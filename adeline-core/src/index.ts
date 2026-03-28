@@ -1,7 +1,12 @@
 // ── THE GOSPEL — primary DNA export ──────────────────────────────
-// All consumers should import from here. types.ts is the source of truth.
+// All consumers should import from "@adeline/core".
+// types.ts is the canonical source of truth for all base types.
 export * from "./types";
 
-// ── Legacy schema modules (kept for internal use by adeline-brain) ─
-// Do not import these directly in adeline-ui — use ./types instead.
+// ── Schema modules ──────────────────────────────────────────────
 export * from "./schemas/studentProfile";
+export * from "./schemas/transcript";
+export * from "./schemas/learningActivity";
+export * from "./schemas/spacedRepetition";
+export * from "./schemas/knowledgeGraph";
+export * from "./schemas/agentResponse";
