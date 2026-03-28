@@ -1,0 +1,19 @@
+{
+  "name": "dear-adeline-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dear Adeline 2.0 — Truth-First K-12 AI Mentor (monorepo root)",
+  "scripts": {
+    "build:core": "pnpm --filter @adeline/core build",
+    "dev:ui": "pnpm --filter adeline-ui dev",
+    "build": "pnpm build:core && pnpm --filter adeline-ui build",
+    "lint": "pnpm -r lint"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  }
+}

@@ -1,0 +1,313 @@
+{
+  "$schema": "../schemas/oas_seed_schema.json",
+  "meta": {
+    "source": "Oklahoma Academic Standards (OAS)",
+    "version": "2016-rev2021",
+    "purpose": "GraphRAG seed — maps OAS standards to the 8-Track Constitution for curriculum routing in adeline-brain",
+    "witness_threshold": 0.85,
+    "maintainer": "adeline-core/src/types.ts → Track enum is the authority"
+  },
+  "mappings": [
+
+    {
+      "grade": 1,
+      "subject": "English Language Arts",
+      "standard_id": "OAS.ELA.1.R.I.1",
+      "standard_text": "Locate and use text features (e.g., title, headings, captions, bold print, glossaries, indexes, table of contents) to understand informational texts.",
+      "track": "ENGLISH_LITERATURE",
+      "track_label": "English Language & Literature",
+      "rationale": "Builds foundational literacy skills — navigating informational structure is the gateway to all truth-seeking in Adeline 2.0.",
+      "adeline_lesson_hook": "How do titles and headings help us know what a book is really about?",
+      "homestead_adaptation": "Read seed packet labels, canning jar lids, and farm almanac headings as real informational texts.",
+      "block_types_suggested": ["TEXT", "QUIZ"],
+      "difficulty": "EMERGING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.ELA.1.R.I.1",
+          "grade": 1,
+          "subject": "ELA",
+          "strand": "Reading: Informational"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "ENGLISH_LITERATURE" },
+        { "type": "FEEDS_INTO",       "target": "OAS.ELA.8.R.I.3" },
+        { "type": "PREREQUISITE_FOR", "target": "OAS.ELA.1.R.I.2" }
+      ]
+    },
+
+    {
+      "grade": 1,
+      "subject": "Science",
+      "standard_id": "OAS.SCI.1.LS.1",
+      "standard_text": "Observe and describe how living things (plants and animals, including humans) depend on the natural world to meet their basic needs of food, water, shelter, and air.",
+      "track": "CREATION_SCIENCE",
+      "track_label": "God's Creation & Science",
+      "rationale": "Dependency and design in creation — Grade 1 entry point for understanding that life systems reflect intentional order.",
+      "adeline_lesson_hook": "Why do all living things need the same basic things? Who designed that system?",
+      "homestead_adaptation": "Observe chickens, garden beds, and rainwater collection as living examples of creation's interdependence on your homestead.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "PRIMARY_SOURCE"],
+      "difficulty": "EMERGING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SCI.1.LS.1",
+          "grade": 1,
+          "subject": "Science",
+          "strand": "Life Science"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "CREATION_SCIENCE" },
+        { "type": "CROSS_TRACK_LINK", "target": "HOMESTEADING",
+          "reason": "Practical stewardship of the created world" }
+      ]
+    },
+
+    {
+      "grade": 1,
+      "subject": "Social Studies",
+      "standard_id": "OAS.SS.1.C.1.1",
+      "standard_text": "Identify and explain the purpose of rules and laws in the home, school, and community, and describe how authority figures enforce them.",
+      "track": "GOVERNMENT_ECONOMICS",
+      "track_label": "Government & Economics",
+      "rationale": "First introduction to delegated authority — connects Biblical concept of governing structures (Romans 13) to everyday civic life.",
+      "adeline_lesson_hook": "Who made the rules in your house? Why do we need them?",
+      "homestead_adaptation": "Discuss property boundaries, water rights, and family 'household laws' as real governance at the homestead scale.",
+      "block_types_suggested": ["TEXT", "QUIZ"],
+      "difficulty": "EMERGING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SS.1.C.1.1",
+          "grade": 1,
+          "subject": "Social Studies",
+          "strand": "Civics"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "GOVERNMENT_ECONOMICS" },
+        { "type": "CROSS_TRACK_LINK", "target": "DISCIPLESHIP",
+          "reason": "Authority and submission rooted in Scripture" }
+      ]
+    },
+
+    {
+      "grade": 1,
+      "subject": "Health",
+      "standard_id": "OAS.HLT.1.HB.1",
+      "standard_text": "Identify healthy behaviors that affect personal health, including physical activity, nutrition, sleep, and hygiene.",
+      "track": "HEALTH_NATUROPATHY",
+      "track_label": "Health & Naturopathy",
+      "rationale": "The body as a created system — Grade 1 foundation for treating health as stewardship of God's design, not just medical compliance.",
+      "adeline_lesson_hook": "God made your body to work best when you feed it good food and rest. What does your body need today?",
+      "homestead_adaptation": "Connect nutrition to growing your own food — garden-to-table meals as a health practice, not just a lifestyle choice.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION"],
+      "difficulty": "EMERGING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.HLT.1.HB.1",
+          "grade": 1,
+          "subject": "Health",
+          "strand": "Health Behaviors"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "HEALTH_NATUROPATHY" },
+        { "type": "CROSS_TRACK_LINK", "target": "HOMESTEADING",
+          "reason": "Food sovereignty and garden medicine" }
+      ]
+    },
+
+    {
+      "grade": 1,
+      "subject": "English Language Arts",
+      "standard_id": "OAS.ELA.1.R.I.3",
+      "standard_text": "Identify the difference between information provided by pictures and information provided by words in an informational text.",
+      "track": "TRUTH_HISTORY",
+      "track_label": "Truth-Based History",
+      "rationale": "Pre-critical-thinking entry point — teaching Grade 1 students that pictures and words can tell different stories is the earliest Witness Protocol skill.",
+      "adeline_lesson_hook": "Look at this old photograph. What does it show? Now read the caption. Do they match? Which one do you trust more, and why?",
+      "homestead_adaptation": "Compare seed catalog pictures to actual harvest — do the pictures always tell the whole truth?",
+      "block_types_suggested": ["PRIMARY_SOURCE", "TEXT", "QUIZ"],
+      "difficulty": "EMERGING",
+      "witness_protocol_note": "Any PRIMARY_SOURCE block generated from this standard must include at least one evidence entry with similarityScore >= 0.85 before rendering.",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.ELA.1.R.I.3",
+          "grade": 1,
+          "subject": "ELA",
+          "strand": "Reading: Informational"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "TRUTH_HISTORY" },
+        { "type": "FEEDS_INTO",       "target": "OAS.ELA.8.R.I.3" },
+        { "type": "CROSS_TRACK_LINK", "target": "ENGLISH_LITERATURE",
+          "reason": "Media literacy and source evaluation" }
+      ]
+    },
+
+    {
+      "grade": 8,
+      "subject": "English Language Arts",
+      "standard_id": "OAS.ELA.8.R.I.3",
+      "standard_text": "Analyze how the author acknowledges and responds to conflicting evidence or viewpoints by evaluating whether the reasoning is sound and the evidence is relevant and sufficient.",
+      "track": "TRUTH_HISTORY",
+      "track_label": "Truth-Based History",
+      "rationale": "Direct Witness Protocol equivalent in ELA — evaluating evidence sufficiency at Grade 8 is the academic form of the 0.85 threshold.",
+      "adeline_lesson_hook": "An author has one version of an event. A primary source has another. How do you decide which account bears witness to what actually happened?",
+      "homestead_adaptation": "Compare a government agricultural report to a homesteader's journal from the same era — whose account has more to lose by lying?",
+      "block_types_suggested": ["PRIMARY_SOURCE", "TEXT", "RESEARCH_MISSION"],
+      "difficulty": "EXPANDING",
+      "witness_protocol_note": "Historian agent MUST enforce TRUTH_THRESHOLD = 0.85 on all PRIMARY_SOURCE blocks at this standard. ARCHIVE_SILENT triggers a RESEARCH_MISSION.",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.ELA.8.R.I.3",
+          "grade": 8,
+          "subject": "ELA",
+          "strand": "Reading: Informational"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "TRUTH_HISTORY" },
+        { "type": "BUILDS_FROM",      "target": "OAS.ELA.1.R.I.3" },
+        { "type": "CROSS_TRACK_LINK", "target": "JUSTICE_CHANGEMAKING",
+          "reason": "Evaluating conflicting narratives is prerequisite to just action" }
+      ]
+    },
+
+    {
+      "grade": 8,
+      "subject": "Science",
+      "standard_id": "OAS.SCI.8.ESS.3.1",
+      "standard_text": "Examine and interpret data on natural hazards, human impacts on Earth's systems, and evaluate the costs and benefits of resource management strategies.",
+      "track": "HOMESTEADING",
+      "track_label": "Homesteading & Stewardship",
+      "rationale": "Stewardship science at Grade 8 — land and resource management as a moral and practical responsibility, not merely environmental policy.",
+      "adeline_lesson_hook": "What does faithful stewardship of land look like when erosion, drought, or pollution threaten it?",
+      "homestead_adaptation": "Design a water conservation plan for your homestead based on local watershed data — real stewardship, not theoretical.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "PRIMARY_SOURCE"],
+      "difficulty": "EXPANDING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SCI.8.ESS.3.1",
+          "grade": 8,
+          "subject": "Science",
+          "strand": "Earth & Space Science"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "HOMESTEADING" },
+        { "type": "CROSS_TRACK_LINK", "target": "CREATION_SCIENCE",
+          "reason": "Creation care is the theological root of stewardship science" },
+        { "type": "CROSS_TRACK_LINK", "target": "GOVERNMENT_ECONOMICS",
+          "reason": "Resource management involves policy, economics, and property rights" }
+      ]
+    },
+
+    {
+      "grade": 8,
+      "subject": "Social Studies",
+      "standard_id": "OAS.SS.8.C.4.2",
+      "standard_text": "Analyze the role of citizens in identifying injustice, organizing collective action, and advocating for change within constitutional limits.",
+      "track": "JUSTICE_CHANGEMAKING",
+      "track_label": "Justice & Change-making",
+      "rationale": "Biblical justice at Grade 8 — distinguishing righteous advocacy (Micah 6:8) from revolution, within covenant structures of civil order.",
+      "adeline_lesson_hook": "What makes a protest righteous? What crosses the line? How did abolitionists, suffragists, and civil rights leaders navigate this?",
+      "homestead_adaptation": "Research local zoning or water rights disputes — how did ordinary families advocate for their land within the law?",
+      "block_types_suggested": ["PRIMARY_SOURCE", "TEXT", "RESEARCH_MISSION"],
+      "difficulty": "EXPANDING",
+      "witness_protocol_note": "Historical claims about specific movements require PRIMARY_SOURCE evidence. ARCHIVE_SILENT must fire if no verified source >= 0.85.",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SS.8.C.4.2",
+          "grade": 8,
+          "subject": "Social Studies",
+          "strand": "Civics"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "JUSTICE_CHANGEMAKING" },
+        { "type": "CROSS_TRACK_LINK", "target": "TRUTH_HISTORY",
+          "reason": "Justice claims require historical evidence" },
+        { "type": "CROSS_TRACK_LINK", "target": "DISCIPLESHIP",
+          "reason": "Prophetic justice is rooted in Biblical discipleship, not ideology" }
+      ]
+    },
+
+    {
+      "grade": 8,
+      "subject": "Social Studies",
+      "standard_id": "OAS.SS.8.E.1.3",
+      "standard_text": "Explain how scarcity, incentives, and trade-offs influence individual and collective economic decisions, including the role of government in markets.",
+      "track": "GOVERNMENT_ECONOMICS",
+      "track_label": "Government & Economics",
+      "rationale": "Economic decision-making at Grade 8 — connecting scarcity and trade-off theory to Biblical stewardship and honest weights (Proverbs 11:1).",
+      "adeline_lesson_hook": "If your family has $200 to spend this month, how do you decide between seeds, livestock feed, and medical supplies? That's economics.",
+      "homestead_adaptation": "Build a real household budget for a homestead family — track trade-offs between self-sufficiency investments and immediate needs.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "QUIZ"],
+      "difficulty": "EXPANDING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SS.8.E.1.3",
+          "grade": 8,
+          "subject": "Social Studies",
+          "strand": "Economics"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "GOVERNMENT_ECONOMICS" },
+        { "type": "CROSS_TRACK_LINK", "target": "HOMESTEADING",
+          "reason": "Homestead economy is applied economics" },
+        { "type": "CROSS_TRACK_LINK", "target": "DISCIPLESHIP",
+          "reason": "Faithfulness with money is a discipleship issue (Luke 16:10)" }
+      ]
+    },
+
+    {
+      "grade": 8,
+      "subject": "Health",
+      "standard_id": "OAS.HLT.8.NPA.2",
+      "standard_text": "Evaluate the influence of media, technology, and cultural factors on food choices, physical activity, and body image, and develop strategies for making informed health decisions.",
+      "track": "HEALTH_NATUROPATHY",
+      "track_label": "Health & Naturopathy",
+      "rationale": "Critical health literacy at Grade 8 — discerning commercial influence from genuine nutritional wisdom, connecting to the body as God's temple (1 Cor. 6:19).",
+      "adeline_lesson_hook": "Who profits when you believe you need that supplement, that diet, or that drug? How do you know when health advice is true?",
+      "homestead_adaptation": "Compare a processed food label to a homegrown equivalent — trace the ingredients back to their source and evaluate what you actually know.",
+      "block_types_suggested": ["PRIMARY_SOURCE", "TEXT", "RESEARCH_MISSION"],
+      "difficulty": "EXPANDING",
+      "witness_protocol_note": "Health claims referencing clinical studies require PRIMARY_SOURCE evidence with witnessCitation including archiveName. No unsourced health claims.",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.HLT.8.NPA.2",
+          "grade": 8,
+          "subject": "Health",
+          "strand": "Nutrition & Physical Activity"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "HEALTH_NATUROPATHY" },
+        { "type": "CROSS_TRACK_LINK", "target": "TRUTH_HISTORY",
+          "reason": "Media influence on health is a historical pattern requiring source evaluation" },
+        { "type": "CROSS_TRACK_LINK", "target": "DISCIPLESHIP",
+          "reason": "Caring for the body is an act of stewardship and worship" }
+      ]
+    }
+
+  ],
+
+  "graphrag_loading_instructions": {
+    "neo4j_cypher_hint": "MERGE (s:OASStandard {id: $standard_id}) SET s += $properties MERGE (t:Track {name: $track}) MERGE (s)-[:MAPS_TO_TRACK]->(t)",
+    "pgvector_embedding_target": "standard_text + adeline_lesson_hook",
+    "seed_order": "Load Grade 1 nodes first (they are PREREQUISITE_FOR Grade 8 nodes via FEEDS_INTO relationships)"
+  }
+}

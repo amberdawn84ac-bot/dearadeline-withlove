@@ -1,0 +1,122 @@
+"""
+adeline-brain — FastAPI Entry Point
+The Intelligence Layer of Dear Adeline 2.0
+"""
+import logging
+import os
+
+import openai
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.schemas.api_models import TRUTH_THRESHOLD
+from app.connections.neo4j_client import neo4j_client
+from app.connections.pgvector_client import hippocampus
+from app.api.lessons import router as lessons_router
+from app.api.opportunities import router as opportunities_router
+from app.api.journal import router as journal_router
+from app.api.transcripts import router as transcripts_router
+from app.api.scaffold import router as scaffold_router
+from app.api.daily_bread import router as daily_bread_router
+from app.connections.journal_store import journal_store
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("[adeline-brain] Starting up...")
+    await neo4j_client.connect()
+    await hippocampus.connect()
+    await journal_store.connect()
+    yield
+    logger.info("[adeline-brain] Shutting down...")
+    await neo4j_client.close()
+
+
+app = FastAPI(
+    title="adeline-brain",
+    description="Intelligence Layer — Dear Adeline 2.0 Truth-First K-12 AI Mentor",
+    version="0.2.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://adeline-ui:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(lessons_router)
+app.include_router(opportunities_router)
+app.include_router(journal_router)
+app.include_router(transcripts_router)
+app.include_router(scaffold_router)
+app.include_router(daily_bread_router)
+
+
+@app.get("/health")
+async def health():
+    return {"status": "alive", "service": "adeline-brain", "version": "0.2.0"}
+
+
+@app.get("/health/truth")
+async def health_truth():
+    """
+    Truth Engine health check.
+    Embeds a Douglass query and runs similarity search against the Hippocampus.
+    """
+    INVESTIGATING_FLOOR = 0.65
+    query = "How did Frederick Douglass learn to read through the help of white boys in the street?"
+
+    try:
+        client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        resp = await client.embeddings.create(model="text-embedding-3-small", input=query)
+        query_embedding = resp.data[0].embedding
+    except Exception as e:
+        return {"status": "EMBEDDING_UNAVAILABLE", "error": str(e)}
+
+    results = await hippocampus.similarity_search(
+        query_embedding=query_embedding, track="TRUTH_HISTORY", top_k=1
+    )
+
+    if not results:
+        return {"status": "CORPUS_EMPTY", "message": "Run seed_curriculum.py first.", "score": None}
+
+    top = results[0]
+    score = float(top["similarity_score"])
+
+    if score >= TRUTH_THRESHOLD:
+        verdict, status = "VERIFIED", "TRUTH_ENGINE_ONLINE"
+    elif score >= INVESTIGATING_FLOOR:
+        verdict, status = "INVESTIGATING", "TRUTH_ENGINE_ONLINE"
+    else:
+        verdict, status = "ARCHIVE_SILENT", "CORPUS_COLD"
+
+    return {
+        "status": status,
+        "verdict": verdict,
+        "score": round(score, 4),
+        "threshold": TRUTH_THRESHOLD,
+        "source": top["source_title"],
+        "citation": {
+            "author": top.get("citation_author"),
+            "year": top.get("citation_year"),
+            "archive": top.get("citation_archive_name"),
+        },
+    }
+
+
+@app.get("/tracks")
+async def list_tracks():
+    from app.schemas.api_models import Track
+    return {
+        "tracks": [
+            {"id": t.value, "label": t.value.replace("_", " ").title()}
+            for t in Track
+        ]
+    }

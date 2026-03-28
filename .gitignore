@@ -1,0 +1,21 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+.next/
+dist/
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,231 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.147 0.004 49.25);
+
+  /* ── Adeline lesson block palette ── */
+  --paper-light: #FFFEF7;
+  --paper-medium: #FAF5E4;
+  --golden-wheat: #BD6809;
+  --ink-brown: #121B13;
+  --deep-purple: #9A3F4A;
+  --forest-green: #2F4731;
+  --fuschia-dark: #3D1419;
+  --paper-shadow: rgba(61, 20, 25, 0.08);
+  --border-brown: #E7DAC3;
+  --highlight-yellow: #FFF9C4;
+  --highlight-pink: #FCE4EC;
+  --highlight-mint: #E8F5E9;
+  --neon-fuschia: #9A3F4A;
+  --neon-orange: #BD6809;
+  --font-handwritten: 'Kalam', 'Caveat', cursive;
+  --font-emphasis: 'Permanent Marker', cursive;
+  --font-bold: 'Swanky and Moo Moo', cursive;
+  --font-neat: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+:root {
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.147 0.004 49.25);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.147 0.004 49.25);
+  --primary: oklch(0.216 0.006 56.043);
+  --primary-foreground: oklch(0.985 0.001 106.423);
+  --secondary: oklch(0.97 0.001 106.424);
+  --secondary-foreground: oklch(0.216 0.006 56.043);
+  --muted: oklch(0.97 0.001 106.424);
+  --muted-foreground: oklch(0.553 0.013 58.071);
+  --accent: oklch(0.97 0.001 106.424);
+  --accent-foreground: oklch(0.216 0.006 56.043);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.923 0.003 48.717);
+  --input: oklch(0.923 0.003 48.717);
+  --ring: oklch(0.709 0.01 56.259);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0.001 106.423);
+  --sidebar-foreground: oklch(0.147 0.004 49.25);
+  --sidebar-primary: oklch(0.216 0.006 56.043);
+  --sidebar-primary-foreground: oklch(0.985 0.001 106.423);
+  --sidebar-accent: oklch(0.97 0.001 106.424);
+  --sidebar-accent-foreground: oklch(0.216 0.006 56.043);
+  
+  /* Adeline Brand Fonts - Emilys Candy loaded locally */
+  --font-emilys-candy: 'Emilys Candy', cursive;
+  --font-kalam: 'Comic Sans MS', 'Chalkboard SE', 'Bradley Hand', cursive;
+  --font-kranky: 'Comic Sans MS', 'Chalkboard SE', 'Bradley Hand', cursive;
+  --font-permanent-marker: 'Comic Sans MS', 'Chalkboard SE', 'Bradley Hand', cursive;
+  --font-swanky-and-moo-moo: 'Comic Sans MS', 'Chalkboard SE', 'Bradley Hand', cursive;
+}
+
+.dark {
+  --background: oklch(0.147 0.004 49.25);
+  --foreground: oklch(0.985 0.001 106.423);
+  --card: oklch(0.216 0.006 56.043);
+  --card-foreground: oklch(0.985 0.001 106.423);
+  --popover: oklch(0.216 0.006 56.043);
+  --popover-foreground: oklch(0.985 0.001 106.423);
+  --primary: oklch(0.923 0.003 48.717);
+  --primary-foreground: oklch(0.216 0.006 56.043);
+  --secondary: oklch(0.268 0.007 34.298);
+  --secondary-foreground: oklch(0.985 0.001 106.423);
+  --muted: oklch(0.268 0.007 34.298);
+  --muted-foreground: oklch(0.709 0.01 56.259);
+  --accent: oklch(0.268 0.007 34.298);
+  --accent-foreground: oklch(0.985 0.001 106.423);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.553 0.013 58.071);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.216 0.006 56.043);
+  --sidebar-foreground: oklch(0.985 0.001 106.423);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0.001 106.423);
+  --sidebar-accent: oklch(0.268 0.007 34.298);
+  --sidebar-accent-foreground: oklch(0.985 0.001 106.423);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.553 0.013 58.071);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Life of Fred Typography - Custom Prose Theme */
+@layer components {
+  .prose {
+    --tw-prose-body: #2F4731;
+    --tw-prose-headings: #1e3a8a;
+    --tw-prose-lead: #2F4731;
+    --tw-prose-links: #BD6809;
+    --tw-prose-bold: #BD6809;
+    --tw-prose-counters: #64748b;
+    --tw-prose-bullets: #64748b;
+    --tw-prose-hr: #e7dac3;
+    --tw-prose-quotes: #475569;
+    --tw-prose-quote-borders: #BD6809;
+    --tw-prose-captions: #64748b;
+    --tw-prose-code: #2F4731;
+    --tw-prose-pre-code: #e5e7eb;
+    --tw-prose-pre-bg: #1e293b;
+    --tw-prose-th-borders: #d1d5db;
+    --tw-prose-td-borders: #e5e7eb;
+  }
+
+  .prose h2 {
+    color: #1e3a8a;
+    font-weight: 800;
+    font-size: 1.75rem;
+    margin-top: 1.5em;
+    margin-bottom: 0.75em;
+    line-height: 1.2;
+  }
+
+  .prose h3 {
+    color: #0f766e;
+    font-weight: 700;
+    font-size: 1.35rem;
+    margin-top: 1.25em;
+    margin-bottom: 0.5em;
+    line-height: 1.3;
+  }
+
+  .prose h4 {
+    color: #2F4731;
+    font-weight: 700;
+    font-size: 1.15rem;
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+  }
+
+  .prose strong {
+    color: #BD6809;
+    font-weight: 700;
+  }
+
+  .prose blockquote {
+    background-color: #f8fafc;
+    border-left: 4px solid #BD6809;
+    padding: 1rem 1.5rem;
+    margin: 1.5em 0;
+    font-style: italic;
+    color: #475569;
+    border-radius: 0.5rem;
+  }
+
+  .prose blockquote p {
+    margin: 0;
+  }
+
+  .prose p {
+    margin-top: 0.75em;
+    margin-bottom: 0.75em;
+    line-height: 1.7;
+  }
+
+  .prose ul, .prose ol {
+    margin-top: 1em;
+    margin-bottom: 1em;
+  }
+
+  .prose li {
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+  }
+
+  .prose code {
+    background-color: #fef3c7;
+    color: #92400e;
+    padding: 0.2em 0.4em;
+    border-radius: 0.25rem;
+    font-size: 0.9em;
+    font-weight: 600;
+  }
+
+  .prose pre {
+    background-color: #1e293b;
+    color: #e5e7eb;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+  }
+
+  .prose pre code {
+    background-color: transparent;
+    color: inherit;
+    padding: 0;
+    font-weight: 400;
+  }
+
+  .prose a {
+    color: #BD6809;
+    text-decoration: underline;
+    font-weight: 600;
+  }
+
+  .prose a:hover {
+    color: #2F4731;
+  }
+}

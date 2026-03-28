@@ -1,0 +1,163 @@
+// adeline-brain/prisma/schema.prisma
+// Mirrors adeline-core/src/types.ts — source of truth for all models.
+
+generator client {
+  provider             = "prisma-client-py"
+  interface            = "asyncio"
+  recursive_type_depth = 5
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_DSN")
+}
+
+// ── Enums ─────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  STUDENT
+  PARENT
+  ADMIN
+}
+
+enum Track {
+  CREATION_SCIENCE
+  HEALTH_NATUROPATHY
+  HOMESTEADING
+  GOVERNMENT_ECONOMICS
+  JUSTICE_CHANGEMAKING
+  DISCIPLESHIP
+  TRUTH_HISTORY
+  ENGLISH_LITERATURE
+}
+
+enum BlockType {
+  TEXT
+  PRIMARY_SOURCE
+  LAB_MISSION
+  RESEARCH_MISSION
+  QUIZ
+}
+
+enum EvidenceVerdict {
+  VERIFIED
+  ARCHIVE_SILENT
+  RESEARCH_MISSION
+}
+
+enum DifficultyLevel {
+  EMERGING
+  DEVELOPING
+  EXPANDING
+  MASTERING
+}
+
+// ── Models ────────────────────────────────────────────────────────────────────
+
+model User {
+  id          String   @id @default(uuid())
+  name        String
+  email       String   @unique
+  role        UserRole
+  isHomestead Boolean  @default(false)
+  gradeLevel  String?  // Required when role = STUDENT (enforced in app layer)
+
+  lessons     StudentLesson[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([role])
+  @@index([email])
+}
+
+model Lesson {
+  id               String   @id @default(uuid())
+  title            String
+  estimatedMinutes Int
+  targetGrades     String[]
+
+  tracks  LessonTrack[]
+  blocks  LessonBlock[]
+  students StudentLesson[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LessonTrack {
+  lessonId String
+  track    Track
+
+  lesson   Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@id([lessonId, track])
+}
+
+model LessonBlock {
+  id         String          @id @default(uuid())
+  lessonId   String
+  track      Track
+  blockType  BlockType
+  difficulty DifficultyLevel
+  order      Int
+  title      String
+  content    String
+  isSilenced Boolean         @default(false)
+  tags       String[]
+
+  homesteadEnabled     Boolean @default(false)
+  homesteadContent     String?
+  homesteadPractical   String?
+
+  evidence  Evidence[]
+  lesson    Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([lessonId, order])
+  @@index([blockType])
+}
+
+model Evidence {
+  id              String          @id @default(uuid())
+  blockId         String
+  sourceTitle     String
+  sourceUrl       String
+  similarityScore Float
+  verdict         EvidenceVerdict
+  chunk           String
+  retrievedAt     DateTime
+
+  // WitnessCitation fields (flattened from the nested Zod object)
+  citationAuthor      String
+  citationYear        Int
+  citationArchiveName String
+
+  block LessonBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  @@index([blockId])
+  @@index([verdict])
+  @@index([similarityScore])
+}
+
+model StudentLesson {
+  studentId  String
+  lessonId   String
+  startedAt  DateTime @default(now())
+  completedAt DateTime?
+
+  student User   @relation(fields: [studentId], references: [id])
+  lesson  Lesson @relation(fields: [lessonId], references: [id])
+
+  @@id([studentId, lessonId])
+}
+
+model InviteCode {
+  id             String   @id @default(uuid())
+  code           String   @unique
+  isUsed         Boolean  @default(false)
+  claimedByEmail String?
+  createdAt      DateTime @default(now())
+
+  @@index([code])
+}

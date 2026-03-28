@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "adeline-core Bridge Schema",
+  "description": "PLACEHOLDER — regenerate by running: cd adeline-core && npx ts-node src/export-schema.ts > ../adeline-brain/app/schemas/core_schema.json",
+  "definitions": {
+    "Track": {
+      "enum": [
+        "CREATION_SCIENCE",
+        "HEALTH_NATUROPATHY",
+        "HOMESTEADING",
+        "GOVERNMENT_ECONOMICS",
+        "JUSTICE_CHANGEMAKING",
+        "DISCIPLESHIP",
+        "TRUTH_HISTORY",
+        "ENGLISH_LITERATURE"
+      ]
+    },
+    "BlockType": {
+      "enum": ["TEXT", "PRIMARY_SOURCE", "LAB_MISSION", "RESEARCH_MISSION", "QUIZ"]
+    },
+    "EvidenceVerdict": {
+      "enum": ["VERIFIED", "ARCHIVE_SILENT", "RESEARCH_MISSION"]
+    },
+    "UserRole": {
+      "enum": ["STUDENT", "PARENT", "ADMIN"]
+    },
+    "TRUTH_THRESHOLD": {
+      "const": 0.85
+    }
+  }
+}

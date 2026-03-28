@@ -1,0 +1,24 @@
+{
+  "name": "@adeline/core",
+  "version": "0.1.0",
+  "description": "Shared types, enums, and schemas for the Dear Adeline 2.0 ecosystem",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs --dts --out-dir dist",
+    "dev": "tsup src/index.ts --format cjs --dts --out-dir dist --watch",
+    "lint": "eslint src/**/*.ts"
+  },
+  "dependencies": {
+    "zod": "^3.22.4",
+    "zod-to-json-schema": "^3.25.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.3"
+  },
+  "files": [
+    "dist"
+  ]
+}
