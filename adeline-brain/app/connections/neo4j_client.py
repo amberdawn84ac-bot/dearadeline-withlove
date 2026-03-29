@@ -1,7 +1,13 @@
 """
 Neo4j GraphRAG Client
 Connects to the knowledge graph for concept relationships across the 8 Tracks.
-Configure via NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD environment variables.
+
+Environment variables (either convention accepted):
+  NEO4J_URI       — bolt:// or neo4j+s:// (Aura) connection string
+  NEO4J_USERNAME  — Aura / cloud convention
+  NEO4J_USER      — local Docker convention (fallback)
+  NEO4J_PASSWORD  — password
+  NEO4J_DATABASE  — optional database name (Aura multi-database)
 """
 import os
 import logging
@@ -12,8 +18,10 @@ from neo4j import AsyncGraphDatabase
 logger = logging.getLogger(__name__)
 
 NEO4J_URI      = os.getenv("NEO4J_URI",      "bolt://neo4j:7687")
-NEO4J_USER     = os.getenv("NEO4J_USER",     "neo4j")
+# Accept NEO4J_USERNAME (Aura) or NEO4J_USER (local Docker)
+NEO4J_USER     = os.getenv("NEO4J_USERNAME") or os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "adeline_local_dev")
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE")  # optional — required for Neo4j Aura
 
 
 class Neo4jClient:
@@ -34,7 +42,8 @@ class Neo4jClient:
 
     async def run(self, cypher: str, params: Optional[dict] = None) -> list[dict]:
         """Execute a Cypher query and return results as a list of dicts."""
-        async with self._driver.session() as session:
+        session_kwargs = {"database": NEO4J_DATABASE} if NEO4J_DATABASE else {}
+        async with self._driver.session(**session_kwargs) as session:
             result = await session.run(cypher, params or {})
             return [record.data() async for record in result]
 
