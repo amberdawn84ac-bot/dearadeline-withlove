@@ -102,67 +102,77 @@ SOURCES = [
             "greatest philosophers."
         ),
     },
-    # ── HOMESTEADING ─────────────────────────────────────────────────────────
+    # ── HOMESTEADING — Grid-down survival and self-sufficiency ───────────────
+    # Frame: if everything crashed tomorrow, could your family survive?
+    # No electricity. No grocery store. No pharmacy. No lumber yard.
     {
         "track": "HOMESTEADING",
-        "source_title": "The Homestead Act of 1862",
-        "source_url": "https://www.archives.gov/education/lessons/homestead-act",
-        "citation_author": "U.S. Congress",
-        "citation_year": 1862,
-        "citation_archive_name": "National Archives",
-        "chunk": (
-            "Be it enacted by the Senate and House of Representatives of the United "
-            "States of America in Congress assembled, That any person who is the head of "
-            "a family, or who has arrived at the age of twenty-one years, and is a "
-            "citizen of the United States, or who shall have filed his declaration of "
-            "intention to become such, shall be entitled to enter one quarter section or "
-            "a less quantity of unappropriated public lands."
-        ),
-    },
-    {
-        "track": "HOMESTEADING",
-        "source_title": "The American Frugal Housewife",
+        "source_title": "The American Frugal Housewife — Food Preservation",
         "source_url": "https://www.gutenberg.org/ebooks/13493",
         "citation_author": "Lydia Maria Child",
         "citation_year": 1833,
         "citation_archive_name": "Project Gutenberg",
         "chunk": (
-            "The true economy of housekeeping is simply the art of gathering up all the "
-            "fragments, so that nothing be lost. I mean fragments of time, as well as "
-            "materials. Nothing should be thrown away so long as it is possible to make "
-            "any use of it, however trifling that use may be; and whatever be the "
-            "article under consideration, it is not wasteful to use it in its place."
+            "Pork should be salted in December or January. Put a layer of salt in the "
+            "bottom of the barrel; then a layer of pork; then salt again; and so on "
+            "alternately. Make a strong brine of salt and water — strong enough to bear "
+            "up an egg. Add saltpetre and brown sugar. Pour this over the meat and keep "
+            "it pressed down with a heavy stone. Smoke-curing requires hanging meat in "
+            "the smokehouse six weeks over green hickory or corncob smoke. Meat cured "
+            "this way keeps through summer without refrigeration. Every family that "
+            "grows and preserves its own food is a family no grocery store can hold hostage."
         ),
     },
     {
         "track": "HOMESTEADING",
-        "source_title": "Farmers' Bulletin No. 1: The What and Why of Agricultural Experiment Stations",
-        "source_url": "https://archive.org/details/farmersbulletin00unit",
-        "citation_author": "U.S. Department of Agriculture",
-        "citation_year": 1889,
-        "citation_archive_name": "Internet Archive",
-        "chunk": (
-            "The object of experiment stations is to aid the farmer in the practical "
-            "work of agriculture by conducting investigations and experiments bearing "
-            "directly upon the profitable cultivation of the various crops; the best "
-            "methods of treatment and feeding of live stock; the renovation and "
-            "fertilization of soils; and all other subjects relating to rural industry."
-        ),
-    },
-    {
-        "track": "HOMESTEADING",
-        "source_title": "Ox-Team Days on the Oregon Trail",
-        "source_url": "https://www.gutenberg.org/ebooks/43861",
-        "citation_author": "Ezra Meeker",
-        "citation_year": 1922,
+        "source_title": "The American Frugal Housewife — Home Remedies Without a Pharmacy",
+        "source_url": "https://www.gutenberg.org/ebooks/13493",
+        "citation_author": "Lydia Maria Child",
+        "citation_year": 1833,
         "citation_archive_name": "Project Gutenberg",
         "chunk": (
-            "The homesteader learned to make the land feed him and his family by using "
-            "every scrap of knowledge earned through trial and failure. The sod house "
-            "was our first shelter, the ox team our first engine, and the open prairie "
-            "our first classroom. Every season taught a new lesson about soil, weather, "
-            "and the stubborn truth that the land will provide only to those who learn "
-            "her language."
+            "Poultices of bread and milk draw out infections from wounds when no doctor "
+            "is near. Onion juice dropped into the ear relieves earache; a poultice of "
+            "roasted onion bound to the throat breaks up a cold. Plantain leaves, bruised "
+            "and bound on bee stings, take out the swelling in minutes. Sage tea soothes "
+            "sore throats. Strong ginger tea settles a sick stomach. These remedies "
+            "require no prescription, no pharmacy, and no supply chain. They grow in your "
+            "yard. They have worked for generations. Knowing them makes you free."
+        ),
+    },
+    {
+        "track": "HOMESTEADING",
+        "source_title": "Foxfire Book — Building Without a Lumber Yard",
+        "source_url": "https://archive.org/details/foxfire1",
+        "citation_author": "Eliot Wigginton (ed.)",
+        "citation_year": 1972,
+        "citation_archive_name": "Internet Archive",
+        "chunk": (
+            "The old-timers needed no lumber yard. They selected their timber standing. "
+            "Chestnut split clean and straight for fence rails. Oak was the choice for "
+            "sills and floor joists because it does not rot. Pine was laid up green for "
+            "walls and allowed to season in place. Notching a corner required only an axe "
+            "and a good eye. The mortise-and-tenon joint, held by a wooden peg, is "
+            "stronger than any nail. A man who knows timber and owns an axe can build a "
+            "house. A man who only knows Home Depot cannot."
+        ),
+    },
+    {
+        "track": "HOMESTEADING",
+        "source_title": "Foxfire Book — Water Without Infrastructure",
+        "source_url": "https://archive.org/details/foxfire1",
+        "citation_author": "Eliot Wigginton (ed.)",
+        "citation_year": 1972,
+        "citation_archive_name": "Internet Archive",
+        "chunk": (
+            "Finding water when the well pump fails begins with reading the land. Springs "
+            "emerge where a hillside changes slope or where a band of rock forces water "
+            "upward. Willows and alders grow along hidden streams. A hand-dug well lined "
+            "with dry-stacked stone can serve a family for generations. Collecting "
+            "rainwater from a metal roof into sealed barrels requires no electricity and "
+            "no utility bill. Boiling water for five minutes kills what would kill you. "
+            "These are not pioneer curiosities. They are the skills every family needs "
+            "when the infrastructure people trusted breaks down."
         ),
     },
     # ── DISCIPLESHIP ─────────────────────────────────────────────────────────
@@ -229,64 +239,72 @@ SOURCES = [
         ),
     },
     # ── ENGLISH_LITERATURE ───────────────────────────────────────────────────
+    # Curriculum reading list (not in Hippocampus — too new for public domain):
+    #   "Do Hard Things" by Alex & Brett Harris (2008)
+    #   C.S. Lewis: Mere Christianity, The Screwtape Letters, The Abolition of Man
+    # Adeline surfaces these in synthesis and recommendations.
+    # Hippocampus seeds the OKLAHOMA ELA standards-aligned public domain texts below.
     {
         "track": "ENGLISH_LITERATURE",
-        "source_title": "Hamlet, Act III, Scene 1",
-        "source_url": "https://www.gutenberg.org/ebooks/1524",
-        "citation_author": "William Shakespeare",
-        "citation_year": 1603,
-        "citation_archive_name": "Project Gutenberg",
-        "chunk": (
-            "To be, or not to be: that is the question: Whether 'tis nobler in the mind "
-            "to suffer the slings and arrows of outrageous fortune, or to take arms "
-            "against a sea of troubles, and by opposing end them? To die: to sleep; "
-            "no more; and by a sleep to say we end the heart-ache and the thousand "
-            "natural shocks that flesh is heir to, 'tis a consummation devoutly to be "
-            "wish'd."
-        ),
-    },
-    {
-        "track": "ENGLISH_LITERATURE",
-        "source_title": "Pride and Prejudice, Chapter 1",
-        "source_url": "https://www.gutenberg.org/ebooks/1342",
-        "citation_author": "Jane Austen",
-        "citation_year": 1813,
-        "citation_archive_name": "Project Gutenberg",
-        "chunk": (
-            "It is a truth universally acknowledged, that a single man in possession of "
-            "a good fortune, must be in want of a wife. However little known the feelings "
-            "or views of such a man may be on his first entering a neighbourhood, this "
-            "truth is so well fixed in the minds of the surrounding families, that he is "
-            "considered the rightful property of some one or other of their daughters."
-        ),
-    },
-    {
-        "track": "ENGLISH_LITERATURE",
-        "source_title": "Because I could not stop for Death",
-        "source_url": "https://www.poetryfoundation.org/poems/47652/because-i-could-not-stop-for-death-479",
-        "citation_author": "Emily Dickinson",
-        "citation_year": 1890,
-        "citation_archive_name": "Public Domain",
-        "chunk": (
-            "Because I could not stop for Death \u2013 He kindly stopped for me \u2013 "
-            "The Carriage held but just Ourselves \u2013 And Immortality. We slowly "
-            "drove \u2013 He knew no haste And I had put away My labor and my leisure "
-            "too, For His Civility \u2013"
-        ),
-    },
-    {
-        "track": "ENGLISH_LITERATURE",
-        "source_title": "Orthodoxy, Chapter IV: The Ethics of Elfland",
+        "source_title": "Orthodoxy — Why I Believe in Christianity",
         "source_url": "https://www.gutenberg.org/ebooks/130",
         "citation_author": "G.K. Chesterton",
         "citation_year": 1908,
         "citation_archive_name": "Project Gutenberg",
         "chunk": (
-            "My first and last philosophy, that which I believe in with unbroken "
-            "certainty, I learnt in the nursery. The things I believed most then, the "
-            "things I believe most now, are the things called fairy tales. They seem to "
-            "me to be the entirely reasonable things. Fairyland is nothing but the sunny "
-            "country of common sense."
+            "The modern world is not evil; in some ways the modern world is far too good. "
+            "It is full of wild and wasted virtues. When a religious scheme is shattered "
+            "it is not merely the vices that are let loose. The vices are, indeed, let "
+            "loose, and they wander and do damage. But the virtues are let loose also; "
+            "and the virtues wander more wildly, and the virtues do more terrible damage. "
+            "The modern world is full of the old Christian virtues gone mad."
+        ),
+    },
+    {
+        "track": "ENGLISH_LITERATURE",
+        "source_title": "The Abolition of Man — Men Without Chests",
+        "source_url": "https://archive.org/details/AbolitionOfMan_934",
+        "citation_author": "C.S. Lewis",
+        "citation_year": 1943,
+        "citation_archive_name": "Internet Archive",
+        "chunk": (
+            "In a sort of ghastly simplicity we remove the organ and demand the function. "
+            "We make men without chests and expect of them virtue and enterprise. We laugh "
+            "at honour and are shocked to find traitors in our midst. We castrate and bid "
+            "the geldings be fruitful."
+        ),
+    },
+    {
+        "track": "ENGLISH_LITERATURE",
+        "source_title": "Letter from Birmingham Jail",
+        "source_url": "https://www.africa.upenn.edu/Articles_Gen/Letter_Birmingham.html",
+        "citation_author": "Martin Luther King Jr.",
+        "citation_year": 1963,
+        "citation_archive_name": "University of Pennsylvania African Studies Center",
+        "chunk": (
+            "One who breaks an unjust law must do so openly, lovingly, and with a "
+            "willingness to accept the penalty. I submit that an individual who breaks a "
+            "law that conscience tells him is unjust, and who willingly accepts the "
+            "penalty of imprisonment in order to arouse the conscience of the community "
+            "over its injustice, is in reality expressing the highest respect for law."
+        ),
+    },
+    {
+        "track": "ENGLISH_LITERATURE",
+        "source_title": "Up from Slavery — Chapter I",
+        "source_url": "https://www.gutenberg.org/ebooks/2376",
+        "citation_author": "Booker T. Washington",
+        "citation_year": 1901,
+        "citation_archive_name": "Project Gutenberg",
+        "chunk": (
+            "I was born a slave on a plantation in Franklin County, Virginia. I am not "
+            "quite sure of the exact place or exact date of my birth, but at any rate "
+            "I suspect I must have been born somewhere and at some time. As nearly as I "
+            "have been able to learn, I was born near a cross-roads post-office called "
+            "Hale's Ford, and the year was 1858 or 1859. I do not know the month or the "
+            "day. The earliest impressions I can now recall are of the plantation and the "
+            "slave quarters — the latter being the part of the plantation where the slaves "
+            "had their cabins."
         ),
     },
 ]
