@@ -214,13 +214,14 @@ export async function scaffold(
 
 export interface StudentState {
   student_id: string;
+  grade_level: string;
+  is_homestead: boolean;
   tracks: Record<
     string,
     {
       mastery_score: number;
       mastery_band: MasteryBand;
       lesson_count: number;
-      mastered_standards_count: number;
     }
   >;
 }
@@ -230,7 +231,7 @@ export async function fetchStudentState(
   role: "STUDENT" | "PARENT" | "ADMIN" = "STUDENT",
 ): Promise<StudentState> {
   const res = await fetch(
-    `${BRAIN_URL}/lesson/student-state/${encodeURIComponent(student_id)}`,
+    `${BRAIN_URL}/students/${encodeURIComponent(student_id)}/state`,
     {
       headers: { "X-User-Role": role },
       cache: "no-store",
@@ -238,6 +239,35 @@ export async function fetchStudentState(
   );
   if (!res.ok) throw new Error(`student state fetch failed: ${res.status}`);
   return res.json() as Promise<StudentState>;
+}
+
+// ── Student Profile ────────────────────────────────────────────────────────────
+
+export interface StudentProfile {
+  student_id: string;
+  name: string;
+  email: string | null;
+  grade_level: string;
+  is_homestead: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function registerStudent(profile: {
+  name?: string;
+  email?: string;
+  grade_level?: string;
+  is_homestead?: boolean;
+  student_id?: string;
+}): Promise<StudentProfile> {
+  const res = await fetch(`${BRAIN_URL}/students/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profile),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`register failed: ${res.status}`);
+  return res.json() as Promise<StudentProfile>;
 }
 
 // ── Opportunities ──────────────────────────────────────────────────────────────

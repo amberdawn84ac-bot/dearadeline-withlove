@@ -20,6 +20,7 @@ from app.api.transcripts import router as transcripts_router
 from app.api.scaffold import router as scaffold_router
 from app.api.daily_bread import router as daily_bread_router
 from app.api.learning_records import router as learning_records_router
+from app.api.students import router as students_router
 from app.connections.journal_store import journal_store
 
 logging.basicConfig(level=logging.INFO)
@@ -44,9 +45,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_CORS_ORIGINS = [
+    o.strip()
+    for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+    if o.strip()
+]
+# Always include Docker-internal UI hostname
+if "http://adeline-ui:3000" not in _CORS_ORIGINS:
+    _CORS_ORIGINS.append("http://adeline-ui:3000")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://adeline-ui:3000"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -59,6 +69,7 @@ app.include_router(transcripts_router)
 app.include_router(scaffold_router)
 app.include_router(daily_bread_router)
 app.include_router(learning_records_router)
+app.include_router(students_router)
 
 
 @app.get("/health")

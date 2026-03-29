@@ -20,9 +20,12 @@ RESEARCH_MISSION block. If a verified source is found, the lesson continues
 with a PRIMARY_SOURCE block from the auto-found archive.
 """
 import uuid
+import os
 import logging
 from datetime import datetime, timezone
 from typing import TypedDict, Literal
+
+import anthropic
 
 from app.schemas.api_models import (
     LessonRequest, LessonResponse, LessonBlockResponse,
@@ -33,6 +36,8 @@ from app.connections.pgvector_client import hippocampus
 from app.connections.neo4j_client import neo4j_client
 from app.tools.researcher import search_witnesses
 
+_ANTHROPIC_MODEL = os.getenv("ADELINE_MODEL", "claude-sonnet-4-6")
+
 logger = logging.getLogger(__name__)
 
 # Track routing constants
@@ -42,6 +47,98 @@ _DISCIPLESHIP_TRACKS = {
     Track.HEALTH_NATUROPATHY, Track.GOVERNMENT_ECONOMICS,
     Track.DISCIPLESHIP, Track.ENGLISH_LITERATURE,
 }
+
+
+# ── Claude synthesis ─────────────────────────────────────────────────────────
+
+# Grade band → readable description
+_GRADE_DESC = {
+    "K": "kindergarten (age 5-6)", "1": "1st grade (age 6-7)", "2": "2nd grade (age 7-8)",
+    "3": "3rd grade (age 8-9)", "4": "4th grade (age 9-10)", "5": "5th grade (age 10-11)",
+    "6": "6th grade (age 11-12)", "7": "7th grade (age 12-13)", "8": "8th grade (age 13-14)",
+    "9": "9th grade (age 14-15)", "10": "10th grade (age 15-16)",
+    "11": "11th grade (age 16-17)", "12": "12th grade (age 17-18)",
+}
+
+_TRACK_PERSONA = {
+    Track.TRUTH_HISTORY:        "a Truth-First historian who presents primary documents without spin",
+    Track.JUSTICE_CHANGEMAKING: "a justice mentor tracing the real history of civil courage",
+    Track.CREATION_SCIENCE:     "a creation science mentor who sees God's hand in every natural law",
+    Track.HOMESTEADING:         "a homestead mentor connecting every lesson to real farm and land work",
+    Track.DISCIPLESHIP:         "a discipleship guide reading all knowledge through a biblical worldview",
+    Track.HEALTH_NATUROPATHY:   "a naturopathic health mentor who honors how God designed the body",
+    Track.GOVERNMENT_ECONOMICS: "a civics mentor teaching stewardship of freedom and just governance",
+    Track.ENGLISH_LITERATURE:   "a literature mentor who reads great stories through a discerning lens",
+}
+
+
+async def _synthesize_content(
+    request: LessonRequest,
+    block_type: str,
+    source_chunks: list[dict],
+    raw_content: str,
+) -> str:
+    """
+    Call Claude to synthesize age-appropriate lesson content from verified sources.
+
+    If the Anthropic API key is absent, returns raw_content unchanged so the
+    lesson still functions (Hippocampus chunk is shown as-is).
+
+    The raw retrieved chunk is always cited; Claude's job is to:
+      1. Explain it at the student's grade level
+      2. Connect it to the 8-Track worldview lens
+      3. Surface the one most important takeaway
+    """
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key or api_key.startswith("sk-ant-..."):
+        return raw_content  # graceful no-op when key not configured
+
+    grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
+    persona    = _TRACK_PERSONA.get(request.track, "a knowledgeable mentor")
+    track_name = request.track.value.replace("_", " ").title()
+
+    sources_text = "\n\n---\n\n".join(
+        f"[SOURCE: {c['source_title']} — {c.get('citation_author', 'Unknown')}, "
+        f"{c.get('citation_year', 'n.d.')}]\n{c['chunk']}"
+        for c in source_chunks
+    )
+
+    block_label = block_type.replace("_", " ").lower()
+
+    system_prompt = (
+        f"You are Adeline — {persona}. "
+        f"You write educational content for Christian homeschool students.\n\n"
+        "RULES (non-negotiable):\n"
+        "• Use ONLY the provided primary source text — never invent facts\n"
+        "• Write at a level appropriate for a " + grade_desc + " student\n"
+        "• Keep response to 2–3 paragraphs maximum\n"
+        "• No formulaic closings like 'In conclusion' or 'Now you know'\n"
+        "• Do not start with 'I' or 'Today we will'\n"
+        "• Biblical worldview where naturally relevant — never forced\n"
+        "• Direct, vivid, specific language — no passive or vague sentences\n"
+    )
+
+    user_prompt = (
+        f"Topic: {request.topic}\n"
+        f"Track: {track_name}\n"
+        f"Block type: {block_label}\n\n"
+        f"Primary source(s) to teach from:\n{sources_text}\n\n"
+        f"Write the {block_label} content. "
+        f"Ground every claim in the source text above."
+    )
+
+    try:
+        client = anthropic.AsyncAnthropic(api_key=api_key)
+        message = await client.messages.create(
+            model=_ANTHROPIC_MODEL,
+            max_tokens=800,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        return message.content[0].text.strip()
+    except Exception as e:
+        logger.warning(f"[Claude] Synthesis failed ({e}) — using raw chunk")
+        return raw_content
 
 
 # ── Agent State ───────────────────────────────────────────────────────────────
@@ -202,14 +299,20 @@ async def historian_agent(state: AdelineState) -> AdelineState:
                 })
                 state["has_research_missions"] = True
         else:
-            content = result["chunk"]
+            raw = result["chunk"]
+            content = await _synthesize_content(
+                request=request,
+                block_type=BlockType.PRIMARY_SOURCE.value,
+                source_chunks=[result],
+                raw_content=raw,
+            )
             blocks.append({
                 "block_type":       BlockType.PRIMARY_SOURCE.value,
                 "content":          content,
                 "evidence":         [evidence.model_dump()],
                 "is_silenced":      False,
                 "homestead_content": (
-                    _homestead_adapt(content) if request.is_homestead else None
+                    _homestead_adapt(raw) if request.is_homestead else None
                 ),
             })
 
@@ -290,19 +393,25 @@ async def science_agent(state: AdelineState) -> AdelineState:
                 state["has_research_missions"] = True
 
         elif evidence.verdict == EvidenceVerdict.VERIFIED:
-            content = result["chunk"]
+            raw = result["chunk"]
             block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
-            lab_content = (
-                f"**Homestead Lab Mission**\n\n{content}\n\n"
-                "*Observe this directly on your land. Record what you find.*"
-                if is_homesteading else content
+            content = await _synthesize_content(
+                request=request,
+                block_type=block_type.value,
+                source_chunks=[result],
+                raw_content=raw,
             )
+            if is_homesteading:
+                content = (
+                    f"**Homestead Lab Mission**\n\n{content}\n\n"
+                    "*Observe this directly on your land. Record what you find.*"
+                )
             blocks.append({
                 "block_type":       block_type.value,
-                "content":          lab_content,
+                "content":          content,
                 "evidence":         [evidence.model_dump()],
                 "is_silenced":      False,
-                "homestead_content": _homestead_adapt(content) if request.is_homestead else None,
+                "homestead_content": _homestead_adapt(raw) if request.is_homestead else None,
             })
 
     if not blocks:
@@ -386,14 +495,20 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
                 state["has_research_missions"] = True
 
         elif evidence.verdict == EvidenceVerdict.VERIFIED:
-            content = result["chunk"]
+            raw = result["chunk"]
+            content = await _synthesize_content(
+                request=request,
+                block_type=BlockType.NARRATIVE.value,
+                source_chunks=[result],
+                raw_content=raw,
+            )
             blocks.append({
                 "block_type":       BlockType.NARRATIVE.value,
                 "content":          _worldview_wrap(content, request.track),
                 "evidence":         [evidence.model_dump()],
                 "is_silenced":      False,
                 "homestead_content": (
-                    _homestead_adapt(content) if request.is_homestead else None
+                    _homestead_adapt(raw) if request.is_homestead else None
                 ),
             })
 
