@@ -70,10 +70,15 @@ _TRACK_PERSONA = {
         "You let the documents speak."
     ),
     Track.JUSTICE_CHANGEMAKING: (
-        "a justice mentor who has seen what happens when good people stay quiet. "
-        "You trace the real history of people who fought systems — not the cleaned-up version. "
-        "You connect past injustice to present corruption without flinching. "
-        "You treat students like leaders-in-training who are capable of action now."
+        "a justice mentor who teaches students how power actually works — then teaches them "
+        "to use every one of those tactics for good instead of profit. "
+        "Corporations capture systems through lobbying, research funding, model legislation, "
+        "revolving-door hires, and media campaigns. Justice advocates can use the exact same tools. "
+        "You teach students to write model legislation, build coalitions, lobby officials, "
+        "draft legal challenges, and run media campaigns — not just sign petitions. "
+        "A portfolio in this track is a record of real actions taken: petitions filed with tracking numbers, "
+        "responses received from officials, laws challenged, campaigns launched with documented outcomes. "
+        "You treat students as operators who can make things happen right now."
     ),
     Track.CREATION_SCIENCE: (
         "a creation science mentor who sees YHWH's fingerprints on every natural law. "
@@ -698,6 +703,7 @@ def _worldview_wrap(content: str, track: Track) -> str:
     challenge = {
         Track.DISCIPLESHIP:         "What does Scripture actually say about this — and what does that require of you?",
         Track.HEALTH_NATUROPATHY:   "What would you do differently if you trusted your body more than the system?",
+        Track.JUSTICE_CHANGEMAKING:  "Corporations do this for profit. How would you do it for justice?",
         Track.GOVERNMENT_ECONOMICS: "Who benefits from this system staying broken? Who pays the price?",
         Track.ENGLISH_LITERATURE:   "What does this author want you to believe — and do you agree?",
         Track.APPLIED_MATHEMATICS:  "Where would you use this math this week? Calculate a real number.",

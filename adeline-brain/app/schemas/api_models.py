@@ -182,3 +182,59 @@ class ExperimentResponse(BaseModel):
     experiment:           Experiment
     student_materials_ready: bool = False
     video_upload_url:     str = ""
+
+
+# ── Projects (CREATIVE_ECONOMY + HOMESTEADING project library) ───────────────
+
+class ProjectDifficulty(int, Enum):
+    SEEDLING = 1   # beginner — a few hours, basic materials
+    GROWER   = 2   # intermediate — half day, some tools
+    BUILDER  = 3   # advanced — full weekend+, real construction
+
+class ProjectCategory(str, Enum):
+    CRAFT     = "CRAFT"      # making/crafting (CREATIVE_ECONOMY)
+    MARKET    = "MARKET"     # branding and selling (CREATIVE_ECONOMY)
+    GARDEN    = "GARDEN"     # growing food (HOMESTEADING)
+    LIVESTOCK = "LIVESTOCK"  # animals (HOMESTEADING)
+    BUILD     = "BUILD"      # construction (HOMESTEADING)
+    PRESERVE  = "PRESERVE"   # food preservation (HOMESTEADING)
+
+class ProjectStep(BaseModel):
+    step_number: int
+    instruction: str
+    tip: Optional[str] = None
+
+class PriceRange(BaseModel):
+    low: float
+    high: float
+    unit: str = "per item"
+
+class Project(BaseModel):
+    id:               str
+    title:            str
+    track:            Track
+    category:         ProjectCategory
+    difficulty:       ProjectDifficulty
+    tagline:          str
+    skills:           list[str]
+    business_skills:  list[str] = []
+    materials:        list[str]
+    steps:            list[ProjectStep]
+    estimated_hours:  float
+    price_range:      Optional[PriceRange] = None
+    where_to_sell:    list[str] = []
+    portfolio_prompts: list[str]
+    safety_notes:     list[str] = []
+    income_description: str = ""
+    grade_band:       str = "5-12"
+
+class ProjectSealRequest(BaseModel):
+    student_id: str
+    project_id: str
+    reflection: str = ""
+
+class ProjectSealResponse(BaseModel):
+    project_id:   str
+    credit_type:  str
+    credit_hours: float
+    message:      str
