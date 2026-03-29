@@ -307,6 +307,80 @@ SOURCES = [
             "had their cabins."
         ),
     },
+    # ── CREATIVE_ECONOMY — Making, crafting, pricing, selling ────────────────
+    # Art/DIY + cottage industry projects. Curriculum content (project library)
+    # is in adeline-brain/app/api/experiments.py pattern (future: projects router).
+    # Hippocampus seeds: public domain sources on craft, work, and trade.
+    {
+        "track": "CREATIVE_ECONOMY",
+        "source_title": "Useful Work versus Useless Toil",
+        "source_url": "https://www.gutenberg.org/ebooks/3037",
+        "citation_author": "William Morris",
+        "citation_year": 1884,
+        "citation_archive_name": "Project Gutenberg",
+        "chunk": (
+            "If we work thus, giving a little hope and rest to the brain, hand, and eye that "
+            "have been strained, we shall make something which at least will not be contemptible. "
+            "If we are to have no art at all — which is unthinkable — we must at least have the "
+            "lesser art of useful work. The pleasureable exercise of our energies is at once "
+            "the source of all art and the foundation of all happiness. A man who makes something "
+            "beautiful and useful with his hands has more to show for his time on earth than one "
+            "who merely consumes what others have made. To make well is to live well."
+        ),
+    },
+    {
+        "track": "CREATIVE_ECONOMY",
+        "source_title": "Poor Richard's Almanack — On Honest Work and Trade",
+        "source_url": "https://www.gutenberg.org/ebooks/52135",
+        "citation_author": "Benjamin Franklin",
+        "citation_year": 1732,
+        "citation_archive_name": "Project Gutenberg",
+        "chunk": (
+            "At the working man's house hunger looks in, but dares not enter. "
+            "Diligence is the mother of good luck. God gives all things to industry. "
+            "Then plough deep, while sluggards sleep, and you shall have corn to sell and keep. "
+            "Early to bed and early to rise makes a man healthy, wealthy, and wise. "
+            "A penny saved is a penny earned. He that hath a trade, hath an estate. "
+            "He that hath a calling, hath an office of profit and honor. "
+            "A man who knows a craft is never dependent on any employer for his living."
+        ),
+    },
+    {
+        "track": "CREATIVE_ECONOMY",
+        "source_title": "The American Frugal Housewife — Making and Selling at Market",
+        "source_url": "https://www.gutenberg.org/ebooks/13493",
+        "citation_author": "Lydia Maria Child",
+        "citation_year": 1833,
+        "citation_archive_name": "Project Gutenberg",
+        "chunk": (
+            "Whatever is homemade is half the price of what is bought, and generally better. "
+            "The woman who makes her own soap, candles, and cloth is supplying her family for "
+            "a fraction of what others pay. The surplus of home manufacture has always been "
+            "the foundation of the country store and the village market. When your labor "
+            "produces more than your family needs, sell what remains. Price your work honestly: "
+            "count the materials, count the hours, add a fair return. Never sell below your "
+            "labor's worth. A market stall run by careful hands can support a family better "
+            "than wages paid by a stranger."
+        ),
+    },
+    {
+        "track": "CREATIVE_ECONOMY",
+        "source_title": "The Foxfire Book — Making Things Worth Keeping",
+        "source_url": "https://archive.org/details/foxfire1",
+        "citation_author": "Eliot Wigginton (ed.)",
+        "citation_year": 1972,
+        "citation_archive_name": "Internet Archive",
+        "chunk": (
+            "The old craftsmen in these mountains made things to last. A chair built to hold "
+            "weight for a generation. A basket woven tight enough to carry grain. A quilt "
+            "stitched to warm children not yet born. They did not make to impress — they made "
+            "to use. The standard was simple: will this still be working in twenty years? "
+            "If you could not answer yes, you had not finished your work. That standard has "
+            "not changed. Cheap things made fast are already broken before they leave the table. "
+            "Good things made carefully are worth what they cost — and the person who made them "
+            "knows exactly why."
+        ),
+    },
     # ── APPLIED_MATHEMATICS — Real-world math: money, land, building, market ───
     # Curriculum reading (not in Hippocampus — copyrighted):
     #   Oklahoma Academic Standards for Mathematics (grade-level standards)

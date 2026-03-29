@@ -46,7 +46,7 @@ _SCIENCE_TRACKS    = {Track.CREATION_SCIENCE, Track.HOMESTEADING}
 _DISCIPLESHIP_TRACKS = {
     Track.HEALTH_NATUROPATHY, Track.GOVERNMENT_ECONOMICS,
     Track.DISCIPLESHIP, Track.ENGLISH_LITERATURE,
-    Track.APPLIED_MATHEMATICS,
+    Track.APPLIED_MATHEMATICS, Track.CREATIVE_ECONOMY,
 }
 
 
@@ -116,6 +116,13 @@ _TRACK_PERSONA = {
         "calculating yields, understanding loans, reading a balance sheet. "
         "You never teach a formula without showing exactly where a person would use it this week. "
         "Math is a tool — not a performance. Show them how it works in the real world."
+    ),
+    Track.CREATIVE_ECONOMY: (
+        "a maker-entrepreneur mentor. You teach students to create beautiful, functional things "
+        "with their hands — and sell them. Upcycled furniture, handmade goods, farm products, "
+        "branded packaging, market displays. You teach craft, pricing, marketing, and the satisfaction "
+        "of building something real. Every project ends with a finished product worth money. "
+        "You treat creativity as a survival skill, not a hobby."
     ),
 }
 
@@ -684,6 +691,7 @@ def _worldview_wrap(content: str, track: Track) -> str:
         Track.GOVERNMENT_ECONOMICS: "Power doesn't work the way the textbook says.",
         Track.ENGLISH_LITERATURE:   "Every story is a truth claim. Read it like one.",
         Track.APPLIED_MATHEMATICS:  "Math doesn't live on tests. It lives on your land, in your budget, at the market.",
+        Track.CREATIVE_ECONOMY:     "Making something with your hands that someone will pay for is one of the most countercultural things you can do.",
     }.get(track, "Here's what this actually means:")
 
     # The closing challenge replaces the generic "How does this shape..." question
@@ -693,6 +701,7 @@ def _worldview_wrap(content: str, track: Track) -> str:
         Track.GOVERNMENT_ECONOMICS: "Who benefits from this system staying broken? Who pays the price?",
         Track.ENGLISH_LITERATURE:   "What does this author want you to believe — and do you agree?",
         Track.APPLIED_MATHEMATICS:  "Where would you use this math this week? Calculate a real number.",
+        Track.CREATIVE_ECONOMY:     "What will you make? What materials do you already have? What would you charge for it?",
     }.get(track, "What does this change about how you act?")
 
     return (
@@ -815,6 +824,7 @@ def _track_to_credit_type(track: Track) -> str:
         Track.HEALTH_NATUROPATHY:   "ELECTIVE",
         Track.HOMESTEADING:         "HOMESTEAD",
         Track.APPLIED_MATHEMATICS:  "MATHEMATICS",
+        Track.CREATIVE_ECONOMY:     "VOCATIONAL",
     }.get(track, "ELECTIVE")
 
 

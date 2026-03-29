@@ -8,7 +8,7 @@
 import { z } from "zod";
 
 // ══════════════════════════════════════════════════════════════════
-// 1. THE 9-TRACK CONSTITUTION
+// 1. THE 10-TRACK CONSTITUTION
 // ══════════════════════════════════════════════════════════════════
 
 export enum Track {
@@ -21,6 +21,7 @@ export enum Track {
   TRUTH_HISTORY         = "TRUTH_HISTORY",          // 7. Truth-Based History
   ENGLISH_LITERATURE    = "ENGLISH_LITERATURE",     // 8. English Language & Literature
   APPLIED_MATHEMATICS   = "APPLIED_MATHEMATICS",    // 9. Applied Mathematics (real-world math)
+  CREATIVE_ECONOMY      = "CREATIVE_ECONOMY",       // 10. Creative Economy (making, crafting, selling)
 }
 
 export const TRACK_LABELS: Record<Track, string> = {
@@ -30,6 +31,7 @@ export const TRACK_LABELS: Record<Track, string> = {
   [Track.GOVERNMENT_ECONOMICS]: "Government & Economics",
   [Track.JUSTICE_CHANGEMAKING]: "Justice & Change-making",
   [Track.APPLIED_MATHEMATICS]:  "Applied Mathematics",
+  [Track.CREATIVE_ECONOMY]:     "Creative Economy",
   [Track.DISCIPLESHIP]:         "Discipleship & Discernment",
   [Track.TRUTH_HISTORY]:        "Truth-Based History",
   [Track.ENGLISH_LITERATURE]:   "English Language & Literature",
@@ -64,6 +66,7 @@ export const TRACK_THEME: Record<Track, TrackThemeEntry> = {
   [Track.TRUTH_HISTORY]:        { primary: COLORS.PARADISE, label: TRACK_LABELS[Track.TRUTH_HISTORY] },
   [Track.ENGLISH_LITERATURE]:   { primary: COLORS.PAPAYA,   label: TRACK_LABELS[Track.ENGLISH_LITERATURE] },
   [Track.APPLIED_MATHEMATICS]:  { primary: COLORS.PARADISE, label: TRACK_LABELS[Track.APPLIED_MATHEMATICS] },
+  [Track.CREATIVE_ECONOMY]:     { primary: COLORS.PAPAYA,   label: TRACK_LABELS[Track.CREATIVE_ECONOMY] },
 };
 
 // ══════════════════════════════════════════════════════════════════
