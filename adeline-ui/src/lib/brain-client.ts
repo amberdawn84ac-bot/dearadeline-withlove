@@ -55,12 +55,40 @@ export interface LessonBlockResponse {
   homestead_content?: string;
 }
 
+export interface XAPIStatement {
+  id: string;
+  timestamp: string;
+  actor: { objectType: string; account: { name: string } };
+  verb: { id: string; display: { "en-US": string } };
+  object: { id: string; definition: { name: { "en-US": string }; type: string } };
+  context: { extensions: Record<string, unknown> };
+}
+
+export interface CASECredit {
+  id: string;
+  lesson_id: string;
+  student_id: string;
+  course_title: string;
+  track: Track;
+  oas_standards: string[];
+  activity_description: string;
+  credit_hours: number;
+  credit_type: "CORE" | "ELECTIVE" | "HOMESTEAD" | "PHYSICAL_ED" | "FINE_ARTS";
+  is_homestead_credit: boolean;
+  completed_at: string;
+  researcher_activated: boolean;
+}
+
 export interface LessonResponse {
   lesson_id: string;
   title: string;
   track: Track;
   blocks: LessonBlockResponse[];
   has_research_missions: boolean;
+  researcher_activated: boolean;
+  agent_name: string;
+  xapi_statements: XAPIStatement[];
+  credits_awarded: CASECredit[];
   oas_standards: Array<{
     standard_id: string;
     text: string;
