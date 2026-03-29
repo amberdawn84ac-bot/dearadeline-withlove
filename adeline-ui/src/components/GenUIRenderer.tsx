@@ -23,6 +23,7 @@ import type { LessonBlockResponse, Evidence } from "@/lib/brain-client";
 type BrainBlockType =
   | "PRIMARY_SOURCE"
   | "LAB_MISSION"
+  | "EXPERIMENT"
   | "NARRATIVE"
   | "RESEARCH_MISSION"
   | "QUIZ"
@@ -106,6 +107,7 @@ function EvidenceFooter({ evidence }: { evidence: Evidence[] }) {
 const LABEL_STYLES: Record<BrainBlockType, string> = {
   PRIMARY_SOURCE:   "bg-[#9A3F4A] text-white",
   LAB_MISSION:      "bg-[#2F4731] text-white",
+  EXPERIMENT:       "bg-[#BD6809] text-black",
   NARRATIVE:        "bg-[#BD6809] text-white",
   RESEARCH_MISSION: "bg-[#6B7280] text-white",
   QUIZ:             "bg-[#4F46E5] text-white",
@@ -115,6 +117,7 @@ const LABEL_STYLES: Record<BrainBlockType, string> = {
 const LABEL_NAMES: Record<BrainBlockType, string> = {
   PRIMARY_SOURCE:   "Primary Source",
   LAB_MISSION:      "Lab Mission",
+  EXPERIMENT:       "Sovereign Lab",
   NARRATIVE:        "Narrative",
   RESEARCH_MISSION: "Research Mission",
   QUIZ:             "Quiz",
@@ -172,6 +175,37 @@ function LabMissionBlock({ block }: { block: LessonBlockResponse }) {
       </div>
       <p className="text-sm text-[#2F4731] leading-relaxed whitespace-pre-wrap">{block.content}</p>
       <EvidenceFooter evidence={block.evidence} />
+    </div>
+  );
+}
+
+// ── EXPERIMENT block (Sovereign Lab) ─────────────────────────────────────────
+
+function ExperimentBlock({ block }: { block: LessonBlockResponse }) {
+  // The block may carry experiment_data in its raw dict (passed through as extra field)
+  return (
+    <div
+      className="rounded-xl p-5 space-y-3"
+      style={{ background: "#FDF6E9", border: "2px solid #BD6809" }}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-xl">🧪</span>
+        <BlockLabel type="EXPERIMENT" />
+        <span className="ml-auto text-xs font-black uppercase tracking-wider text-[#BD6809]">
+          Sovereign Lab
+        </span>
+      </div>
+      <p
+        className="text-base text-[#2F4731] leading-relaxed whitespace-pre-wrap font-medium"
+        style={{ fontFamily: "var(--font-kalam), cursive" }}
+      >
+        {block.content}
+      </p>
+      <div className="flex items-center gap-3 pt-2 border-t border-[#BD6809]/20">
+        <span className="text-xs text-[#BD6809] font-bold">
+          🎬 Film This — Your video IS the portfolio
+        </span>
+      </div>
     </div>
   );
 }
@@ -361,6 +395,8 @@ export default function GenUIRenderer({
               );
             case "LAB_MISSION":
               return <LabMissionBlock key={block.block_id} block={block} />;
+            case "EXPERIMENT":
+              return <ExperimentBlock key={block.block_id} block={block} />;
             case "NARRATIVE":
               return (
                 <NarrativeBlock key={block.block_id} block={block} isHomestead={isHomestead} />

@@ -338,44 +338,165 @@ async def historian_agent(state: AdelineState) -> AdelineState:
 
 async def science_agent(state: AdelineState) -> AdelineState:
     """
-    Creation Science and Homesteading specialist.
-    HOMESTEADING track uses LAB_MISSION blocks for hands-on, land-based learning.
-    CREATION_SCIENCE uses PRIMARY_SOURCE blocks with direct observation lens.
-    Homestead flag deepens the application to real farm/land activities.
-    Witness Protocol applies; ARCHIVE_SILENT triggers Researcher.
+    Creation Science and Homesteading specialist — "Sovereign Lab" model.
+
+    CREATION_SCIENCE: EXPERIMENT-FIRST. Adeline acts as a Lab Director.
+      1. Check the experiment catalog for a matching "wow" experiment
+      2. If found → EXPERIMENT block (hands-on, filmable, viral)
+      3. If not  → fall back to Hippocampus retrieval (PRIMARY_SOURCE)
+
+    HOMESTEADING: LAB_MISSION blocks for hands-on, land-based learning.
+
+    The "No Busywork" science loop:
+      Hook → Materials Check → Live Guide → Film It → Discovery Video = Portfolio
+
+    Witness Protocol applies to text-based blocks; experiments are pre-verified
+    via the curated experiment catalog and don't need cosine scoring.
     """
+    from app.api.experiments import EXPERIMENTS
+
     request = state["request"]
     state["agent_name"] = "ScienceAgent"
     blocks: list[dict] = []
     is_homesteading = request.track == Track.HOMESTEADING
+    is_creation_science = request.track == Track.CREATION_SCIENCE
 
-    raw_results = await hippocampus.similarity_search(
-        query_embedding=state["query_embedding"],
-        track=request.track.value,
-        top_k=3,
-    )
+    # ── Step 1: Experiment match (CREATION_SCIENCE only) ──────────────────────
+    # Search the experiment catalog for concept keyword overlap with the topic.
+    experiment_matched = False
+    if is_creation_science:
+        topic_lower = request.topic.lower()
+        best_experiment = None
+        best_overlap = 0
 
-    for result in raw_results:
-        evidence = evaluate_evidence(
-            source_id=result["id"],
-            source_title=result["source_title"],
-            source_url=result.get("source_url", ""),
-            citation_author=result.get("citation_author", ""),
-            citation_year=result.get("citation_year"),
-            citation_archive_name=result.get("citation_archive_name", ""),
-            similarity_score=float(result["similarity_score"]),
-            chunk=result["chunk"],
+        for exp in EXPERIMENTS.values():
+            # Score: number of concept keywords that appear in the topic
+            overlap = sum(
+                1 for concept in exp.scientific_concepts
+                if concept.lower() in topic_lower or any(
+                    word in topic_lower for word in concept.lower().split()
+                )
+            )
+            # Also check title/tagline
+            if exp.title.lower() in topic_lower or topic_lower in exp.title.lower():
+                overlap += 3
+            for word in topic_lower.split():
+                if len(word) > 3 and word in exp.tagline.lower():
+                    overlap += 1
+
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_experiment = exp
+
+        if best_experiment and best_overlap >= 1:
+            experiment_matched = True
+            logger.info(
+                f"[ScienceAgent] Experiment match: '{best_experiment.title}' "
+                f"(overlap={best_overlap}) for topic='{request.topic}'"
+            )
+
+            # Build the EXPERIMENT block with the Creation Connection
+            content = (
+                f"**{best_experiment.title}** {_CHAOS_EMOJI[best_experiment.chaos_level]}\n\n"
+                f"*{best_experiment.tagline}*\n\n"
+                f"We could read about {', '.join(best_experiment.scientific_concepts[:2])}, "
+                f"OR we could make enough "
+            )
+            # Tailor the hook per experiment
+            if "toothpaste" in best_experiment.title.lower():
+                content += "foam to wash an elephant. Which one?"
+            elif "mentos" in best_experiment.title.lower():
+                content += "pressure to launch a soda rocket 50 feet into the air. Which one?"
+            elif "oobleck" in best_experiment.title.lower():
+                content += "non-Newtonian fluid to walk on. Which one?"
+            elif "fire" in best_experiment.title.lower():
+                content += "heat to build a real vortex of fire. Which one?"
+            elif "dry ice" in best_experiment.title.lower():
+                content += "CO\u2082 to fill a giant fog bubble. Which one?"
+            else:
+                content += f"something unforgettable. Ready?"
+
+            blocks.append({
+                "block_type":        BlockType.EXPERIMENT.value,
+                "content":           content,
+                "evidence":          [],  # experiments are pre-verified (curated catalog)
+                "is_silenced":       False,
+                "homestead_content": None,
+                "experiment_id":     best_experiment.id,
+                "experiment_data":   best_experiment.model_dump(),
+            })
+
+    # ── Step 2: Hippocampus retrieval (HOMESTEADING, or CREATION_SCIENCE fallback)
+    if not experiment_matched:
+        raw_results = await hippocampus.similarity_search(
+            query_embedding=state["query_embedding"],
+            track=request.track.value,
+            top_k=3,
         )
 
-        if evidence.verdict == EvidenceVerdict.ARCHIVE_SILENT:
-            logger.info(
-                f"[ScienceAgent] ARCHIVE_SILENT on '{result['source_title']}' — "
-                "activating Researcher..."
+        for result in raw_results:
+            evidence = evaluate_evidence(
+                source_id=result["id"],
+                source_title=result["source_title"],
+                source_url=result.get("source_url", ""),
+                citation_author=result.get("citation_author", ""),
+                citation_year=result.get("citation_year"),
+                citation_archive_name=result.get("citation_archive_name", ""),
+                similarity_score=float(result["similarity_score"]),
+                chunk=result["chunk"],
             )
-            block = await _researcher_fallback(state, request.track.value, result["source_title"])
+
+            if evidence.verdict == EvidenceVerdict.ARCHIVE_SILENT:
+                logger.info(
+                    f"[ScienceAgent] ARCHIVE_SILENT on '{result['source_title']}' — "
+                    "activating Researcher..."
+                )
+                block = await _researcher_fallback(state, request.track.value, result["source_title"])
+                if block:
+                    if is_homesteading:
+                        block["block_type"] = BlockType.LAB_MISSION.value
+                        block["content"] = (
+                            f"**Homestead Lab Mission**\n\n"
+                            f"{block['content']}\n\n"
+                            "*Observe this directly on your land. Record what you find.*"
+                        )
+                    blocks.append(block)
+                else:
+                    mission = build_research_mission_block(request.topic, [result["source_title"]])
+                    blocks.append({
+                        **mission,
+                        "block_type": BlockType.RESEARCH_MISSION.value,
+                        "evidence":   [evidence.model_dump()],
+                    })
+                    state["has_research_missions"] = True
+
+            elif evidence.verdict == EvidenceVerdict.VERIFIED:
+                raw = result["chunk"]
+                block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
+                content = await _synthesize_content(
+                    request=request,
+                    block_type=block_type.value,
+                    source_chunks=[result],
+                    raw_content=raw,
+                )
+                if is_homesteading:
+                    content = (
+                        f"**Homestead Lab Mission**\n\n{content}\n\n"
+                        "*Observe this directly on your land. Record what you find.*"
+                    )
+                blocks.append({
+                    "block_type":       block_type.value,
+                    "content":          content,
+                    "evidence":         [evidence.model_dump()],
+                    "is_silenced":      False,
+                    "homestead_content": _homestead_adapt(raw) if request.is_homestead else None,
+                })
+
+        if not blocks:
+            logger.info("[ScienceAgent] Empty Hippocampus result — activating Researcher...")
+            block = await _researcher_fallback(state, request.track.value)
             if block:
                 if is_homesteading:
-                    # Promote to LAB_MISSION for hands-on homestead track
                     block["block_type"] = BlockType.LAB_MISSION.value
                     block["content"] = (
                         f"**Homestead Lab Mission**\n\n"
@@ -384,59 +505,20 @@ async def science_agent(state: AdelineState) -> AdelineState:
                     )
                 blocks.append(block)
             else:
-                mission = build_research_mission_block(request.topic, [result["source_title"]])
+                mission = build_research_mission_block(request.topic, [])
                 blocks.append({
                     **mission,
                     "block_type": BlockType.RESEARCH_MISSION.value,
-                    "evidence":   [evidence.model_dump()],
+                    "evidence":   [],
                 })
                 state["has_research_missions"] = True
 
-        elif evidence.verdict == EvidenceVerdict.VERIFIED:
-            raw = result["chunk"]
-            block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
-            content = await _synthesize_content(
-                request=request,
-                block_type=block_type.value,
-                source_chunks=[result],
-                raw_content=raw,
-            )
-            if is_homesteading:
-                content = (
-                    f"**Homestead Lab Mission**\n\n{content}\n\n"
-                    "*Observe this directly on your land. Record what you find.*"
-                )
-            blocks.append({
-                "block_type":       block_type.value,
-                "content":          content,
-                "evidence":         [evidence.model_dump()],
-                "is_silenced":      False,
-                "homestead_content": _homestead_adapt(raw) if request.is_homestead else None,
-            })
-
-    if not blocks:
-        logger.info("[ScienceAgent] Empty Hippocampus result — activating Researcher...")
-        block = await _researcher_fallback(state, request.track.value)
-        if block:
-            if is_homesteading:
-                block["block_type"] = BlockType.LAB_MISSION.value
-                block["content"] = (
-                    f"**Homestead Lab Mission**\n\n"
-                    f"{block['content']}\n\n"
-                    "*Observe this directly on your land. Record what you find.*"
-                )
-            blocks.append(block)
-        else:
-            mission = build_research_mission_block(request.topic, [])
-            blocks.append({
-                **mission,
-                "block_type": BlockType.RESEARCH_MISSION.value,
-                "evidence":   [],
-            })
-            state["has_research_missions"] = True
-
     state["blocks"] = blocks
     return state
+
+
+# Chaos level emoji lookup
+_CHAOS_EMOJI = {1: "🌱", 2: "🔭", 3: "🔥"}
 
 
 # ── Discipleship Agent ─────────────────────────────────────────────────────────
@@ -599,7 +681,9 @@ async def registrar_agent(state: AdelineState) -> AdelineState:
         if b.get("block_type") in (BlockType.PRIMARY_SOURCE.value, BlockType.NARRATIVE.value)
     )
     lab_count       = sum(1 for b in blocks if b.get("block_type") == BlockType.LAB_MISSION.value)
-    credit_hours    = round(min(1.0, 0.1 * (verified_count + lab_count)), 2)
+    experiment_count = sum(1 for b in blocks if b.get("block_type") == BlockType.EXPERIMENT.value)
+    # Experiments grant 0.25 credit each (higher than 0.1 for text blocks)
+    credit_hours    = round(min(1.0, 0.1 * (verified_count + lab_count) + 0.25 * experiment_count), 2)
 
     credits_awarded: list[dict] = [{
         "id":                  str(uuid.uuid4()),
@@ -612,6 +696,7 @@ async def registrar_agent(state: AdelineState) -> AdelineState:
             f"Lesson on '{request.topic}' via {state.get('agent_name', 'Adeline')} — "
             f"{verified_count} verified source(s)"
             + (f", {lab_count} lab mission(s)" if lab_count else "")
+            + (f", {experiment_count} experiment(s)" if experiment_count else "")
         ),
         "credit_hours":        credit_hours,
         "credit_type":         _track_to_credit_type(request.track),
@@ -634,6 +719,7 @@ def _block_type_to_xapi_verb(block_type: str) -> str:
         BlockType.PRIMARY_SOURCE.value:   "experienced",
         BlockType.NARRATIVE.value:        "experienced",
         BlockType.LAB_MISSION.value:      "attempted",
+        BlockType.EXPERIMENT.value:       "completed",    # Sovereign Lab experiments count as "completed"
         BlockType.RESEARCH_MISSION.value: "interacted",
         BlockType.QUIZ.value:             "attempted",
         BlockType.TEXT.value:             "experienced",
@@ -641,9 +727,14 @@ def _block_type_to_xapi_verb(block_type: str) -> str:
 
 
 def _track_to_credit_type(track: Track) -> str:
+    """
+    Map track to default credit type.
+    CREATION_SCIENCE now returns LABORATORY_SCIENCE (not generic CORE)
+    when the lesson contains EXPERIMENT blocks — handled in registrar_agent.
+    """
     return {
         Track.TRUTH_HISTORY:        "CORE",
-        Track.CREATION_SCIENCE:     "CORE",
+        Track.CREATION_SCIENCE:     "LABORATORY_SCIENCE",
         Track.ENGLISH_LITERATURE:   "CORE",
         Track.GOVERNMENT_ECONOMICS: "CORE",
         Track.JUSTICE_CHANGEMAKING: "CORE",

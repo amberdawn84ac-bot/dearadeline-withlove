@@ -39,8 +39,25 @@ class BlockType(str, Enum):
     NARRATIVE        = "NARRATIVE"
     PRIMARY_SOURCE   = "PRIMARY_SOURCE"
     LAB_MISSION      = "LAB_MISSION"
+    EXPERIMENT       = "EXPERIMENT"
     RESEARCH_MISSION = "RESEARCH_MISSION"
     QUIZ             = "QUIZ"
+
+
+# ── Chaos Levels (Science Experiment difficulty/safety) ──────────────────────
+
+class ChaosLevel(int, Enum):
+    SPROUT    = 1   # 🌱 Kitchen table; paper towels only
+    SCOUT     = 2   # 🔭 Driveway/backyard; wear old clothes
+    SOVEREIGN = 3   # 🔥 Open field; fire extinguisher & Dad required
+
+
+class ScienceCredit(str, Enum):
+    LABORATORY_SCIENCE = "LABORATORY_SCIENCE"
+    PHYSICS            = "PHYSICS"
+    CHEMISTRY          = "CHEMISTRY"
+    BIOLOGY            = "BIOLOGY"
+    EARTH_SCIENCE      = "EARTH_SCIENCE"
 
 
 # ── User Roles (mirrors UserRole in types.ts) ─────────────────────────────────
@@ -121,3 +138,45 @@ class LessonResponse(BaseModel):
     agent_name:           str = ""       # Which specialist agent handled this lesson
     xapi_statements:      list[dict] = Field(default_factory=list)  # xAPI records (Phase 6 persists these)
     credits_awarded:      list[dict] = Field(default_factory=list)  # CASE credit entries
+
+
+# ── Experiment (Sovereign Lab — CREATION_SCIENCE experiments) ────────────────
+
+class ExperimentStep(BaseModel):
+    step_number: int
+    instruction: str
+    tip:         str = ""  # optional safety/technique tip
+
+class SocialMediaKit(BaseModel):
+    caption_template: str = ""               # e.g. "Adeline taught us THIS today 🧪🔥"
+    filming_tips:     list[str] = Field(default_factory=list)  # "Use slow-mo", "Get the reaction shot"
+    hashtags:         list[str] = Field(default_factory=list)
+
+class CreationConnection(BaseModel):
+    """The 'God's Creation' bridge — why this experiment points to design."""
+    title:      str             # e.g. "Catalysts in the Human Body"
+    scripture:  str = ""        # e.g. "Psalm 139:14 — fearfully and wonderfully made"
+    explanation: str            # 2-3 sentences connecting the science to God's design
+
+class Experiment(BaseModel):
+    id:                   str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title:                str                                 # "Elephant Toothpaste"
+    tagline:              str = ""                             # "The loudest way to learn decomposition"
+    chaos_level:          ChaosLevel                          # SPROUT / SCOUT / SOVEREIGN
+    wow_factor:           int = Field(ge=1, le=10, default=8) # 1-10 spectacle rating
+    scientific_concepts:  list[str]                            # ["exothermic reactions", "decomposition", "catalysts"]
+    science_credits:      list[ScienceCredit]                  # what the Registrar grants
+    grade_band:           str = "3-12"                         # applicable grade range
+    materials:            list[str]                            # shopping/pantry list
+    safety_requirements:  list[str] = Field(default_factory=list)
+    steps:                list[ExperimentStep]
+    creation_connection:  CreationConnection
+    social_media_kit:     SocialMediaKit = Field(default_factory=SocialMediaKit)
+    estimated_minutes:    int = 30
+    track:                Track = Track.CREATION_SCIENCE
+
+class ExperimentResponse(BaseModel):
+    """Returned from GET /experiments and POST /experiments/start."""
+    experiment:           Experiment
+    student_materials_ready: bool = False
+    video_upload_url:     str = ""
