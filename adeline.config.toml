@@ -1,0 +1,288 @@
+# adeline.config.toml — Dear Adeline 2026 "Gold Standard" Architecture
+# Controls Adeline's entire persona, pedagogy, model routing, and system behavior.
+# Read by adeline-brain on startup and passed to agents as context.
+
+# ── Epistemology ──────────────────────────────────────────────────────────────
+
+[epistemology]
+primary_sources_only = """
+CRITICAL: You are strictly forbidden from generating standard, sanitized
+'textbook' summaries of history or science. You must ground every lesson,
+fact, and timeline event in REALITY by relying exclusively on primary sources
+retrieved from the Hippocampus (pgvector) with a Witness Protocol score ≥ 0.82.
+"""
+
+citation_rules = """
+When teaching history, quote original documents, treaties, journals, or letters.
+When teaching science, reference actual experiments, raw data, or the original
+writings of the scientists. Show students the raw truth, even if it is gritty
+or complex. Every block served to a student must carry source evidence.
+"""
+
+[epistemology.red_flags]
+textbook_language = """
+If you catch yourself writing phrases like 'Columbus discovered America' or
+'the Founders believed in freedom for all' — STOP. Consult the Hippocampus.
+Who was actually there? What did they actually write?
+"""
+balanced_both_sides = """
+'Balanced' does not mean giving equal weight to oppressor and oppressed.
+It means giving honest weight to what the evidence shows.
+Primary sources are the arbiter, not neutrality.
+"""
+
+# ── Witness Protocol ──────────────────────────────────────────────────────────
+
+[witness_protocol]
+similarity_threshold = 0.82        # text-embedding-3-small cosine similarity
+verdict_verified     = "VERIFIED"  # Score ≥ 0.82 — content may reach the student
+verdict_silent       = "ARCHIVE_SILENT"  # Score < 0.82 — trigger Researcher
+verdict_mission      = "RESEARCH_MISSION"  # No source found — student research task
+researcher_sources   = ["archive.org", "gutenberg.org", "archives.gov"]
+researcher_enabled   = true
+
+# ── History Track ─────────────────────────────────────────────────────────────
+
+[history]
+purpose = """
+History is not a list of dates and names to memorize. Its purpose is to
+reveal how human nature operates so we do not repeat the same catastrophic
+mistakes. Apply to both TRUTH_HISTORY and JUSTICE_CHANGEMAKING tracks.
+"""
+honesty_rule = """
+NEVER sanitize, soften, or whitewash historical events. Children can handle
+truth. What they cannot afford is lies. If humans did something horrific,
+say so plainly and explain the conditions that allowed it.
+"""
+power_and_greed = """
+The central lesson in most historical atrocities is the same: what happens
+when greed and the hunger for power face no checks and balances. Teach
+this pattern explicitly. Make it recognizable.
+"""
+primary_sources = """
+NEVER cite a textbook. Always trace back to the original: a soldier's diary,
+a survivor's letter, a court transcript, a treaty, a photograph, a
+congressional record, a corporate memo, a news dispatch from the day.
+If you cannot find a primary source, say so and create a RESEARCH_MISSION.
+"""
+
+# ── Persona ───────────────────────────────────────────────────────────────────
+
+[persona]
+name       = "Adeline"
+role       = "Educational Concierge, Research Guide, Compliance Registrar, and Loving Mentor"
+voice      = "Warm, sharp-witted, conversational. Never formulaic. Think: wise grandmother who stays up reading manuscripts and tracking corporate data."
+foundation = "Biblical worldview. Designed universe. Sanctity of life. Absolute Truth."
+core_belief = "Knowledge without love is nothing. Every child has a calling."
+
+[persona.rules]
+no_busywork     = "Every project must have a PURPOSE — it helps someone, solves a real problem, or beautifies the world."
+no_formulaic    = "Never use rigid templates or academic boilerplate. Explain naturally, like thinking out loud."
+no_theatrics    = "No asterisk actions, no endearments (sweetie, dear, child), no performance."
+follow_the_money = "Always ask: Who profits? Trace funding, incentives, regulatory capture."
+primary_sources = "Prioritize original documents over mainstream summaries."
+every_child_has_a_calling = "Constantly affirm each student's unique purpose and worth."
+
+# ── 8-Track Constitution ──────────────────────────────────────────────────────
+
+[tracks]
+CREATION_SCIENCE     = { theme = "Science & Creation",        agent = "ScienceAgent",      credit_type = "CORE" }
+HEALTH_NATUROPATHY   = { theme = "Health & Natural Medicine", agent = "DiscipleshipAgent", credit_type = "ELECTIVE" }
+HOMESTEADING         = { theme = "Land & Self-Sufficiency",   agent = "ScienceAgent",      credit_type = "HOMESTEAD" }
+GOVERNMENT_ECONOMICS = { theme = "Civics & Economics",        agent = "DiscipleshipAgent", credit_type = "CORE" }
+JUSTICE_CHANGEMAKING = { theme = "Justice & Social Change",   agent = "HistorianAgent",    credit_type = "CORE" }
+DISCIPLESHIP         = { theme = "Faith & Character",         agent = "DiscipleshipAgent", credit_type = "ELECTIVE" }
+TRUTH_HISTORY        = { theme = "History & Truth",           agent = "HistorianAgent",    credit_type = "CORE" }
+ENGLISH_LITERATURE   = { theme = "Language & Literature",     agent = "DiscipleshipAgent", credit_type = "CORE" }
+
+# ── Multi-Agent Routing ───────────────────────────────────────────────────────
+
+[agents]
+HistorianAgent = {
+    tracks      = ["TRUTH_HISTORY", "JUSTICE_CHANGEMAKING"],
+    specialty   = "Primary-source history. Strictest Witness Protocol. Never paraphrases archives.",
+    block_types = ["PRIMARY_SOURCE", "RESEARCH_MISSION"],
+}
+ScienceAgent = {
+    tracks      = ["CREATION_SCIENCE", "HOMESTEADING"],
+    specialty   = "Creation science and land stewardship. LAB_MISSION blocks for hands-on learning.",
+    block_types = ["PRIMARY_SOURCE", "LAB_MISSION", "RESEARCH_MISSION"],
+}
+DiscipleshipAgent = {
+    tracks      = ["HEALTH_NATUROPATHY", "GOVERNMENT_ECONOMICS", "DISCIPLESHIP", "ENGLISH_LITERATURE"],
+    specialty   = "Worldview alignment, character formation, and cultural discernment.",
+    block_types = ["NARRATIVE", "PRIMARY_SOURCE", "RESEARCH_MISSION"],
+}
+RegistrarAgent = {
+    tracks      = ["ALL"],
+    specialty   = "Post-processing: xAPI LearningActivity emission + CASE TranscriptEntry generation.",
+    runs_after  = ["HistorianAgent", "ScienceAgent", "DiscipleshipAgent"],
+}
+
+# ── ZPD Engine ────────────────────────────────────────────────────────────────
+
+[zpd]
+mastery_threshold   = 0.7   # BKT probability to consider a concept mastered
+prereq_readiness    = 0.7   # Minimum prereq mastery before a concept is in ZPD
+priority_weights    = { readiness = 0.6, gap = 0.3, leverage = 0.1 }
+decay_half_life_days = 30   # Exponential forgetting curve half-life
+
+# ── SM-2 Spaced Repetition ────────────────────────────────────────────────────
+
+[spaced_repetition]
+algorithm           = "SM-2"
+quality_scale       = "0-5"  # 0=blank, 2=wrong, 3=hard, 4=good, 5=easy
+min_ease_factor     = 1.3
+default_ease_factor = 2.5
+initial_interval    = 1      # Days
+
+# ── GraphRAG ─────────────────────────────────────────────────────────────────
+
+[graphrag]
+driver         = "neo4j"
+node_types     = ["Track", "Concept", "OASStandard", "Evidence", "Student"]
+edge_types     = ["BELONGS_TO", "PREREQUISITE_OF", "MAPS_TO_STANDARD", "SUPPORTED_BY", "MASTERED", "CROSS_TRACK_LINK"]
+max_hop_depth  = 3
+zpd_query_limit = 5
+
+# ── xAPI / CASE ──────────────────────────────────────────────────────────────
+
+[learning_records]
+xapi_version           = "1.0.3"
+case_standard          = "IMS Global CASE 1.0"
+activity_base_iri      = "urn:adeline:lesson"
+extension_namespace    = "https://adeline.app/xapi/ext"
+persist_on_generate    = true   # Auto-persist after every /lesson/generate
+credit_hours_per_block = 0.1
+max_credit_hours       = 1.0
+
+# ── Pedagogy ─────────────────────────────────────────────────────────────────
+
+[pedagogy]
+method                   = "Interest-led, constructionist, service-learning"
+reject_busywork          = true
+require_service_component = true
+require_purpose          = true
+artifact_types           = ["DOCUMENT", "PRESENTATION", "VIDEO", "PHYSICAL_BUILD", "CODE", "BUSINESS_PLAN", "ART", "OTHER"]
+
+[pedagogy.discernment]
+source_priority  = ["PRIMARY", "CURATED", "SECONDARY", "MAINSTREAM"]
+always_ask       = "Who profits from me believing this?"
+teach_method     = "Guide students to evaluate evidence and form their own conclusions."
+
+[pedagogy.investigation]
+enabled     = true
+description = "Curriculum units investigate real companies and trace how corporate interests shaped public policy."
+focus       = "Center human suffering caused by corporate exploitation, not generic environmental talking points."
+
+# ── Homesteading Integration ──────────────────────────────────────────────────
+
+[homesteading]
+core_focus = "Actively weave the family's real-world homesteading goals into analogies, math problems, and science labs."
+active_projects = [
+    "Farming and soil regeneration",
+    "Canning and food preservation",
+    "Raising sheep for milk, wool, and meat",
+    "Building and maintaining the saltbox greenhouse",
+    "Raising chickens and ducks",
+    "Equestrian care and horses",
+    "Complete self-sustainability and off-grid logic",
+]
+
+[homesteading.science_experiments]
+household_items_rule = "ALWAYS default to materials any family has at home. NEVER suggest lab equipment requiring purchase."
+homestead_first      = "Default to fermentation, plant biology, animal science, water systems, food chemistry."
+
+# ── Life-to-Credit Rules ──────────────────────────────────────────────────────
+
+[life_to_credit]
+baking        = "Chemistry: Thermodynamics & Fermentation, Math: Ratios & Measurement"
+cooking       = "Chemistry: Applied Chemistry, Math: Measurement & Fractions, Health: Nutrition"
+gardening     = "Biology: Botany & Ecology, Chemistry: Soil Science"
+building      = "Engineering: Structural Design, Math: Geometry & Budgeting"
+woodworking   = "Engineering: Materials Science, Math: Measurement & Geometry, Art: Design"
+sewing        = "Math: Measurement & Geometry, Art: Textile Design, History: Cultural Studies"
+coding        = "Computer Science: Programming, Math: Logic & Algorithms"
+reading       = "Language Arts: Narrative Structure & Comprehension"
+writing       = "Language Arts: Composition & Rhetoric"
+volunteering  = "Civics: Community Service, Social Studies: Community Organization"
+animals       = "Biology: Zoology & Animal Husbandry, Ethics: Stewardship"
+soap_making   = "Chemistry: Saponification, Entrepreneurship: Product Development"
+debate        = "Language Arts: Rhetoric & Argumentation, Civics: Democratic Participation"
+
+# ── Model Routing ─────────────────────────────────────────────────────────────
+
+[models]
+default          = "claude-sonnet-4-6"
+investigation    = "claude-sonnet-4-6"
+deep_analysis    = "claude-opus-4-6"
+embeddings       = "text-embedding-3-small"
+embed_dimensions = 1536
+
+[models.routing_rules]
+historian_tracks     = ["TRUTH_HISTORY", "JUSTICE_CHANGEMAKING"]
+science_tracks       = ["CREATION_SCIENCE", "HOMESTEADING"]
+discipleship_tracks  = ["HEALTH_NATUROPATHY", "GOVERNMENT_ECONOMICS", "DISCIPLESHIP", "ENGLISH_LITERATURE"]
+investigation_keywords = ["who profits", "follow the money", "what really happened", "investigate", "regulatory capture"]
+
+# ── UI / Design System ────────────────────────────────────────────────────────
+
+[ui]
+theme     = "sketchnotes_farmhouse_2026"
+aesthetic = """
+Adeline's UI uses a SKETCHNOTES aesthetic: varied typography, color-coded
+block types, hand-drawn SVG accents, and visual hierarchy that makes every
+lesson feel like a nature journal entry. The page itself is alive.
+"""
+
+[ui.block_colors]
+PRIMARY_SOURCE   = "#9A3F4A"   # Paradise — primary archive sources
+LAB_MISSION      = "#2F4731"   # Palm Frond — hands-on homestead labs
+NARRATIVE        = "#BD6809"   # Papaya — worldview-aligned narrative
+RESEARCH_MISSION = "#6B7280"   # Slate — student research opportunities
+QUIZ             = "#4F46E5"   # Indigo — assessment blocks
+TEXT             = "#D1D5DB"   # Gray — plain reading content
+
+[ui.palette]
+papaya      = "#BD6809"   # Key terms, vocabulary highlights
+paradise    = "#9A3F4A"   # Scripture references, biblical connections
+palm_frond  = "#2F4731"   # Nature/science/farm connections
+fuschia     = "#3D1419"   # Follow-the-Money investigation callouts
+vervain     = "#121B13"   # Primary body text
+cream       = "#FFFEF7"   # Card/note backgrounds
+parchment   = "#FDF6E9"   # Warm off-white for blocks
+
+[ui.fonts]
+header        = "Emily's Candy"
+fun           = "Kranky"
+body          = "Swanky and Moo Moo"
+handwritten   = "Kalam"
+emphasis      = "Permanent Marker"
+scripture     = "Georgia, serif"
+
+# ── Safety ────────────────────────────────────────────────────────────────────
+
+[safety]
+min_age                 = 5
+max_age                 = 18
+require_parent_approval_for = ["TranscriptEntry", "showcase_artifact"]
+content_filter          = "age_appropriate_biblical_worldview"
+never_share             = ["student_location", "student_full_name_externally", "parent_contact_info"]
+
+# ── Grade Expectations ────────────────────────────────────────────────────────
+
+[grade_expectations."K-2"]
+min_credits_per_year = 1.0
+tracks = ["CREATION_SCIENCE", "HEALTH_NATUROPATHY", "HOMESTEADING", "DISCIPLESHIP", "ENGLISH_LITERATURE"]
+
+[grade_expectations."3-5"]
+min_credits_per_year = 1.5
+tracks = ["CREATION_SCIENCE", "HEALTH_NATUROPATHY", "HOMESTEADING", "GOVERNMENT_ECONOMICS", "JUSTICE_CHANGEMAKING", "DISCIPLESHIP", "TRUTH_HISTORY", "ENGLISH_LITERATURE"]
+
+[grade_expectations."6-8"]
+min_credits_per_year = 2.0
+tracks = ["CREATION_SCIENCE", "HEALTH_NATUROPATHY", "HOMESTEADING", "GOVERNMENT_ECONOMICS", "JUSTICE_CHANGEMAKING", "DISCIPLESHIP", "TRUTH_HISTORY", "ENGLISH_LITERATURE"]
+
+[grade_expectations."9-12"]
+min_credits_per_year = 3.0
+tracks = ["CREATION_SCIENCE", "HEALTH_NATUROPATHY", "HOMESTEADING", "GOVERNMENT_ECONOMICS", "JUSTICE_CHANGEMAKING", "DISCIPLESHIP", "TRUTH_HISTORY", "ENGLISH_LITERATURE"]
