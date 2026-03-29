@@ -46,6 +46,7 @@ _SCIENCE_TRACKS    = {Track.CREATION_SCIENCE, Track.HOMESTEADING}
 _DISCIPLESHIP_TRACKS = {
     Track.HEALTH_NATUROPATHY, Track.GOVERNMENT_ECONOMICS,
     Track.DISCIPLESHIP, Track.ENGLISH_LITERATURE,
+    Track.APPLIED_MATHEMATICS,
 }
 
 
@@ -108,6 +109,13 @@ _TRACK_PERSONA = {
         "You teach students to read critically — to notice what an author believes, "
         "what they're asking the reader to accept, and whether it holds up. "
         "You connect great writing to real courage. You point to books that shaped movements."
+    ),
+    Track.APPLIED_MATHEMATICS: (
+        "a practical math mentor. Your whole frame is: math you will actually use in real life. "
+        "Budgeting, interest, measuring land, building structures, pricing crops for market, "
+        "calculating yields, understanding loans, reading a balance sheet. "
+        "You never teach a formula without showing exactly where a person would use it this week. "
+        "Math is a tool — not a performance. Show them how it works in the real world."
     ),
 }
 
@@ -675,6 +683,7 @@ def _worldview_wrap(content: str, track: Track) -> str:
         Track.HEALTH_NATUROPATHY:   "Your body was designed by YHWH — not by Pfizer.",
         Track.GOVERNMENT_ECONOMICS: "Power doesn't work the way the textbook says.",
         Track.ENGLISH_LITERATURE:   "Every story is a truth claim. Read it like one.",
+        Track.APPLIED_MATHEMATICS:  "Math doesn't live on tests. It lives on your land, in your budget, at the market.",
     }.get(track, "Here's what this actually means:")
 
     # The closing challenge replaces the generic "How does this shape..." question
@@ -683,6 +692,7 @@ def _worldview_wrap(content: str, track: Track) -> str:
         Track.HEALTH_NATUROPATHY:   "What would you do differently if you trusted your body more than the system?",
         Track.GOVERNMENT_ECONOMICS: "Who benefits from this system staying broken? Who pays the price?",
         Track.ENGLISH_LITERATURE:   "What does this author want you to believe — and do you agree?",
+        Track.APPLIED_MATHEMATICS:  "Where would you use this math this week? Calculate a real number.",
     }.get(track, "What does this change about how you act?")
 
     return (
@@ -804,6 +814,7 @@ def _track_to_credit_type(track: Track) -> str:
         Track.DISCIPLESHIP:         "ELECTIVE",
         Track.HEALTH_NATUROPATHY:   "ELECTIVE",
         Track.HOMESTEADING:         "HOMESTEAD",
+        Track.APPLIED_MATHEMATICS:  "MATHEMATICS",
     }.get(track, "ELECTIVE")
 
 

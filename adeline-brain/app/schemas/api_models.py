@@ -20,6 +20,7 @@ class Track(str, Enum):
     DISCIPLESHIP         = "DISCIPLESHIP"
     TRUTH_HISTORY        = "TRUTH_HISTORY"
     ENGLISH_LITERATURE   = "ENGLISH_LITERATURE"
+    APPLIED_MATHEMATICS  = "APPLIED_MATHEMATICS"
 
 
 # ── Witness Protocol (mirrors TRUTH_THRESHOLD + EvidenceVerdict in types.ts) ──

@@ -13,11 +13,11 @@ import { TranscriptEntrySchema } from "./transcript";
 
 /**
  * The 4 specialist agents in Adeline 2.0.
- * Each agent handles specific tracks of the 8-Track Constitution.
+ * Each agent handles specific tracks of the 9-Track Constitution.
  *
  *  HISTORIAN    → Tracks 5 (Justice/Change-making) + 7 (Truth-Based History)
  *  SCIENCE      → Tracks 1 (Creation Science) + 3 (Homesteading)
- *  DISCIPLESHIP → Tracks 2 (Health) + 4 (Government) + 6 (Discipleship) + 8 (Literature)
+ *  DISCIPLESHIP → Tracks 2 (Health) + 4 (Government) + 6 (Discipleship) + 8 (Literature) + 9 (Applied Math)
  *  REGISTRAR    → All tracks: transcript generation + xAPI statement emission
  */
 export enum AgentName {
@@ -37,6 +37,7 @@ export const TRACK_AGENT_MAP: Record<string, AgentName> = {
   [Track.DISCIPLESHIP]:         AgentName.DISCIPLESHIP,
   [Track.TRUTH_HISTORY]:        AgentName.HISTORIAN,
   [Track.ENGLISH_LITERATURE]:   AgentName.DISCIPLESHIP,
+  [Track.APPLIED_MATHEMATICS]:  AgentName.DISCIPLESHIP,
 };
 
 export const AgentResponseSchema = z.object({

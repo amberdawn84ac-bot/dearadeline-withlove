@@ -307,6 +307,79 @@ SOURCES = [
             "had their cabins."
         ),
     },
+    # ── APPLIED_MATHEMATICS — Real-world math: money, land, building, market ───
+    # Curriculum reading (not in Hippocampus — copyrighted):
+    #   Oklahoma Academic Standards for Mathematics (grade-level standards)
+    # Hippocampus seeds: public domain sources showing math in real work
+    {
+        "track": "APPLIED_MATHEMATICS",
+        "source_title": "Advice to a Young Tradesman — The Power of Compound Interest",
+        "source_url": "https://www.gutenberg.org/ebooks/148",
+        "citation_author": "Benjamin Franklin",
+        "citation_year": 1748,
+        "citation_archive_name": "Project Gutenberg",
+        "chunk": (
+            "Remember that money is of the prolific, generating nature. Money can beget money, "
+            "and its offspring can beget more, and so on. Five shillings turned is six, turned "
+            "again it is seven and three pence, and so on till it becomes a hundred pounds. "
+            "The more there is of it, the more it produces every turning, so that the profits "
+            "rise quicker and quicker. He that kills a breeding sow, destroys all her offspring "
+            "to the thousandth generation. He that murders a crown, destroys all that it might "
+            "have produced, even scores of pounds. Remember that time is money."
+        ),
+    },
+    {
+        "track": "APPLIED_MATHEMATICS",
+        "source_title": "The American Frugal Housewife — Household Accounts",
+        "source_url": "https://www.gutenberg.org/ebooks/13493",
+        "citation_author": "Lydia Maria Child",
+        "citation_year": 1833,
+        "citation_archive_name": "Project Gutenberg",
+        "chunk": (
+            "A woman who keeps exact accounts will always know what she can and cannot afford. "
+            "Write down every expense, however trifling. At the end of the week, cast up the "
+            "column. If the sum exceeds what you earned, you are already in debt to yourself. "
+            "If it is less, you have the beginning of independence. The difference between "
+            "a family that thrives and one that is always poor is not income — it is arithmetic. "
+            "The family that counts every shilling knows when it is wasting and when it is "
+            "building. That is the whole art of household management."
+        ),
+    },
+    {
+        "track": "APPLIED_MATHEMATICS",
+        "source_title": "The Foxfire Book — Measuring Land by Chain and Compass",
+        "source_url": "https://archive.org/details/foxfire1",
+        "citation_author": "Eliot Wigginton (ed.)",
+        "citation_year": 1972,
+        "citation_archive_name": "Internet Archive",
+        "chunk": (
+            "Every man who owns land should be able to measure it himself. A chain is sixty-six "
+            "feet. Ten chains square is one acre — forty-three thousand five hundred and sixty "
+            "square feet. Walk the boundary. Count your chains. Multiply length by width and "
+            "divide by ten. A man who does not know the area of his own fields cannot know what "
+            "his land can produce, what seed he needs, what harvest he can expect, or what his "
+            "property is worth. Geometry is not a school subject. It is the difference between "
+            "owning your land and being cheated out of it."
+        ),
+    },
+    {
+        "track": "APPLIED_MATHEMATICS",
+        "source_title": "Elements — Book II, Proposition 14 (On Areas and Ratios)",
+        "source_url": "https://www.gutenberg.org/ebooks/21076",
+        "citation_author": "Euclid",
+        "citation_year": -300,
+        "citation_archive_name": "Project Gutenberg",
+        "chunk": (
+            "To construct a square equal in area to a given rectilineal figure. Let A be the "
+            "given rectilineal figure; it is required to construct a square equal to A. "
+            "For it is possible to construct a rectangle equal to any rectilineal figure. "
+            "So let the rectangle BD be constructed equal to the rectilineal figure A. "
+            "If, then, BE equals ED, what was enjoined will have been done; and a square BD "
+            "has been constructed equal to the rectilineal figure A. "
+            "Ratios of areas, lengths, and proportions are the foundation of every measurement — "
+            "in land, in building, in trade, and in the sciences of nature."
+        ),
+    },
 ]
 
 
