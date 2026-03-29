@@ -270,6 +270,37 @@ export async function registerStudent(profile: {
   return res.json() as Promise<StudentProfile>;
 }
 
+// ── Journal Entries ────────────────────────────────────────────────────────────
+
+export interface JournalEntryRequest {
+  student_id: string;
+  topic: string;
+  track: string;
+  learned: string;
+  action: string;
+}
+
+export interface JournalEntryResponse {
+  id: string;
+  student_id: string;
+  topic: string;
+  track: string;
+  created_at: string;
+}
+
+export async function postJournalEntry(
+  payload: JournalEntryRequest,
+): Promise<JournalEntryResponse> {
+  const res = await fetch(`${BRAIN_URL}/journal/entries`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`journal entry failed: ${res.status} ${res.statusText}`);
+  return res.json() as Promise<JournalEntryResponse>;
+}
+
 // ── Opportunities ──────────────────────────────────────────────────────────────
 
 export async function fetchOpportunities(role = "ADMIN"): Promise<{
