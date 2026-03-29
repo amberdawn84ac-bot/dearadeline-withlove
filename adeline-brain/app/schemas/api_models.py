@@ -118,3 +118,6 @@ class LessonResponse(BaseModel):
     has_research_missions: bool = False
     oas_standards:        list[dict] = Field(default_factory=list)
     researcher_activated: bool = False   # True when auto-search ran during generation
+    agent_name:           str = ""       # Which specialist agent handled this lesson
+    xapi_statements:      list[dict] = Field(default_factory=list)  # xAPI records (Phase 6 persists these)
+    credits_awarded:      list[dict] = Field(default_factory=list)  # CASE credit entries
