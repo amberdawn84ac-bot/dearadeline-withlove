@@ -1,68 +1,119 @@
 # Dear Adeline 2.0 — Truth-First K-12 AI Mentor
 
-A three-repo ecosystem grounded in the **8-Track Constitution**.
+A three-repo ecosystem grounded in the **10-Track Constitution**. Built for Christian homeschool families who want their kids to think clearly, act courageously, and know how to survive in the real world.
 
 ## Repositories
 
 | Repo | Tech | Role |
 |------|------|------|
-| `adeline-core` | TypeScript + Zod | Shared types, enums, schemas |
-| `adeline-brain` | FastAPI + LangGraph | Intelligence Layer, Witness Protocol |
-| `adeline-ui` | Next.js 14 + Tailwind | Experience Layer, GenUIRenderer |
+| `adeline-core` | TypeScript + Zod | Shared types, enums, schemas — source of truth |
+| `adeline-brain` | FastAPI + Python | Intelligence layer, Witness Protocol, 4-agent orchestration |
+| `adeline-ui` | Next.js 14 + Tailwind | Experience layer, GenUIRenderer, pricing, dashboard |
 
-## The 8-Track Constitution
+## The 10-Track Constitution
 
-1. God's Creation & Science
-2. Health & Naturopathy
-3. Homesteading & Stewardship
-4. Government & Economics
-5. Justice & Change-making
-6. Discipleship & Discernment
-7. Truth-Based History
-8. English Language & Literature
+| # | Track | What It Teaches |
+|---|-------|-----------------|
+| 1 | **God's Creation & Science** | Experiment-first science through the Sovereign Lab — 3 chaos levels |
+| 2 | **Health & Naturopathy** | How your body actually works; what the system won't tell you |
+| 3 | **Homesteading & Stewardship** | Grid-down survival: food, water, building, medicine without a store |
+| 4 | **Government & Economics** | How power actually works — not the textbook version |
+| 5 | **Justice & Change-making** | Corporate capture tactics — flipped for justice instead of profit |
+| 6 | **Discipleship & Discernment** | Scripture in original context; no hollow motivation |
+| 7 | **Truth-Based History** | Primary sources, not the sanitized version |
+| 8 | **English Language & Literature** | Every story is a truth claim — read it like one |
+| 9 | **Applied Mathematics** | Math you will actually use: budgets, land, market pricing |
+| 10 | **Creative Economy** | Make beautiful things with your hands. Price them. Sell them. |
 
-## Quick Start
+## Architecture
 
-```bash
-# 1. Copy env file and fill in secrets
-cp .env.example .env
-
-# 2. Build and start all services
-docker-compose up --build
-
-# 3. Access the UI
-open http://localhost:3000
-
-# 4. adeline-brain API docs
-open http://localhost:8000/docs
-
-# 5. Neo4j Browser (GraphRAG)
-open http://localhost:7474
 ```
+adeline-ui (Next.js 14, port 3000)
+    └── REST → adeline-brain (FastAPI, port 8000)
+                    ├── pgvector (Hippocampus) — 40+ primary source chunks, semantic search
+                    ├── neo4j   (GraphRAG)     — 64 concept nodes, 55 edges
+                    └── redis   (Upstash)      — session cache, daily bread
+```
+
+## 4-Agent Orchestration
+
+| Agent | Tracks | What It Does |
+|---|---|---|
+| **HistorianAgent** | Truth History, Justice | Strictest Witness Protocol; PRIMARY_SOURCE focus |
+| **ScienceAgent** | Creation Science, Homesteading | Experiment-first for science; survival-skill lens for homesteading |
+| **DiscipleshipAgent** | Health, Government, Discipleship, Literature, Math, Creative Economy | Worldview synthesis; brand voice |
+| **RegistrarAgent** | All tracks | xAPI learning records + CASE transcript credit |
 
 ## The Witness Protocol
 
 > "A matter must be established by the testimony of two or three witnesses." — Deuteronomy 19:15
 
-All historical content passes through a **0.85 cosine similarity threshold** against the verified source corpus (Hippocampus / pgvector). If the threshold is not met:
+All lesson content passes through a **0.82 cosine similarity threshold** against the verified Hippocampus corpus. If the threshold is not met:
 
 - No content is generated
 - `ARCHIVE_SILENT` is returned
-- Student receives a `RESEARCH_MISSION` block instead
+- Student receives a `RESEARCH_MISSION` block
 
-## Service Handshake
+## Sovereign Lab (Science Track)
 
+Experiments over textbooks. Each experiment has:
+- **Chaos Level** — Sprout 🌱 / Scout 🔭 / Sovereign 🔥
+- **Creation Connection** — Scripture + real science explanation
+- **Film This** — social media kit for documenting discoveries
+- **Credit** — 0.25 Laboratory Science credit per completed experiment
+
+## Portfolio Philosophy
+
+A portfolio is a record of **accomplishments, not assignments**.
+
+- "I filed this clemency petition — here's the tracking number"
+- "I built this raised bed — here's the harvest log"
+- "I sold these at the farmers market — here's what I charged"
+
+Not: "I completed 20 assignments."
+
+## Pricing
+
+| Tier | Monthly | Yearly | Students |
+|------|---------|--------|----------|
+| Free | $0 | $0 | 1 |
+| Student | $9.99 | $107.89 | 1 |
+| Parent | $29.99 | $323.89 | 5 |
+| Teacher / Co-op | $49.99 | $539.89 | 40 |
+
+7-day free trial on all paid tiers. +$2.99/mo per extra student on Parent/Teacher.
+
+## Quick Start
+
+```bash
+# 1. Copy env file and fill in secrets
+cp adeline-brain/.env.example adeline-brain/.env
+
+# 2. Build and start all services
+docker-compose up --build
+
+# 3. Seed the Hippocampus and knowledge graph (run once)
+cd adeline-brain
+python scripts/seed_curriculum.py
+python scripts/seed_hippocampus.py
+python scripts/seed_knowledge_graph.py
+
+# 4. Access the UI
+open http://localhost:3000
+
+# 5. adeline-brain API docs
+open http://localhost:8000/docs
 ```
-adeline-ui (port 3000)
-    └── REST → adeline-brain (port 8000)
-                    ├── pgvector (postgres:5432) — Hippocampus semantic search
-                    └── neo4j   (bolt:7687)      — GraphRAG concept relationships
-```
 
-## Placeholders to Complete
+## Environment Variables
 
-- [ ] Connect real LLM API key and LangGraph agent chains
-- [ ] Load curated source documents into Hippocampus (pgvector)
-- [ ] Build 8-Track knowledge graph in Neo4j
-- [ ] Add student auth and profile persistence
-- [ ] Wire real `generateLesson` call in `adeline-ui/src/app/page.tsx`
+See `adeline-brain/.env.example` for all required keys:
+
+- `POSTGRES_DSN` — pgvector database (Hippocampus)
+- `OPENAI_API_KEY` — embeddings (`text-embedding-3-small`)
+- `ANTHROPIC_API_KEY` — lesson synthesis (`claude-sonnet-4-6`)
+- `NEO4J_URI` / `NEO4J_USERNAME` / `NEO4J_PASSWORD` — GraphRAG (Neo4j Aura)
+- `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` — session cache
+- `TAVILY_API_KEY` — Researcher tool (web archive search)
+- `STRIPE_SECRET_KEY` + price IDs — subscription billing
+- `HYGRAPH_ENDPOINT` / `HYGRAPH_TOKEN` — headless CMS
