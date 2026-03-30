@@ -16,7 +16,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load .env from adeline-brain directory
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 import openai
 from sqlalchemy import text, Column, String, Float, Integer, DateTime, func
