@@ -171,8 +171,7 @@ async def _synthesize_content(
       3. Ground every claim in the provided source
       4. No busywork, no padding, no academic tone
     """
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key or api_key.startswith("sk-ant-..."):
+    if not os.getenv("ANTHROPIC_API_KEY"):
         return raw_content
 
     grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
@@ -488,7 +487,7 @@ RESEARCH_MISSION:
 {_ADELINE_VOICE}
 """
 
-    client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+    client = anthropic.AsyncAnthropic()
     message = await client.messages.create(
         model=_ANTHROPIC_MODEL,
         max_tokens=1200,
