@@ -307,6 +307,106 @@ SOURCES = [
             "had their cabins."
         ),
     },
+    # ── JUSTICE_CHANGEMAKING — How power works; how to flip it for good ────────
+    # Primary sources showing regulatory/legislative/media capture — and the
+    # advocates who used the same tactics for justice instead of profit.
+    {
+        "track": "JUSTICE_CHANGEMAKING",
+        "source_title": "What to the Slave Is the Fourth of July?",
+        "source_url": "https://www.gutenberg.org/ebooks/1314",
+        "citation_author": "Frederick Douglass",
+        "citation_year": 1852,
+        "citation_archive_name": "Project Gutenberg",
+        "chunk": (
+            "What, to the American slave, is your Fourth of July? I answer: a day that reveals "
+            "to him, more than all other days in the year, the gross injustice and cruelty to "
+            "which he is the constant victim. To him, your celebration is a sham; your boasted "
+            "liberty, an unholy license; your national greatness, swelling vanity; your sounds "
+            "of rejoicing are empty and heartless; your denunciation of tyrants, brass-fronted "
+            "impudence; your shouts of liberty and equality, hollow mockery; your prayers and "
+            "hymns, your sermons and thanksgivings, with all your religious parade and "
+            "solemnity, are to him mere bombast, fraud, deception, impiety, and hypocrisy — "
+            "a thin veil to cover up crimes which would disgrace a nation of savages."
+        ),
+    },
+    {
+        "track": "JUSTICE_CHANGEMAKING",
+        "source_title": "Southern Horrors: Lynch Law in All Its Phases",
+        "source_url": "https://www.gutenberg.org/ebooks/14975",
+        "citation_author": "Ida B. Wells",
+        "citation_year": 1892,
+        "citation_archive_name": "Project Gutenberg",
+        "chunk": (
+            "The South is not 'settled' on the Negro question. It will not be 'settled' until "
+            "justice is done. The Afro-American is not a bestial creature. He is a man. He has "
+            "human passions, human rights, human sympathies. He has been tried in the court of "
+            "public opinion, judged by a standard which the law does not recognize, and executed "
+            "without a trial. The press of the country has accepted as gospel the slanders which "
+            "justify this murder. The only way to right these wrongs is to expose them. Silence "
+            "is complicity. The community that allows a child to grow up in ignorance of the "
+            "law, and yet punishes its violation, is more responsible for crime than the criminal."
+        ),
+    },
+    {
+        "track": "JUSTICE_CHANGEMAKING",
+        "source_title": "Other People's Money and How the Bankers Use It",
+        "source_url": "https://www.gutenberg.org/ebooks/1614",
+        "citation_author": "Louis D. Brandeis",
+        "citation_year": 1914,
+        "citation_archive_name": "Project Gutenberg",
+        "chunk": (
+            "The dominant element in our financial oligarchy is the investment banker. "
+            "Associated banks, trust companies and life insurance companies are his tools. "
+            "Controlled railroads, public service and industrial corporations are his subjects. "
+            "Though properly but middlemen, these bankers bestride as masters America's business "
+            "world, so that practically no large enterprise can be undertaken successfully "
+            "without their participation or approval. These bankers are, of course, able men "
+            "possessed of large fortunes; but the most potent factor in their dominance is not "
+            "the possession of extraordinary ability or huge wealth. The key to their power is "
+            "combination — and the fact that they have been able to establish, through "
+            "interlocking directorates, a financial oligarchy which defies competition."
+        ),
+    },
+    {
+        "track": "JUSTICE_CHANGEMAKING",
+        "source_title": "The Jungle — Chapter II (The Meatpacking Industry)",
+        "source_url": "https://www.gutenberg.org/ebooks/140",
+        "citation_author": "Upton Sinclair",
+        "citation_year": 1906,
+        "citation_archive_name": "Project Gutenberg",
+        "chunk": (
+            "There was never the least attention paid to what was cut up for sausage; there "
+            "would come all the way back from Europe old sausage that had been rejected, and "
+            "that was mouldy and white — it would be dosed with borax and glycerine, and "
+            "dumped into the hoppers, and made over again for home consumption. There would "
+            "be meat that had tumbled out on the floor, in the dirt and sawdust, where the "
+            "workers had tramped and spit uncounted billions of consumption germs. There would "
+            "be meat stored in great piles in rooms; and the water from leaky roofs would "
+            "drip over it, and thousands of rats would race about on it. It was too dark in "
+            "these storage places to see well, but a man could run his hand over these piles "
+            "of meat and sweep off handfuls of the dried dung of rats."
+        ),
+    },
+    {
+        "track": "JUSTICE_CHANGEMAKING",
+        "source_title": "Senate Lobby Investigation — Opening Statement",
+        "source_url": "https://archive.org/details/senatelobbyliste00unit",
+        "citation_author": "U.S. Senate Judiciary Committee",
+        "citation_year": 1913,
+        "citation_archive_name": "Internet Archive",
+        "chunk": (
+            "There is evidence that certain combinations of men have come to Washington for "
+            "the purpose of influencing legislation in the interest of special privilege. "
+            "Money has been spent to create public sentiment, to subsidize newspapers, to "
+            "maintain paid agents in the lobbies of Congress, and to corrupt the processes "
+            "of democratic government. The same tactics used to pass legislation favorable to "
+            "one industry can be used by citizens to defeat it. The petition, the letter "
+            "campaign, the organized constituency visit, the funded study, the drafted bill — "
+            "none of these belong to any corporation. They belong to whoever is willing to "
+            "use them. The difference between a lobbyist for Standard Oil and a citizen "
+            "advocate is not the method. It is who benefits."
+        ),
+    },
     # ── CREATIVE_ECONOMY — Making, crafting, pricing, selling ────────────────
     # Art/DIY + cottage industry projects. Curriculum content (project library)
     # is in adeline-brain/app/api/experiments.py pattern (future: projects router).
