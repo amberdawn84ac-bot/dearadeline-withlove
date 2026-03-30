@@ -41,7 +41,10 @@ _ANTHROPIC_MODEL = os.getenv("ADELINE_MODEL", "claude-sonnet-4-6")
 logger = logging.getLogger(__name__)
 
 # Track routing constants
-_HISTORIAN_TRACKS  = {Track.TRUTH_HISTORY, Track.JUSTICE_CHANGEMAKING}
+# TRUTH_HISTORY is the ONLY track that requires the Witness Protocol —
+# every block must be backed by a verified primary source (cosine ≥ 0.82).
+_HISTORIAN_TRACKS  = {Track.TRUTH_HISTORY}
+_JUSTICE_TRACKS    = {Track.JUSTICE_CHANGEMAKING}
 _SCIENCE_TRACKS    = {Track.CREATION_SCIENCE, Track.HOMESTEADING}
 _DISCIPLESHIP_TRACKS = {
     Track.HEALTH_NATUROPATHY, Track.GOVERNMENT_ECONOMICS,
@@ -70,15 +73,20 @@ _TRACK_PERSONA = {
         "You let the documents speak."
     ),
     Track.JUSTICE_CHANGEMAKING: (
-        "a justice mentor who teaches students how power actually works — then teaches them "
-        "to use every one of those tactics for good instead of profit. "
-        "Corporations capture systems through lobbying, research funding, model legislation, "
-        "revolving-door hires, and media campaigns. Justice advocates can use the exact same tools. "
-        "You teach students to write model legislation, build coalitions, lobby officials, "
-        "draft legal challenges, and run media campaigns — not just sign petitions. "
-        "A portfolio in this track is a record of real actions taken: petitions filed with tracking numbers, "
-        "responses received from officials, laws challenged, campaigns launched with documented outcomes. "
-        "You treat students as operators who can make things happen right now."
+        "a justice investigator. Your job is to show students exactly what happened, "
+        "who got hurt, and who profited. You focus on three categories of harm: "
+        "(1) NATION-BUILDING PROPAGANDA — government and corporate narratives designed to "
+        "justify wars, displacement, and exploitation. You name the specific lies, who told them, "
+        "and who benefited financially or politically. "
+        "(2) CORPORATE CRIMES — deliberate harm for profit. Pharma companies that hid trial data. "
+        "Food companies that funded research to blame fat instead of sugar. Chemical companies that "
+        "knew their products caused cancer. Oil companies that buried their own climate science. "
+        "You always name the company, the executive, the internal memo if it exists, and the body count. "
+        "(3) JUSTICE FOR PEOPLE HARMED — you center the victims by name. Not statistics. "
+        "Real people. What happened to them. What it cost them. Whether anyone was held accountable. "
+        "You teach students to follow the money: find the lobbying disclosures, read the court documents, "
+        "look at who funded the science, trace the revolving door between regulators and industry. "
+        "You treat students as investigators who can use the same tools journalists and lawyers use."
     ),
     Track.CREATION_SCIENCE: (
         "a creation science mentor who sees YHWH's fingerprints on every natural law. "
@@ -400,6 +408,129 @@ async def historian_agent(state: AdelineState) -> AdelineState:
                 "evidence":   [],
             })
             state["has_research_missions"] = True
+
+    state["blocks"] = blocks
+    return state
+
+
+# ── Justice Agent (JUSTICE_CHANGEMAKING) ─────────────────────────────────────
+
+async def justice_agent(state: AdelineState) -> AdelineState:
+    """
+    Justice Changemaking specialist — investigative journalism model.
+
+    Does NOT require the Witness Protocol. Justice teaches students to BE
+    investigators. The lesson is an investigation brief, not a verified archive.
+
+    Three focal areas (always present at least one per lesson):
+      1. Nation-building propaganda — name the lie, who told it, who profited
+      2. Corporate crimes — deliberate harm for profit, name company + body count
+      3. People harmed — center victims by name, not as statistics
+
+    Block structure:
+      NARRATIVE  — presents the harm clearly: who, what, how much they profited
+      RESEARCH_MISSION — gives the student a specific place to look for evidence
+                         (lobbying disclosures, court records, internal memos, etc.)
+    """
+    request = state["request"]
+    state["agent_name"] = "JusticeAgent"
+    blocks: list[dict] = []
+
+    # Pull any seeded primary sources as background context (not for Witness gatekeeping)
+    raw_results = await hippocampus.similarity_search(
+        query_embedding=state["query_embedding"],
+        track=request.track.value,
+        top_k=3,
+    )
+
+    source_context = "\n\n".join(
+        f"[Source: {r['source_title']}]\n{r['chunk']}"
+        for r in raw_results
+    ) if raw_results else ""
+
+    grade_desc = _GRADE_DESC.get(request.grade_level or "8", "middle school")
+    persona    = _TRACK_PERSONA[Track.JUSTICE_CHANGEMAKING]
+
+    investigation_prompt = f"""You are {persona}
+
+Grade level: {grade_desc}
+Topic: {request.topic}
+
+{"Background sources from the archive:\\n" + source_context if source_context else "No archive sources found. Rely on well-documented public knowledge."}
+
+Write a justice investigation lesson in two parts:
+
+PART 1 — THE BRIEF (NARRATIVE block):
+Open with the specific harm. Name it plainly. Then:
+• Who was hurt? Name real people if possible — not "communities" or "workers."
+• Who profited? Name the company, the executive, the dollar amount if known.
+• What mechanism did they use? (propaganda campaign, regulatory capture, buried research, legislative capture, media control)
+• What did they know and when? If there are internal documents, name them.
+• One sentence on whether anyone faced accountability — and if not, say so plainly.
+
+PART 2 — THE INVESTIGATION (RESEARCH_MISSION block):
+Give the student exactly ONE specific investigation task. Not "research the topic."
+A real task: find a specific document, read a specific database, look up a specific filing.
+Examples of good tasks:
+  • "Go to opensecrets.org and find how much [company] spent lobbying [agency] in [year range]."
+  • "Search the FDA adverse event database for [drug name] and count how many deaths were reported."
+  • "Read the 1969 internal Sugar Research Foundation memo at UCSF's tobacco documents archive."
+  • "Look up [company] v. [plaintiff] in PACER — read the plaintiff's complaint, paragraph 12."
+
+Format your response as:
+
+NARRATIVE:
+[The investigation brief — plain, direct, no academic language]
+
+RESEARCH_MISSION:
+[The specific task — one concrete action with a real URL or database name]
+
+{_ADELINE_VOICE}
+"""
+
+    client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+    message = await client.messages.create(
+        model=_ANTHROPIC_MODEL,
+        max_tokens=1200,
+        messages=[{"role": "user", "content": investigation_prompt}],
+    )
+    raw_output = message.content[0].text.strip()
+
+    # Parse NARRATIVE and RESEARCH_MISSION sections
+    narrative_text = ""
+    mission_text   = ""
+    if "RESEARCH_MISSION:" in raw_output:
+        parts          = raw_output.split("RESEARCH_MISSION:", 1)
+        narrative_text = parts[0].replace("NARRATIVE:", "").strip()
+        mission_text   = parts[1].strip()
+    else:
+        narrative_text = raw_output.replace("NARRATIVE:", "").strip()
+
+    if narrative_text:
+        blocks.append({
+            "block_type":  BlockType.NARRATIVE.value,
+            "content":     narrative_text,
+            "evidence":    [],
+            "is_silenced": False,
+        })
+
+    if mission_text:
+        blocks.append({
+            "block_type":  BlockType.RESEARCH_MISSION.value,
+            "content":     mission_text,
+            "evidence":    [],
+            "is_silenced": False,
+        })
+        state["has_research_missions"] = True
+
+    if not blocks:
+        mission = build_research_mission_block(request.topic, [])
+        blocks.append({
+            **mission,
+            "block_type": BlockType.RESEARCH_MISSION.value,
+            "evidence":   [],
+        })
+        state["has_research_missions"] = True
 
     state["blocks"] = blocks
     return state
@@ -836,10 +967,12 @@ def _track_to_credit_type(track: Track) -> str:
 
 # ── Router ────────────────────────────────────────────────────────────────────
 
-def _route(state: AdelineState) -> Literal["historian", "science", "discipleship"]:
+def _route(state: AdelineState) -> Literal["historian", "justice", "science", "discipleship"]:
     track = state["request"].track
     if track in _HISTORIAN_TRACKS:
         return "historian"
+    if track in _JUSTICE_TRACKS:
+        return "justice"
     if track in _SCIENCE_TRACKS:
         return "science"
     return "discipleship"
@@ -890,6 +1023,8 @@ async def run_orchestrator(
     # ── 1. Specialist agent ────────────────────────────────────────────────────
     if route == "historian":
         state = await historian_agent(state)
+    elif route == "justice":
+        state = await justice_agent(state)
     elif route == "science":
         state = await science_agent(state)
     else:
