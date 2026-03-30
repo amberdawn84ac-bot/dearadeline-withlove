@@ -20,7 +20,9 @@ export type Track =
   | "JUSTICE_CHANGEMAKING"
   | "DISCIPLESHIP"
   | "TRUTH_HISTORY"
-  | "ENGLISH_LITERATURE";
+  | "ENGLISH_LITERATURE"
+  | "APPLIED_MATHEMATICS"
+  | "CREATIVE_ECONOMY";
 
 export interface LessonRequest {
   student_id: string;
@@ -319,5 +321,161 @@ export async function fetchOpportunities(role = "ADMIN"): Promise<{
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Opportunities fetch failed: ${res.status}`);
+  return res.json();
+}
+
+// ── Projects ───────────────────────────────────────────────────────────────────
+
+export interface ProjectSummary {
+  id: string;
+  title: string;
+  track: Track;
+  category: string;
+  difficulty: number;
+  tagline: string;
+  estimated_hours: number;
+  grade_band: string;
+  price_range: { low: number; high: number; unit: string } | null;
+  skills: string[];
+}
+
+export interface ProjectStep {
+  step_number: number;
+  instruction: string;
+  tip: string;
+}
+
+export interface ProjectDetail extends ProjectSummary {
+  skills: string[];
+  business_skills: string[];
+  materials: string[];
+  steps: ProjectStep[];
+  portfolio_prompts: string[];
+  safety_notes: string[];
+  income_description: string;
+  where_to_sell: string[];
+}
+
+export interface ProjectSealResponse {
+  project_id: string;
+  credit_type: string;
+  credit_hours: number;
+  message: string;
+}
+
+export async function listProjects(filters: {
+  track?: Track;
+  category?: string;
+  difficulty?: number;
+  grade_band?: string;
+} = {}, role: "STUDENT" | "ADMIN" = "STUDENT"): Promise<{ total: number; projects: ProjectSummary[] }> {
+  const params = new URLSearchParams();
+  if (filters.track)      params.set("track", filters.track);
+  if (filters.category)   params.set("category", filters.category);
+  if (filters.difficulty) params.set("difficulty", String(filters.difficulty));
+  if (filters.grade_band) params.set("grade_band", filters.grade_band);
+
+  const res = await fetch(`${BRAIN_URL}/projects?${params}`, {
+    headers: { "X-User-Role": role },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`listProjects failed: ${res.status}`);
+  return res.json();
+}
+
+export async function getProject(
+  projectId: string,
+  role: "STUDENT" | "ADMIN" = "STUDENT",
+): Promise<ProjectDetail> {
+  const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}`, {
+    headers: { "X-User-Role": role },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`getProject failed: ${res.status}`);
+  return res.json();
+}
+
+export async function sealProject(
+  projectId: string,
+  studentId: string,
+  role: "STUDENT" | "ADMIN" = "STUDENT",
+): Promise<ProjectSealResponse> {
+  const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}/seal`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-User-Role": role },
+    body: JSON.stringify({ student_id: studentId }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`sealProject failed: ${res.status}`);
+  return res.json();
+}
+
+// ── Activities (Life-to-Credit) ────────────────────────────────────────────────
+
+export interface ActivityReportRequest {
+  student_id: string;
+  grade_level: string;
+  description: string;
+  time_minutes: number;
+  activity_date?: string;
+}
+
+export interface CreditedTrack {
+  track: Track;
+  subjects: string[];
+  credit_type: string;
+}
+
+export interface ActivityReportResponse {
+  activity_id: string;
+  course_title: string;
+  activity_description: string;
+  credit_hours: number;
+  credited_tracks: CreditedTrack[];
+  sealed: boolean;
+  adeline_note: string;
+}
+
+export interface ActivityEntry {
+  activity_id: string;
+  course_title: string;
+  activity_description: string;
+  credit_hours: number;
+  primary_track: Track;
+  credit_type: string;
+  activity_date: string;
+  sealed_at: string;
+}
+
+export interface ActivityListResponse {
+  student_id: string;
+  activities: ActivityEntry[];
+  total: number;
+  total_credits: number;
+}
+
+export async function reportActivity(
+  payload: ActivityReportRequest,
+  role: "STUDENT" | "ADMIN" = "STUDENT",
+): Promise<ActivityReportResponse> {
+  const res = await fetch(`${BRAIN_URL}/activities/report`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-User-Role": role },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`reportActivity failed: ${res.status}`);
+  return res.json();
+}
+
+export async function listActivities(
+  studentId: string,
+  role: "STUDENT" | "ADMIN" = "STUDENT",
+): Promise<ActivityListResponse> {
+  const res = await fetch(`${BRAIN_URL}/activities/${encodeURIComponent(studentId)}`, {
+    headers: { "X-User-Role": role },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`listActivities failed: ${res.status}`);
   return res.json();
 }

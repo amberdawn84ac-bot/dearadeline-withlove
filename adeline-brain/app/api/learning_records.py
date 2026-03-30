@@ -86,7 +86,8 @@ class SealTranscriptResponse(BaseModel):
 class SM2ReviewSubmit(BaseModel):
     student_id: str
     concept_id: str
-    quality:    int   # 0–5 per SM-2 spec
+    quality:    int          # 0–5 per SM-2 spec
+    track:      str = "TRUTH_HISTORY"  # track the concept belongs to
 
 class SM2ReviewResponse(BaseModel):
     concept_id:   str
@@ -340,7 +341,7 @@ async def submit_review(payload: SM2ReviewSubmit):
                 interval, "easeFactor", repetitions,
                 "lastQuality", "dueAt", "lastReviewedAt"
             ) VALUES (
-                $1, $2, $3, $4, 'TRUTH_HISTORY'::\"Track\",
+                $1, $2, $3, $4, $11::\"Track\",
                 $5, $6, $7,
                 $8, $9::timestamp, $10::timestamp
             )
@@ -357,6 +358,7 @@ async def submit_review(payload: SM2ReviewSubmit):
             payload.concept_id,   # conceptName defaults to id until explicitly set
             result.interval, result.ease_factor, result.repetitions,
             payload.quality, result.next_due_at.isoformat(), now.isoformat(),
+            payload.track,
         )
 
     logger.info(

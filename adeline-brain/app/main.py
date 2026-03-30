@@ -22,6 +22,8 @@ from app.api.daily_bread import router as daily_bread_router
 from app.api.learning_records import router as learning_records_router
 from app.api.students import router as students_router
 from app.api.experiments import router as experiments_router
+from app.api.activities import router as activities_router
+from app.api.projects import router as projects_router
 from app.connections.journal_store import journal_store
 
 logging.basicConfig(level=logging.INFO)
@@ -72,6 +74,8 @@ app.include_router(daily_bread_router)
 app.include_router(learning_records_router)
 app.include_router(students_router)
 app.include_router(experiments_router)
+app.include_router(activities_router)
+app.include_router(projects_router)
 
 
 @app.get("/health")
