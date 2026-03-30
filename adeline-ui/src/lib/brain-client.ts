@@ -243,6 +243,21 @@ export async function fetchStudentState(
   return res.json() as Promise<StudentState>;
 }
 
+/**
+ * fetchStudentMastery — convenience wrapper around fetchStudentState.
+ * Returns per-track mastery scores keyed by track name (0–1 floats).
+ * Uses GET /students/{id}/state — no extra endpoint needed.
+ */
+export async function fetchStudentMastery(
+  student_id: string,
+  role: "STUDENT" | "PARENT" | "ADMIN" = "STUDENT",
+): Promise<Record<string, number>> {
+  const state = await fetchStudentState(student_id, role);
+  return Object.fromEntries(
+    Object.entries(state.tracks).map(([track, data]) => [track, data.mastery_score]),
+  );
+}
+
 // ── Student Profile ────────────────────────────────────────────────────────────
 
 export interface StudentProfile {
@@ -408,6 +423,34 @@ export async function sealProject(
   });
   if (!res.ok) throw new Error(`sealProject failed: ${res.status}`);
   return res.json();
+}
+
+/** Alias for getProject — used by ProjectGuide. */
+export const fetchProject = getProject;
+
+export interface StartProjectResponse {
+  project_id: string;
+  student_id: string;
+  started: boolean;
+}
+
+/**
+ * POST /projects/{projectId}/start — marks the project started for a student.
+ * Records intent so the registrar can track time-to-completion.
+ */
+export async function startProject(
+  projectId: string,
+  studentId: string,
+  role: "STUDENT" | "ADMIN" = "STUDENT",
+): Promise<StartProjectResponse> {
+  const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-User-Role": role },
+    body: JSON.stringify({ student_id: studentId }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`startProject failed: ${res.status}`);
+  return res.json() as Promise<StartProjectResponse>;
 }
 
 // ── Activities (Life-to-Credit) ────────────────────────────────────────────────
