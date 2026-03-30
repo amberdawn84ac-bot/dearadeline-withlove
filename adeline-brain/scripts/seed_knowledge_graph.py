@@ -20,6 +20,10 @@ import asyncio
 import logging
 import sys
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 # Add parent to path so app imports work
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
