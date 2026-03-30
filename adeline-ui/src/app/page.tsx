@@ -8,6 +8,7 @@ import {
   MagnifyingGlass,
   Lightbulb,
 } from '@/components/illustrations';
+import { HomeLessonDemo } from '@/components/HomeLessonDemo';
 
 export default function Home() {
   return (
@@ -165,6 +166,27 @@ export default function Home() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Live Demo Section */}
+      <section className="py-24 px-6 bg-[#F9F6F0]">
+        <div className="max-w-7xl mx-auto flex flex-col items-center gap-10">
+          <div className="text-center space-y-3">
+            <p className="text-[#BD6809] font-black uppercase tracking-[0.4em] text-xs">
+              Try It Now — No Account Required
+            </p>
+            <h2
+              className="text-4xl md:text-5xl font-normal leading-tight"
+              style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}
+            >
+              Ask Adeline anything.
+            </h2>
+            <p className="text-sm text-[#2F4731]/60 max-w-md">
+              Choose a track, type a topic, and watch Adeline retrieve a verified primary source and synthesize an age-appropriate lesson — live.
+            </p>
+          </div>
+          <HomeLessonDemo />
         </div>
       </section>
 

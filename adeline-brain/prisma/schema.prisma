@@ -29,14 +29,67 @@ enum Track {
   DISCIPLESHIP
   TRUTH_HISTORY
   ENGLISH_LITERATURE
+  APPLIED_MATHEMATICS
+  CREATIVE_ECONOMY
 }
 
 enum BlockType {
   TEXT
+  NARRATIVE
   PRIMARY_SOURCE
   LAB_MISSION
   RESEARCH_MISSION
   QUIZ
+}
+
+enum XAPIVerb {
+  experienced
+  completed
+  attempted
+  passed
+  failed
+  scored
+  interacted
+  created
+  shared
+  observed
+  practiced
+  researched
+  sealed
+}
+
+enum CreditType {
+  CORE
+  ELECTIVE
+  PHYSICAL_ED
+  FINE_ARTS
+  HOMESTEAD
+}
+
+enum GradeLetter {
+  A_PLUS
+  A
+  A_MINUS
+  B_PLUS
+  B
+  B_MINUS
+  C_PLUS
+  C
+  C_MINUS
+  D_PLUS
+  D
+  D_MINUS
+  F
+  PASS
+  FAIL
+  INCOMPLETE
+}
+
+enum AgentName {
+  HistorianAgent
+  ScienceAgent
+  DiscipleshipAgent
+  RegistrarAgent
 }
 
 enum EvidenceVerdict {
@@ -160,4 +213,87 @@ model InviteCode {
   createdAt      DateTime @default(now())
 
   @@index([code])
+}
+
+// ── Phase 6: Learning Records, Transcript, Spaced Repetition ─────────────────
+
+model LearningRecord {
+  id           String    @id @default(uuid())
+  studentId    String
+  lessonId     String
+  blockId      String?
+  verb         XAPIVerb
+  objectId     String
+  objectName   String
+  track        Track
+  oasStandard  String    @default("")
+  gradeLevel   String    @default("")
+  isHomestead  Boolean   @default(false)
+  agentName    AgentName?
+  blockType    String    @default("")
+  durationMs   Int?
+  completion   Boolean   @default(false)
+  response     String?
+  scoreRaw     Float?
+  scoreMin     Float?
+  scoreMax     Float?
+  statementJson Json     @default("{}")
+  timestamp    DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+
+  @@index([studentId])
+  @@index([lessonId])
+  @@index([track])
+  @@index([verb])
+  @@index([timestamp])
+}
+
+model TranscriptEntry {
+  id                  String      @id @default(uuid())
+  studentId           String
+  lessonId            String
+  courseTitle         String
+  track               Track
+  oasStandards        String[]    @default([])
+  activityDescription String      @default("")
+  creditHours         Float       @default(0.0)
+  creditType          CreditType  @default(ELECTIVE)
+  gradeLetter         GradeLetter?
+  percentScore        Float?
+  isHomesteadCredit   Boolean     @default(false)
+  agentName           AgentName?
+  researcherActivated Boolean     @default(false)
+  completedAt         DateTime    @default(now())
+  sealedAt            DateTime?
+  xapiStatementId     String?
+  createdAt           DateTime    @default(now())
+
+  @@unique([studentId, lessonId])
+  @@index([studentId])
+  @@index([track])
+  @@index([creditType])
+  @@index([completedAt])
+}
+
+model SpacedRepetitionCard {
+  id             String   @id @default(uuid())
+  studentId      String
+  conceptId      String
+  conceptName    String
+  track          Track
+  interval       Int      @default(1)
+  easeFactor     Float    @default(2.5)
+  repetitions    Int      @default(0)
+  lastQuality    Int?
+  masteryLevel   Float    @default(0.0)
+  dueAt          DateTime @default(now())
+  lastReviewedAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([studentId, conceptId])
+  @@index([studentId])
+  @@index([dueAt])
+  @@index([track])
+  @@index([masteryLevel])
 }

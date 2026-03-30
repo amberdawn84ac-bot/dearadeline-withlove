@@ -284,6 +284,25 @@ export default function LessonRenderer({
       {/* OAS Standards */}
       <OASFooter standards={lesson.oas_standards} />
 
+      {/* Agent + CASE credits */}
+      {(lesson.agent_name || lesson.credits_awarded?.length > 0) && (
+        <div className="flex flex-wrap items-center gap-3 pt-3">
+          {lesson.agent_name && (
+            <span className="font-mono text-[10px] px-2 py-0.5 rounded-full"
+              style={{ background: "#F0FDF4", color: "#166534" }}>
+              {lesson.agent_name}
+            </span>
+          )}
+          {lesson.credits_awarded?.[0] && (
+            <span className="font-mono text-[10px] px-2 py-0.5 rounded-full"
+              style={{ background: "#FDF6E9", color: "#BD6809" }}>
+              {lesson.credits_awarded[0].credit_hours} credit hr
+              {" · "}{lesson.credits_awarded[0].credit_type}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Seal Journal */}
       <div className="pt-6 border-t border-fuschia/10 flex items-center justify-between flex-wrap gap-3">
         <p className="font-sketch text-xs text-fuschia/40 uppercase tracking-widest">

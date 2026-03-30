@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Sparkles, Send, Loader2 } from "lucide-react";
+import { Sparkles, Send, Loader2, FlaskConical, Search } from "lucide-react";
 import { scaffold, generateLesson } from "@/lib/brain-client";
-import type { Track, ScaffoldResponse, LessonResponse } from "@/lib/brain-client";
+import type { Track, ScaffoldResponse, LessonResponse, LessonBlockResponse } from "@/lib/brain-client";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -266,6 +266,206 @@ export function AdelineChatPanel({
         <p className="text-[10px] text-[#2F4731]/40 mt-1.5 text-center">
           Enter to send · Shift+Enter for new line
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ── LessonBlockChatPanel ───────────────────────────────────────────────────────
+// A separate lesson panel: topic + track picker → blocks rendered as chat bubbles.
+
+const TRACK_OPTIONS: { value: Track; label: string }[] = [
+  { value: "TRUTH_HISTORY",        label: "History" },
+  { value: "CREATION_SCIENCE",     label: "Science" },
+  { value: "HOMESTEADING",         label: "Homestead" },
+  { value: "GOVERNMENT_ECONOMICS", label: "Govt" },
+  { value: "JUSTICE_CHANGEMAKING", label: "Justice" },
+  { value: "DISCIPLESHIP",         label: "Discipleship" },
+  { value: "HEALTH_NATUROPATHY",   label: "Health" },
+  { value: "ENGLISH_LITERATURE",   label: "English" },
+];
+
+interface LessonBlockChatPanelProps {
+  studentId: string;
+  initialTrack?: Track;
+}
+
+function BlockBubble({ block }: { block: LessonBlockResponse }) {
+  const verdict = block.evidence[0]?.verdict ?? "ARCHIVE_SILENT";
+  const sourceTitle = block.evidence[0]?.source_title;
+
+  if (block.is_silenced || verdict === "ARCHIVE_SILENT") {
+    return (
+      <div
+        className="max-w-[88%] rounded-2xl rounded-bl-sm px-4 py-3 space-y-1 animate-fade-slide-in"
+        style={{ background: "#F3F4F6", border: "1px solid #D1D5DB" }}
+      >
+        <p className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wide">
+          Source not found
+        </p>
+        <p className="text-sm text-[#374151] leading-relaxed">{block.content}</p>
+      </div>
+    );
+  }
+
+  if (block.block_type === "EXPERIMENT" || block.block_type === "LAB_MISSION") {
+    return (
+      <div
+        className="max-w-[88%] rounded-2xl rounded-bl-sm px-4 py-3 space-y-1.5 animate-fade-slide-in"
+        style={{ background: "#FFF7ED", border: "2px solid #BD6809" }}
+      >
+        <div className="flex items-center gap-1.5">
+          <FlaskConical size={13} className="text-[#BD6809]" />
+          <span className="text-[10px] font-bold text-[#BD6809] uppercase tracking-wide">
+            Experiment
+          </span>
+        </div>
+        <p className="text-sm text-[#2F4731] leading-relaxed">{block.content}</p>
+      </div>
+    );
+  }
+
+  if (verdict === "RESEARCH_MISSION") {
+    return (
+      <div
+        className="max-w-[88%] rounded-2xl rounded-bl-sm px-4 py-3 space-y-1.5 animate-fade-slide-in"
+        style={{ background: "#FEFCE8", border: "2px solid #CA8A04" }}
+      >
+        <div className="flex items-center gap-1.5">
+          <Search size={13} className="text-[#CA8A04]" />
+          <span className="text-[10px] font-bold text-[#CA8A04] uppercase tracking-wide">
+            Research Mission
+          </span>
+        </div>
+        <p className="text-sm text-[#2F4731] leading-relaxed">{block.content}</p>
+      </div>
+    );
+  }
+
+  // VERIFIED
+  return (
+    <div
+      className="max-w-[88%] rounded-2xl rounded-bl-sm px-4 py-3 space-y-2 animate-fade-slide-in"
+      style={{ background: "#fff", border: "1px solid #E7DAC3" }}
+    >
+      {sourceTitle && (
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+          <span className="text-[10px] font-semibold text-[#166534] truncate">{sourceTitle}</span>
+        </div>
+      )}
+      <p className="text-sm text-[#2F4731] leading-relaxed">{block.content}</p>
+    </div>
+  );
+}
+
+export function LessonBlockChatPanel({ studentId, initialTrack = "TRUTH_HISTORY" }: LessonBlockChatPanelProps) {
+  const [topic, setTopic] = useState("");
+  const [track, setTrack] = useState<Track>(initialTrack);
+  const [blocks, setBlocks] = useState<LessonBlockResponse[]>([]);
+  const [visibleCount, setVisibleCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Reveal blocks one at a time with a short delay for the "streaming" feel
+  useEffect(() => {
+    if (visibleCount >= blocks.length) return;
+    const timer = setTimeout(() => setVisibleCount((c) => c + 1), 600);
+    return () => clearTimeout(timer);
+  }, [visibleCount, blocks.length]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [visibleCount, loading]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!topic.trim() || loading) return;
+    setBlocks([]);
+    setVisibleCount(0);
+    setLoading(true);
+    try {
+      const lesson: LessonResponse = await generateLesson({
+        student_id: studentId,
+        track,
+        topic: topic.trim(),
+        is_homestead: false,
+        grade_level: "9",
+      });
+      setBlocks(lesson.blocks);
+    } catch {
+      // surface nothing — user can retry
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const visibleBlocks = blocks.slice(0, visibleCount);
+  const stillStreaming = visibleCount < blocks.length && blocks.length > 0;
+
+  return (
+    <div className="flex flex-col h-full" style={{ background: "#FFFEF7" }}>
+      {/* Track selector */}
+      <div className="shrink-0 px-4 pt-4 pb-2">
+        <div className="flex gap-1.5 flex-wrap">
+          {TRACK_OPTIONS.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => setTrack(t.value)}
+              className="px-3 py-1 rounded-full text-xs font-semibold transition-all"
+              style={{
+                background: track === t.value ? "#2F4731" : "#F3F0EA",
+                color: track === t.value ? "#FFFEF7" : "#2F4731",
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+        {visibleBlocks.map((block) => (
+          <div key={block.block_id} className="flex justify-start">
+            <BlockBubble block={block} />
+          </div>
+        ))}
+
+        {/* Typing indicator between blocks or during fetch */}
+        {(loading || stillStreaming) && (
+          <div className="flex justify-start">
+            <div
+              className="rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-2"
+              style={{ background: "#FDF6E9", border: "1px solid #E7DAC3" }}
+            >
+              <Loader2 size={14} className="animate-spin text-[#BD6809]" />
+              <span className="text-sm text-[#2F4731]/60 italic">Adeline is thinking…</span>
+            </div>
+          </div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Topic input */}
+      <div className="shrink-0 px-4 py-3 border-t border-[#E7DAC3]" style={{ background: "#FFFDF5" }}>
+        <form onSubmit={handleSubmit} className="flex items-end gap-2">
+          <input
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            placeholder="Enter a topic to explore…"
+            className="flex-1 rounded-xl px-3 py-2 text-sm text-[#2F4731] border border-[#E7DAC3] bg-white focus:outline-none focus:border-[#2F4731] transition-colors"
+          />
+          <button
+            type="submit"
+            disabled={!topic.trim() || loading}
+            className="w-9 h-9 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            style={{ background: "#BD6809", color: "#fff" }}
+          >
+            <Send size={15} />
+          </button>
+        </form>
       </div>
     </div>
   );

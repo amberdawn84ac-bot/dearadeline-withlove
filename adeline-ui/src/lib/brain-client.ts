@@ -20,7 +20,9 @@ export type Track =
   | "JUSTICE_CHANGEMAKING"
   | "DISCIPLESHIP"
   | "TRUTH_HISTORY"
-  | "ENGLISH_LITERATURE";
+  | "ENGLISH_LITERATURE"
+  | "APPLIED_MATHEMATICS"
+  | "CREATIVE_ECONOMY";
 
 export interface LessonRequest {
   student_id: string;
@@ -55,12 +57,40 @@ export interface LessonBlockResponse {
   homestead_content?: string;
 }
 
+export interface XAPIStatement {
+  id: string;
+  timestamp: string;
+  actor: { objectType: string; account: { name: string } };
+  verb: { id: string; display: { "en-US": string } };
+  object: { id: string; definition: { name: { "en-US": string }; type: string } };
+  context: { extensions: Record<string, unknown> };
+}
+
+export interface CASECredit {
+  id: string;
+  lesson_id: string;
+  student_id: string;
+  course_title: string;
+  track: Track;
+  oas_standards: string[];
+  activity_description: string;
+  credit_hours: number;
+  credit_type: "CORE" | "ELECTIVE" | "HOMESTEAD" | "PHYSICAL_ED" | "FINE_ARTS";
+  is_homestead_credit: boolean;
+  completed_at: string;
+  researcher_activated: boolean;
+}
+
 export interface LessonResponse {
   lesson_id: string;
   title: string;
   track: Track;
   blocks: LessonBlockResponse[];
   has_research_missions: boolean;
+  researcher_activated: boolean;
+  agent_name: string;
+  xapi_statements: XAPIStatement[];
+  credits_awarded: CASECredit[];
   oas_standards: Array<{
     standard_id: string;
     text: string;
@@ -186,13 +216,14 @@ export async function scaffold(
 
 export interface StudentState {
   student_id: string;
+  grade_level: string;
+  is_homestead: boolean;
   tracks: Record<
     string,
     {
       mastery_score: number;
       mastery_band: MasteryBand;
       lesson_count: number;
-      mastered_standards_count: number;
     }
   >;
 }
@@ -202,7 +233,7 @@ export async function fetchStudentState(
   role: "STUDENT" | "PARENT" | "ADMIN" = "STUDENT",
 ): Promise<StudentState> {
   const res = await fetch(
-    `${BRAIN_URL}/lesson/student-state/${encodeURIComponent(student_id)}`,
+    `${BRAIN_URL}/students/${encodeURIComponent(student_id)}/state`,
     {
       headers: { "X-User-Role": role },
       cache: "no-store",
@@ -210,6 +241,66 @@ export async function fetchStudentState(
   );
   if (!res.ok) throw new Error(`student state fetch failed: ${res.status}`);
   return res.json() as Promise<StudentState>;
+}
+
+// ── Student Profile ────────────────────────────────────────────────────────────
+
+export interface StudentProfile {
+  student_id: string;
+  name: string;
+  email: string | null;
+  grade_level: string;
+  is_homestead: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function registerStudent(profile: {
+  name?: string;
+  email?: string;
+  grade_level?: string;
+  is_homestead?: boolean;
+  student_id?: string;
+}): Promise<StudentProfile> {
+  const res = await fetch(`${BRAIN_URL}/students/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profile),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`register failed: ${res.status}`);
+  return res.json() as Promise<StudentProfile>;
+}
+
+// ── Journal Entries ────────────────────────────────────────────────────────────
+
+export interface JournalEntryRequest {
+  student_id: string;
+  topic: string;
+  track: string;
+  learned: string;
+  action: string;
+}
+
+export interface JournalEntryResponse {
+  id: string;
+  student_id: string;
+  topic: string;
+  track: string;
+  created_at: string;
+}
+
+export async function postJournalEntry(
+  payload: JournalEntryRequest,
+): Promise<JournalEntryResponse> {
+  const res = await fetch(`${BRAIN_URL}/journal/entries`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`journal entry failed: ${res.status} ${res.statusText}`);
+  return res.json() as Promise<JournalEntryResponse>;
 }
 
 // ── Opportunities ──────────────────────────────────────────────────────────────
@@ -230,5 +321,161 @@ export async function fetchOpportunities(role = "ADMIN"): Promise<{
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Opportunities fetch failed: ${res.status}`);
+  return res.json();
+}
+
+// ── Projects ───────────────────────────────────────────────────────────────────
+
+export interface ProjectSummary {
+  id: string;
+  title: string;
+  track: Track;
+  category: string;
+  difficulty: number;
+  tagline: string;
+  estimated_hours: number;
+  grade_band: string;
+  price_range: { low: number; high: number; unit: string } | null;
+  skills: string[];
+}
+
+export interface ProjectStep {
+  step_number: number;
+  instruction: string;
+  tip: string;
+}
+
+export interface ProjectDetail extends ProjectSummary {
+  skills: string[];
+  business_skills: string[];
+  materials: string[];
+  steps: ProjectStep[];
+  portfolio_prompts: string[];
+  safety_notes: string[];
+  income_description: string;
+  where_to_sell: string[];
+}
+
+export interface ProjectSealResponse {
+  project_id: string;
+  credit_type: string;
+  credit_hours: number;
+  message: string;
+}
+
+export async function listProjects(filters: {
+  track?: Track;
+  category?: string;
+  difficulty?: number;
+  grade_band?: string;
+} = {}, role: "STUDENT" | "ADMIN" = "STUDENT"): Promise<{ total: number; projects: ProjectSummary[] }> {
+  const params = new URLSearchParams();
+  if (filters.track)      params.set("track", filters.track);
+  if (filters.category)   params.set("category", filters.category);
+  if (filters.difficulty) params.set("difficulty", String(filters.difficulty));
+  if (filters.grade_band) params.set("grade_band", filters.grade_band);
+
+  const res = await fetch(`${BRAIN_URL}/projects?${params}`, {
+    headers: { "X-User-Role": role },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`listProjects failed: ${res.status}`);
+  return res.json();
+}
+
+export async function getProject(
+  projectId: string,
+  role: "STUDENT" | "ADMIN" = "STUDENT",
+): Promise<ProjectDetail> {
+  const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}`, {
+    headers: { "X-User-Role": role },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`getProject failed: ${res.status}`);
+  return res.json();
+}
+
+export async function sealProject(
+  projectId: string,
+  studentId: string,
+  role: "STUDENT" | "ADMIN" = "STUDENT",
+): Promise<ProjectSealResponse> {
+  const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}/seal`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-User-Role": role },
+    body: JSON.stringify({ student_id: studentId }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`sealProject failed: ${res.status}`);
+  return res.json();
+}
+
+// ── Activities (Life-to-Credit) ────────────────────────────────────────────────
+
+export interface ActivityReportRequest {
+  student_id: string;
+  grade_level: string;
+  description: string;
+  time_minutes: number;
+  activity_date?: string;
+}
+
+export interface CreditedTrack {
+  track: Track;
+  subjects: string[];
+  credit_type: string;
+}
+
+export interface ActivityReportResponse {
+  activity_id: string;
+  course_title: string;
+  activity_description: string;
+  credit_hours: number;
+  credited_tracks: CreditedTrack[];
+  sealed: boolean;
+  adeline_note: string;
+}
+
+export interface ActivityEntry {
+  activity_id: string;
+  course_title: string;
+  activity_description: string;
+  credit_hours: number;
+  primary_track: Track;
+  credit_type: string;
+  activity_date: string;
+  sealed_at: string;
+}
+
+export interface ActivityListResponse {
+  student_id: string;
+  activities: ActivityEntry[];
+  total: number;
+  total_credits: number;
+}
+
+export async function reportActivity(
+  payload: ActivityReportRequest,
+  role: "STUDENT" | "ADMIN" = "STUDENT",
+): Promise<ActivityReportResponse> {
+  const res = await fetch(`${BRAIN_URL}/activities/report`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-User-Role": role },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`reportActivity failed: ${res.status}`);
+  return res.json();
+}
+
+export async function listActivities(
+  studentId: string,
+  role: "STUDENT" | "ADMIN" = "STUDENT",
+): Promise<ActivityListResponse> {
+  const res = await fetch(`${BRAIN_URL}/activities/${encodeURIComponent(studentId)}`, {
+    headers: { "X-User-Role": role },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`listActivities failed: ${res.status}`);
   return res.json();
 }

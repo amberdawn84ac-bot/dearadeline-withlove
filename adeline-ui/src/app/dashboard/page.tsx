@@ -10,6 +10,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchTrackProgress } from "@/lib/brain-client";
+import { ZPDRecommendations } from "@/components/dashboard/ZPDRecommendations";
+import { SpacedRepWidget } from "@/components/dashboard/SpacedRepWidget";
 
 // ── Track configuration ───────────────────────────────────────────────────────
 
@@ -331,6 +333,14 @@ export default function DashboardPage() {
           <RecentActivity entries={recent} />
         )}
       </section>
+
+      {/* ZPD + Spaced Repetition — side-by-side on wider screens */}
+      {!offline && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ZPDRecommendations studentId={STUDENT_ID} limit={3} />
+          <SpacedRepWidget studentId={STUDENT_ID} />
+        </div>
+      )}
 
     </div>
   );
