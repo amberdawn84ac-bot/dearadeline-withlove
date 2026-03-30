@@ -16,9 +16,10 @@ from pgvector.sqlalchemy import Vector
 
 logger = logging.getLogger(__name__)
 
+_pg_password = os.getenv("POSTGRES_PASSWORD", "adeline_local_dev")
 POSTGRES_DSN = os.getenv(
     "POSTGRES_DSN",
-    "postgresql://adeline:adeline_local_dev@postgres:5432/hippocampus"
+    f"postgresql://adeline:{_pg_password}@postgres:5432/hippocampus"
 )
 # SQLAlchemy async requires the asyncpg driver
 ASYNC_DSN = POSTGRES_DSN.replace("postgresql://", "postgresql+asyncpg://")

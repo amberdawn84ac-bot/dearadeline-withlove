@@ -37,10 +37,14 @@ log = logging.getLogger("seed")
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
+_pg_password = os.getenv("POSTGRES_PASSWORD", "adeline_local_dev")
 POSTGRES_DSN = os.getenv(
     "POSTGRES_DSN",
-    "postgresql://adeline:adeline_local_dev@localhost:5432/hippocampus",
+    f"postgresql://adeline:{_pg_password}@localhost:5432/hippocampus",
 ).replace("postgresql://", "postgresql+asyncpg://")
+# When running outside Docker, force localhost (docker-compose sets POSTGRES_DSN
+# with internal hostname 'postgres'; seed scripts run on the host use port mapping)
+POSTGRES_DSN = POSTGRES_DSN.replace("@postgres:", "@localhost:")
 
 NEO4J_URI      = os.getenv("NEO4J_URI",      "bolt://localhost:7687")
 NEO4J_USER     = os.getenv("NEO4J_USER",     "neo4j")

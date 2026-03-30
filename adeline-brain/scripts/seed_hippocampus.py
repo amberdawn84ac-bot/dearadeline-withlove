@@ -19,6 +19,16 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
+# Seed scripts run on the host machine — swap Docker-internal hostname for localhost
+# so the port mapping (5432:5432) works. pgvector_client reads POSTGRES_DSN at
+# import time, so we must patch the env var before importing it.
+_pg_dsn = os.getenv("POSTGRES_DSN", "")
+if _pg_dsn and "@postgres:" in _pg_dsn:
+    os.environ["POSTGRES_DSN"] = _pg_dsn.replace("@postgres:", "@localhost:")
+elif not _pg_dsn:
+    _pg_pw = os.getenv("POSTGRES_PASSWORD", "adeline_local_dev")
+    os.environ["POSTGRES_DSN"] = f"postgresql://adeline:{_pg_pw}@localhost:5432/hippocampus"
+
 import openai
 from app.connections.pgvector_client import hippocampus
 
