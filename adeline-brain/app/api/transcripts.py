@@ -34,6 +34,8 @@ TRACK_LABELS: dict[str, str] = {
     "DISCIPLESHIP":         "Track 6 — Discipleship & Discernment",
     "TRUTH_HISTORY":        "Track 7 — Truth-Based History",
     "ENGLISH_LITERATURE":   "Track 8 — English Language & Literature",
+    "APPLIED_MATHEMATICS":  "Track 9 — Applied Mathematics",
+    "CREATIVE_ECONOMY":     "Track 10 — Creative Economy",
 }
 
 

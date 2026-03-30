@@ -83,7 +83,7 @@ follow_the_money = "Always ask: Who profits? Trace funding, incentives, regulato
 primary_sources = "Prioritize original documents over mainstream summaries."
 every_child_has_a_calling = "Constantly affirm each student's unique purpose and worth."
 
-# ── 8-Track Constitution ──────────────────────────────────────────────────────
+# ── 10-Track Constitution ─────────────────────────────────────────────────────
 
 [tracks]
 CREATION_SCIENCE     = { theme = "Science & Creation",        agent = "ScienceAgent",      credit_type = "CORE" }
@@ -94,6 +94,8 @@ JUSTICE_CHANGEMAKING = { theme = "Justice & Social Change",   agent = "Historian
 DISCIPLESHIP         = { theme = "Faith & Character",         agent = "DiscipleshipAgent", credit_type = "ELECTIVE" }
 TRUTH_HISTORY        = { theme = "History & Truth",           agent = "HistorianAgent",    credit_type = "CORE" }
 ENGLISH_LITERATURE   = { theme = "Language & Literature",     agent = "DiscipleshipAgent", credit_type = "CORE" }
+APPLIED_MATHEMATICS  = { theme = "Real-World Mathematics",    agent = "DiscipleshipAgent", credit_type = "CORE" }
+CREATIVE_ECONOMY     = { theme = "Making, Crafting & Selling",agent = "DiscipleshipAgent", credit_type = "ELECTIVE" }
 
 # ── Multi-Agent Routing ───────────────────────────────────────────────────────
 
@@ -109,8 +111,8 @@ ScienceAgent = {
     block_types = ["PRIMARY_SOURCE", "LAB_MISSION", "RESEARCH_MISSION"],
 }
 DiscipleshipAgent = {
-    tracks      = ["HEALTH_NATUROPATHY", "GOVERNMENT_ECONOMICS", "DISCIPLESHIP", "ENGLISH_LITERATURE"],
-    specialty   = "Worldview alignment, character formation, and cultural discernment.",
+    tracks      = ["HEALTH_NATUROPATHY", "GOVERNMENT_ECONOMICS", "DISCIPLESHIP", "ENGLISH_LITERATURE", "APPLIED_MATHEMATICS", "CREATIVE_ECONOMY"],
+    specialty   = "Worldview alignment, character formation, cultural discernment, real-world math, and creative economy.",
     block_types = ["NARRATIVE", "PRIMARY_SOURCE", "RESEARCH_MISSION"],
 }
 RegistrarAgent = {
@@ -222,7 +224,7 @@ embed_dimensions = 1536
 [models.routing_rules]
 historian_tracks     = ["TRUTH_HISTORY", "JUSTICE_CHANGEMAKING"]
 science_tracks       = ["CREATION_SCIENCE", "HOMESTEADING"]
-discipleship_tracks  = ["HEALTH_NATUROPATHY", "GOVERNMENT_ECONOMICS", "DISCIPLESHIP", "ENGLISH_LITERATURE"]
+discipleship_tracks  = ["HEALTH_NATUROPATHY", "GOVERNMENT_ECONOMICS", "DISCIPLESHIP", "ENGLISH_LITERATURE", "APPLIED_MATHEMATICS", "CREATIVE_ECONOMY"]
 investigation_keywords = ["who profits", "follow the money", "what really happened", "investigate", "regulatory capture"]
 
 # ── UI / Design System ────────────────────────────────────────────────────────
@@ -281,8 +283,8 @@ tracks = ["CREATION_SCIENCE", "HEALTH_NATUROPATHY", "HOMESTEADING", "GOVERNMENT_
 
 [grade_expectations."6-8"]
 min_credits_per_year = 2.0
-tracks = ["CREATION_SCIENCE", "HEALTH_NATUROPATHY", "HOMESTEADING", "GOVERNMENT_ECONOMICS", "JUSTICE_CHANGEMAKING", "DISCIPLESHIP", "TRUTH_HISTORY", "ENGLISH_LITERATURE"]
+tracks = ["CREATION_SCIENCE", "HEALTH_NATUROPATHY", "HOMESTEADING", "GOVERNMENT_ECONOMICS", "JUSTICE_CHANGEMAKING", "DISCIPLESHIP", "TRUTH_HISTORY", "ENGLISH_LITERATURE", "APPLIED_MATHEMATICS", "CREATIVE_ECONOMY"]
 
 [grade_expectations."9-12"]
 min_credits_per_year = 3.0
-tracks = ["CREATION_SCIENCE", "HEALTH_NATUROPATHY", "HOMESTEADING", "GOVERNMENT_ECONOMICS", "JUSTICE_CHANGEMAKING", "DISCIPLESHIP", "TRUTH_HISTORY", "ENGLISH_LITERATURE"]
+tracks = ["CREATION_SCIENCE", "HEALTH_NATUROPATHY", "HOMESTEADING", "GOVERNMENT_ECONOMICS", "JUSTICE_CHANGEMAKING", "DISCIPLESHIP", "TRUTH_HISTORY", "ENGLISH_LITERATURE", "APPLIED_MATHEMATICS", "CREATIVE_ECONOMY"]

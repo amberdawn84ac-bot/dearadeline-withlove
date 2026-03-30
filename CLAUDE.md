@@ -2,6 +2,8 @@
 
 AI context guide for the **dearadeline-withlove** monorepo. Read this before making any changes.
 
+> **Last updated:** 2026-03-29 — Tracks 9+10 added (APPLIED_MATHEMATICS, CREATIVE_ECONOMY), portfolio philosophy, projects router, Upstash/Aura support.
+
 ---
 
 ## Project Vision
@@ -13,6 +15,27 @@ AI context guide for the **dearadeline-withlove** monorepo. Read this before mak
 - A Creation Science mentor who turns the farm into a laboratory
 - A Discipleship guide who reads culture through a biblical worldview lens
 - A Registrar who automatically credits real-world learning to an academic transcript
+- A Creative Economy coach who teaches making, crafting, and selling as legitimate scholarship
+- A Mathematics guide who connects numbers to land, commerce, and building — not worksheets
+
+**Portfolio philosophy:** A student's portfolio is a record of *accomplishments*, not assignments. What did they make, build, grow, publish, or sell? The Registrar credits those outcomes to a transcript. Adeline never treats a completed worksheet as evidence of mastery.
+
+---
+
+## 10-Track Curriculum
+
+| # | Track | Traditional Equivalent | Agent |
+|---|-------|------------------------|-------|
+| 1 | `CREATION_SCIENCE` | Biology / Earth Science | ScienceAgent |
+| 2 | `HEALTH_NATUROPATHY` | Health Science | DiscipleshipAgent |
+| 3 | `HOMESTEADING` | Agricultural Science & Technology | ScienceAgent |
+| 4 | `GOVERNMENT_ECONOMICS` | Government & Economics | DiscipleshipAgent |
+| 5 | `JUSTICE_CHANGEMAKING` | Social Studies / Civics | HistorianAgent |
+| 6 | `DISCIPLESHIP` | Philosophy & Ethics | DiscipleshipAgent |
+| 7 | `TRUTH_HISTORY` | American History / World History | HistorianAgent |
+| 8 | `ENGLISH_LITERATURE` | English Language Arts | DiscipleshipAgent |
+| 9 | `APPLIED_MATHEMATICS` | Mathematics | DiscipleshipAgent |
+| 10 | `CREATIVE_ECONOMY` | Art, Design & Entrepreneurship | DiscipleshipAgent |
 
 ---
 
@@ -24,7 +47,7 @@ dearadeline-withlove/
 ├── CLAUDE.md                   # This file
 ├── adeline-core/               # Shared TypeScript types + Zod schemas
 │   └── src/
-│       ├── types.ts            # Track enum, BlockType, etc.
+│       ├── types.ts            # Track enum (10 tracks), BlockType, TRACK_LABELS, TRACK_THEME
 │       └── schemas/
 │           ├── studentProfile.ts
 │           ├── transcript.ts       # CASE TranscriptEntry, CreditType, GradeLetter
@@ -46,16 +69,18 @@ dearadeline-withlove/
 │   │   │   ├── scaffold.py          # POST /lesson/scaffold (ZPD Socratic response)
 │   │   │   ├── learning_records.py  # xAPI + CASE + SM-2 endpoints
 │   │   │   ├── journal.py           # POST /journal/seal, GET /journal/progress
-│   │   │   └── transcripts.py       # GET /transcripts/{student_id}
+│   │   │   ├── transcripts.py       # GET /transcripts/{student_id}
+│   │   │   ├── students.py          # POST /students/register, GET /students/{id}/state
+│   │   │   └── projects.py          # GET /projects — Art/DIY + Farm project catalog ⬜
 │   │   ├── connections/
 │   │   │   ├── pgvector_client.py   # Hippocampus: pgvector similarity search
 │   │   │   ├── neo4j_client.py      # GraphRAG: OASStandard + cross-track queries
 │   │   │   ├── knowledge_graph.py   # Concept nodes, PREREQUISITE_OF edges, ZPD queries
-│   │   │   └── redis_client.py      # Session cache
+│   │   │   └── redis_client.py      # Session cache (Upstash REST or local Redis)
 │   │   ├── protocols/
 │   │   │   └── witness.py           # Witness Protocol: evaluate_evidence() at 0.82 threshold
 │   │   ├── schemas/
-│   │   │   └── api_models.py        # Pydantic mirrors of adeline-core types
+│   │   │   └── api_models.py        # Pydantic mirrors of adeline-core types (10 tracks)
 │   │   └── tools/
 │   │       ├── researcher.py        # SearchWitnesses: archive.org fallback
 │   │       └── graph_query.py       # ZPD candidates, prerequisite chain, cross-track
@@ -76,12 +101,17 @@ dearadeline-withlove/
         │   ├── dashboard/
         │   │   ├── ZPDRecommendations.tsx  # Top unmastered tracks by ZPD priority
         │   │   └── SpacedRepWidget.tsx     # SM-2 review session widget
-        │   └── gen-ui/patterns/
-        │       ├── QuizCard.tsx            # Multiple-choice with reveal
-        │       └── Flashcard.tsx           # CSS 3D flip card
+        │   ├── gen-ui/patterns/
+        │   │   ├── QuizCard.tsx            # Multiple-choice with reveal
+        │   │   └── Flashcard.tsx           # CSS 3D flip card
+        │   └── projects/
+        │       ├── ProjectCard.tsx         # Browse project catalog ⬜
+        │       └── ProjectGuide.tsx        # Step-by-step project runner ⬜
         └── lib/
             └── brain-client.ts            # Type-safe REST client for adeline-brain
 ```
+
+> ⬜ = not yet implemented
 
 ---
 
@@ -105,10 +135,12 @@ All lesson generation goes through `adeline-brain/app/agents/orchestrator.py`:
 |-------|--------|-------------|
 | `HistorianAgent` | TRUTH_HISTORY, JUSTICE_CHANGEMAKING | PRIMARY_SOURCE, RESEARCH_MISSION |
 | `ScienceAgent` | CREATION_SCIENCE, HOMESTEADING | PRIMARY_SOURCE, LAB_MISSION, RESEARCH_MISSION |
-| `DiscipleshipAgent` | HEALTH_NATUROPATHY, GOVERNMENT_ECONOMICS, DISCIPLESHIP, ENGLISH_LITERATURE | NARRATIVE, PRIMARY_SOURCE, RESEARCH_MISSION |
+| `DiscipleshipAgent` | HEALTH_NATUROPATHY, GOVERNMENT_ECONOMICS, DISCIPLESHIP, ENGLISH_LITERATURE, APPLIED_MATHEMATICS, CREATIVE_ECONOMY | NARRATIVE, PRIMARY_SOURCE, RESEARCH_MISSION |
 | `RegistrarAgent` | All tracks (post-processing) | Emits xAPI + CASE credits |
 
 **RegistrarAgent always runs last.** Do not skip it — it's how learning gets recorded.
+
+**Justice framing note:** JUSTICE_CHANGEMAKING lessons route through HistorianAgent with a special framing — power-capture tactics (regulatory capture, legislative capture, narrative capture) are named and then *flipped*: what does the changemaker do in response? Evidence is always primary source (lobbying records, civil rights documents, legislative history). Portfolio evidence = actions taken, not essays written.
 
 ### 3. GraphRAG (Neo4j)
 The knowledge graph powers ZPD reasoning:
@@ -118,11 +150,16 @@ The knowledge graph powers ZPD reasoning:
 
 Graph mutations go through `app/connections/knowledge_graph.py`. Never write Cypher directly in agent code.
 
+**Neo4j Aura (cloud):** If `NEO4J_URI` starts with `neo4j+s://`, the client uses Aura TLS automatically. Local dev uses `bolt://neo4j:7687`.
+
 ### 4. GraphQL stays in Next.js
 The `adeline-brain` FastAPI layer is **REST only**. Any Hygraph (headless CMS) GraphQL queries go through `adeline-ui/src/app/api/graphql/route.ts` — never inside `adeline-brain`.
 
 ### 5. No DB calls in algorithm files
 `algorithms/zpd_engine.py`, `spaced_repetition.py`, `adaptive_content.py`, `cognitive_load.py` are **pure computation**. They receive data, return results. API routes fetch from DB and pass data in.
+
+### 6. Projects are not lessons
+The project catalog (`projects.py`) returns structured `Project` objects — steps, materials, track, grade range, Sovereign Lab flag. Projects do **not** go through lesson generation or the Witness Protocol. They are curated by Adeline, not synthesized from Hippocampus. ProjectGuide.tsx runs them step-by-step.
 
 ---
 
@@ -135,11 +172,16 @@ The `adeline-brain` FastAPI layer is **REST only**. Any Hygraph (headless CMS) G
 | GET  | `/lesson/student-state/{id}` | Per-track mastery scores + bands |
 | POST | `/journal/seal` | Seal a lesson, record OAS mastery in Neo4j |
 | GET  | `/journal/progress/{id}` | Track progress percentages |
+| POST | `/students/register` | Create student profile |
+| GET  | `/students/{id}` | Fetch student profile |
+| GET  | `/students/{id}/state` | Full student state (mastery + ZPD + SM-2 queue) |
 | POST | `/learning/record` | Persist xAPI statements |
 | POST | `/learning/transcript` | Seal CASE credit entry |
 | GET  | `/learning/transcript/{id}` | Student's full academic transcript |
 | GET  | `/learning/reviews/{id}` | Due SM-2 cards for SpacedRepWidget |
 | POST | `/learning/reviews` | Submit SM-2 quality rating (0–5) |
+| GET  | `/projects` | Art/DIY + Farm project catalog ⬜ |
+| GET  | `/projects/{id}` | Single project with full step guide ⬜ |
 
 ---
 
@@ -162,10 +204,24 @@ The `adeline-brain` FastAPI layer is **REST only**. Any Hygraph (headless CMS) G
 ## What to Preserve — Never Change Without Discussion
 
 1. **Witness Protocol threshold** (`TRUTH_THRESHOLD = 0.82`) — changing this changes what students see
-2. **8-Track Constitution** — the track names are canonical; no renaming
+2. **10-Track Constitution** — the track names and numbers are canonical; no renaming, no reordering
 3. **RegistrarAgent** runs after every lesson — xAPI/CASE records require it
 4. **GraphQL in Next.js only** — adeline-brain is REST-only by design
 5. **Pure computation algorithms** — no DB calls inside `algorithms/`
+6. **Portfolio = accomplishments** — never treat worksheet completion as mastery evidence
+
+---
+
+## Known Gaps (as of 2026-03-29)
+
+| Gap | Notes |
+|-----|-------|
+| `projects.py` router | Models written; router in progress |
+| `ProjectCard.tsx` / `ProjectGuide.tsx` | Not started — blocked on projects.py |
+| Justice track seeds | Hippocampus needs JUSTICE_CHANGEMAKING primary sources (lobbying docs, civil rights, regulatory capture) |
+| Knowledge tree UI | Visual mastery graph — not started |
+| Tracks 9+10 in transcript PDF | `TRACK_LABELS` in `transcripts.py` still shows 8 tracks — needs APPLIED_MATHEMATICS + CREATIVE_ECONOMY added |
+| CLAUDE.md ↔ adeline.config.toml sync | config.toml may still reference 8 tracks |
 
 ---
 
@@ -205,12 +261,26 @@ pnpm build
 ```bash
 # adeline-brain (.env)
 POSTGRES_DSN=postgresql://...
+OPENAI_API_KEY=sk-...
+TAVILY_API_KEY=...
+ADELINE_MODEL=claude-sonnet-4-6   # or claude-opus-4-6 for production
+
+# Neo4j — local Docker
 NEO4J_URI=bolt://neo4j:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=adeline_local_dev
-OPENAI_API_KEY=sk-...
-TAVILY_API_KEY=...
+
+# Neo4j Aura (cloud) — URI prefix auto-enables TLS
+NEO4J_URI=neo4j+s://xxxxxxxx.databases.neo4j.io
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=...
+
+# Redis — local
 REDIS_URL=redis://redis:6379
+
+# Upstash Redis REST (serverless)
+UPSTASH_REDIS_REST_URL=https://...
+UPSTASH_REDIS_REST_TOKEN=...
 
 # adeline-ui (.env.local)
 NEXT_PUBLIC_BRAIN_URL=http://localhost:8000
