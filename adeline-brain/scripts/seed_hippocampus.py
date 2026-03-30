@@ -26,7 +26,7 @@ _pg_dsn = os.getenv("POSTGRES_DSN", "")
 if _pg_dsn and "@postgres:" in _pg_dsn:
     os.environ["POSTGRES_DSN"] = _pg_dsn.replace("@postgres:", "@localhost:")
 elif not _pg_dsn:
-    _pg_pw = os.getenv("POSTGRES_PASSWORD", "adeline_local_dev")
+    _pg_pw = os.getenv("POSTGRES_PASSWORD", "placeholder_password")
     os.environ["POSTGRES_DSN"] = f"postgresql://adeline:{_pg_pw}@localhost:5432/hippocampus"
 
 import openai

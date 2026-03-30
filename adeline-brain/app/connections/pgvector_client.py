@@ -16,7 +16,7 @@ from pgvector.sqlalchemy import Vector
 
 logger = logging.getLogger(__name__)
 
-_pg_password = os.getenv("POSTGRES_PASSWORD", "adeline_local_dev")
+_pg_password = os.getenv("POSTGRES_PASSWORD", "placeholder_password")
 POSTGRES_DSN = os.getenv(
     "POSTGRES_DSN",
     f"postgresql://adeline:{_pg_password}@postgres:5432/hippocampus"
