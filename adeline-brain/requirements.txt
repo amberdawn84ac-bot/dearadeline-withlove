@@ -15,7 +15,6 @@ anthropic==0.30.1
 # Database — Hippocampus (pgvector)
 pgvector==0.2.5
 asyncpg==0.29.0
-psycopg2-binary==2.9.9
 sqlalchemy==2.0.30
 prisma==0.13.1
 
