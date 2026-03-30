@@ -6,7 +6,7 @@
  * The browser never sees the HYGRAPH_TOKEN.
  *
  * Content models managed in Hygraph:
- *   TrackPage      — curriculum overview for each 8-Track
+ *   TrackPage      — curriculum overview for each 10-Track
  *   CurriculumUnit — a multi-lesson thematic unit per track
  *   LessonStub     — lightweight metadata (title, grade band, standards)
  *   BlockContent   — rich-text lesson blocks (replaces hard-coded cascade content)
@@ -31,7 +31,9 @@ export type Track =
   | "JUSTICE_CHANGEMAKING"
   | "DISCIPLESHIP"
   | "TRUTH_HISTORY"
-  | "ENGLISH_LITERATURE";
+  | "ENGLISH_LITERATURE"
+  | "APPLIED_MATHEMATICS"
+  | "CREATIVE_ECONOMY";
 
 export interface TrackPage {
   id:          string;
