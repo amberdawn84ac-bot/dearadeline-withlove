@@ -38,13 +38,12 @@ log = logging.getLogger("seed")
 # ── Config ────────────────────────────────────────────────────────────────────
 
 _pg_password = os.getenv("POSTGRES_PASSWORD", "placeholder_password")
-POSTGRES_DSN = os.getenv(
-    "POSTGRES_DSN",
-    f"postgresql://adeline:{_pg_password}@localhost:5432/hippocampus",
-).replace("postgresql://", "postgresql+asyncpg://")
-# When running outside Docker, force localhost (docker-compose sets POSTGRES_DSN
-# with internal hostname 'postgres'; seed scripts run on the host use port mapping)
-POSTGRES_DSN = POSTGRES_DSN.replace("@postgres:", "@localhost:")
+POSTGRES_DSN = (
+    os.getenv("POSTGRES_DSN")
+    or os.getenv("DIRECT_DATABASE_URL")   # Supabase direct (port 5432) — best for DDL
+    or os.getenv("DATABASE_URL")           # Supabase pooler fallback
+    or f"postgresql://adeline:{_pg_password}@localhost:5432/hippocampus"
+).replace("postgresql://", "postgresql+asyncpg://").replace("@postgres:", "@localhost:")
 
 NEO4J_URI      = os.getenv("NEO4J_URI",      "bolt://localhost:7687")
 NEO4J_USER     = os.getenv("NEO4J_USER",     "neo4j")
