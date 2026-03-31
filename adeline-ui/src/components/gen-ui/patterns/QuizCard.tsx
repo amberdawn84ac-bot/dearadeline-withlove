@@ -70,8 +70,8 @@ export function QuizCard({
                 color: "#2F4731",
               }}
             >
-              {showCorrect && <CheckCircle size={16} style={{ color: "#28A745", shrink: 0 }} />}
-              {showIncorrect && <XCircle size={16} style={{ color: "#DC3545", shrink: 0 }} />}
+              {showCorrect && <CheckCircle size={16} style={{ color: "#28A745", flexShrink: 0 }} />}
+              {showIncorrect && <XCircle size={16} style={{ color: "#DC3545", flexShrink: 0 }} />}
               {!showCorrect && !showIncorrect && (
                 <span
                   className="w-5 h-5 rounded-full border text-[10px] font-bold flex items-center justify-center shrink-0"

@@ -171,7 +171,7 @@ function OASFooter({ standards }: { standards: LessonResponse["oas_standards"] }
   const crossTrack = standards.filter((s) => s.source_type === "cross_track");
 
   // Deduplicate cross-track entries by connected_track for the "connects to" badges
-  const connectedTracks = [...new Set(crossTrack.map((s) => s.connected_track).filter(Boolean))];
+  const connectedTracks = Array.from(new Set(crossTrack.map((s) => s.connected_track).filter(Boolean)));
 
   return (
     <div className="pt-4 border-t border-fuschia/10 space-y-4">

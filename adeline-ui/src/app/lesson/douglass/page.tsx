@@ -15,6 +15,10 @@ const DOUGLASS_LESSON: LessonResponse = {
   title: "Frederick Douglass: Witness to Liberty",
   track: "TRUTH_HISTORY",
   has_research_missions: false,
+  researcher_activated: false,
+  agent_name: "HistorianAgent",
+  xapi_statements: [],
+  credits_awarded: [],
   oas_standards: [
     {
       standard_id: "OK.US.H.5.4",

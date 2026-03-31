@@ -37,6 +37,8 @@ const TRACK_LABELS: Record<Track, string> = {
   DISCIPLESHIP:         "Discipleship",
   HEALTH_NATUROPATHY:   "Health & Naturopathy",
   ENGLISH_LITERATURE:   "English Literature",
+  APPLIED_MATHEMATICS:  "Applied Mathematics",
+  CREATIVE_ECONOMY:     "Creative Economy",
 };
 
 const SOURCE_TYPE_COLORS: Record<string, string> = {
