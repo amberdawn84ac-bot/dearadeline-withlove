@@ -10,3 +10,7 @@ export * from "./schemas/learningActivity";
 export * from "./schemas/spacedRepetition";
 export * from "./schemas/knowledgeGraph";
 export * from "./schemas/agentResponse";
+export * from "./schemas/standards";
+
+// ── Config modules ──────────────────────────────────────────────
+export * from "./config/tracks";

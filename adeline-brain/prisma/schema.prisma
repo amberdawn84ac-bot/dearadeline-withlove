@@ -38,8 +38,12 @@ enum BlockType {
   NARRATIVE
   PRIMARY_SOURCE
   LAB_MISSION
+  EXPERIMENT
   RESEARCH_MISSION
   QUIZ
+  DATA_TRACKING
+  PROBLEM
+  WRITING
 }
 
 enum XAPIVerb {
@@ -296,4 +300,91 @@ model SpacedRepetitionCard {
   @@index([dueAt])
   @@index([track])
   @@index([masteryLevel])
+}
+
+// ── Reading Nook ──────────────────────────────────────────────────────────────
+
+model Book {
+  id            String   @id @default(uuid())
+  title         String
+  author        String
+  gutenbergId   String?  @unique
+  sourceLibrary String?  // "Standard Ebooks" | "Gutenberg"
+  downloadUrl   String?
+  storageKey    String?  // Supabase Storage object path
+  isDownloaded  Boolean  @default(false)
+  format        String   @default("epub")
+  coverUrl      String?
+
+  studentBooks  StudentBook[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([author])
+  @@index([isDownloaded])
+}
+
+model StudentBook {
+  studentId   String
+  bookId      String
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+  currentPage Int?
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, bookId])
+  @@index([studentId])
+}
+
+// ── Student Ledgers (Standards / Credit / Evidence) ───────────────────────────
+
+model StandardsLedgerEntry {
+  id          String   @id @default(uuid())
+  studentId   String
+  framework   String   // StandardsFramework enum value
+  subject     String   // StandardsSubject enum value
+  code        String?  // e.g. "OK-ELA-8.R.1"
+  confidence  Float    @default(0.0)
+  lessonId    String?
+  addressedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([studentId])
+  @@index([framework, subject])
+  @@index([studentId, code])
+}
+
+model CreditLedgerEntry {
+  id          String   @id @default(uuid())
+  studentId   String
+  bucket      String   // CreditBucket enum value
+  hoursEarned Float
+  source      String   // "lesson" | "project" | "activity"
+  sourceId    String
+  createdAt   DateTime @default(now())
+
+  @@index([studentId])
+  @@index([studentId, bucket])
+}
+
+model EvidenceLedgerEntry {
+  id             String    @id @default(uuid())
+  studentId      String
+  artifactType   String    // "essay" | "quiz" | "lab" | "project" | "discussion" | "fieldwork" | "presentation"
+  title          String
+  masteryScore   Float
+  hours          Float
+  activityDate   DateTime
+  evaluatorNotes String?
+  bucket         String    // CreditBucket value
+  proposedCourse String?
+  isApproved     Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([studentId])
+  @@index([studentId, bucket])
+  @@index([isApproved])
 }
