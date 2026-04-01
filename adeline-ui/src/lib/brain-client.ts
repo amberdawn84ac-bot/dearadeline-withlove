@@ -522,3 +522,88 @@ export async function listActivities(
   if (!res.ok) throw new Error(`listActivities failed: ${res.status}`);
   return res.json();
 }
+
+// ── Credit Engine Types ───────────────────────────────────────────────────────
+
+export interface CreditBucketState {
+  bucket: string;
+  hoursEarned: number;
+  evidenceCount: number;
+  masteryAverage: number;
+  masteryGrade: string;
+  creditEarned: number | null;
+}
+
+export interface CourseProposal {
+  proposalId: string;
+  bucket: string;
+  externalCourseName: string;
+  hoursEarned: number;
+  masteryPercentage: number;
+  masteryGrade: string;
+  isApproved: boolean;
+  proposedAt: string;
+  approvedAt?: string;
+}
+
+export interface CreditDashboard {
+  studentId: string;
+  currentProfile: string;
+  buckets: CreditBucketState[];
+  pendingProposals: CourseProposal[];
+  approvedCourses: CourseProposal[];
+}
+
+export interface OklahomaProfile {
+  key: string;
+  name: string;
+  description: string;
+  oasOptional: boolean;
+}
+
+// ── Credit Engine Functions ───────────────────────────────────────────────────
+
+export async function listAvailableProfiles(): Promise<OklahomaProfile[]> {
+  const res = await fetch(`${BRAIN_URL}/credits/available-profiles`);
+  if (!res.ok) throw new Error(`Failed to fetch profiles: ${res.status}`);
+  return res.json();
+}
+
+export async function getStudentProfile(
+  studentId: string,
+): Promise<{ studentId: string; profileKey: string; profile: Record<string, unknown> }> {
+  const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}/profile`);
+  if (!res.ok) throw new Error(`Failed to fetch profile: ${res.status}`);
+  return res.json();
+}
+
+export async function setStudentProfile(
+  studentId: string,
+  profileKey: string,
+): Promise<{ studentId: string; profileKey: string; message: string }> {
+  const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}/profile?profile_key=${encodeURIComponent(profileKey)}`, {
+    method: "PUT",
+  });
+  if (!res.ok) throw new Error(`Failed to set profile: ${res.status}`);
+  return res.json();
+}
+
+export async function getCreditDashboard(
+  studentId: string,
+): Promise<CreditDashboard> {
+  const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}`);
+  if (!res.ok) throw new Error(`Failed to fetch credit dashboard: ${res.status}`);
+  return res.json();
+}
+
+export async function approveCourseProposal(
+  studentId: string,
+  proposalId: string,
+): Promise<{ proposalId: string; isApproved: boolean; message: string }> {
+  const res = await fetch(
+    `${BRAIN_URL}/credits/${encodeURIComponent(studentId)}/approve/${encodeURIComponent(proposalId)}`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(`Failed to approve proposal: ${res.status}`);
+  return res.json();
+}
