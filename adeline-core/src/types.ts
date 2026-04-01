@@ -69,6 +69,9 @@ export const TRACK_THEME: Record<Track, TrackThemeEntry> = {
   [Track.CREATIVE_ECONOMY]:     { primary: COLORS.PAPAYA,   label: TRACK_LABELS[Track.CREATIVE_ECONOMY] },
 };
 
+/** Convenience array of all 10 track values. */
+export const ALL_TRACKS = Object.values(Track);
+
 // ══════════════════════════════════════════════════════════════════
 // 3. THE WITNESS THRESHOLD
 // ══════════════════════════════════════════════════════════════════
