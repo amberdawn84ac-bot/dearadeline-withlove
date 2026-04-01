@@ -1,0 +1,96 @@
+{
+  "oklahoma_flexible_homeschool": {
+    "name": "Oklahoma Flexible Homeschool",
+    "description": "Portfolio-first, OAS optional. Student accomplishments drive the transcript, not standards checklists.",
+    "oasOptional": true,
+    "requiresApprovalForTranscript": true,
+    "creditHourWeighting": {
+      "essay": 1.0,
+      "quiz": 0.5,
+      "lab": 1.5,
+      "project": 2.0,
+      "discussion": 0.75,
+      "fieldwork": 1.5,
+      "presentation": 1.25
+    },
+    "creditThresholds": {
+      "full_credit": 120,
+      "half_credit": 60
+    },
+    "oasrheEnabled": false,
+    "actReadinessEnabled": false,
+    "transcript": {
+      "allowCourseProposals": true,
+      "courseProposalPrefix": "Portfolio",
+      "exampleCourse": "Portfolio: Environmental Science"
+    }
+  },
+  "oklahoma_college_prep": {
+    "name": "Oklahoma College Prep (OSRHE 15-Unit Core)",
+    "description": "OAS standards on. OSRHE 15-unit dashboard shows college-readiness progress. ACT prep indicators visible.",
+    "oasOptional": false,
+    "requiresApprovalForTranscript": true,
+    "creditHourWeighting": {
+      "essay": 1.0,
+      "quiz": 0.5,
+      "lab": 1.5,
+      "project": 1.75,
+      "discussion": 0.75,
+      "fieldwork": 1.25,
+      "presentation": 1.25
+    },
+    "creditThresholds": {
+      "full_credit": 120,
+      "half_credit": 60
+    },
+    "oasrheEnabled": true,
+    "osrheCoreBuckets": ["ENGLISH", "MATH", "LAB_SCIENCE", "SOCIAL_STUDIES"],
+    "actReadinessEnabled": true,
+    "oasSubjectWeights": {
+      "ELA": 1.0,
+      "MATH": 1.0,
+      "SCIENCE": 1.25,
+      "SOCIAL_STUDIES": 1.0
+    },
+    "transcript": {
+      "allowCourseProposals": true,
+      "courseProposalPrefix": "AP Eligible",
+      "exampleCourse": "AP Eligible: Environmental Science (Mastery 94%)"
+    }
+  },
+  "oklahoma_public_school_parity": {
+    "name": "Oklahoma Public School Parity (High Compliance)",
+    "description": "OAS saturation checks enforced. Min 80% standards mastery per subject. Stricter pacing. Opt-in only.",
+    "oasOptional": false,
+    "requiresApprovalForTranscript": true,
+    "creditHourWeighting": {
+      "essay": 1.0,
+      "quiz": 0.75,
+      "lab": 1.5,
+      "project": 1.5,
+      "discussion": 0.75,
+      "fieldwork": 1.0,
+      "presentation": 1.0
+    },
+    "creditThresholds": {
+      "full_credit": 120,
+      "half_credit": 60
+    },
+    "oasrheEnabled": true,
+    "osrheCoreBuckets": ["ENGLISH", "MATH", "LAB_SCIENCE", "SOCIAL_STUDIES"],
+    "oasStandardsSaturationRequired": true,
+    "oasStandardsSaturationThreshold": 0.80,
+    "actReadinessEnabled": true,
+    "oasSubjectWeights": {
+      "ELA": 1.0,
+      "MATH": 1.0,
+      "SCIENCE": 1.25,
+      "SOCIAL_STUDIES": 1.0
+    },
+    "transcript": {
+      "allowCourseProposals": true,
+      "courseProposalPrefix": "School Parity",
+      "exampleCourse": "School Parity: Environmental Science (OAS Saturation 82%)"
+    }
+  }
+}
