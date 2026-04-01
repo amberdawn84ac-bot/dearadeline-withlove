@@ -165,11 +165,16 @@ export type User = z.infer<typeof UserSchema>;
 // ── 4c. LessonBlockSchema ──────────────────────────────────────────
 
 export enum BlockType {
-  TEXT             = "TEXT",             // Core reading / narrative passage
-  PRIMARY_SOURCE   = "PRIMARY_SOURCE",   // Historical or scientific primary document
-  LAB_MISSION      = "LAB_MISSION",      // Hands-on experiment or homestead activity
-  RESEARCH_MISSION = "RESEARCH_MISSION", // Assigned when ARCHIVE_SILENT fires
+  TEXT             = "TEXT",             // Plain reading passage
+  NARRATIVE        = "NARRATIVE",        // Story-driven worldview content (DiscipleshipAgent)
+  PRIMARY_SOURCE   = "PRIMARY_SOURCE",   // Historical/scientific primary document — evidence required
+  LAB_MISSION      = "LAB_MISSION",      // Hands-on homestead/science activity
+  EXPERIMENT       = "EXPERIMENT",       // Sovereign Lab — student films as portfolio evidence
+  RESEARCH_MISSION = "RESEARCH_MISSION", // Assigned when Witness Protocol fires ARCHIVE_SILENT
   QUIZ             = "QUIZ",             // Knowledge check
+  DATA_TRACKING    = "DATA_TRACKING",    // Applied Math / Science metric logging
+  PROBLEM          = "PROBLEM",          // Applied Math contextual problem
+  WRITING          = "WRITING",          // English / Creative Economy composition prompt
 }
 
 export enum DifficultyLevel {
