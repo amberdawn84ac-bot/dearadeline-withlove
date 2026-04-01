@@ -53,7 +53,7 @@ export type TrackThemeEntry = {
 };
 
 /**
- * Maps each of the 9 Tracks to its Sketchnote accent color.
+ * Maps each of the 10 Tracks to its Sketchnote accent color.
  * Used by GenUIRenderer and any styled track badge in adeline-ui.
  */
 export const TRACK_THEME: Record<Track, TrackThemeEntry> = {
