@@ -15,25 +15,20 @@ Usage:
 import asyncio
 import httpx
 import logging
+import os
 from typing import Optional
 
 from openai import AsyncOpenAI
 
 from app.connections.pgvector_client import hippocampus
 from app.tools.declassified_parser import parse_declassified_document
+from app.tools.researcher import search_archive_async
 from app.schemas.api_models import SourceType
 
 logger = logging.getLogger(__name__)
 
 # Lazy-initialize OpenAI client (defer until first use)
 openai_client = None
-
-# Try to import tavily_client; if not available, stub it
-try:
-    from app.tools.tavily_client import tavily_client
-except (ImportError, ModuleNotFoundError):
-    logger.warning("[Seed] Tavily client not available — search will be limited")
-    tavily_client = None
 
 
 def _get_openai_client():
@@ -101,8 +96,8 @@ async def seed_nara_documents(track: str, limit: int = 10) -> int:
     Returns:
         Number of chunks ingested
     """
-    if tavily_client is None:
-        logger.warning("[NARA] Tavily client not available — skipping NARA seed")
+    if not os.getenv("TAVILY_API_KEY"):
+        logger.warning("[NARA] TAVILY_API_KEY not set — skipping NARA seed")
         return 0
 
     queries = TRACK_QUERIES.get(track, [f"{track} declassified documents"])
@@ -111,27 +106,22 @@ async def seed_nara_documents(track: str, limit: int = 10) -> int:
     for query in queries:
         try:
             logger.info(f"[NARA] Searching: {query}")
-            search_query = f"{query} site:catalog.archives.gov"
 
-            results = tavily_client.search(
-                query=search_query,
-                include_domains=["catalog.archives.gov"],
-                max_results=3,
-            )
+            results = await search_archive_async(query, "NARA")
 
-            for result in results.get("results", [])[:limit]:
+            for result in results[:limit]:
                 try:
                     url = result.get("url", "")
                     title = result.get("title", "Untitled NARA Document")
+                    snippet = result.get("snippet", "")
 
-                    # Fetch full document text
-                    doc_text = await fetch_document_text(url)
-                    if not doc_text:
+                    if not snippet:
+                        logger.warning(f"[NARA] No snippet for {title}")
                         continue
 
-                    # Parse into chunks
+                    # Parse snippet into chunks
                     chunks = parse_declassified_document(
-                        raw_text=doc_text,
+                        raw_text=snippet,
                         archive_name="NARA",
                         source_url=url,
                     )
@@ -152,20 +142,18 @@ async def seed_nara_documents(track: str, limit: int = 10) -> int:
 
                             # Upsert to Hippocampus
                             doc_id = await hippocampus.upsert_document(
-                                source_title=chunk.metadata.get("title", "Untitled"),
+                                source_title=title,
                                 track=track,
                                 chunk=chunk.chunk_text,
                                 embedding=embedding,
-                                source_url=chunk.metadata.get("source_url", ""),
+                                source_url=url,
                                 source_type=SourceType.DECLASSIFIED_GOV.value,
                                 citation_author=chunk.metadata.get("author", ""),
                                 citation_year=None,
                                 citation_archive_name="NARA",
                             )
                             ingested_count += 1
-                            logger.info(
-                                f"[NARA] Ingested: {chunk.metadata.get('title', 'Untitled')[:50]}..."
-                            )
+                            logger.info(f"[NARA] Ingested: {title[:50]}...")
 
                         except Exception as e:
                             logger.warning(f"[NARA] Failed to embed/persist chunk: {e}")
@@ -196,8 +184,8 @@ async def seed_cia_foia_documents(track: str, limit: int = 10) -> int:
     Returns:
         Number of chunks ingested
     """
-    if tavily_client is None:
-        logger.warning("[CIA FOIA] Tavily client not available — skipping CIA FOIA seed")
+    if not os.getenv("TAVILY_API_KEY"):
+        logger.warning("[CIA FOIA] TAVILY_API_KEY not set — skipping CIA FOIA seed")
         return 0
 
     queries = TRACK_QUERIES.get(track, [f"{track} CIA documents"])
@@ -206,25 +194,21 @@ async def seed_cia_foia_documents(track: str, limit: int = 10) -> int:
     for query in queries:
         try:
             logger.info(f"[CIA FOIA] Searching: {query}")
-            search_query = f"{query} site:cia.gov"
 
-            results = tavily_client.search(
-                query=search_query,
-                include_domains=["cia.gov"],
-                max_results=3,
-            )
+            results = await search_archive_async(query, "CIA_FOIA")
 
-            for result in results.get("results", [])[:limit]:
+            for result in results[:limit]:
                 try:
                     url = result.get("url", "")
                     title = result.get("title", "Untitled CIA Document")
+                    snippet = result.get("snippet", "")
 
-                    doc_text = await fetch_document_text(url)
-                    if not doc_text:
+                    if not snippet:
+                        logger.warning(f"[CIA FOIA] No snippet for {title}")
                         continue
 
                     chunks = parse_declassified_document(
-                        raw_text=doc_text,
+                        raw_text=snippet,
                         archive_name="CIA_FOIA",
                         source_url=url,
                     )
@@ -242,20 +226,18 @@ async def seed_cia_foia_documents(track: str, limit: int = 10) -> int:
                             embedding = embedding_response.data[0].embedding
 
                             doc_id = await hippocampus.upsert_document(
-                                source_title=chunk.metadata.get("title", "Untitled"),
+                                source_title=title,
                                 track=track,
                                 chunk=chunk.chunk_text,
                                 embedding=embedding,
-                                source_url=chunk.metadata.get("source_url", ""),
+                                source_url=url,
                                 source_type=SourceType.DECLASSIFIED_GOV.value,
                                 citation_author=chunk.metadata.get("author", ""),
                                 citation_year=None,
                                 citation_archive_name="CIA_FOIA",
                             )
                             ingested_count += 1
-                            logger.info(
-                                f"[CIA FOIA] Ingested: {chunk.metadata.get('title', 'Untitled')[:50]}..."
-                            )
+                            logger.info(f"[CIA FOIA] Ingested: {title[:50]}...")
 
                         except Exception as e:
                             logger.warning(f"[CIA FOIA] Failed to embed/persist chunk: {e}")
@@ -286,8 +268,8 @@ async def seed_fbi_vault_documents(track: str, limit: int = 10) -> int:
     Returns:
         Number of chunks ingested
     """
-    if tavily_client is None:
-        logger.warning("[FBI Vault] Tavily client not available — skipping FBI Vault seed")
+    if not os.getenv("TAVILY_API_KEY"):
+        logger.warning("[FBI Vault] TAVILY_API_KEY not set — skipping FBI Vault seed")
         return 0
 
     queries = TRACK_QUERIES.get(track, [f"{track} FBI documents"])
@@ -296,25 +278,21 @@ async def seed_fbi_vault_documents(track: str, limit: int = 10) -> int:
     for query in queries:
         try:
             logger.info(f"[FBI Vault] Searching: {query}")
-            search_query = f"{query} site:vault.fbi.gov"
 
-            results = tavily_client.search(
-                query=search_query,
-                include_domains=["vault.fbi.gov"],
-                max_results=3,
-            )
+            results = await search_archive_async(query, "FBI_VAULT")
 
-            for result in results.get("results", [])[:limit]:
+            for result in results[:limit]:
                 try:
                     url = result.get("url", "")
                     title = result.get("title", "Untitled FBI Document")
+                    snippet = result.get("snippet", "")
 
-                    doc_text = await fetch_document_text(url)
-                    if not doc_text:
+                    if not snippet:
+                        logger.warning(f"[FBI Vault] No snippet for {title}")
                         continue
 
                     chunks = parse_declassified_document(
-                        raw_text=doc_text,
+                        raw_text=snippet,
                         archive_name="FBI_VAULT",
                         source_url=url,
                     )
@@ -332,20 +310,18 @@ async def seed_fbi_vault_documents(track: str, limit: int = 10) -> int:
                             embedding = embedding_response.data[0].embedding
 
                             doc_id = await hippocampus.upsert_document(
-                                source_title=chunk.metadata.get("title", "Untitled"),
+                                source_title=title,
                                 track=track,
                                 chunk=chunk.chunk_text,
                                 embedding=embedding,
-                                source_url=chunk.metadata.get("source_url", ""),
+                                source_url=url,
                                 source_type=SourceType.DECLASSIFIED_GOV.value,
                                 citation_author=chunk.metadata.get("author", ""),
                                 citation_year=None,
                                 citation_archive_name="FBI_VAULT",
                             )
                             ingested_count += 1
-                            logger.info(
-                                f"[FBI Vault] Ingested: {chunk.metadata.get('title', 'Untitled')[:50]}..."
-                            )
+                            logger.info(f"[FBI Vault] Ingested: {title[:50]}...")
 
                         except Exception as e:
                             logger.warning(f"[FBI Vault] Failed to embed/persist chunk: {e}")
@@ -375,6 +351,10 @@ async def seed_all_declassified_documents() -> int:
         Total number of chunks ingested across all archives
     """
     logger.info("[Seed] Starting declassified documents ingestion...")
+
+    # Connect to Hippocampus
+    await hippocampus.connect()
+    logger.info("[Seed] Connected to Hippocampus")
 
     tasks = [
         seed_nara_documents(track="TRUTH_HISTORY", limit=5),
