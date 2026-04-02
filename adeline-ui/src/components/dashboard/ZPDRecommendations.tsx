@@ -31,6 +31,8 @@ const TRACK_LABELS: Record<Track, string> = {
   DISCIPLESHIP:         "Discipleship",
   HEALTH_NATUROPATHY:   "Health & Naturopathy",
   ENGLISH_LITERATURE:   "English Literature",
+  APPLIED_MATHEMATICS:  "Applied Mathematics",
+  CREATIVE_ECONOMY:     "Creative Economy",
 };
 
 const TRACK_COLORS: Record<Track, string> = {
@@ -42,6 +44,8 @@ const TRACK_COLORS: Record<Track, string> = {
   DISCIPLESHIP:         "#4F46E5",
   HEALTH_NATUROPATHY:   "#047857",
   ENGLISH_LITERATURE:   "#7C3AED",
+  APPLIED_MATHEMATICS:  "#0369A1",
+  CREATIVE_ECONOMY:     "#B45309",
 };
 
 const BAND_LABEL: Record<string, string> = {

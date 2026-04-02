@@ -224,6 +224,7 @@ export interface StudentState {
       mastery_score: number;
       mastery_band: MasteryBand;
       lesson_count: number;
+      mastered_standards_count: number;
     }
   >;
 }
