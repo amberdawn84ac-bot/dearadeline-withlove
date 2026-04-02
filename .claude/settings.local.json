@@ -66,7 +66,20 @@
       "Bash(bash --noprofile --norc -c \"pnpm build 2>&1\")",
       "Bash(tee /tmp/test-output.log)",
       "Bash(npx prisma:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(npm test:*)",
+      "Bash(find src/schemas/__tests__ -name \"*.test.ts\" -exec wc -l {} +)",
+      "Bash(/tmp/verification.md:*)",
+      "Read(//tmp/**)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -n \"test.*orchestrator\\\\|test.*researcher\\\\|test.*empty_hippocampus\" adeline-brain/tests/*.py)",
+      "Bash(for file:*)",
+      "Bash(do echo:*)",
+      "Bash(done)",
+      "Bash(find /c/Users/Aarons -path */adeline-brain/*declassif* -type f)",
+      "Bash(mkdir -p /c/Users/Aarons/.config/superpowers/worktrees/dearadeline-withlove/declassified-documents/adeline-brain/app/scripts)",
+      "Bash(touch /c/Users/Aarons/.config/superpowers/worktrees/dearadeline-withlove/declassified-documents/adeline-brain/app/scripts/__init__.py)",
+      "Bash(find /c/Users/Aarons/dearadeline-withlove/adeline-brain -name *declassif* -o -name *seed*)"
     ]
   }
 }
