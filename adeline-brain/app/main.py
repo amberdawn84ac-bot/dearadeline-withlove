@@ -26,6 +26,7 @@ from app.api.activities import router as activities_router
 from app.api.projects import router as projects_router
 from app.api.subscriptions import router as subscriptions_router
 from app.api.credits import router as credits_router
+from app.api.bookshelf import router as bookshelf_router
 from app.connections.journal_store import journal_store
 
 logging.basicConfig(level=logging.INFO)
@@ -80,6 +81,7 @@ app.include_router(activities_router)
 app.include_router(projects_router)
 app.include_router(subscriptions_router)
 app.include_router(credits_router)
+app.include_router(bookshelf_router)
 
 
 @app.get("/health")
