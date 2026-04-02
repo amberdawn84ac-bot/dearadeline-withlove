@@ -107,6 +107,7 @@ class Evidence(BaseModel):
     source_id:        str = Field(default_factory=lambda: str(uuid.uuid4()))
     source_title:     str
     source_url:       str = ""
+    source_type:      str = "PRIMARY_SOURCE"
     witness_citation: WitnessCitation = Field(default_factory=WitnessCitation)
     similarity_score: float = Field(ge=0.0, le=1.0)
     verdict:          EvidenceVerdict
