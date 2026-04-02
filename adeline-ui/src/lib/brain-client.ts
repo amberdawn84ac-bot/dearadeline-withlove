@@ -650,3 +650,53 @@ export async function downloadMasteryPortfolio(studentId: string): Promise<Blob>
   if (!res.ok) throw new Error(`Failed to download mastery portfolio: ${res.status}`);
   return res.blob();
 }
+
+// ── Bookshelf Types ───────────────────────────────────────────────────────────
+
+export interface BookSummary {
+  id: string;
+  title: string;
+  author: string;
+  sourceLibrary: string | null;
+  isDownloaded: boolean;
+  format: string;
+  coverUrl: string | null;
+}
+
+export interface AddBookResult {
+  id: string;
+  title: string;
+  author: string;
+  status: "fetching" | "downloaded" | "not_found";
+  sourceLibrary: string | null;
+}
+
+// ── Bookshelf Functions ───────────────────────────────────────────────────────
+
+export async function listBooks(): Promise<BookSummary[]> {
+  const res = await fetch(`${BRAIN_URL}/bookshelf`);
+  if (!res.ok) throw new Error(`Failed to list books: ${res.status}`);
+  return res.json();
+}
+
+export async function getBook(bookId: string): Promise<BookSummary> {
+  const res = await fetch(`${BRAIN_URL}/bookshelf/${encodeURIComponent(bookId)}`);
+  if (!res.ok) throw new Error(`Failed to get book: ${res.status}`);
+  return res.json();
+}
+
+export async function addBook(title: string, author: string): Promise<AddBookResult> {
+  const res = await fetch(`${BRAIN_URL}/bookshelf/add`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, author }),
+  });
+  if (!res.ok) throw new Error(`Failed to add book: ${res.status}`);
+  return res.json();
+}
+
+export async function downloadBook(bookId: string): Promise<Blob> {
+  const res = await fetch(`${BRAIN_URL}/bookshelf/${encodeURIComponent(bookId)}/download`);
+  if (!res.ok) throw new Error(`Failed to download book: ${res.status}`);
+  return res.blob();
+}
