@@ -2,16 +2,27 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Sparkles, Send, Loader2, FlaskConical, Search } from "lucide-react";
-import { scaffold, generateLesson } from "@/lib/brain-client";
-import type { Track, ScaffoldResponse, LessonResponse, LessonBlockResponse } from "@/lib/brain-client";
+import { scaffold, generateLesson, listProjects, getProject, reportActivity } from "@/lib/brain-client";
+import type {
+  Track, ScaffoldResponse, LessonResponse, LessonBlockResponse,
+  ProjectSummary, ProjectDetail, ActivityReportResponse,
+} from "@/lib/brain-client";
+import { ProjectCatalog } from "@/components/projects/ProjectCard";
+import { ProjectGuide } from "@/components/projects/ProjectGuide";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
+
+type RichContent =
+  | { type: "projectList"; projects: ProjectSummary[] }
+  | { type: "projectDetail"; project: ProjectDetail }
+  | { type: "activityCredit"; result: ActivityReportResponse };
 
 interface Message {
   id: string;
   role: "user" | "adeline";
   content: string;
   zpd_zone?: string;
+  rich?: RichContent;
 }
 
 interface LessonContext {
@@ -36,8 +47,28 @@ const WELCOME_MSG: Message = {
   id: "welcome",
   role: "adeline",
   content:
-    "Hello! I'm Adeline. Tell me a topic you'd like to explore and I'll find primary sources for you — or ask me questions about an active lesson.",
+    "Hello! I'm Adeline. Tell me a topic you'd like to explore, ask to see projects, or tell me what you did today to earn credit.",
 };
+
+// ── Intent detection ───────────────────────────────────────────────────────────
+
+const PROJECT_LIST_RE = /\b(show|browse|see|find|list|what|give me).{0,20}(project|craft|make|build|farm)/i;
+const ACTIVITY_RE = /\b(i (spent|did|worked|practiced|baked|built|planted|made|helped|cooked|cleaned|studied|read|drew|painted|sewed|fixed)|today i|this (morning|afternoon|week)|i've been)\b/i;
+
+/** Parse "2 hours", "30 minutes", "an hour" → minutes */
+function parseMinutes(text: string): number {
+  const hoursMatch = text.match(/(\d+(?:\.\d+)?)\s*hour/i);
+  const minutesMatch = text.match(/(\d+)\s*min/i);
+  const anHourMatch = /\ban hour\b/i.test(text);
+  const halfHourMatch = /half.{0,5}hour/i.test(text);
+
+  let total = 0;
+  if (hoursMatch) total += parseFloat(hoursMatch[1]) * 60;
+  if (minutesMatch) total += parseInt(minutesMatch[1]);
+  if (anHourMatch && !hoursMatch) total += 60;
+  if (halfHourMatch && !minutesMatch) total += 30;
+  return total > 0 ? Math.round(total) : 60; // default 60 min
+}
 
 // ── ZPD zone badge colors ──────────────────────────────────────────────────────
 
@@ -63,6 +94,39 @@ function ZPDBadge({ zone }: { zone: string }) {
     >
       {s.label}
     </span>
+  );
+}
+
+// ── Activity credit receipt ────────────────────────────────────────────────────
+
+function ActivityCreditCard({ result }: { result: ActivityReportResponse }) {
+  return (
+    <div className="space-y-2 pt-1">
+      <div
+        className="rounded-xl p-3 space-y-2"
+        style={{ background: "#F0FDF4", border: "1.5px solid #2F4731" }}
+      >
+        <p className="text-xs font-bold text-[#2F4731] uppercase tracking-wider">
+          Credits recorded
+        </p>
+        <p className="text-sm font-bold text-[#2F4731]">{result.course_title}</p>
+        <p className="text-xs text-[#2F4731]/70">{result.activity_description}</p>
+        <div className="flex flex-wrap gap-2 pt-1 border-t border-[#2F4731]/20">
+          <span className="text-xs font-bold text-[#BD6809]">
+            {result.credit_hours} credit hr{result.credit_hours !== 1 ? "s" : ""}
+          </span>
+          {result.credited_tracks.map((ct) => (
+            <span
+              key={ct.track}
+              className="text-[10px] px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: "rgba(47,71,49,0.08)", color: "#2F4731" }}
+            >
+              {ct.track.replace(/_/g, " ")} · {ct.credit_type}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -113,8 +177,30 @@ export function AdelineChatPanel({
           content: result.adeline_response,
           zpd_zone: result.zpd_zone,
         });
+      } else if (PROJECT_LIST_RE.test(text)) {
+        // Project catalog intent
+        addMessage({ role: "adeline", content: "Let me pull up the project catalog for you…" });
+        const { projects } = await listProjects({}, "STUDENT");
+        addMessage({
+          role: "adeline",
+          content: "",
+          rich: { type: "projectList", projects },
+        });
+      } else if (ACTIVITY_RE.test(text)) {
+        // Life-to-credit: student describing what they did
+        const minutes = parseMinutes(text);
+        addMessage({ role: "adeline", content: "Got it — let me calculate your credits…" });
+        const result = await reportActivity(
+          { student_id: studentId, grade_level: gradeLevel, description: text, time_minutes: minutes },
+          "STUDENT",
+        );
+        addMessage({
+          role: "adeline",
+          content: result.adeline_note,
+          rich: { type: "activityCredit", result },
+        });
       } else {
-        // No active lesson — treat message as a lesson topic request
+        // Default: lesson topic request
         const topic = text;
         addMessage({
           role: "adeline",
@@ -156,6 +242,23 @@ export function AdelineChatPanel({
     }
   };
 
+  const handleProjectSelect = useCallback(async (projectId: string) => {
+    addMessage({ role: "user", content: `I'd like to do that project.` });
+    setIsLoading(true);
+    try {
+      const project = await getProject(projectId, "STUDENT");
+      addMessage({
+        role: "adeline",
+        content: `Here's your step-by-step guide for **${project.title}**:`,
+        rich: { type: "projectDetail", project },
+      });
+    } catch {
+      addMessage({ role: "adeline", content: "I couldn't load that project right now. Please try again." });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [addMessage]);
+
   return (
     <div className="flex flex-col h-full" style={{ background: "#FFFEF7" }}>
       {/* Header */}
@@ -188,7 +291,8 @@ export function AdelineChatPanel({
           >
             <div
               style={{
-                maxWidth: "85%",
+                maxWidth: msg.rich ? "100%" : "85%",
+                width: msg.rich ? "100%" : undefined,
                 background: msg.role === "user" ? "#2F4731" : "#FDF6E9",
                 color: msg.role === "user" ? "#FFFEF7" : "#2F4731",
                 border: msg.role === "adeline" ? "1px solid #E7DAC3" : "none",
@@ -196,7 +300,7 @@ export function AdelineChatPanel({
                   msg.role === "user"
                     ? "18px 18px 4px 18px"
                     : "18px 18px 18px 4px",
-                padding: "10px 14px",
+                padding: msg.rich ? "12px" : "10px 14px",
               }}
             >
               {msg.zpd_zone && (
@@ -204,9 +308,28 @@ export function AdelineChatPanel({
                   <ZPDBadge zone={msg.zpd_zone} />
                 </div>
               )}
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                {msg.content}
-              </p>
+              {msg.content && (
+                <p className="text-sm leading-relaxed whitespace-pre-wrap mb-2">
+                  {msg.content}
+                </p>
+              )}
+
+              {/* Rich content */}
+              {msg.rich?.type === "projectList" && (
+                <ProjectCatalog
+                  projects={msg.rich.projects}
+                  onSelect={handleProjectSelect}
+                />
+              )}
+              {msg.rich?.type === "projectDetail" && (
+                <ProjectGuide
+                  project={msg.rich.project}
+                  studentId={studentId}
+                />
+              )}
+              {msg.rich?.type === "activityCredit" && (
+                <ActivityCreditCard result={msg.rich.result} />
+              )}
             </div>
           </div>
         ))}

@@ -44,7 +44,29 @@
       "Bash(docker ps:*)",
       "Bash(git -C C:/users/aarons/dearadeline-withlove rev-parse --show-toplevel)",
       "Bash(git -C C:/users/aarons/dearadeline-withlove log --oneline -5)",
-      "Bash(git -C C:/users/aarons/dearadeline-withlove log --oneline)"
+      "Bash(git -C C:/users/aarons/dearadeline-withlove log --oneline)",
+      "Bash(find /c/users/aarons/dearadeline-withlove/adeline-ui/src/components -type f -name *.tsx)",
+      "Bash(wc -l /c/users/aarons/dearadeline-withlove/adeline-brain/app/api/*.py)",
+      "Bash(grep -r \"TODO\\\\|FIXME\\\\|XXX\\\\|HACK\\\\|BUG\" /c/users/aarons/dearadeline-withlove --include=*.py --include=*.ts --include=*.tsx)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(git merge:*)",
+      "Bash(git push:*)",
+      "Bash(mkdir -p ~/.config/superpowers/worktrees/dearadeline-withlove)",
+      "Bash(git worktree:*)",
+      "Read(//c/Users/Aarons/.config/superpowers/worktrees/dearadeline-withlove/foundation-types-schema/**)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm test:*)",
+      "Skill(commit-commands:commit)",
+      "Bash(find C:UsersAaronsdearadeline-withloveadeline-core -type f -name *test*)",
+      "Bash(timeout 60 bash -c 'while [ ! -f /tmp/test_done ]; do pnpm test 2>&1; done')",
+      "Bash(bash --noprofile --norc -c \"pnpm test --run 2>&1\")",
+      "Bash(bash --noprofile --norc -c \"pnpm build 2>&1\")",
+      "Bash(tee /tmp/test-output.log)",
+      "Bash(npx prisma:*)",
+      "Bash(git pull:*)"
     ]
   }
 }
