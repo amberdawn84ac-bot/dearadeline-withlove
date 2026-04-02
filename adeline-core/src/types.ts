@@ -83,8 +83,8 @@ export const ALL_TRACKS = Object.values(Track);
 export const TRUTH_THRESHOLD = 0.82; // calibrated for text-embedding-3-small
 
 export enum EvidenceVerdict {
-  VERIFIED         = "VERIFIED",          // score >= 0.85 — safe to present
-  ARCHIVE_SILENT   = "ARCHIVE_SILENT",    // score <  0.85 — do NOT generate
+  VERIFIED         = "VERIFIED",          // score >= 0.82 — safe to present
+  ARCHIVE_SILENT   = "ARCHIVE_SILENT",    // score <  0.82 — do NOT generate
   RESEARCH_MISSION = "RESEARCH_MISSION",  // pivot to student inquiry
 }
 

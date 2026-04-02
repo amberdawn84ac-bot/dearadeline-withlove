@@ -34,6 +34,32 @@ class EvidenceVerdict(str, Enum):
     RESEARCH_MISSION = "RESEARCH_MISSION"
 
 
+class SourceType(str, Enum):
+    """What kind of archive this evidence came from."""
+    PRIMARY_SOURCE      = "PRIMARY_SOURCE"
+    DECLASSIFIED_GOV    = "DECLASSIFIED_GOV"
+    ARCHIVE_ORG         = "ARCHIVE_ORG"
+    ACADEMIC_JOURNAL    = "ACADEMIC_JOURNAL"
+    PERSONAL_COLLECTION = "PERSONAL_COLLECTION"
+
+SOURCE_TYPE_LABELS = {
+    "PRIMARY_SOURCE":      "Primary Source",
+    "DECLASSIFIED_GOV":    "Declassified Document",
+    "ARCHIVE_ORG":         "Archive.org",
+    "ACADEMIC_JOURNAL":    "Academic Journal",
+    "PERSONAL_COLLECTION": "Personal Collection",
+}
+
+DECLASSIFIED_COLLECTIONS = {
+    "NARA":                 "https://catalog.archives.gov/search",
+    "CIA_FOIA":             "https://www.cia.gov/information-freedom/records-available-online/",
+    "FBI_VAULT":            "https://vault.fbi.gov/",
+    "CONGRESSIONAL_RECORD": "https://www.congress.gov/congressional-record/",
+    "FEDERAL_REGISTER":     "https://www.federalregister.gov/",
+    "DNSA":                 "https://nsarchive.gwu.edu/",
+}
+
+
 # ── Block Types (mirrors BlockType in types.ts) ───────────────────────────────
 
 class BlockType(str, Enum):
@@ -81,6 +107,7 @@ class Evidence(BaseModel):
     source_id:        str = Field(default_factory=lambda: str(uuid.uuid4()))
     source_title:     str
     source_url:       str = ""
+    source_type:      str = "PRIMARY_SOURCE"
     witness_citation: WitnessCitation = Field(default_factory=WitnessCitation)
     similarity_score: float = Field(ge=0.0, le=1.0)
     verdict:          EvidenceVerdict

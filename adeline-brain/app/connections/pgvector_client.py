@@ -46,11 +46,17 @@ class HippocampusDocument(Base):
     track         = Column(String, nullable=False)
     chunk         = Column(String, nullable=False)
     embedding     = Column(Vector(EMBEDDING_DIM), nullable=False)
+    source_type   = Column(String, nullable=False, default="PRIMARY_SOURCE")
     # WitnessCitation fields
     citation_author       = Column(String, nullable=False, default="")
     citation_year         = Column(Integer, nullable=True)
     citation_archive_name = Column(String, nullable=False, default="")
     created_at    = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __init__(self, **kwargs):
+        # Apply Python-level defaults for columns before calling super().__init__
+        kwargs.setdefault("source_type", "PRIMARY_SOURCE")
+        super().__init__(**kwargs)
 
 
 class HippocampusClient:
@@ -78,6 +84,7 @@ class HippocampusClient:
         citation_year: Optional[int] = None,
         citation_archive_name: str = "",
         source_url: str = "",
+        source_type: str = "PRIMARY_SOURCE",
     ) -> str:
         """Insert a verified source document chunk with its embedding."""
         async with self._session_factory() as session:
@@ -87,6 +94,7 @@ class HippocampusClient:
                 track=track,
                 chunk=chunk,
                 embedding=embedding,
+                source_type=source_type,
                 citation_author=citation_author,
                 citation_year=citation_year,
                 citation_archive_name=citation_archive_name,
@@ -110,6 +118,7 @@ class HippocampusClient:
                         id::text,
                         source_title,
                         source_url,
+                        source_type,
                         chunk,
                         citation_author,
                         citation_year,

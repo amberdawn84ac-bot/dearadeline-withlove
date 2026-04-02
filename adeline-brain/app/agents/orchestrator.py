@@ -305,21 +305,21 @@ async def _researcher_fallback(
 ) -> dict | None:
     """Call SearchWitnesses and return a PRIMARY_SOURCE block dict, or None."""
     request = state["request"]
-    witness = await search_witnesses(
-        topic=request.topic,
+    witness_list = await search_witnesses(
+        query=request.topic,
         track=track_value,
-        query_embedding=state["query_embedding"],
-        lesson_id=state["lesson_id"],
+        top_k=1,
     )
-    if witness:
+    if witness_list:
         state["researcher_activated"] = True
-        content = witness.evidence.chunk
+        best_evidence = witness_list[0]
+        content = best_evidence['chunk']
         return {
             "block_type":       BlockType.PRIMARY_SOURCE.value,
             "content": (
                 f"*[Adeline searched the archives and found:]*\n\n{content}"
             ),
-            "evidence":         [witness.evidence.model_dump()],
+            "evidence":         [best_evidence],
             "is_silenced":      False,
             "homestead_content": (
                 _homestead_adapt(content) if request.is_homestead else None
