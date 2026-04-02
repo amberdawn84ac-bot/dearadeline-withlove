@@ -607,3 +607,46 @@ export async function approveCourseProposal(
   if (!res.ok) throw new Error(`Failed to approve proposal: ${res.status}`);
   return res.json();
 }
+
+// ── OSRHE & Transcript Endpoints ──────────────────────────────────────────
+
+export type OSRHEBucket = "ENGLISH" | "LAB_SCIENCE" | "MATH" | "SOCIAL_STUDIES" | "ELECTIVE";
+
+export interface OSRHEBucketProgress {
+  bucket: OSRHEBucket;
+  label: string;
+  earned: number;
+  required: number;
+  hoursEarned: number;
+  evidenceCount: number;
+}
+
+export interface OSRHEProgress {
+  totalRequired: number;
+  totalEarned: number;
+  buckets: OSRHEBucketProgress[];
+}
+
+export async function getOSRHEProgress(studentId: string): Promise<OSRHEProgress> {
+  const res = await fetch(
+    `${BRAIN_URL}/transcripts/${encodeURIComponent(studentId)}/osrhe-progress`,
+  );
+  if (!res.ok) throw new Error(`Failed to fetch OSRHE progress: ${res.status}`);
+  return res.json();
+}
+
+export async function downloadOfficialTranscript(studentId: string): Promise<Blob> {
+  const res = await fetch(
+    `${BRAIN_URL}/transcripts/${encodeURIComponent(studentId)}/official/download`,
+  );
+  if (!res.ok) throw new Error(`Failed to download official transcript: ${res.status}`);
+  return res.blob();
+}
+
+export async function downloadMasteryPortfolio(studentId: string): Promise<Blob> {
+  const res = await fetch(
+    `${BRAIN_URL}/transcripts/${encodeURIComponent(studentId)}/portfolio/download`,
+  );
+  if (!res.ok) throw new Error(`Failed to download mastery portfolio: ${res.status}`);
+  return res.blob();
+}
