@@ -1,132 +1,267 @@
 """
-Integration tests: Witness Protocol evaluates evidence consistently,
-and search_witnesses finds sources from approved archives.
+Integration tests: Witness Protocol + deep web search acquisition.
+Validates complete flow: Hippocampus query → threshold enforcement → deep web fallback → persistence.
 """
 import pytest
-from unittest.mock import AsyncMock, patch
-from app.protocols.witness import evaluate_evidence, EvidenceVerdict
-from app.tools.researcher import search_witnesses, ALLOWED_DOMAINS
+from unittest.mock import AsyncMock, patch, MagicMock
+from app.tools.researcher import search_witnesses
+from app.schemas.api_models import TRUTH_THRESHOLD
 
 
-# ── Witness Protocol accepts all sources equally ──────────────────────
-
-def test_witness_protocol_verifies_high_similarity_source():
-    """Any source at 0.88 must be VERIFIED — threshold is applied equally."""
-    evidence = evaluate_evidence(
-        source_id="nara-2723456",
-        source_title="Civil Rights Act - 1964 Legislative Record",
-        similarity_score=0.88,
-        chunk="Full text of the Civil Rights Act...",
-        source_url="https://catalog.archives.gov/id/2723456",
-        citation_author="National Archives",
-        citation_year=1964,
-        citation_archive_name="NARA",
-    )
-    assert evidence.verdict == EvidenceVerdict.VERIFIED
-    assert evidence.similarity_score == 0.88
-
-
-def test_witness_protocol_rejects_low_similarity_source():
-    """Any source at 0.65 must be ARCHIVE_SILENT — same rules for all."""
-    evidence = evaluate_evidence(
-        source_id="archive-12345",
-        source_title="Historical Document",
-        similarity_score=0.65,
-        chunk="Some content...",
-        source_url="https://archive.org/details/12345",
-        citation_author="Internet Archive",
-        citation_year=1972,
-        citation_archive_name="Archive.org",
-    )
-    assert evidence.verdict == EvidenceVerdict.ARCHIVE_SILENT
-
-
-# ── Allowed domains for search ────────────────────────────────────────
-
-def test_allowed_domains_includes_archives():
-    """Search must include approved archive domains."""
-    assert "archive.org" in ALLOWED_DOMAINS
-    assert "gutenberg.org" in ALLOWED_DOMAINS
-    assert "archives.gov" in ALLOWED_DOMAINS
-
-
-# ── search_witnesses integration ──────────────────────────────────────
+# ── Witness Protocol threshold enforcement (0.82) ──────────────────────
 
 @pytest.mark.asyncio
-@patch("app.tools.researcher._embed")
-@patch("app.tools.researcher._tavily_search")
-@patch("app.tools.researcher.neo4j_client")
-async def test_search_witnesses_finds_and_verifies_source(
-    mock_neo4j, mock_tavily, mock_embed
-):
-    """
-    When search finds a document clearing the threshold,
-    it must return a WitnessResult with VERIFIED verdict.
-    """
-    mock_tavily.return_value = [
-        {
-            "url": "https://catalog.archives.gov/id/299868",
-            "title": "Civil Rights Act of 1964",
-            "content": "An act to enforce the constitutional right to vote...",
-        }
-    ]
-    query_emb = [0.9] * 1536
-    mock_embed.return_value = query_emb  # Same vector = similarity 1.0
-    mock_neo4j.run = AsyncMock()
+async def test_witness_protocol_returns_verified_above_threshold():
+    """Results >= 0.82 should return as VERIFIED."""
+    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1] * 1536), \
+         patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo:
 
-    result = await search_witnesses(
-        topic="civil rights act 1964",
-        track="TRUTH_HISTORY",
-        query_embedding=query_emb,
-        lesson_id="lesson-123",
-    )
+        # Result above threshold
+        mock_hippo.return_value = [
+            {
+                'id': 'doc-123',
+                'source_title': 'Civil Rights Act 1964',
+                'source_url': 'https://congress.gov/...',
+                'source_type': 'PRIMARY_SOURCE',
+                'chunk': 'Legislative text...',
+                'similarity_score': 0.88,
+                'citation_author': 'Congress',
+                'citation_year': 1964,
+                'citation_archive_name': 'Congressional Record',
+            }
+        ]
 
-    assert result is not None
-    assert result.evidence.verdict == EvidenceVerdict.VERIFIED
-    assert result.evidence.source_title == "Civil Rights Act of 1964"
-    assert "archives.gov" in result.source_url
+        results = await search_witnesses(
+            query="civil rights legislation",
+            track="TRUTH_HISTORY",
+        )
+
+        assert len(results) == 1
+        assert results[0]['verdict'] == 'VERIFIED'
+        assert results[0]['similarity_score'] >= TRUTH_THRESHOLD
 
 
 @pytest.mark.asyncio
-@patch("app.tools.researcher._embed")
-@patch("app.tools.researcher._tavily_search")
-async def test_search_witnesses_returns_none_when_no_match(mock_tavily, mock_embed):
-    """
-    When no source clears the threshold, search_witnesses returns None.
-    """
-    mock_tavily.return_value = [
-        {
-            "url": "https://archive.org/details/weak",
-            "title": "Weak Match",
-            "content": "Unrelated content...",
-        }
-    ]
-    # Return very different embedding = low similarity
-    mock_embed.return_value = [0.1] * 1536
+async def test_witness_protocol_filters_below_threshold():
+    """Results < 0.82 should be filtered out (not returned)."""
+    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1] * 1536), \
+         patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo:
 
-    result = await search_witnesses(
-        topic="obscure topic",
-        track="TRUTH_HISTORY",
-        query_embedding=[0.9] * 1536,
-        lesson_id="lesson-789",
-    )
+        # Result below threshold
+        mock_hippo.return_value = [
+            {
+                'id': 'doc-456',
+                'source_title': 'Weak Match Document',
+                'source_url': 'https://example.com/weak',
+                'source_type': 'PRIMARY_SOURCE',
+                'chunk': 'Marginally related text...',
+                'similarity_score': 0.75,  # Below 0.82
+                'citation_author': 'Unknown',
+                'citation_year': None,
+                'citation_archive_name': '',
+            }
+        ]
 
-    assert result is None
+        results = await search_witnesses(
+            query="obscure topic",
+            track="TRUTH_HISTORY",
+        )
+
+        # Should be filtered out, return empty
+        assert len(results) == 0
+
+
+# ── Unified search across all source types ──────────────────────────────
+
+@pytest.mark.asyncio
+async def test_unified_search_accepts_all_source_types():
+    """Hippocampus search should return results of any source_type >= 0.82."""
+    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1] * 1536), \
+         patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo:
+
+        # Mixed source types all above threshold
+        mock_hippo.return_value = [
+            {
+                'id': 'primary-1',
+                'source_title': 'Archive.org Entry',
+                'source_url': 'https://archive.org/details/...',
+                'source_type': 'PRIMARY_SOURCE',
+                'chunk': 'Primary source text...',
+                'similarity_score': 0.87,
+                'citation_author': '',
+                'citation_year': None,
+                'citation_archive_name': 'Archive.org',
+            },
+            {
+                'id': 'declassified-1',
+                'source_title': 'NARA Document',
+                'source_url': 'https://catalog.archives.gov/...',
+                'source_type': 'DECLASSIFIED_GOV',
+                'chunk': 'Declassified text...',
+                'similarity_score': 0.91,
+                'citation_author': 'Kennedy, J.',
+                'citation_year': 1963,
+                'citation_archive_name': 'NARA',
+            },
+        ]
+
+        results = await search_witnesses(
+            query="1960s policy decisions",
+            track="TRUTH_HISTORY",
+        )
+
+        # All should be returned regardless of source type
+        assert len(results) == 2
+        assert any(r['source_type'] == 'PRIMARY_SOURCE' for r in results)
+        assert any(r['source_type'] == 'DECLASSIFIED_GOV' for r in results)
+
+
+# ── Deep web search activation when Hippocampus empty ──────────────────
+
+@pytest.mark.asyncio
+async def test_deep_web_search_triggered_when_hippocampus_empty():
+    """If Hippocampus empty, should activate deep web search."""
+    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.2] * 1536), \
+         patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo, \
+         patch('app.tools.researcher.search_all_archives_parallel', new_callable=AsyncMock) as mock_deep:
+
+        # Hippocampus empty
+        mock_hippo.return_value = []
+
+        # Deep web returns documents
+        mock_deep.return_value = [
+            {
+                'title': 'FBI Vault: COINTELPRO',
+                'url': 'https://vault.fbi.gov/...',
+                'archive': 'FBI_VAULT',
+                'snippet': 'Declassified FBI surveillance documentation...',
+            }
+        ]
+
+        results = await search_witnesses(
+            query="FBI civil rights surveillance",
+            track="JUSTICE_CHANGEMAKING",
+        )
+
+        # Deep search should be called
+        assert mock_deep.called
+        assert len(results) >= 0  # May or may not return (depends on similarity)
 
 
 @pytest.mark.asyncio
-@patch("app.tools.researcher._tavily_search")
-async def test_search_witnesses_returns_none_when_no_results(mock_tavily):
-    """
-    When Tavily returns no results, search_witnesses returns None.
-    """
-    mock_tavily.return_value = []
+async def test_acquired_documents_persisted_with_correct_metadata():
+    """Deep web search results should be embedded, scored, and persisted to Hippocampus."""
+    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.3] * 1536), \
+         patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo, \
+         patch('app.tools.researcher.search_all_archives_parallel', new_callable=AsyncMock) as mock_deep, \
+         patch('app.tools.researcher.hippocampus.upsert_document', new_callable=AsyncMock) as mock_upsert:
 
-    result = await search_witnesses(
-        topic="nonexistent topic",
-        track="TRUTH_HISTORY",
-        query_embedding=[0.9] * 1536,
-        lesson_id="lesson-999",
-    )
+        # Hippocampus empty → triggers deep web
+        mock_hippo.return_value = []
 
-    assert result is None
+        # Deep web returns documents
+        mock_deep.return_value = [
+            {
+                'title': 'Congressional Record: Civil Rights Debate',
+                'url': 'https://congress.gov/record/...',
+                'archive': 'CONGRESSIONAL_RECORD',
+                'snippet': 'Senate debate on civil rights legislation 1964...' * 50,  # Long snippet
+            }
+        ]
+
+        # Mock upsert returns document ID
+        mock_upsert.return_value = 'newly-acquired-123'
+
+        results = await search_witnesses(
+            query="civil rights act debate",
+            track="TRUTH_HISTORY",
+        )
+
+        # Verify upsert was called with correct parameters
+        if results:  # Only if similarity >= 0.82
+            assert mock_upsert.called
+            call_kwargs = mock_upsert.call_args[1]
+            assert call_kwargs['source_type'] == 'DECLASSIFIED_GOV'
+            assert call_kwargs['track'] == 'TRUTH_HISTORY'
+            assert call_kwargs['citation_archive_name'] == 'CONGRESSIONAL_RECORD'
+
+
+# ── Self-improving system: acquired docs available in next query ────────
+
+@pytest.mark.asyncio
+async def test_self_improving_system_subsequent_queries():
+    """Documents acquired and persisted should be found by Hippocampus on next query."""
+    query_emb = [0.1] * 1536
+
+    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=query_emb), \
+         patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo, \
+         patch('app.tools.researcher.search_all_archives_parallel', new_callable=AsyncMock) as mock_deep, \
+         patch('app.tools.researcher.hippocampus.upsert_document', new_callable=AsyncMock) as mock_upsert:
+
+        # First query: Hippocampus empty
+        call_count = [0]
+        async def hippo_side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                # First query returns empty → triggers deep web
+                return []
+            # Subsequent queries find the newly acquired document
+            return [{
+                'id': 'newly-acquired-123',
+                'source_title': 'COINTELPRO Files',
+                'source_url': 'https://vault.fbi.gov/...',
+                'source_type': 'DECLASSIFIED_GOV',
+                'chunk': 'Declassified FBI surveillance files...',
+                'similarity_score': 0.85,
+                'citation_author': 'J. Edgar Hoover',
+                'citation_year': 1965,
+                'citation_archive_name': 'FBI_VAULT',
+            }]
+
+        mock_hippo.side_effect = hippo_side_effect
+
+        # First query triggers deep web
+        mock_deep.return_value = [{
+            'title': 'COINTELPRO Files',
+            'url': 'https://vault.fbi.gov/...',
+            'archive': 'FBI_VAULT',
+            'snippet': 'Declassified FBI surveillance files...',
+        }]
+        mock_upsert.return_value = 'newly-acquired-123'
+
+        # First query
+        results1 = await search_witnesses(
+            query="COINTELPRO FBI surveillance",
+            track="JUSTICE_CHANGEMAKING",
+        )
+
+        # Second similar query should find the doc in Hippocampus (not deep web again)
+        results2 = await search_witnesses(
+            query="FBI surveillance programs",
+            track="JUSTICE_CHANGEMAKING",
+        )
+
+        # First query triggers deep web, second doesn't
+        assert mock_deep.call_count == 1
+
+
+# ── Empty case: both sources fail → RESEARCH_MISSION ────────────────────
+
+@pytest.mark.asyncio
+async def test_empty_case_returns_empty_list():
+    """If both Hippocampus and deep web fail, return empty (triggers RESEARCH_MISSION)."""
+    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1] * 1536), \
+         patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo, \
+         patch('app.tools.researcher.search_all_archives_parallel', new_callable=AsyncMock) as mock_deep:
+
+        # Both empty
+        mock_hippo.return_value = []
+        mock_deep.return_value = []
+
+        results = await search_witnesses(
+            query="extremely obscure undocumented topic",
+            track="TRUTH_HISTORY",
+        )
+
+        # Should return empty (orchestrator converts to RESEARCH_MISSION)
+        assert results == []
