@@ -162,7 +162,70 @@ export const UserSchema = z.object({
 
 export type User = z.infer<typeof UserSchema>;
 
-// ── 4c. LessonBlockSchema ──────────────────────────────────────────
+// ── 4c. REALITY LAYER SCHEMAS (needed before LessonBlockSchema) ─────
+
+export enum WeightTier {
+  CORE_TRUTH        = 1,
+  WORKING_KNOWLEDGE = 2,
+  EXPOSURE          = 3,
+}
+
+export const WEIGHT_TIER_LABELS: Record<WeightTier, string> = {
+  [WeightTier.CORE_TRUTH]:        "Core Truth",
+  [WeightTier.WORKING_KNOWLEDGE]: "Working Knowledge",
+  [WeightTier.EXPOSURE]:          "Exposure",
+};
+
+export const WEIGHT_TIER_COLORS: Record<WeightTier, { bg: string; text: string; accent: string }> = {
+  [WeightTier.CORE_TRUTH]:        { bg: "#FEE2E2", text: "#991B1B", accent: "#DC2626" },
+  [WeightTier.WORKING_KNOWLEDGE]: { bg: "#FEF3C7", text: "#92400E", accent: "#F59E0B" },
+  [WeightTier.EXPOSURE]:          { bg: "#F3F4F6", text: "#374151", accent: "#9CA3AF" },
+};
+
+export const DistortionFlagSchema = z.object({
+  id:                  z.string().uuid(),
+  commonClaim:         z.string().min(10),
+  whatsHidden:         z.string().min(10),
+  whatActuallyHappens: z.string().min(10),
+  whyItMatters:        z.string().min(5),
+});
+
+export type DistortionFlag = z.infer<typeof DistortionFlagSchema>;
+
+export const KeystoneConceptSchema = z.object({
+  id:               z.string().uuid(),
+  concept:          z.string().min(5),
+  firstIntroduced:  z.boolean().default(false),
+  context:          z.string().optional(),
+  repetitionNumber: z.number().int().min(1).max(4).default(1),
+});
+
+export type KeystoneConcept = z.infer<typeof KeystoneConceptSchema>;
+
+export const DistractionBoxSchema = z.object({
+  id:           z.string().uuid(),
+  topic:        z.string().min(5),
+  reason:       z.string().min(10),
+  whenToReturn: z.string().optional(),
+});
+
+export type DistractionBox = z.infer<typeof DistractionBoxSchema>;
+
+export const RealityLayerMetadataSchema = z.object({
+  weightTier:       z.nativeEnum(WeightTier),
+  distortionFlags:  z.array(DistortionFlagSchema).default([]),
+  keystoneConcept:  KeystoneConceptSchema.optional(),
+  distractionBoxes: z.array(DistractionBoxSchema).default([]),
+  importanceFilter: z.object({
+    survivalFunction: z.boolean(),
+    powerSystems:     z.boolean(),
+    permanence:       z.boolean(),
+  }),
+});
+
+export type RealityLayerMetadata = z.infer<typeof RealityLayerMetadataSchema>;
+
+// ── 4d. LessonBlockSchema ──────────────────────────────────────────
 
 export enum BlockType {
   TEXT             = "TEXT",             // Plain reading passage
@@ -205,6 +268,12 @@ export const LessonBlockSchema = z.object({
 
   evidence:         z.array(EvidenceSchema).default([]),
   homesteadVariant: HomesteadVariantSchema.optional(),
+
+  /**
+   * Reality Layer metadata: truth weights, distortion flags, keystones, distractions.
+   * Applied by adeline-brain to augment educational depth and cultural literacy.
+   */
+  realityLayer: RealityLayerMetadataSchema.optional(),
 
   /**
    * Set to true by adeline-brain when the Witness Protocol fires (ARCHIVE_SILENT).
