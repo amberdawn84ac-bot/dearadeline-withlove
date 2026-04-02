@@ -1,17 +1,13 @@
 import { z } from "zod";
+import { EvidenceVerdict, TRUTH_THRESHOLD } from "../types";
 
 /**
  * Witness Protocol Threshold
  * If a historical search similarity score falls below this value,
  * adeline-brain must return ARCHIVE_SILENT instead of generating content.
+ * MUST match TRUTH_THRESHOLD in types.ts (0.82 canonical).
  */
-export const WITNESS_THRESHOLD = 0.85;
-
-export enum EvidenceVerdict {
-  VERIFIED = "VERIFIED",           // similarity >= 0.85, safe to present
-  ARCHIVE_SILENT = "ARCHIVE_SILENT", // similarity < 0.85, do NOT hallucinate
-  RESEARCH_MISSION = "RESEARCH_MISSION", // pivot: assign student a research task
-}
+export const WITNESS_THRESHOLD = TRUTH_THRESHOLD;
 
 export enum SourceType {
   PRIMARY_SOURCE = "PRIMARY_SOURCE",
@@ -38,15 +34,45 @@ export const DECLASSIFIED_COLLECTIONS: Record<string, string> = {
   DNSA: "https://nsarchive.gwu.edu/",
 };
 
+export const WitnessCitationSchema = z.object({
+  author:      z.string().min(1).describe("Full name of the primary author or institution"),
+  year:        z.number().int().min(1000).max(new Date().getFullYear()).describe("Year of publication or original record"),
+  archiveName: z.string().min(1).describe("Name of the archive, library, or repository holding this source"),
+});
+
+export type WitnessCitation = z.infer<typeof WitnessCitationSchema>;
+
 export const EvidenceSchema = z.object({
-  sourceId: z.string().uuid().describe("Unique ID of the source document in the vector store"),
-  sourceTitle: z.string(),
-  sourceUrl: z.string().url().optional(),
-  sourceType: z.nativeEnum(SourceType).default(SourceType.PRIMARY_SOURCE),
+  sourceId:        z.string().uuid().describe("Unique ID of the source document in the vector store"),
+  sourceTitle:     z.string().min(1),
+  sourceUrl:       z.string().url(),
+  witnessCitation: WitnessCitationSchema,
+  sourceType:      z.nativeEnum(SourceType).default(SourceType.PRIMARY_SOURCE),
   similarityScore: z.number().min(0).max(1),
-  verdict: z.nativeEnum(EvidenceVerdict),
-  retrievedAt: z.string().datetime(),
-  chunk: z.string().describe("The raw text chunk retrieved from the Hippocampus"),
+  verdict:         z.nativeEnum(EvidenceVerdict),
+  retrievedAt:     z.string().datetime(),
+  chunk:           z.string().describe("Raw text passage retrieved from the Hippocampus"),
+}).superRefine((data, ctx) => {
+  // Chain of Custody: verdict must be strictly consistent with similarityScore.
+  // adeline-brain cannot set a verdict that contradicts the measured score.
+  if (data.similarityScore < WITNESS_THRESHOLD && data.verdict !== EvidenceVerdict.ARCHIVE_SILENT) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["verdict"],
+      message:
+        `similarityScore ${data.similarityScore} is below WITNESS_THRESHOLD (${WITNESS_THRESHOLD}). ` +
+        `verdict must be ARCHIVE_SILENT — got "${data.verdict}".`,
+    });
+  }
+  if (data.similarityScore >= WITNESS_THRESHOLD && data.verdict === EvidenceVerdict.ARCHIVE_SILENT) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["verdict"],
+      message:
+        `similarityScore ${data.similarityScore} meets WITNESS_THRESHOLD (${WITNESS_THRESHOLD}). ` +
+        `verdict cannot be ARCHIVE_SILENT.`,
+    });
+  }
 });
 
 export type Evidence = z.infer<typeof EvidenceSchema>;
