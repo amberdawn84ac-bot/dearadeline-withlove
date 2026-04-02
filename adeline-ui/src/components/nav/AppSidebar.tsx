@@ -10,6 +10,7 @@ import { DailyBreadWidget } from "@/components/daily-bread/DailyBreadWidget";
 const NAV_ITEMS = [
   { label: "My Learning Plan", href: "/dashboard/journey", icon: BookOpen },
   { label: "Opportunities",    href: "/dashboard/opportunities", icon: Briefcase },
+  { label: "Reading Nook",     href: "/dashboard/reading-nook", icon: BookOpen },
   { label: "Transcript",       href: "/dashboard/transcript", icon: GraduationCap },
 ];
 
