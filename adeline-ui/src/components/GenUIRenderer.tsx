@@ -21,6 +21,7 @@ import { WeightTierBadge } from "@/components/lessons/WeightTierBadge";
 import { DistortionFlag } from "@/components/lessons/DistortionFlag";
 import { KeystoneConcept } from "@/components/lessons/KeystoneConcept";
 import { DistractionBox } from "@/components/lessons/DistractionBox";
+import { SourceBadge } from "./SourceBadge";
 
 // ── Block type constants ───────────────────────────────────────────────────────
 
@@ -81,27 +82,42 @@ function EvidenceFooter({ evidence }: { evidence: Evidence[] }) {
   if (!evidence.length) return null;
   const ev = evidence[0];
   return (
-    <div className="mt-3 pt-3 border-t border-[#E7DAC3] flex flex-wrap items-center gap-2">
-      <VerdictBadge verdict={ev.verdict} />
-      <span className="text-[11px] text-[#2F4731]/60 truncate max-w-xs">
-        {ev.source_url ? (
-          <a
-            href={ev.source_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-[#BD6809] transition-colors"
-          >
-            {ev.source_title}
-          </a>
-        ) : (
-          ev.source_title
-        )}
-        {ev.witness_citation.author && ` · ${ev.witness_citation.author}`}
-        {ev.witness_citation.year && ` (${ev.witness_citation.year})`}
-      </span>
-      <span className="text-[10px] text-[#2F4731]/40 ml-auto shrink-0">
-        {(ev.similarity_score * 100).toFixed(0)}% match
-      </span>
+    <div className="mt-3 pt-3 border-t border-[#E7DAC3] space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <VerdictBadge verdict={ev.verdict} />
+        <span className="text-[11px] text-[#2F4731]/60 truncate max-w-xs">
+          {ev.source_url ? (
+            <a
+              href={ev.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-[#BD6809] transition-colors"
+            >
+              {ev.source_title}
+            </a>
+          ) : (
+            ev.source_title
+          )}
+          {ev.witness_citation.author && ` · ${ev.witness_citation.author}`}
+          {ev.witness_citation.year && ` (${ev.witness_citation.year})`}
+        </span>
+        <span className="text-[10px] text-[#2F4731]/40 ml-auto shrink-0">
+          {(ev.similarity_score * 100).toFixed(0)}% match
+        </span>
+      </div>
+      {evidence.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {evidence.map((ev, i) => (
+            <SourceBadge
+              key={ev.source_id || i}
+              sourceType={(ev as any).source_type ?? "PRIMARY_SOURCE"}
+              sourceTitle={ev.source_title}
+              sourceUrl={ev.source_url}
+              citationYear={ev.witness_citation?.year}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

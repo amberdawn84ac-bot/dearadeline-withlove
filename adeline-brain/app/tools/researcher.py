@@ -1,230 +1,267 @@
 """
 SearchWitnesses Tool — Adeline's Auto-Search Capability
 
-When Adeline hits a knowledge gap (ARCHIVE_SILENT from the Hippocampus),
-she searches for her own Witnesses from verified primary-source archives.
+Two-layer search for primary evidence:
 
-Restricted domains:
-  - archive.org   (Internet Archive)
-  - gutenberg.org (Project Gutenberg — public domain texts)
-  - archives.gov  (National Archives — US government primary sources)
+Layer 1 (Hippocampus): Semantic search in verified corpus
+  - Query all source types (PRIMARY_SOURCE, DECLASSIFIED_GOV, etc)
+  - Return any result >= 0.82 TRUTH_THRESHOLD
+
+Layer 2 (Deep Web): Parallel search across 6 declassified archives
+  - NARA, CIA FOIA, FBI Vault, Congressional Record, Federal Register, DNSA
+  - Embed results and filter by 0.82 threshold
+  - Persist newly acquired documents to Hippocampus (self-improving)
 
 Flow:
-  1. Tavily search with domain restriction
-  2. Scrape text from top results (httpx + BeautifulSoup)
-  3. Embed scraped content (OpenAI text-embedding-3-small)
-  4. Cosine similarity against the original query embedding
-  5. If score >= 0.85 → VERIFIED Evidence + Neo4j (:Source) node linked to (:Lesson)
-  6. If no source clears threshold → return None (RESEARCH_MISSION falls through)
+  1. Embed query
+  2. Unified Hippocampus search (all source types)
+  3. If results >= 0.82: Return as VERIFIED
+  4. If empty: Trigger parallel deep web search
+  5. Embed found documents and filter by 0.82
+  6. Persist acquired docs to Hippocampus
+  7. Return newly acquired docs
+  8. If both empty: Return [] (triggers RESEARCH_MISSION)
 """
+import asyncio
 import os
-import uuid
 import logging
-from dataclasses import dataclass
 from typing import Optional
 
 import httpx
 import numpy as np
 import openai
-from bs4 import BeautifulSoup
 
 from app.schemas.api_models import (
-    Evidence, EvidenceVerdict, WitnessCitation, TRUTH_THRESHOLD,
+    Evidence, EvidenceVerdict, WitnessCitation, TRUTH_THRESHOLD, SourceType,
 )
-from app.connections.neo4j_client import neo4j_client
+from app.connections.pgvector_client import hippocampus
 
 logger = logging.getLogger(__name__)
 
 EMBED_MODEL       = "text-embedding-3-small"
 TAVILY_URL        = "https://api.tavily.com/search"
-ALLOWED_DOMAINS   = ["archive.org", "gutenberg.org", "archives.gov"]
-MAX_CHUNK_CHARS   = 2000   # Characters to embed from scraped page
-SCRAPE_TIMEOUT    = 20.0   # Seconds before giving up on a page load
-SEARCH_TIMEOUT    = 15.0   # Seconds for Tavily API call
+TAVILY_TIMEOUT    = 15.0
 
-_DOMAIN_LABELS = {
-    "archive.org":   "Internet Archive",
-    "gutenberg.org": "Project Gutenberg",
-    "archives.gov":  "National Archives",
+DECLASSIFIED_DOMAINS = {
+    'NARA': 'catalog.archives.gov',
+    'CIA_FOIA': 'cia.gov/information-freedom',
+    'FBI_VAULT': 'vault.fbi.gov',
+    'CONGRESSIONAL_RECORD': 'congress.gov/congressional-record',
+    'FEDERAL_REGISTER': 'federalregister.gov',
+    'DNSA': 'nsarchive.gwu.edu',
 }
 
 
-@dataclass
-class WitnessResult:
-    """A primary source that cleared the 0.85 Witness Protocol threshold."""
-    evidence: Evidence
-    source_url: str
-    title: str
-    similarity_score: float
+# ── Cosine similarity helper ───────────────────────────────────────────────────
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Compute cosine similarity between two embedding vectors."""
+    va = np.array(a, dtype=np.float32)
+    vb = np.array(b, dtype=np.float32)
+    denom = np.linalg.norm(va) * np.linalg.norm(vb)
+    return float(np.dot(va, vb) / denom) if denom > 0 else 0.0
 
 
-# ── Internal helpers ───────────────────────────────────────────────────────────
+# ── OpenAI embedding helper ────────────────────────────────────────────────────
 
 async def _embed(text: str) -> list[float]:
+    """Embed text using text-embedding-3-small."""
     client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     resp = await client.embeddings.create(model=EMBED_MODEL, input=text[:8000])
     return resp.data[0].embedding
 
 
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    va, vb = np.array(a, dtype=np.float32), np.array(b, dtype=np.float32)
-    denom = np.linalg.norm(va) * np.linalg.norm(vb)
-    return float(np.dot(va, vb) / denom) if denom > 0 else 0.0
+# ── Deep web search helpers ────────────────────────────────────────────────────
 
-
-def _domain_label(url: str) -> str:
-    for domain, label in _DOMAIN_LABELS.items():
-        if domain in url:
-            return label
-    return "Verified Archive"
-
-
-async def _tavily_search(query: str) -> list[dict]:
-    """Search Tavily restricted to approved primary-source archives."""
-    api_key = os.getenv("TAVILY_API_KEY", "")
-    if not api_key:
-        logger.warning("[Researcher] TAVILY_API_KEY not set — skipping auto-search")
+async def search_archive_async(query: str, archive_name: str) -> list[dict]:
+    """
+    Search a single declassified archive via Tavily.
+    Returns list of documents with title, url, archive, snippet.
+    """
+    domain = DECLASSIFIED_DOMAINS.get(archive_name)
+    if not domain:
         return []
 
+    api_key = os.getenv("TAVILY_API_KEY", "")
+    if not api_key:
+        logger.warning(f"[Researcher] TAVILY_API_KEY not set — skipping {archive_name}")
+        return []
+
+    search_query = f'{query} site:{domain}'
     payload = {
         "api_key": api_key,
-        "query": query,
-        "include_domains": ALLOWED_DOMAINS,
+        "query": search_query,
+        "include_domains": [domain],
         "max_results": 3,
         "search_depth": "basic",
     }
 
     try:
-        async with httpx.AsyncClient(timeout=SEARCH_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=TAVILY_TIMEOUT) as client:
             resp = await client.post(TAVILY_URL, json=payload)
             resp.raise_for_status()
-            return resp.json().get("results", [])
+
+            results = []
+            for result in resp.json().get('results', []):
+                results.append({
+                    'title': result.get('title', ''),
+                    'url': result.get('url', ''),
+                    'archive': archive_name,
+                    'snippet': result.get('content', ''),
+                })
+            return results
     except Exception as e:
-        logger.warning(f"[Researcher] Tavily search failed: {e}")
+        logger.warning(f"[Researcher] Failed to search {archive_name}: {e}")
         return []
 
 
-async def _scrape_text(url: str) -> str:
-    """Fetch URL and extract readable plain text."""
-    try:
-        async with httpx.AsyncClient(
-            timeout=SCRAPE_TIMEOUT,
-            headers={"User-Agent": "DearAdeline/2.0 Educational Research Bot"},
-            follow_redirects=True,
-        ) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            soup = BeautifulSoup(resp.text, "html.parser")
-            for tag in soup(["script", "style", "nav", "header", "footer"]):
-                tag.decompose()
-            return soup.get_text(separator=" ", strip=True)[:MAX_CHUNK_CHARS]
-    except Exception as e:
-        logger.warning(f"[Researcher] Scrape failed for {url}: {e}")
-        return ""
-
-
-async def _link_source_to_lesson(
-    lesson_id: str, url: str, title: str, score: float, track: str
-) -> None:
+async def search_all_archives_parallel(query: str) -> list[dict]:
     """
-    Create a temporary (:Source) node in Neo4j and link it to the (:Lesson).
-    Fire-and-forget: errors are logged but never surface to the student.
+    Search all 6 declassified archives in parallel.
+    Returns deduplicated list of documents across all archives.
     """
-    try:
-        await neo4j_client.run(
-            """
-            MERGE (l:Lesson {id: $lesson_id})
-            SET l.track = $track, l.updated_at = datetime()
-            MERGE (s:Source {url: $url})
-            SET s.title      = $title,
-                s.similarity_score = $score,
-                s.found_at   = datetime(),
-                s.status     = "auto_found"
-            MERGE (l)-[:USED_SOURCE]->(s)
-            """,
-            {
-                "lesson_id": lesson_id,
-                "track": track,
-                "url": url,
-                "title": title,
-                "score": round(score, 4),
-            },
-        )
-        logger.info(f"[Researcher] Neo4j Source node created — {url}")
-    except Exception as e:
-        logger.warning(f"[Researcher] Neo4j link failed (non-fatal): {e}")
+    archives = list(DECLASSIFIED_DOMAINS.keys())
+    tasks = [search_archive_async(query, archive) for archive in archives]
+    all_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Deduplicate by URL
+    seen_urls = set()
+    deduplicated = []
+    for result_list in all_results:
+        if isinstance(result_list, list):
+            for result in result_list:
+                if result['url'] not in seen_urls:
+                    seen_urls.add(result['url'])
+                    deduplicated.append(result)
+
+    return deduplicated
 
 
-# ── Public API ─────────────────────────────────────────────────────────────────
+# ── Main search_witnesses() API ────────────────────────────────────────────────
 
 async def search_witnesses(
-    topic: str,
+    query: str,
     track: str,
-    query_embedding: list[float],
-    lesson_id: str,
-) -> Optional[WitnessResult]:
+    top_k: int = 5,
+) -> list[dict]:
     """
-    Search approved archives for a primary source on `topic`.
+    Search for evidence to answer a student question.
 
-    Returns a WitnessResult when a source scores >= 0.85 against the
-    original lesson query embedding, or None if no qualifying source is found.
+    Flow:
+    1. Embed query
+    2. Search Hippocampus (all source types at >= 0.82)
+    3. If found: Return results
+    4. If empty: Deep web search across 6 declassified archives
+    5. Embed + persist found docs to Hippocampus
+    6. Return newly acquired docs
+    7. If still empty: Return empty (triggers RESEARCH_MISSION)
 
-    Called by the orchestrator agents when Hippocampus returns ARCHIVE_SILENT.
+    Returns list of Evidence dicts with verdict, source_type, etc.
     """
-    logger.info(
-        f"[Researcher] Searching for a Primary Source — "
-        f"topic='{topic}' track={track}"
-    )
+    try:
+        logger.info(f"[Researcher] Searching for witnesses — query='{query}' track={track}")
 
-    results = await _tavily_search(topic)
-    if not results:
-        logger.info("[Researcher] No archive results — knowledge gap persists")
-        return None
+        # Step 1: Embed the query
+        embedding_response = await _embed(query)
+        query_embedding = embedding_response
 
-    for result in results:
-        url   = result.get("url", "")
-        title = result.get("title", "Untitled Source")
-
-        # Prefer Tavily's excerpt; scrape if too short
-        excerpt = result.get("content", "")
-        if len(excerpt) < 100:
-            excerpt = await _scrape_text(url)
-        if not excerpt:
-            continue
-
-        try:
-            source_embedding = await _embed(excerpt)
-        except Exception as e:
-            logger.warning(f"[Researcher] Embedding failed for {url}: {e}")
-            continue
-
-        score = _cosine_similarity(query_embedding, source_embedding)
-        logger.info(
-            f"[Researcher] score={score:.3f} — '{title}' ({url})"
+        # Step 2: Unified Hippocampus search (all source types)
+        hippo_results = await hippocampus.similarity_search(
+            query_embedding=query_embedding,
+            track=track,
+            top_k=top_k,
         )
 
-        if score >= TRUTH_THRESHOLD:
-            logger.info(
-                f"[Researcher] ✓ WITNESS FOUND — '{title}' score={score:.3f}"
-            )
-            await _link_source_to_lesson(lesson_id, url, title, score, track)
+        # Step 3: Filter by TRUTH_THRESHOLD (0.82)
+        verified_results = [
+            r for r in hippo_results
+            if r.get('similarity_score', 0) >= TRUTH_THRESHOLD
+        ]
 
-            return WitnessResult(
-                evidence=Evidence(
-                    source_id=str(uuid.uuid4()),
-                    source_title=title,
-                    source_url=url,
-                    witness_citation=WitnessCitation(
-                        archive_name=_domain_label(url),
-                    ),
-                    similarity_score=min(score, 1.0),
-                    verdict=EvidenceVerdict.VERIFIED,
-                    chunk=excerpt[:1000],
-                ),
-                source_url=url,
-                title=title,
-                similarity_score=score,
-            )
+        if verified_results:
+            # Convert to Evidence format
+            evidence_list = []
+            for result in verified_results:
+                evidence = {
+                    'source_id': result['id'],
+                    'source_title': result['source_title'],
+                    'source_url': result['source_url'],
+                    'source_type': result.get('source_type', 'PRIMARY_SOURCE'),
+                    'witness_citation': {
+                        'author': result.get('citation_author', ''),
+                        'year': result.get('citation_year'),
+                        'archive_name': result.get('citation_archive_name', ''),
+                    },
+                    'similarity_score': result['similarity_score'],
+                    'verdict': 'VERIFIED',
+                    'chunk': result['chunk'],
+                }
+                evidence_list.append(evidence)
 
-    logger.info("[Researcher] No sources cleared the 0.85 threshold — RESEARCH_MISSION")
-    return None
+            logger.info(f"[Researcher] Found {len(evidence_list)} verified in Hippocampus")
+            return evidence_list
+
+        # Step 4: Hippocampus empty → deep web search
+        logger.info(f"[Researcher] Hippocampus empty. Triggering deep web search.")
+        archive_results = await search_all_archives_parallel(query)
+
+        if not archive_results:
+            logger.info(f"[Researcher] No results from deep web search either.")
+            return []
+
+        # Step 5: Embed and score found documents
+        acquired_evidence = []
+        for doc in archive_results:
+            try:
+                # Embed the document snippet
+                doc_embedding = await _embed(doc['snippet'][:8000])
+
+                # Cosine similarity
+                similarity_score = _cosine_similarity(query_embedding, doc_embedding)
+
+                # Step 5b: Persist to Hippocampus if >= 0.82
+                if similarity_score >= TRUTH_THRESHOLD:
+                    doc_id = await hippocampus.upsert_document(
+                        source_title=doc['title'],
+                        track=track,
+                        chunk=doc['snippet'],
+                        embedding=doc_embedding,
+                        source_url=doc['url'],
+                        source_type=SourceType.DECLASSIFIED_GOV.value,
+                        citation_author='',
+                        citation_year=None,
+                        citation_archive_name=doc['archive'],
+                    )
+
+                    acquired_evidence.append({
+                        'source_id': doc_id,
+                        'source_title': doc['title'],
+                        'source_url': doc['url'],
+                        'source_type': SourceType.DECLASSIFIED_GOV.value,
+                        'witness_citation': {
+                            'author': '',
+                            'year': None,
+                            'archive_name': doc['archive'],
+                        },
+                        'similarity_score': similarity_score,
+                        'verdict': 'VERIFIED',
+                        'chunk': doc['snippet'][:1000],
+                    })
+
+                    logger.info(f"[Researcher] Acquired document: {doc['title']} from {doc['archive']}")
+
+            except Exception as e:
+                logger.warning(f"[Researcher] Failed to process document {doc['title']}: {e}")
+                continue
+
+        if acquired_evidence:
+            logger.info(f"[Researcher] Acquired {len(acquired_evidence)} documents from deep web search")
+            return acquired_evidence
+
+        # Step 7: Both empty → return empty
+        logger.info(f"[Researcher] No results from any source. Student gets RESEARCH_MISSION.")
+        return []
+
+    except Exception as e:
+        logger.error(f"[Researcher] Error in search_witnesses: {e}")
+        return []
