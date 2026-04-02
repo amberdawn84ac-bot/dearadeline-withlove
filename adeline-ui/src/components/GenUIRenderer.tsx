@@ -17,6 +17,10 @@
 
 import { clsx } from "clsx";
 import type { LessonBlockResponse, Evidence } from "@/lib/brain-client";
+import { WeightTierBadge } from "@/components/lessons/WeightTierBadge";
+import { DistortionFlag } from "@/components/lessons/DistortionFlag";
+import { KeystoneConcept } from "@/components/lessons/KeystoneConcept";
+import { DistractionBox } from "@/components/lessons/DistractionBox";
 
 // ── Block type constants ───────────────────────────────────────────────────────
 
@@ -384,30 +388,73 @@ export default function GenUIRenderer({
         .map((block) => {
           const type = block.block_type as BrainBlockType;
 
+          let blockContent;
           switch (type) {
             case "PRIMARY_SOURCE":
-              return (
+              blockContent = (
                 <PrimarySourceBlock
-                  key={block.block_id}
                   block={block}
                   isHomestead={isHomestead}
                 />
               );
+              break;
             case "LAB_MISSION":
-              return <LabMissionBlock key={block.block_id} block={block} />;
+              blockContent = <LabMissionBlock block={block} />;
+              break;
             case "EXPERIMENT":
-              return <ExperimentBlock key={block.block_id} block={block} />;
+              blockContent = <ExperimentBlock block={block} />;
+              break;
             case "NARRATIVE":
-              return (
-                <NarrativeBlock key={block.block_id} block={block} isHomestead={isHomestead} />
+              blockContent = (
+                <NarrativeBlock block={block} isHomestead={isHomestead} />
               );
+              break;
             case "RESEARCH_MISSION":
-              return <ResearchMissionBlock key={block.block_id} block={block} />;
+              blockContent = <ResearchMissionBlock block={block} />;
+              break;
             case "QUIZ":
-              return <QuizBlock key={block.block_id} block={block} />;
+              blockContent = <QuizBlock block={block} />;
+              break;
             default:
-              return <TextBlock key={block.block_id} block={block} />;
+              blockContent = <TextBlock block={block} />;
           }
+
+          return (
+            <div key={block.block_id}>
+              {blockContent}
+              {/* Reality Layer */}
+              {(block as any).reality_layer && (
+                <div className="space-y-2 mt-2">
+                  <WeightTierBadge tier={(block as any).reality_layer.weight_tier} />
+                  {(block as any).reality_layer.keystone_concept && (
+                    <KeystoneConcept
+                      concept={(block as any).reality_layer.keystone_concept.concept}
+                      firstIntroduced={(block as any).reality_layer.keystone_concept.first_introduced}
+                      repetitionNumber={(block as any).reality_layer.keystone_concept.repetition_number}
+                      context={(block as any).reality_layer.keystone_concept.context}
+                    />
+                  )}
+                  {((block as any).reality_layer.distortion_flags || []).map((flag: any, i: number) => (
+                    <DistortionFlag
+                      key={`distortion-${block.block_id}-${i}`}
+                      commonClaim={flag.common_claim}
+                      whatsHidden={flag.whats_hidden}
+                      whatActuallyHappens={flag.what_actually_happens}
+                      whyItMatters={flag.why_it_matters}
+                    />
+                  ))}
+                  {((block as any).reality_layer.distraction_boxes || []).map((box: any, i: number) => (
+                    <DistractionBox
+                      key={`distraction-${block.block_id}-${i}`}
+                      topic={box.topic}
+                      reason={box.reason}
+                      whenToReturn={box.when_to_return}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
         })}
 
       {oasStandards.length > 0 && <OASStandardsSection standards={oasStandards} />}
