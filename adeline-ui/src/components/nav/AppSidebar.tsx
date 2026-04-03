@@ -8,8 +8,7 @@ import { BookOpen, Briefcase, Settings, Menu, X, GraduationCap } from "lucide-re
 import { DailyBreadWidget } from "@/components/daily-bread/DailyBreadWidget";
 
 const NAV_ITEMS = [
-  { label: "My Learning Plan", href: "/dashboard/journey", icon: BookOpen },
-  { label: "Opportunities",    href: "/dashboard/opportunities", icon: Briefcase },
+  { label: "My Learning Plan", href: "/dashboard", icon: BookOpen },
   { label: "Reading Nook",     href: "/dashboard/reading-nook", icon: BookOpen },
   { label: "Transcript",       href: "/dashboard/transcript", icon: GraduationCap },
 ];
@@ -22,7 +21,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-[#FFFEF7] flex flex-col md:flex-row">
       {/* Mobile header */}
       <div className="md:hidden flex items-center justify-between p-4 border-b border-[#E7DAC3] bg-white/50 backdrop-blur-sm sticky top-0 z-50">
-        <Link href="/dashboard/journey" className="flex items-center gap-3">
+        <Link href="/dashboard" className="flex items-center gap-3">
           <span
             className="font-bold text-[#2F4731]"
             style={{ fontFamily: "var(--font-emilys-candy), cursive" }}
