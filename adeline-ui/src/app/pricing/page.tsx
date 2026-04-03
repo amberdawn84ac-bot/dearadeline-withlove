@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
 import { CheckoutForm } from '@/components/checkout/CheckoutForm'
 
@@ -83,6 +84,7 @@ const TIERS = [
 const DEMO_USER = { id: 'demo-user-001', email: 'demo@example.com' }
 
 export default function PricingPage() {
+  const router = useRouter()
   const [billing, setBilling]   = useState<Billing>('monthly')
   const [checkout, setCheckout] = useState<string | null>(null)
 
@@ -182,12 +184,12 @@ export default function PricingPage() {
               </ul>
 
               <button
-                onClick={() => tier.id === 'FREE' ? null : setCheckout(tier.id)}
+                onClick={() => tier.id === 'FREE' ? router.push('/dashboard') : setCheckout(tier.id)}
                 className={`w-full py-3 rounded-xl font-bold text-sm transition-colors ${
                   tier.popular
                     ? 'bg-[#BD6809] text-white hover:bg-[#a05a08]'
                     : 'bg-[#2F4731] text-white hover:bg-[#243828]'
-                } ${tier.id === 'FREE' ? 'opacity-60 cursor-default' : ''}`}
+                }`}
               >
                 {tier.cta}
               </button>
