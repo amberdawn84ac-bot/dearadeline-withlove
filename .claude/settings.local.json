@@ -102,7 +102,9 @@
       "Bash(git check-ignore:*)",
       "Bash(pnpm up:*)",
       "Bash(grep:*)",
-      "Bash(vercel env:*)"
+      "Bash(vercel env:*)",
+      "Bash(cat:*)",
+      "Bash(cat /tmp/cascade-adeline/src/app/\\\\\\(routes\\\\\\)/layout.tsx)"
     ]
   }
 }

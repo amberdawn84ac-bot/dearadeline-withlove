@@ -73,7 +73,7 @@ export default function DashboardPage() {
               {LESSON_SUGGESTIONS.map(suggestion => (
                 <button
                   key={suggestion.id}
-                  onClick={() => handleLessonRequest(suggestion.title)}
+                  onClick={() => handleLessonGenerated(suggestion)}
                   disabled={isStreaming}
                   className="text-left p-6 rounded-2xl border-2 border-[#E7DAC3] hover:border-[#BD6809] hover:shadow-lg transition-all bg-white group disabled:opacity-50 disabled:cursor-not-allowed"
                 >
