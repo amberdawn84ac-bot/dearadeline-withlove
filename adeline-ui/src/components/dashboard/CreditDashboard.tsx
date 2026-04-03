@@ -101,9 +101,9 @@ export function CreditDashboardComponent({ studentId }: Props) {
             {dashboard.pendingProposals.map((proposal) => (
               <div key={proposal.proposalId} className="flex items-center justify-between rounded-lg border border-yellow-200 bg-yellow-50 p-4">
                 <div>
-                  <p className="font-medium text-gray-900">{proposal.courseName}</p>
-                  <p className="text-sm text-gray-600">{proposal.track}</p>
-                  <p className="mt-1 text-xs text-gray-500">{proposal.artifactCount} artifacts collected</p>
+                  <p className="font-medium text-gray-900">{proposal.externalCourseName}</p>
+                  <p className="text-sm text-gray-600">{proposal.bucket}</p>
+                  <p className="mt-1 text-xs text-gray-500">{proposal.hoursEarned} hours earned ({proposal.masteryGrade})</p>
                 </div>
                 <button
                   onClick={() => handleApproveProposal(proposal.proposalId)}
@@ -124,14 +124,14 @@ export function CreditDashboardComponent({ studentId }: Props) {
           <h3 className="text-lg font-semibold text-gray-900">Official Transcript</h3>
           <div className="mt-4 space-y-3">
             {dashboard.approvedCourses.map((course) => (
-              <div key={course.courseId} className="flex items-center justify-between rounded-lg border border-green-200 bg-green-50 p-4">
+              <div key={course.proposalId} className="flex items-center justify-between rounded-lg border border-green-200 bg-green-50 p-4">
                 <div>
-                  <p className="font-medium text-gray-900">{course.courseName}</p>
-                  <p className="text-sm text-gray-600">{course.track}</p>
+                  <p className="font-medium text-gray-900">{course.externalCourseName}</p>
+                  <p className="text-sm text-gray-600">{course.bucket}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-semibold text-green-900">{course.credits.toFixed(1)} credit</p>
-                  <p className="text-xs text-gray-500">Grade: {course.gradeLetter}</p>
+                  <p className="font-semibold text-green-900">{course.hoursEarned} hours</p>
+                  <p className="text-xs text-gray-500">Grade: {course.masteryGrade}</p>
                 </div>
               </div>
             ))}
