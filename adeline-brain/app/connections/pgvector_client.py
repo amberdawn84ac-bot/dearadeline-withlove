@@ -94,8 +94,31 @@ class HippocampusClient:
         source_url: str = "",
         source_type: str = "PRIMARY_SOURCE",
     ) -> str:
-        """Insert a verified source document chunk with its embedding."""
+        """
+        Insert a verified source document chunk with its embedding.
+
+        Skips insertion if (source_url, track) pair already exists.
+        Returns the document ID (existing or newly created).
+        """
         async with self._session_factory() as session:
+            # Check for duplicate (source_url, track) pair
+            existing = await session.execute(
+                text("""
+                    SELECT id FROM hippocampus_documents
+                    WHERE source_url = :source_url AND track = :track
+                    LIMIT 1
+                """),
+                {"source_url": source_url, "track": track},
+            )
+            result = existing.scalar()
+
+            if result:
+                logger.debug(
+                    f"[Duplicate] Skipping {source_url} for track {track} — already exists (id={result})"
+                )
+                return str(result)
+
+            # Insert new document
             doc = HippocampusDocument(
                 source_title=source_title,
                 source_url=source_url,
@@ -110,6 +133,7 @@ class HippocampusClient:
             session.add(doc)
             await session.commit()
             await session.refresh(doc)
+            logger.debug(f"[Hippocampus] Inserted document id={doc.id} for {source_url}")
             return str(doc.id)
 
     async def similarity_search(
