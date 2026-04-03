@@ -44,8 +44,8 @@ const TIERS = [
     trial: true,
   },
   {
-    id: 'PARENT',
-    name: 'Parent',
+    id: 'FAMILY',
+    name: 'Family',
     price: { monthly: 29.99, yearly: 323.89 },
     description: 'For homeschool families',
     features: [
@@ -61,12 +61,12 @@ const TIERS = [
     trial: true,
   },
   {
-    id: 'TEACHER',
-    name: 'Teacher / Co-op',
+    id: 'COOP',
+    name: 'Co-op',
     price: { monthly: 49.99, yearly: 539.89 },
     description: 'For classrooms and co-ops',
     features: [
-      'Everything in Parent, plus:',
+      'Everything in Family, plus:',
       '✓ Up to 40 students',
       '✓ Classroom management',
       '✓ Bulk progress reports',
