@@ -113,7 +113,7 @@ function EvidenceFooter({ evidence }: { evidence: Evidence[] }) {
               sourceType={(ev as any).source_type ?? "PRIMARY_SOURCE"}
               sourceTitle={ev.source_title}
               sourceUrl={ev.source_url}
-              citationYear={ev.witness_citation?.year}
+              citationYear={ev.witness_citation?.year ?? undefined}
             />
           ))}
         </div>
