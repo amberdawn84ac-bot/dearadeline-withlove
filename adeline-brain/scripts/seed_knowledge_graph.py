@@ -307,6 +307,72 @@ CONCEPTS = [
     ("el-008", "Archetype and Allegory in Literature",
      "Recognizing universal patterns and extended metaphors in canonical works.",
      "ENGLISH_LITERATURE", "MASTERING", "OK-ELA-12.2", "912"),
+
+    # ── APPLIED_MATHEMATICS (Track 9) ────────────────────────────────────────
+    ("am-001", "Counting, Money, and Making Change",
+     "Recognizing coins and bills; making change at a farm stand or market.",
+     "APPLIED_MATHEMATICS", "EMERGING", "OK-MATH-K.3", "k2"),
+
+    ("am-002", "Budgeting a Household or Garden",
+     "Building a simple budget: income, fixed costs, variable costs, savings.",
+     "APPLIED_MATHEMATICS", "DEVELOPING", "OK-MATH-3.5", "35"),
+
+    ("am-003", "Fractions in the Kitchen and Field",
+     "Using halves, thirds, and quarters in recipes, land division, and crop rows.",
+     "APPLIED_MATHEMATICS", "DEVELOPING", "OK-MATH-4.2", "35"),
+
+    ("am-004", "Area, Perimeter, and Land Measurement",
+     "Calculating square footage for garden beds, rooms, and fence lines.",
+     "APPLIED_MATHEMATICS", "EXPANDING", "OK-MATH-6.4", "68"),
+
+    ("am-005", "Percentages, Interest, and Loans",
+     "How interest rates work on savings and loans; reading a simple amortization schedule.",
+     "APPLIED_MATHEMATICS", "EXPANDING", "OK-MATH-7.5", "68"),
+
+    ("am-006", "Crop Yield and Pricing for Market",
+     "Calculating cost-per-unit, markup, and break-even point for farm products.",
+     "APPLIED_MATHEMATICS", "EXPANDING", "OK-MATH-8.3", "68"),
+
+    ("am-007", "Reading a Balance Sheet and Profit/Loss Statement",
+     "Assets, liabilities, equity; what a small-business P&L statement tells you.",
+     "APPLIED_MATHEMATICS", "MASTERING", "OK-MATH-10.2", "912"),
+
+    ("am-008", "Building Structures: Load, Materials, and Cost Estimation",
+     "Estimating materials (lumber, concrete) and labor cost for a small structure.",
+     "APPLIED_MATHEMATICS", "MASTERING", "OK-MATH-11.4", "912"),
+
+    # ── CREATIVE_ECONOMY (Track 10) ──────────────────────────────────────────
+    ("ce-001", "What Can I Make? Materials Around Us",
+     "Identifying found and natural materials that can be turned into sellable goods.",
+     "CREATIVE_ECONOMY", "EMERGING", "CE-K.1", "k2"),
+
+    ("ce-002", "Craft Basics: Tools, Safety, and Simple Projects",
+     "Foundational hand-tool use, sewing basics, and first finished project.",
+     "CREATIVE_ECONOMY", "DEVELOPING", "CE-3.1", "35"),
+
+    ("ce-003", "Upcycling: Turning Discards into Products",
+     "Finding, cleaning, and transforming secondhand materials into finished goods.",
+     "CREATIVE_ECONOMY", "DEVELOPING", "CE-4.3", "35"),
+
+    ("ce-004", "Pricing Handmade Goods: Cost + Labor + Margin",
+     "Calculating material cost, time cost, and a fair selling price for a craft item.",
+     "CREATIVE_ECONOMY", "EXPANDING", "CE-6.2", "68"),
+
+    ("ce-005", "Market Display and Customer Experience",
+     "Arranging a booth, signage, pricing tags, and making a buyer feel welcome.",
+     "CREATIVE_ECONOMY", "EXPANDING", "CE-7.1", "68"),
+
+    ("ce-006", "Branding: Name, Logo, and Story for a Small Business",
+     "Creating a consistent brand identity across packaging, social, and market presence.",
+     "CREATIVE_ECONOMY", "EXPANDING", "CE-8.2", "68"),
+
+    ("ce-007", "Business Math for Makers: Revenue, Expense, and Reinvestment",
+     "Tracking sales, logging expenses, and deciding how much to reinvest in materials.",
+     "CREATIVE_ECONOMY", "MASTERING", "CE-10.1", "912"),
+
+    ("ce-008", "Online Selling: Platforms, Photography, and Fulfillment",
+     "Setting up a shop; product photography; shipping and packaging basics.",
+     "CREATIVE_ECONOMY", "MASTERING", "CE-11.3", "912"),
 ]
 
 
@@ -381,6 +447,29 @@ PREREQUISITES = [
     ("el-006", "el-004", 0.7),
     ("el-007", "el-006", 0.8),
     ("el-008", "el-005", 0.8),
+
+    # APPLIED_MATHEMATICS chain
+    ("am-002", "am-001", 0.9),   # Budgeting requires counting/money
+    ("am-003", "am-001", 0.8),   # Fractions requires counting/money
+    ("am-004", "am-003", 0.8),   # Area/perimeter requires fractions
+    ("am-005", "am-002", 0.9),   # Interest/loans requires budgeting
+    ("am-006", "am-005", 0.8),   # Crop yield/pricing requires percentages
+    ("am-006", "am-002", 0.7),   # Crop yield/pricing requires budgeting
+    ("am-007", "am-006", 0.9),   # Balance sheet requires crop pricing
+    ("am-007", "am-005", 0.8),   # Balance sheet requires interest/loans
+    ("am-008", "am-004", 0.8),   # Building structures requires area/measurement
+    ("am-008", "am-007", 0.7),   # Building structures requires balance sheet
+
+    # CREATIVE_ECONOMY chain
+    ("ce-002", "ce-001", 0.9),   # Craft basics requires materials awareness
+    ("ce-003", "ce-002", 0.8),   # Upcycling requires craft basics
+    ("ce-004", "ce-002", 0.8),   # Pricing requires craft basics
+    ("ce-005", "ce-004", 0.8),   # Market display requires pricing knowledge
+    ("ce-006", "ce-005", 0.7),   # Branding requires market display experience
+    ("ce-007", "ce-004", 0.9),   # Business math requires pricing
+    ("ce-007", "ce-006", 0.7),   # Business math requires branding context
+    ("ce-008", "ce-007", 0.8),   # Online selling requires business math
+    ("ce-008", "ce-006", 0.7),   # Online selling requires branding
 ]
 
 
@@ -403,6 +492,13 @@ CROSS_TRACK_LINKS = [
     ("ENGLISH_LITERATURE",   "TRUTH_HISTORY"),
     # Biblical worldview bridges DISCIPLESHIP ↔ GOVERNMENT_ECONOMICS
     ("DISCIPLESHIP",         "GOVERNMENT_ECONOMICS"),
+    # Applied math bridges
+    ("APPLIED_MATHEMATICS",  "GOVERNMENT_ECONOMICS"),  # budgeting + economics overlap
+    ("APPLIED_MATHEMATICS",  "HOMESTEADING"),           # land measurement + crop math
+    ("APPLIED_MATHEMATICS",  "CREATIVE_ECONOMY"),       # pricing + business math
+    # Creative economy bridges
+    ("CREATIVE_ECONOMY",     "ENGLISH_LITERATURE"),     # branding + storytelling/voice
+    ("CREATIVE_ECONOMY",     "HOMESTEADING"),           # handmade goods + farm products
 ]
 
 

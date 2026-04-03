@@ -238,6 +238,8 @@ class AdelineState(TypedDict):
     agent_name:           str
     xapi_statements:      list[dict]
     credits_awarded:      list[dict]
+    interaction_count:    int
+    cross_track_acknowledgment: str | None
 
 
 # ── Neo4j graph-link (multi-hop) ──────────────────────────────────────────────
@@ -991,7 +993,10 @@ def _route(state: AdelineState) -> Literal["historian", "justice", "science", "d
 # ── Main Entry Point ──────────────────────────────────────────────────────────
 
 async def run_orchestrator(
-    request: LessonRequest, query_embedding: list[float]
+    request: LessonRequest,
+    query_embedding: list[float],
+    interaction_count: int = 10,
+    cross_track_acknowledgment: str | None = None,
 ) -> LessonResponse:
     """
     Routes the request to the correct specialist agent, graph-links to
@@ -1022,6 +1027,8 @@ async def run_orchestrator(
         "agent_name":           "",
         "xapi_statements":      [],
         "credits_awarded":      [],
+        "interaction_count":    interaction_count,
+        "cross_track_acknowledgment": cross_track_acknowledgment,
     }
 
     route = _route(state)
@@ -1040,12 +1047,18 @@ async def run_orchestrator(
     else:
         state = await discipleship_agent(state)
 
-    # ── 2. Graph context (Neo4j) ───────────────────────────────────────────────
+    # ── 2. Cross-track acknowledgment (prepend to first block if set) ─────────
+    if state.get("cross_track_acknowledgment") and state["blocks"]:
+        state["blocks"][0]["content"] = (
+            state["cross_track_acknowledgment"] + "\n\n" + state["blocks"][0]["content"]
+        )
+
+    # ── 3. Graph context (Neo4j) ───────────────────────────────────────────────
     state["oas_standards"] = await _fetch_graph_context(request.track.value)
     primary_count = sum(1 for s in state["oas_standards"] if s.get("source_type") == "primary")
     cross_count   = sum(1 for s in state["oas_standards"] if s.get("source_type") == "cross_track")
 
-    # ── 3. Registrar (xAPI + CASE credits) ────────────────────────────────────
+    # ── 4. Registrar (xAPI + CASE credits) ────────────────────────────────────
     state = await registrar_agent(state)
 
     logger.info(
