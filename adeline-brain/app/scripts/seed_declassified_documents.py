@@ -16,7 +16,8 @@ import asyncio
 import httpx
 import logging
 import os
-from typing import Optional
+import random
+from typing import Optional, Callable, Any
 
 from openai import AsyncOpenAI
 
@@ -37,6 +38,57 @@ def _get_openai_client():
     if openai_client is None:
         openai_client = AsyncOpenAI()
     return openai_client
+
+
+# ── Retry logic with exponential backoff ──────────────────────────────────
+
+async def _retry_search(
+    query: str,
+    archive: str,
+    max_retries: int,
+    search_fn: Callable[..., Any],
+    initial_delay: float = 0.5,
+) -> list:
+    """
+    Retry search function with exponential backoff + jitter.
+
+    Handles transient failures (ConnectionError, TimeoutError) gracefully.
+    Non-transient errors are raised immediately without retry.
+
+    Args:
+        query: Search query
+        archive: Archive name (for logging)
+        max_retries: Maximum number of retries (not counting initial attempt)
+        search_fn: Async search function to call
+        initial_delay: Initial delay in seconds (default 0.5)
+
+    Returns:
+        List of search results
+
+    Raises:
+        ConnectionError if all retries exhausted
+        TimeoutError if all retries exhausted
+        Other exceptions are raised immediately without retry
+    """
+    attempt = 0
+    while attempt < max_retries:
+        try:
+            return await search_fn(query)
+        except (ConnectionError, TimeoutError) as e:
+            attempt += 1
+            if attempt >= max_retries:
+                raise  # Re-raise on final attempt
+
+            # Exponential backoff: 0.5s, 1s, 2s, 4s... with ±10% jitter
+            delay = initial_delay * (2 ** (attempt - 1))
+            jitter = delay * 0.1 * (random.random() - 0.5)
+            sleep_time = delay + jitter
+
+            logger.warning(
+                f"[{archive}] Search failed (attempt {attempt}/{max_retries}): {e}. "
+                f"Retrying in {sleep_time:.2f}s..."
+            )
+            await asyncio.sleep(sleep_time)
 
 
 # ── Search queries tailored to each track ──────────────────────────────────
@@ -87,7 +139,7 @@ async def seed_nara_documents(track: str, limit: int = 10) -> int:
     """
     Seed NARA (National Archives and Records Administration) documents into Hippocampus.
 
-    Searches for documents relevant to the given track.
+    Searches for documents relevant to the given track with retry logic for transient failures.
 
     Args:
         track: Track name (TRUTH_HISTORY, JUSTICE_CHANGEMAKING, etc.)
@@ -107,7 +159,15 @@ async def seed_nara_documents(track: str, limit: int = 10) -> int:
         try:
             logger.info(f"[NARA] Searching: {query}")
 
-            results = await search_archive_async(query, "NARA")
+            async def nara_search(q):
+                return await search_archive_async(q, "NARA")
+
+            results = await _retry_search(
+                query=query,
+                archive="NARA",
+                max_retries=3,
+                search_fn=nara_search,
+            )
 
             for result in results[:limit]:
                 try:
@@ -175,7 +235,7 @@ async def seed_cia_foia_documents(track: str, limit: int = 10) -> int:
     """
     Seed CIA FOIA documents into Hippocampus.
 
-    Searches for declassified CIA documents relevant to the given track.
+    Searches for declassified CIA documents relevant to the given track with retry logic for transient failures.
 
     Args:
         track: Track name (TRUTH_HISTORY, JUSTICE_CHANGEMAKING, etc.)
@@ -195,7 +255,15 @@ async def seed_cia_foia_documents(track: str, limit: int = 10) -> int:
         try:
             logger.info(f"[CIA FOIA] Searching: {query}")
 
-            results = await search_archive_async(query, "CIA_FOIA")
+            async def cia_search(q):
+                return await search_archive_async(q, "CIA_FOIA")
+
+            results = await _retry_search(
+                query=query,
+                archive="CIA_FOIA",
+                max_retries=3,
+                search_fn=cia_search,
+            )
 
             for result in results[:limit]:
                 try:
@@ -259,7 +327,8 @@ async def seed_fbi_vault_documents(track: str, limit: int = 10) -> int:
     """
     Seed FBI Vault documents into Hippocampus.
 
-    Primarily targets JUSTICE_CHANGEMAKING track (surveillance, civil rights, COINTELPRO).
+    Primarily targets JUSTICE_CHANGEMAKING track (surveillance, civil rights, COINTELPRO)
+    with retry logic for transient failures.
 
     Args:
         track: Track name (typically JUSTICE_CHANGEMAKING, TRUTH_HISTORY)
@@ -279,7 +348,15 @@ async def seed_fbi_vault_documents(track: str, limit: int = 10) -> int:
         try:
             logger.info(f"[FBI Vault] Searching: {query}")
 
-            results = await search_archive_async(query, "FBI_VAULT")
+            async def fbi_search(q):
+                return await search_archive_async(q, "FBI_VAULT")
+
+            results = await _retry_search(
+                query=query,
+                archive="FBI_VAULT",
+                max_retries=3,
+                search_fn=fbi_search,
+            )
 
             for result in results[:limit]:
                 try:
@@ -359,6 +436,8 @@ async def seed_all_declassified_documents() -> int:
     tasks = [
         seed_nara_documents(track="TRUTH_HISTORY", limit=5),
         seed_cia_foia_documents(track="TRUTH_HISTORY", limit=5),
+        seed_nara_documents(track="JUSTICE_CHANGEMAKING", limit=5),
+        seed_cia_foia_documents(track="JUSTICE_CHANGEMAKING", limit=5),
         seed_fbi_vault_documents(track="JUSTICE_CHANGEMAKING", limit=5),
     ]
 
