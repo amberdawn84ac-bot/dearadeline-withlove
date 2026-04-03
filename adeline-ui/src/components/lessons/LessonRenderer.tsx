@@ -16,6 +16,7 @@ import ArchiveSilent from "@/components/lessons/ArchiveSilent";
 import { BotanicalDivider } from "@/components/icons";
 import { sealJournal } from "@/lib/brain-client";
 import type { LessonResponse, LessonBlockResponse } from "@/lib/brain-client";
+import { downloadCitation } from "@/lib/citation-export";
 
 interface LessonRendererProps {
   lesson: LessonResponse;
@@ -303,13 +304,27 @@ export default function LessonRenderer({
         </div>
       )}
 
-      {/* Seal Journal */}
+      {/* Seal Journal + Export Citations */}
       <div className="pt-6 border-t border-fuschia/10 flex items-center justify-between flex-wrap gap-3">
         <p className="font-sketch text-xs text-fuschia/40 uppercase tracking-widest">
           {lesson.blocks.filter((b) => b.evidence[0]?.verdict === "VERIFIED").length} verified{" "}
           &bull; {lesson.blocks.length} total blocks
         </p>
-        <SealButton lesson={lesson} studentId={studentId} />
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={() => downloadCitation(lesson, "mla")}
+            className="font-sketch text-sm px-4 py-2 transition-colors"
+            style={{
+              background: "#F0FDF4",
+              color: "#166534",
+              border: "2px solid #D1FAE5",
+              boxShadow: "2px 2px 0 #D1FAE5",
+            }}
+          >
+            Export Citations (MLA)
+          </button>
+          <SealButton lesson={lesson} studentId={studentId} />
+        </div>
       </div>
 
     </article>
