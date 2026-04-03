@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Loader2, BookOpen, MessageCircle } from 'lucide-react';
 import { StudentStatusBar } from '@/components/StudentStatusBar';
 import { AdelineChatPanel } from '@/components/AdelineChatPanel';
 
@@ -25,6 +25,7 @@ const STUDENT_ID = 'demo-student-001';
 export default function DashboardPage() {
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [mobileTab, setMobileTab] = useState<'learn' | 'chat'>('learn');
 
   const handleLessonGenerated = useCallback((lesson: any) => {
     console.log('[Dashboard] Lesson generated:', lesson.title);
@@ -36,9 +37,14 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="flex h-screen -m-6 md:-m-8 overflow-hidden bg-[#FFFEF7]">
+    <div className="flex flex-col md:flex-row h-screen -m-6 md:-m-8 overflow-hidden bg-[#FFFEF7]">
+
       {/* ── Left column: lesson content ── */}
-      <div className="flex-1 overflow-y-auto min-w-0">
+      <div className={[
+        "flex-1 overflow-y-auto min-w-0 flex flex-col",
+        "pb-14 md:pb-0",           // space for mobile tab bar
+        mobileTab === 'chat' ? "hidden md:flex" : "flex",
+      ].join(" ")}>
         {/* Page header */}
         <header className="bg-white border-b-2 border-[#E7DAC3] px-6 py-5 sticky top-0 z-10">
           <h1
@@ -49,8 +55,8 @@ export default function DashboardPage() {
           </h1>
           <p className="text-[#2F4731]/60 mt-0.5 text-sm">
             {activeLessonId
-              ? 'Lesson in progress — ask Adeline questions in the panel →'
-              : 'Choose a topic below or ask Adeline in the panel →'}
+              ? 'Lesson in progress — tap Chat below to ask Adeline'
+              : 'Choose a topic, or tap Chat below to ask Adeline'}
           </p>
         </header>
 
@@ -73,7 +79,7 @@ export default function DashboardPage() {
               {LESSON_SUGGESTIONS.map(suggestion => (
                 <button
                   key={suggestion.id}
-                  onClick={() => handleLessonGenerated(suggestion)}
+                  onClick={() => { handleLessonGenerated(suggestion); setMobileTab('chat'); }}
                   disabled={isStreaming}
                   className="text-left p-6 rounded-2xl border-2 border-[#E7DAC3] hover:border-[#BD6809] hover:shadow-lg transition-all bg-white group disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -112,9 +118,45 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Right column: Adeline chat panel ── */}
-      <div className="w-[380px] shrink-0 hidden md:flex flex-col border-l-2 border-[#E7DAC3]">
-        <AdelineChatPanel studentId={STUDENT_ID} onLessonGenerated={handleLessonGenerated} />
+      <div className={[
+        "md:w-[380px] md:shrink-0 md:flex flex-col border-l-2 border-[#E7DAC3]",
+        mobileTab === 'chat' ? "flex flex-1" : "hidden md:flex",
+      ].join(" ")}>
+        {/* Extra bottom padding on mobile so chat input clears the tab bar */}
+        <div className="flex flex-col flex-1 md:pb-0 pb-14 min-h-0">
+          <AdelineChatPanel studentId={STUDENT_ID} onLessonGenerated={handleLessonGenerated} />
+        </div>
       </div>
+
+      {/* ── Mobile bottom tab bar ── */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-14 flex border-t-2 border-[#E7DAC3] bg-white z-50">
+        <button
+          onClick={() => setMobileTab('learn')}
+          className={[
+            "flex-1 flex flex-col items-center justify-center gap-0.5 text-xs font-bold transition-colors",
+            mobileTab === 'learn'
+              ? "text-[#2F4731] border-t-2 border-[#2F4731] -mt-px bg-[#FFFEF7]"
+              : "text-[#2F4731]/40",
+          ].join(" ")}
+        >
+          <BookOpen size={20} />
+          Learn
+        </button>
+        <button
+          onClick={() => setMobileTab('chat')}
+          className={[
+            "flex-1 flex flex-col items-center justify-center gap-0.5 text-xs font-bold transition-colors",
+            mobileTab === 'chat'
+              ? "text-[#BD6809] border-t-2 border-[#BD6809] -mt-px bg-[#FFFEF7]"
+              : "text-[#2F4731]/40",
+          ].join(" ")}
+        >
+          <MessageCircle size={20} />
+          Chat
+        </button>
+      </nav>
+
     </div>
   );
 }
+
