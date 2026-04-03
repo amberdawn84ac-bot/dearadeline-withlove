@@ -1,10 +1,7 @@
 'use client'
 
-import { useCallback } from 'react'
-import { loadStripe } from '@stripe/stripe-js'
-import { EmbeddedCheckout, EmbeddedCheckoutProvider } from '@stripe/react-stripe-js'
-
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
+import { useEffect, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 
 interface CheckoutFormProps {
   userId:    string
@@ -14,20 +11,53 @@ interface CheckoutFormProps {
 }
 
 export function CheckoutForm({ userId, userEmail, tier, billing }: CheckoutFormProps) {
-  const fetchClientSecret = useCallback(async () => {
-    const res = await fetch('/api/stripe/create-checkout', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ userId, userEmail, tier, billing }),
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error ?? 'Checkout failed')
-    return data.clientSecret as string
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function initCheckout() {
+      try {
+        const res = await fetch('/api/stripe/create-checkout', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ userId, userEmail, tier, billing }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error ?? 'Checkout failed')
+
+        // Redirect to Stripe Checkout
+        if (data.url) {
+          window.location.href = data.url
+        } else {
+          setError('No checkout URL returned')
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Checkout error')
+        setIsLoading(false)
+      }
+    }
+
+    initCheckout()
   }, [userId, userEmail, tier, billing])
 
-  return (
-    <EmbeddedCheckoutProvider stripe={stripePromise} options={{ fetchClientSecret }}>
-      <EmbeddedCheckout />
-    </EmbeddedCheckoutProvider>
-  )
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-[#BD6809]" />
+          <p className="text-sm text-gray-600">Preparing checkout…</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 text-center">
+        <p className="text-red-600 text-sm">{error}</p>
+      </div>
+    )
+  }
+
+  return null
 }

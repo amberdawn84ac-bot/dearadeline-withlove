@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       allow_promotion_codes: true,
     })
 
-    return NextResponse.json({ sessionId: session.id, url: session.url, clientSecret: session.client_secret })
+    return NextResponse.json({ sessionId: session.id, url: session.url })
   } catch (err) {
     console.error('[Stripe Checkout Error]', err)
     const msg = err instanceof Error ? err.message : 'Unknown error'
