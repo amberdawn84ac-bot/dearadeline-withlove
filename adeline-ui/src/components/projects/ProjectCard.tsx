@@ -8,7 +8,7 @@
  * top 3 skills as chips, and a "Start Project" CTA.
  */
 
-import type { ProjectDetail } from "@/lib/brain-client";
+import type { ProjectDetail, ProjectSummary } from "@/lib/brain-client";
 
 // ── Track config ─────────────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ interface ProjectCardProps {
 }
 
 export interface ProjectCatalogProps {
-  projects: ProjectDetail[];
+  projects: (ProjectDetail | ProjectSummary)[];
   onSelect: (projectId: string) => void;
 }
 
@@ -52,7 +52,7 @@ export function ProjectCatalog({ projects, onSelect }: ProjectCatalogProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {projects.map((project) => (
-        <ProjectCard key={project.id} project={project} onStart={onSelect} />
+        <ProjectCard key={project.id} project={project as ProjectDetail} onStart={onSelect} />
       ))}
     </div>
   );
