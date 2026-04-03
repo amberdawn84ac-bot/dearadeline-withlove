@@ -13,7 +13,7 @@ import { ProjectGuide } from "@/components/projects/ProjectGuide";
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type RichContent =
-  | { type: "projectList"; projects: ProjectSummary[] }
+  | { type: "projectList"; projects: (ProjectSummary | ProjectDetail)[] }
   | { type: "projectDetail"; project: ProjectDetail }
   | { type: "activityCredit"; result: ActivityReportResponse };
 
