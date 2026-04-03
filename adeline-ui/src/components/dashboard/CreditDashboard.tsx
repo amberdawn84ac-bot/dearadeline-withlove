@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getCreditDashboard, approveCourseProposal, listAvailableProfiles } from "@/lib/brain-client";
-import type { CreditDashboard, OklahomProfile } from "@/lib/brain-client";
+import type { CreditDashboard, OklahomaProfile } from "@/lib/brain-client";
 
 interface Props {
   studentId: string;
@@ -10,7 +10,7 @@ interface Props {
 
 export function CreditDashboardComponent({ studentId }: Props) {
   const [dashboard, setDashboard] = useState<CreditDashboard | null>(null);
-  const [profiles, setProfiles] = useState<OklahomProfile[]>([]);
+  const [profiles, setProfiles] = useState<OklahomaProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [approvingProposalId, setApprovingProposalId] = useState<string | null>(null);
