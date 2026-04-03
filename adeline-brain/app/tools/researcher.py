@@ -35,8 +35,13 @@ from app.schemas.api_models import (
     Evidence, EvidenceVerdict, WitnessCitation, TRUTH_THRESHOLD, SourceType,
 )
 from app.connections.pgvector_client import hippocampus
+from app.utils.rate_limiter import TokenBucket
 
 logger = logging.getLogger(__name__)
+
+# Initialize Tavily rate limiter: 10 tokens max, 0.5 tokens/second refill
+# This limits to ~10 API calls, with gradual refill for sustained load
+tavily_limiter = TokenBucket(max_tokens=10, refill_rate=0.5)
 
 EMBED_MODEL       = "text-embedding-3-small"
 TAVILY_URL        = "https://api.tavily.com/search"
@@ -86,6 +91,11 @@ async def search_archive_async(query: str, archive_name: str) -> list[dict]:
     if not api_key:
         logger.warning(f"[Researcher] TAVILY_API_KEY not set — skipping {archive_name}")
         return []
+
+    # Rate limit Tavily API calls
+    if not await tavily_limiter.acquire(tokens=1.0):
+        logger.warning(f"[Tavily] Rate limit reached for {archive_name}; waiting for token refill...")
+        await tavily_limiter.wait_for_acquire(tokens=1.0)
 
     search_query = f'{query} site:{domain}'
     payload = {
