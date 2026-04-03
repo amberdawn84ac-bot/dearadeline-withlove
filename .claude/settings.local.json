@@ -88,7 +88,21 @@
       "Bash(grep -E \"\\\\.\\(py|ts|tsx\\)$\")",
       "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
       "Bash(for task:*)",
-      "Bash(pip list:*)"
+      "Bash(pip list:*)",
+      "Bash(find C:UsersAaronsdearadeline-withloveadeline-brain -name *test*scheduler* -o -name *scheduler*test*)",
+      "Bash(find C:/Users/Aarons/dearadeline-withlove -name citation-export* -o -name *SourceBadge*)",
+      "Bash(find C:/Users/Aarons/dearadeline-withlove -name *[Dd]eploy* -type f)",
+      "Bash(/tmp/phase6_verification.txt:*)",
+      "Bash(echo \"POSTGRES_DSN is: [$POSTGRES_DSN]\")",
+      "Bash(export POSTGRES_DSN=\"postgresql://postgres:9fbMRQRnpAy8MrTL@db.gyxowttfwqbajoapfebf.supabase.co:5432/postgres\")",
+      "Bash(npm ls:*)",
+      "Bash(node:*)",
+      "Bash(POSTGRES_DSN=\"postgresql://postgres:9fbMRQRnpAy8MrTL@db.gyxowttfwqbajoapfebf.supabase.co:5432/postgres\" npx prisma migrate deploy 2>&1)",
+      "Bash(POSTGRES_DSN=\"postgresql://postgres:9fbMRQRnpAy8MrTL@db.gyxowttfwqbajoapfebf.supabase.co:5432/postgres\" npx prisma db push 2>&1)",
+      "Bash(git check-ignore:*)",
+      "Bash(pnpm up:*)",
+      "Bash(grep:*)",
+      "Bash(vercel env:*)"
     ]
   }
 }

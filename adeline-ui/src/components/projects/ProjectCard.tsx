@@ -43,6 +43,21 @@ interface ProjectCardProps {
   onStart: (id: string) => void;
 }
 
+export interface ProjectCatalogProps {
+  projects: ProjectDetail[];
+  onSelect: (projectId: string) => void;
+}
+
+export function ProjectCatalog({ projects, onSelect }: ProjectCatalogProps) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {projects.map((project) => (
+        <ProjectCard key={project.id} project={project} onStart={onSelect} />
+      ))}
+    </div>
+  );
+}
+
 export function ProjectCard({ project, onStart }: ProjectCardProps) {
   const track =
     TRACK_CONFIG[project.track as keyof typeof TRACK_CONFIG] ??

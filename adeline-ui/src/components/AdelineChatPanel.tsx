@@ -7,9 +7,8 @@ import type {
   Track, ScaffoldResponse, LessonResponse, LessonBlockResponse,
   ProjectSummary, ProjectDetail, ActivityReportResponse,
 } from "@/lib/brain-client";
-// TODO: Uncomment when ProjectCard/ProjectGuide are fully implemented
-// import { ProjectCatalog } from "@/components/projects/ProjectCard";
-// import { ProjectGuide } from "@/components/projects/ProjectGuide";
+import { ProjectCatalog } from "@/components/projects/ProjectCard";
+import { ProjectGuide } from "@/components/projects/ProjectGuide";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -316,8 +315,7 @@ export function AdelineChatPanel({
               )}
 
               {/* Rich content */}
-              {/* TODO: Uncomment when ProjectCard/ProjectGuide are fully implemented */}
-              {/* {msg.rich?.type === "projectList" && (
+              {msg.rich?.type === "projectList" && (
                 <ProjectCatalog
                   projects={msg.rich.projects}
                   onSelect={handleProjectSelect}
@@ -325,10 +323,13 @@ export function AdelineChatPanel({
               )}
               {msg.rich?.type === "projectDetail" && (
                 <ProjectGuide
-                  project={msg.rich.project}
-                  studentId={studentId}
+                  projectId={msg.rich.project.id}
+                  studentId={studentId || STUDENT_ID}
+                  onSeal={() => {
+                    // Project sealed — refresh student state if needed
+                  }}
                 />
-              )} */}
+              )}
               {msg.rich?.type === "activityCredit" && (
                 <ActivityCreditCard result={msg.rich.result} />
               )}
