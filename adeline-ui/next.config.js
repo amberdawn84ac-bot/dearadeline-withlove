@@ -5,9 +5,7 @@ const nextConfig = {
   output: "standalone",
   // Tell Next.js to trace files from the monorepo root so pnpm-hoisted
   // packages (like `next` itself) are included in the standalone bundle.
-  experimental: {
-    outputFileTracingRoot: path.join(__dirname, "../"),
-  },
+  outputFileTracingRoot: path.join(__dirname, "../"),
 
   /**
    * All adeline-brain calls go through /brain/* on the same origin.
