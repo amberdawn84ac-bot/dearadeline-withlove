@@ -55,13 +55,19 @@ _DISCIPLESHIP_TRACKS = {
 
 # ── Claude synthesis ─────────────────────────────────────────────────────────
 
-# Grade band → readable description
+# Grade band → readable description and age mapping
 _GRADE_DESC = {
     "K": "kindergarten (age 5-6)", "1": "1st grade (age 6-7)", "2": "2nd grade (age 7-8)",
     "3": "3rd grade (age 8-9)", "4": "4th grade (age 9-10)", "5": "5th grade (age 10-11)",
     "6": "6th grade (age 11-12)", "7": "7th grade (age 12-13)", "8": "8th grade (age 13-14)",
     "9": "9th grade (age 14-15)", "10": "10th grade (age 15-16)",
     "11": "11th grade (age 16-17)", "12": "12th grade (age 17-18)",
+}
+
+# Grade → minimum age mapping (lower bound for content filtering)
+_GRADE_TO_MIN_AGE = {
+    "K": 5, "1": 6, "2": 7, "3": 8, "4": 9, "5": 10, "6": 11,
+    "7": 12, "8": 13, "9": 14, "10": 15, "11": 16, "12": 17,
 }
 
 # Per-track character voice for synthesis
@@ -305,10 +311,15 @@ async def _researcher_fallback(
 ) -> dict | None:
     """Call SearchWitnesses and return a PRIMARY_SOURCE block dict, or None."""
     request = state["request"]
+
+    # Get student age from grade level for content filtering
+    student_age = _GRADE_TO_MIN_AGE.get(request.grade_level)
+
     witness_list = await search_witnesses(
         query=request.topic,
         track=track_value,
         top_k=1,
+        student_age=student_age,
     )
     if witness_list:
         state["researcher_activated"] = True
