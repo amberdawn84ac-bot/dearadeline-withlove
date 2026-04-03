@@ -35,6 +35,7 @@ from app.schemas.api_models import (
     Evidence, EvidenceVerdict, WitnessCitation, TRUTH_THRESHOLD, SourceType,
 )
 from app.connections.pgvector_client import hippocampus
+from app.protocols.content_filter import should_return_document
 from app.utils.rate_limiter import TokenBucket
 
 logger = logging.getLogger(__name__)
@@ -153,6 +154,7 @@ async def search_witnesses(
     query: str,
     track: str,
     top_k: int = 5,
+    student_age: Optional[int] = None,
 ) -> list[dict]:
     """
     Search for evidence to answer a student question.
@@ -160,11 +162,18 @@ async def search_witnesses(
     Flow:
     1. Embed query
     2. Search Hippocampus (all source types at >= 0.82)
-    3. If found: Return results
+    3. If found: Filter by age appropriateness and return results
     4. If empty: Deep web search across 6 declassified archives
     5. Embed + persist found docs to Hippocampus
-    6. Return newly acquired docs
+    6. Filter and return newly acquired docs
     7. If still empty: Return empty (triggers RESEARCH_MISSION)
+
+    Args:
+        query: Search query string
+        track: Curriculum track (e.g., 'TRUTH_HISTORY', 'JUSTICE_CHANGEMAKING')
+        top_k: Number of results to return (default: 5)
+        student_age: Student's age in years. If provided, filters by content appropriateness.
+                    If None, no age filtering is applied.
 
     Returns list of Evidence dicts with verdict, source_type, etc.
     """
@@ -208,8 +217,15 @@ async def search_witnesses(
                 }
                 evidence_list.append(evidence)
 
-            logger.info(f"[Researcher] Found {len(evidence_list)} verified in Hippocampus")
-            return evidence_list
+            # Filter by student age
+            filtered_evidence = [
+                e for e in evidence_list
+                if should_return_document(e, student_age=student_age)
+            ]
+
+            logger.debug(f"[Researcher] Filtered {len(evidence_list)} results to {len(filtered_evidence)} for age {student_age}")
+            logger.info(f"[Researcher] Found {len(filtered_evidence)} verified in Hippocampus after age filtering")
+            return filtered_evidence
 
         # Step 4: Hippocampus empty → deep web search
         logger.info(f"[Researcher] Hippocampus empty. Triggering deep web search.")
@@ -265,8 +281,15 @@ async def search_witnesses(
                 continue
 
         if acquired_evidence:
-            logger.info(f"[Researcher] Acquired {len(acquired_evidence)} documents from deep web search")
-            return acquired_evidence
+            # Filter by student age
+            filtered_acquired = [
+                e for e in acquired_evidence
+                if should_return_document(e, student_age=student_age)
+            ]
+
+            logger.debug(f"[Researcher] Filtered {len(acquired_evidence)} acquired results to {len(filtered_acquired)} for age {student_age}")
+            logger.info(f"[Researcher] Acquired {len(filtered_acquired)} documents from deep web search after age filtering")
+            return filtered_acquired
 
         # Step 7: Both empty → return empty
         logger.info(f"[Researcher] No results from any source. Student gets RESEARCH_MISSION.")
