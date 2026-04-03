@@ -72,7 +72,37 @@ TRACKS_METADATA = {
     "DISCIPLESHIP":         {"theme": "Faith & Character",         "color": "#4F46E5"},
     "HEALTH_NATUROPATHY":   {"theme": "Health & Natural Medicine", "color": "#047857"},
     "ENGLISH_LITERATURE":   {"theme": "Language & Literature",     "color": "#7C3AED"},
+    "APPLIED_MATHEMATICS":  {"theme": "Math & Real-World Application",    "color": "#1E3A5F"},
+    "CREATIVE_ECONOMY":     {"theme": "Making, Craft & Entrepreneurship", "color": "#7B2D8B"},
 }
+
+# Maps source_track → list of (target_track, influence_weight).
+# Used by get_cross_track_bias() to inflate initial BKT pL when a student
+# has high mastery in a related track.
+CROSS_TRACK_INFLUENCE_MAP: dict[str, list[tuple[str, float]]] = {
+    "APPLIED_MATHEMATICS":  [("GOVERNMENT_ECONOMICS", 0.3), ("HOMESTEADING", 0.25), ("CREATIVE_ECONOMY", 0.3)],
+    "CREATION_SCIENCE":     [("HEALTH_NATUROPATHY", 0.35), ("HOMESTEADING", 0.3)],
+    "DISCIPLESHIP":         [("ENGLISH_LITERATURE", 0.25), ("TRUTH_HISTORY", 0.2)],
+    "TRUTH_HISTORY":        [("JUSTICE_CHANGEMAKING", 0.3), ("ENGLISH_LITERATURE", 0.25)],
+    "GOVERNMENT_ECONOMICS": [("JUSTICE_CHANGEMAKING", 0.3), ("APPLIED_MATHEMATICS", 0.25)],
+    "HOMESTEADING":         [("CREATION_SCIENCE", 0.3), ("APPLIED_MATHEMATICS", 0.2)],
+    "CREATIVE_ECONOMY":     [("APPLIED_MATHEMATICS", 0.2), ("HOMESTEADING", 0.15)],
+    "ENGLISH_LITERATURE":   [("TRUTH_HISTORY", 0.2), ("DISCIPLESHIP", 0.2)],
+}
+
+_TRACK_DISPLAY_LABELS: dict[str, str] = {
+    "APPLIED_MATHEMATICS":  "Applied Mathematics",
+    "CREATION_SCIENCE":     "Creation Science",
+    "CREATIVE_ECONOMY":     "Creative Economy",
+    "DISCIPLESHIP":         "Discipleship",
+    "ENGLISH_LITERATURE":   "English Literature",
+    "GOVERNMENT_ECONOMICS": "Government & Economics",
+    "HEALTH_NATUROPATHY":   "Health & Naturopathy",
+    "HOMESTEADING":         "Homesteading",
+    "JUSTICE_CHANGEMAKING": "Justice & Changemaking",
+    "TRUTH_HISTORY":        "Truth & History",
+}
+
 
 async def seed_tracks() -> None:
     for name, meta in TRACKS_METADATA.items():
@@ -282,3 +312,76 @@ async def get_cross_track_concepts(track: str, topic_keywords: list[str], limit:
         """,
         {"track": track, "pattern": f"(?i).*({keyword_pattern}).*", "limit": limit},
     )
+
+
+async def get_cross_track_bias(
+    student_id: str,
+    target_track: str,
+) -> tuple[float, str | None]:
+    """
+    Compute a cross-track mastery bias for a student entering a new track.
+
+    Queries Neo4j for mastered concepts in all source tracks that influence
+    `target_track` (via CROSS_TRACK_INFLUENCE_MAP) and returns a weighted bias.
+
+    Returns:
+        (bias_value, acknowledgment_line | None)
+        acknowledgment_line is only set when bias > 0.15.
+    """
+    influencers: list[tuple[str, float]] = [
+        (source, weight)
+        for source, targets in CROSS_TRACK_INFLUENCE_MAP.items()
+        for t_track, weight in targets
+        if t_track == target_track
+    ]
+    if not influencers:
+        return 0.0, None
+
+    bias = 0.0
+    strongest_source: str | None = None
+    strongest_contribution = 0.0
+
+    for source_track, influence_weight in influencers:
+        try:
+            rows = await neo4j_client.run(
+                """
+                MATCH (st:Student {id: $student_id})-[m:MASTERED]->(c:Concept)
+                      -[:BELONGS_TO]->(t:Track {name: $track})
+                WHERE m.score >= 0.7
+                RETURN count(c) AS mastered_count,
+                       coalesce(avg(m.score), 0.0) AS avg_score
+                """,
+                {"student_id": student_id, "track": source_track},
+            )
+        except Exception as e:
+            logger.warning(
+                f"[KnowledgeGraph] cross_track_bias query failed for {source_track}: {e}"
+            )
+            continue
+
+        if rows:
+            row = rows[0]
+            source_mastery = (
+                min(1.0, row.get("mastered_count", 0) / 8.0)
+                * float(row.get("avg_score", 0.0))
+            )
+            contribution = source_mastery * influence_weight
+            bias += contribution
+            if contribution > strongest_contribution:
+                strongest_contribution = contribution
+                strongest_source = source_track
+
+    acknowledgment: str | None = None
+    if bias > 0.15 and strongest_source:
+        s_label = _TRACK_DISPLAY_LABELS.get(
+            strongest_source, strongest_source.replace("_", " ").title()
+        )
+        t_label = _TRACK_DISPLAY_LABELS.get(
+            target_track, target_track.replace("_", " ").title()
+        )
+        acknowledgment = (
+            f"Since you've built real skill in {s_label}, I think {t_label} is going to feel "
+            f"familiar — some of what you already know maps directly here."
+        )
+
+    return bias, acknowledgment
