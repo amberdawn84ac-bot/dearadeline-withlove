@@ -6,12 +6,12 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
 // Price IDs — create these in Stripe Dashboard, then set env vars
 export const STRIPE_PRICES = {
-  STUDENT_MONTHLY: process.env.STRIPE_PRICE_STUDENT_MONTHLY || '',
-  STUDENT_YEARLY:  process.env.STRIPE_PRICE_STUDENT_YEARLY  || '',
-  FAMILY_MONTHLY:  process.env.STRIPE_PRICE_FAMILY_MONTHLY  || '',
-  FAMILY_YEARLY:   process.env.STRIPE_PRICE_FAMILY_YEARLY   || '',
-  COOP_MONTHLY:    process.env.STRIPE_PRICE_COOP_MONTHLY    || '',
-  COOP_YEARLY:     process.env.STRIPE_PRICE_COOP_YEARLY     || '',
+  STUDENT_MONTHLY: process.env.NEXT_PUBLIC_STRIPE_PRICE_STUDENT_MONTHLY || '',
+  STUDENT_YEARLY:  process.env.NEXT_PUBLIC_STRIPE_PRICE_STUDENT_YEARLY  || '',
+  FAMILY_MONTHLY:  process.env.NEXT_PUBLIC_STRIPE_PRICE_FAMILY_MONTHLY  || '',
+  FAMILY_YEARLY:   process.env.NEXT_PUBLIC_STRIPE_PRICE_FAMILY_YEARLY   || '',
+  COOP_MONTHLY:    process.env.NEXT_PUBLIC_STRIPE_PRICE_COOP_MONTHLY    || '',
+  COOP_YEARLY:     process.env.NEXT_PUBLIC_STRIPE_PRICE_COOP_YEARLY     || '',
 } as const
 
 export type TierName = 'FREE' | 'STUDENT' | 'FAMILY' | 'COOP'
