@@ -7,7 +7,7 @@ ALTER TABLE "User" ADD COLUMN "scienceLevel" INTEGER;
 ALTER TABLE "User" ADD COLUMN "historyLevel" INTEGER;
 
 -- Add learning style and pacing preferences
-ALTER TABLE "User" ADD COLUMN "interests" TEXT[];
+ALTER TABLE "User" ADD COLUMN "interests" TEXT[] DEFAULT '{}';
 ALTER TABLE "User" ADD COLUMN "learningStyle" TEXT;
 ALTER TABLE "User" ADD COLUMN "pacingMultiplier" DOUBLE PRECISION;
 
