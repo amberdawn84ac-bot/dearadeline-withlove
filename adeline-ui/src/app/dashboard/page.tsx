@@ -26,8 +26,8 @@ export default function DashboardPage() {
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
 
-  const handleLessonRequest = useCallback((topic: string) => {
-    console.log('[Dashboard] handleLessonRequest →', topic);
+  const handleLessonGenerated = useCallback((lesson: any) => {
+    console.log('[Dashboard] Lesson generated:', lesson.title);
     setActiveLessonId('active');
   }, []);
 
@@ -113,7 +113,7 @@ export default function DashboardPage() {
 
       {/* ── Right column: Adeline chat panel ── */}
       <div className="w-[380px] shrink-0 hidden md:flex flex-col border-l-2 border-[#E7DAC3]">
-        <AdelineChatPanel studentId={STUDENT_ID} onLessonRequest={handleLessonRequest} />
+        <AdelineChatPanel studentId={STUDENT_ID} onLessonGenerated={handleLessonGenerated} />
       </div>
     </div>
   );
