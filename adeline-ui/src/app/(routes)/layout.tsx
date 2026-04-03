@@ -5,9 +5,5 @@ export default function RoutesLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <AppSidebar>
-      {children}
-    </AppSidebar>
-  );
+  return <AppSidebar>{children}</AppSidebar>;
 }
