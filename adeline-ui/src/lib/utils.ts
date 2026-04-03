@@ -1,16 +1,16 @@
-import { TRUTH_THRESHOLD } from "@adeline/core";
-
 /**
  * Three-tier truth status for the Field Note UI.
  *
- *  VERIFIED      — score >= 0.85  → VerifiedSeal renders, content is shown
+ *  VERIFIED      — score >= 0.82  → VerifiedSeal renders, content is shown
  *  INVESTIGATING — score >= 0.65  → Caution state, content renders with warning
  *  ARCHIVE_SILENT — score <  0.65  → ArchiveSilent component replaces content
  *
- * The hard gate (TRUTH_THRESHOLD = 0.85) from adeline-core is the boundary
+ * The hard gate (TRUTH_THRESHOLD = 0.82) from adeline-core is the boundary
  * between VERIFIED and INVESTIGATING. ARCHIVE_SILENT is a deeper silence —
  * not just uncertain, but genuinely unwitnessed.
  */
+
+const TRUTH_THRESHOLD = 0.82;
 
 export type TruthStatus = "VERIFIED" | "INVESTIGATING" | "ARCHIVE_SILENT";
 
