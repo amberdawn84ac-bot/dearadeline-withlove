@@ -9,6 +9,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // ── Enums ─────────────────────────────────────────────────────────────────────
@@ -111,12 +112,22 @@ enum DifficultyLevel {
 // ── Models ────────────────────────────────────────────────────────────────────
 
 model User {
-  id          String   @id @default(uuid())
-  name        String
-  email       String   @unique
-  role        UserRole
-  isHomestead Boolean  @default(false)
-  gradeLevel  String?  // Required when role = STUDENT (enforced in app layer)
+  id                   String   @id @default(uuid())
+  name                 String
+  email                String   @unique
+  role                 UserRole
+  isHomestead          Boolean  @default(false)
+  gradeLevel           String?  // Required when role = STUDENT (enforced in app layer)
+  mathLevel            Int?     // Subject-specific mastery override (0-100)
+  elaLevel             Int?     // Subject-specific mastery override (0-100)
+  scienceLevel         Int?     // Subject-specific mastery override (0-100)
+  historyLevel         Int?     // Subject-specific mastery override (0-100)
+  interests            String[] // e.g., ["farm", "robotics", "art"]
+  learningStyle        String?  // e.g., "visual", "kinesthetic", "auditory"
+  pacingMultiplier     Float?   // Lesson pacing adjustment (0.5 = slower, 2.0 = faster)
+  state                String?  // Student's state for context/standards (e.g., "Oklahoma")
+  targetGraduationYear Int?     // Expected graduation year
+  onboardingComplete   Boolean  @default(false)
 
   lessons     StudentLesson[]
   createdAt   DateTime @default(now())
@@ -124,6 +135,7 @@ model User {
 
   @@index([role])
   @@index([email])
+  @@index([onboardingComplete])
 }
 
 model Lesson {
