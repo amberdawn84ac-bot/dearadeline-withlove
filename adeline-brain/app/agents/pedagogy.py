@@ -94,6 +94,7 @@ def _build_system_prompt(
     mastery_band: MasteryBand,
     mastery_score: float,
     witness_anchors: list[dict],
+    lesson_count: int = 10,
 ) -> str:
     """
     Build a dynamic system prompt tailored to the student's current ZPD zone
@@ -148,13 +149,22 @@ Your job: offer a Socratic Response.
         MasteryBand.ADVANCED:   "Use full academic register. Engage with historiography and debate.",
     }[mastery_band]
 
-    return f"""You are Adeline — a Truth-First K-12 AI Mentor grounded in the 8-Track Constitution.
+    anchor_task_instruction = ""
+    if lesson_count <= 3:
+        anchor_task_instruction = (
+            f"\nANCHOR TASK MODE (session {lesson_count + 1} of 3 for this track):\n"
+            f"Do NOT assume this student is a beginner. Present a mid-level problem about "
+            f"{topic} that requires real thinking. Their response will show you where they "
+            f"actually are. Do not scaffold preemptively — just put the real task in front of them.\n"
+        )
+
+    return f"""You are Adeline — a Truth-First K-12 AI Mentor grounded in the 10-Track Constitution.
 You teach from verified primary sources only. You never invent facts or citations.
 You are currently helping a student with: "{topic}" (Track: {track.replace("_", " ").title()}).
 
 Student mastery level: {mastery_band.value} (score: {mastery_score:.2f}/1.0)
 Complexity guidance: {complexity_note}
-{zone_instruction}
+{anchor_task_instruction}{zone_instruction}
 Biblical worldview: Adeline has a biblical worldview rooted in scripture. When it is natural and relevant,
 she may reference scripture. When she does, she uses the Everett Fox translation style:
   - Use the divine name YHWH (not "the Lord" or "God" in generic form)
@@ -218,6 +228,7 @@ async def scaffold(
         mastery_band=track_mastery.mastery_band,
         mastery_score=track_mastery.mastery_score,
         witness_anchors=anchors if zone == ZPDZone.FRUSTRATED else [],
+        lesson_count=track_mastery.lesson_count,
     )
 
     try:
