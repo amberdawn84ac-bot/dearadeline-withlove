@@ -14,6 +14,9 @@ from app.schemas.api_models import LessonRequest, LessonResponse, TRUTH_THRESHOL
 from app.api.middleware import require_role
 from app.agents.orchestrator import run_orchestrator
 from app.connections.pgvector_client import hippocampus
+from app.connections.knowledge_graph import get_cross_track_bias
+from app.algorithms.zpd_engine import apply_cross_track_bias, AdaptiveBKTParams
+from app.models.student import load_student_state
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lesson", tags=["lessons"])
@@ -105,7 +108,36 @@ async def generate_lesson(request: LessonRequest):
     )
     try:
         query_embedding = await _embed(request.topic)
-        lesson = await run_orchestrator(request, query_embedding)
+
+        # Load track interaction count for stealth assessment calibration
+        student_state     = await load_student_state(request.student_id)
+        track_mastery     = student_state.get(request.track.value)
+        interaction_count = track_mastery.lesson_count
+
+        # Cross-track mastery bias — only computed on first entry to a track
+        cross_track_acknowledgment: str | None = None
+        if interaction_count == 0:
+            try:
+                bias_value, cross_track_acknowledgment = await get_cross_track_bias(
+                    student_id=request.student_id,
+                    target_track=request.track.value,
+                )
+                if bias_value > 0.0:
+                    biased = apply_cross_track_bias(AdaptiveBKTParams(), bias_value)
+                    logger.info(
+                        f"[Lessons] Cross-track bias {request.track.value}: "
+                        f"pL 0.1 → {biased.pL:.3f} (bias={bias_value:.3f})"
+                    )
+            except Exception as e:
+                logger.warning(f"[Lessons] Cross-track bias lookup failed (non-fatal): {e}")
+                cross_track_acknowledgment = None
+
+        lesson = await run_orchestrator(
+            request,
+            query_embedding,
+            interaction_count=interaction_count,
+            cross_track_acknowledgment=cross_track_acknowledgment,
+        )
         # Persist learning records fire-and-forget (don't block lesson response)
         asyncio.create_task(_persist_learning_records(lesson))
         return lesson
