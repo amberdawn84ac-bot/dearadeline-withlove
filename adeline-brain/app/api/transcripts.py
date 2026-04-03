@@ -222,7 +222,7 @@ def _build_pdf(
         ),
     ))
     story.append(Paragraph(
-        "This transcript is verified via the Adeline 0.85 Truth-Gate Protocol. "
+        "This transcript is verified via the Adeline Witness Protocol (cosine similarity ≥ 0.82). "
         "All credits represent primary-source mastery.",
         italic_style,
     ))
@@ -233,7 +233,7 @@ def _build_pdf(
         story.append(Paragraph("EVIDENCE APPENDIX — PRIMARY SOURCES", section_style))
         story.append(Paragraph(
             "The following primary sources were verified through the Witness Protocol "
-            "(cosine similarity ≥ 0.85 against the archived corpus). These documents "
+            "(cosine similarity ≥ 0.82 against the archived corpus). These documents "
             "constitute the evidentiary basis of this transcript.",
             body_style,
         ))

@@ -28,6 +28,7 @@ from app.api.subscriptions import router as subscriptions_router
 from app.api.credits import router as credits_router
 from app.api.bookshelf import router as bookshelf_router
 from app.connections.journal_store import journal_store
+from app.jobs.seed_scheduler import startup_seed_scheduler, shutdown_seed_scheduler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -39,8 +40,10 @@ async def lifespan(app: FastAPI):
     await neo4j_client.connect()
     await hippocampus.connect()
     await journal_store.connect()
+    await startup_seed_scheduler()
     yield
     logger.info("[adeline-brain] Shutting down...")
+    await shutdown_seed_scheduler()
     await neo4j_client.close()
 
 

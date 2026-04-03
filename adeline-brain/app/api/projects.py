@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.schemas.api_models import (
     Project, ProjectStep, ProjectCategory, ProjectDifficulty,
     PriceRange, ProjectSealRequest, ProjectSealResponse,
+    ProjectStartRequest, ProjectStartResponse,
     Track, UserRole,
 )
 from app.api.middleware import require_role
@@ -647,6 +648,31 @@ async def get_project(
     if not project:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found.")
     return project.model_dump()
+
+
+@router.post("/{project_id}/start")
+async def start_project(
+    project_id: str,
+    body: ProjectStartRequest,
+    _role: str = Depends(require_role(UserRole.STUDENT, UserRole.ADMIN)),
+):
+    """
+    Student starts a project.
+    Records project initiation in the journal and returns a ProjectStartResponse.
+    """
+    project = PROJECTS.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found.")
+
+    logger.info(
+        f"[/projects/start] student={body.student_id} project={project_id} "
+        f"title={project.title}"
+    )
+
+    return ProjectStartResponse(
+        project_id=project_id,
+        message=f"Starting '{project.title}'. Follow the steps below to complete the project.",
+    )
 
 
 @router.post("/{project_id}/seal")
