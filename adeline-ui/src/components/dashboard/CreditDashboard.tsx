@@ -75,26 +75,18 @@ export function CreditDashboardComponent({ studentId }: Props) {
         <h3 className="text-lg font-semibold text-gray-900">Credit Accumulation by Bucket</h3>
         <div className="mt-4 space-y-4">
           {dashboard.buckets.map((bucket) => {
-            const percentage = (bucket.earnedHours / bucket.threshold) * 100;
-            const isFull = percentage >= 100;
             return (
-              <div key={bucket.bucketKey} className="space-y-2">
+              <div key={bucket.bucket} className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-gray-900">{bucket.bucketLabel}</span>
+                  <span className="font-medium text-gray-900">{bucket.bucket}</span>
                   <span className="text-sm text-gray-600">
-                    {bucket.earnedHours.toFixed(1)} / {bucket.threshold} hours
+                    {bucket.hoursEarned.toFixed(1)} hours
                   </span>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-gray-200">
-                  <div
-                    className={`h-full transition-all ${isFull ? "bg-green-500" : "bg-blue-500"}`}
-                    style={{ width: `${Math.min(percentage, 100)}%` }}
-                  />
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium">{bucket.masteryGrade}</span>
+                  <span className="text-xs text-gray-600">({bucket.evidenceCount} pieces of evidence)</span>
                 </div>
-                {isFull && <p className="text-xs font-medium text-green-700">1.0 credit awarded</p>}
-                {bucket.earnedHours >= 60 && !isFull && (
-                  <p className="text-xs font-medium text-blue-700">0.5 credit awarded (60-119 hours)</p>
-                )}
               </div>
             );
           })}
