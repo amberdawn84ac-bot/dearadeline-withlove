@@ -8,14 +8,13 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 export const STRIPE_PRICES = {
   STUDENT_MONTHLY: process.env.STRIPE_PRICE_STUDENT_MONTHLY || '',
   STUDENT_YEARLY:  process.env.STRIPE_PRICE_STUDENT_YEARLY  || '',
-  PARENT_MONTHLY:  process.env.STRIPE_PRICE_PARENT_MONTHLY  || '',
-  PARENT_YEARLY:   process.env.STRIPE_PRICE_PARENT_YEARLY   || '',
-  TEACHER_MONTHLY: process.env.STRIPE_PRICE_TEACHER_MONTHLY || '',
-  TEACHER_YEARLY:  process.env.STRIPE_PRICE_TEACHER_YEARLY  || '',
-  EXTRA_STUDENT:   process.env.STRIPE_PRICE_EXTRA_STUDENT   || '',
+  FAMILY_MONTHLY:  process.env.STRIPE_PRICE_FAMILY_MONTHLY  || '',
+  FAMILY_YEARLY:   process.env.STRIPE_PRICE_FAMILY_YEARLY   || '',
+  COOP_MONTHLY:    process.env.STRIPE_PRICE_COOP_MONTHLY    || '',
+  COOP_YEARLY:     process.env.STRIPE_PRICE_COOP_YEARLY     || '',
 } as const
 
-export type TierName = 'FREE' | 'STUDENT' | 'PARENT' | 'TEACHER'
+export type TierName = 'FREE' | 'STUDENT' | 'FAMILY' | 'COOP'
 
 export const TIER_LIMITS: Record<TierName, {
   students:          number
@@ -44,7 +43,7 @@ export const TIER_LIMITS: Record<TierName, {
     hasJournal:        true,
     hasProjects:       true,
   },
-  PARENT: {
+  FAMILY: {
     students:          5,
     canCreateClubs:    true,
     hasParentDashboard: true,
@@ -53,7 +52,7 @@ export const TIER_LIMITS: Record<TierName, {
     hasJournal:        true,
     hasProjects:       true,
   },
-  TEACHER: {
+  COOP: {
     students:          40,
     canCreateClubs:    true,
     hasParentDashboard: true,

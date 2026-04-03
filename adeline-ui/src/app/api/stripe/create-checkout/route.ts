@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'userId required' }, { status: 400 })
   }
 
-  const validTiers = ['STUDENT', 'PARENT', 'TEACHER']
+  const validTiers = ['STUDENT', 'FAMILY', 'COOP']
   if (!validTiers.includes(tier)) {
     return NextResponse.json({ error: 'Invalid tier' }, { status: 400 })
   }
