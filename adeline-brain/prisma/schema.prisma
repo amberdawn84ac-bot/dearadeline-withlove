@@ -111,16 +111,28 @@ enum DifficultyLevel {
 // ── Models ────────────────────────────────────────────────────────────────────
 
 model User {
-  id          String   @id @default(uuid())
-  name        String
-  email       String   @unique
-  role        UserRole
-  isHomestead Boolean  @default(false)
-  gradeLevel  String?  // Required when role = STUDENT (enforced in app layer)
+  id                    String   @id @default(uuid())
+  name                  String
+  email                 String   @unique
+  role                  UserRole
+  isHomestead           Boolean  @default(false)
+  gradeLevel            String?  // Required when role = STUDENT (enforced in app layer)
 
-  lessons     StudentLesson[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  // Onboarding profile fields
+  mathLevel             String?
+  elaLevel              String?
+  scienceLevel          String?
+  historyLevel          String?
+  interests             String[]  @default([])
+  learningStyle         String?
+  pacingMultiplier      Float?    @default(1.0)
+  state                 String?
+  targetGraduationYear  Int?
+  onboardingComplete    Boolean   @default(false)
+
+  lessons               StudentLesson[]
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@index([role])
   @@index([email])
