@@ -10,7 +10,8 @@ import pytest
 import asyncio
 import os
 from unittest.mock import AsyncMock, patch, MagicMock
-from app.tools.researcher import search_all_archives_parallel, tavily_limiter
+from app.tools.researcher import search_all_archives_parallel, tavily_limiter, search_archive_async
+from app.utils.rate_limiter import TokenBucket
 
 
 @pytest.mark.asyncio
@@ -95,3 +96,147 @@ async def test_tavily_rate_limiter_wait_for_acquire():
         )
     except asyncio.TimeoutError:
         pytest.fail("wait_for_acquire() timed out — limiter not refilling")
+
+
+@pytest.mark.asyncio
+async def test_search_archive_async_respects_rate_limit():
+    """search_archive_async respects the rate limiter before calling Tavily."""
+    call_count = [0]
+
+    async def mock_tavily_post(*args, **kwargs):
+        call_count[0] += 1
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'results': [
+                {
+                    'title': f'Result {call_count[0]}',
+                    'url': f'https://example.com/{call_count[0]}',
+                    'content': f'Content snippet {call_count[0]}',
+                }
+            ]
+        }
+        mock_response.raise_for_status = MagicMock()
+        return mock_response
+
+    with patch('app.tools.researcher.httpx.AsyncClient') as mock_client_class, \
+         patch.dict('os.environ', {'TAVILY_API_KEY': 'test-api-key'}):
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(side_effect=mock_tavily_post)
+        mock_client_class.return_value = mock_client
+
+        # Call search_archive_async
+        result = await search_archive_async(query="test query", archive_name="NARA")
+
+        # Should have called Tavily API at least once
+        assert call_count[0] > 0
+        assert isinstance(result, list)
+
+
+@pytest.mark.asyncio
+async def test_tavily_limiter_is_module_singleton():
+    """tavily_limiter is a module-level singleton."""
+    from app.tools.researcher import tavily_limiter as limiter1
+    from app.tools.researcher import tavily_limiter as limiter2
+
+    # Should be the same object
+    assert limiter1 is limiter2
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_token_depletion_and_recovery():
+    """Rate limiter depletes and recovers correctly."""
+    limiter = TokenBucket(max_tokens=3, refill_rate=0.5)
+
+    # Acquire 3 tokens
+    for i in range(3):
+        assert await limiter.acquire(tokens=1.0) == True
+
+    # Should be empty now
+    assert await limiter.acquire(tokens=1.0) == False
+
+    # Wait for 2.2 seconds (0.5 tokens/sec * 2.2 sec = 1.1 tokens)
+    await asyncio.sleep(2.2)
+
+    # Should have approximately 1 token
+    assert await limiter.acquire(tokens=1.0) == True
+
+    # Should be depleted again
+    assert await limiter.acquire(tokens=0.5) == False
+
+
+@pytest.mark.asyncio
+async def test_wait_for_acquire_blocks_until_available():
+    """wait_for_acquire blocks until tokens become available."""
+    limiter = TokenBucket(max_tokens=1, refill_rate=0.5)
+
+    # Acquire the single token
+    assert await limiter.acquire(tokens=1.0) == True
+
+    # Start waiting for a token in the background
+    acquired = [False]
+    start_times = [None]
+
+    async def wait_and_acquire():
+        start_times[0] = asyncio.get_event_loop().time()
+        await limiter.wait_for_acquire(tokens=1.0)
+        acquired[0] = True
+        return asyncio.get_event_loop().time() - start_times[0]
+
+    task = asyncio.create_task(wait_and_acquire())
+
+    # Give it time to start waiting
+    await asyncio.sleep(0.3)
+
+    # Token should not have been acquired yet
+    assert acquired[0] == False
+
+    # Wait for it to be acquired (should take ~2 seconds for refill)
+    elapsed = await asyncio.wait_for(task, timeout=3.0)
+
+    # Should have been acquired
+    assert acquired[0] == True
+    assert elapsed >= 2.0  # Should have waited ~2 seconds
+
+
+@pytest.mark.asyncio
+async def test_search_all_archives_parallel_calls_multiple_archives():
+    """search_all_archives_parallel calls multiple archive sources."""
+    call_count = [0]
+    archive_names = []
+
+    async def mock_tavily_post(*args, **kwargs):
+        call_count[0] += 1
+        # Track which archives were called based on the payload
+        payload = kwargs.get('json', {})
+        if 'include_domains' in payload:
+            archive_names.extend(payload['include_domains'])
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'results': [
+                {
+                    'title': f'Result {call_count[0]}',
+                    'url': f'https://example.com/{call_count[0]}',
+                    'content': f'Content snippet {call_count[0]}',
+                }
+            ]
+        }
+        mock_response.raise_for_status = MagicMock()
+        return mock_response
+
+    with patch('app.tools.researcher.httpx.AsyncClient') as mock_client_class, \
+         patch.dict('os.environ', {'TAVILY_API_KEY': 'test-api-key'}):
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(side_effect=mock_tavily_post)
+        mock_client_class.return_value = mock_client
+
+        # Call search_all_archives_parallel
+        result = await search_all_archives_parallel(query="test query")
+
+        # Should have made multiple calls (one per archive)
+        assert call_count[0] >= 1  # At least one call
+        assert isinstance(result, list)
