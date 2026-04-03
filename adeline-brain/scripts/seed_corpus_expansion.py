@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 import openai
-from sqlalchemy import text, Column, String, Float, Integer, DateTime, func
+from sqlalchemy import text, Column, String, Float, Integer, DateTime, func, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
@@ -63,6 +63,11 @@ class HippocampusDocument(Base):
     citation_year         = Column(Integer, nullable=True)
     citation_archive_name = Column(String, nullable=False, default="")
     created_at            = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Unique constraint: (source_url, track) pair must be unique
+    __table_args__ = (
+        UniqueConstraint("source_url", "track", name="hippocampus_document_source_url_track_key"),
+    )
 
 
 # ── Primary source corpus ─────────────────────────────────────────────────────

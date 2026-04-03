@@ -265,3 +265,11 @@ class ProjectSealResponse(BaseModel):
     credit_type:  str
     credit_hours: float
     message:      str
+
+class ProjectStartRequest(BaseModel):
+    student_id: str
+    project_id: str
+
+class ProjectStartResponse(BaseModel):
+    project_id: str
+    message:    str

@@ -79,7 +79,16 @@
       "Bash(find /c/Users/Aarons -path */adeline-brain/*declassif* -type f)",
       "Bash(mkdir -p /c/Users/Aarons/.config/superpowers/worktrees/dearadeline-withlove/declassified-documents/adeline-brain/app/scripts)",
       "Bash(touch /c/Users/Aarons/.config/superpowers/worktrees/dearadeline-withlove/declassified-documents/adeline-brain/app/scripts/__init__.py)",
-      "Bash(find /c/Users/Aarons/dearadeline-withlove/adeline-brain -name *declassif* -o -name *seed*)"
+      "Bash(find /c/Users/Aarons/dearadeline-withlove/adeline-brain -name *declassif* -o -name *seed*)",
+      "Bash(env)",
+      "mcp__plugin_supabase_supabase__list_projects",
+      "mcp__plugin_supabase_supabase__get_project",
+      "mcp__plugin_supabase_supabase__execute_sql",
+      "Bash(pkill -f \"python.*seed_declassified\")",
+      "Bash(grep -E \"\\\\.\\(py|ts|tsx\\)$\")",
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Bash(for task:*)",
+      "Bash(pip list:*)"
     ]
   }
 }

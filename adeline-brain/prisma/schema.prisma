@@ -388,3 +388,25 @@ model EvidenceLedgerEntry {
   @@index([studentId, bucket])
   @@index([isApproved])
 }
+
+// ── Hippocampus (pgvector) ────────────────────────────────────────────────────
+
+model HippocampusDocument {
+  id                   String   @id @default(cuid())
+  source_title         String
+  source_url           String
+  source_type          String   @default("PRIMARY_SOURCE")
+  chunk                String   @db.Text
+  embedding            Float[]  // pgvector type
+  citation_author      String   @default("")
+  citation_year        Int?
+  citation_archive_name String  @default("")
+  track                String
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  // Prevent duplicate (source_url, track) combinations
+  @@unique([source_url, track])
+  @@index([track])
+  @@index([source_url])
+}

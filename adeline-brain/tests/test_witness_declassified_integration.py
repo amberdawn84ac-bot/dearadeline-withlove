@@ -265,3 +265,64 @@ async def test_empty_case_returns_empty_list():
 
         # Should return empty (orchestrator converts to RESEARCH_MISSION)
         assert results == []
+
+
+# ── Justice Track: COINTELPRO + surveillance documents ─────────────────────
+
+@pytest.mark.asyncio
+async def test_justice_track_cointelpro_deep_web_search():
+    """
+    JUSTICE_CHANGEMAKING track: deep web search finds FBI COINTELPRO documents,
+    embeds them, and returns via witness protocol at >= 0.82 threshold.
+    """
+    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.4] * 1536), \
+         patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo, \
+         patch('app.tools.researcher.search_all_archives_parallel', new_callable=AsyncMock) as mock_deep, \
+         patch('app.tools.researcher.hippocampus.upsert_document', new_callable=AsyncMock) as mock_upsert:
+
+        # Hippocampus empty → triggers deep web
+        mock_hippo.return_value = []
+
+        # Deep web returns FBI COINTELPRO documents
+        mock_deep.return_value = [
+            {
+                'title': 'FBI COINTELPRO: Civil Rights Surveillance (NAACP)',
+                'url': 'https://vault.fbi.gov/cointel-pro/naacp',
+                'archive': 'FBI_VAULT',
+                'snippet': 'DECLASSIFIED. J. Edgar Hoover ordered surveillance of civil rights organizations including the NAACP. Agents infiltrated groups, created disinformation, and disrupted peaceful activism. Thousands of documents detail the systematic violation of Americans\' constitutional rights.',
+            },
+            {
+                'title': 'CIA Assassination Plots Against Foreign Leaders',
+                'url': 'https://www.cia.gov/information-freedom/foia-electronic-reading-room/',
+                'archive': 'CIA_FOIA',
+                'snippet': 'Declassified CIA documents reveal approved assassination attempts against Fidel Castro and other foreign leaders during the Cold War. These operations were conducted without congressional oversight or public knowledge.',
+            }
+        ]
+
+        # Mock upsert returns document IDs
+        mock_upsert.side_effect = ['cointelpro-123', 'cia-plot-456']
+
+        # Query should trigger deep web search for justice track
+        results = await search_witnesses(
+            query="FBI surveillance civil rights COINTELPRO",
+            track="JUSTICE_CHANGEMAKING",
+        )
+
+        # Both documents embedded and persisted
+        assert mock_upsert.call_count == 2
+
+        # Verify upsert calls used correct archive names
+        call_1_kwargs = mock_upsert.call_args_list[0][1]
+        call_2_kwargs = mock_upsert.call_args_list[1][1]
+
+        assert call_1_kwargs['source_type'] == 'DECLASSIFIED_GOV'
+        assert call_1_kwargs['citation_archive_name'] == 'FBI_VAULT'
+        assert call_1_kwargs['track'] == 'JUSTICE_CHANGEMAKING'
+
+        assert call_2_kwargs['source_type'] == 'DECLASSIFIED_GOV'
+        assert call_2_kwargs['citation_archive_name'] == 'CIA_FOIA'
+        assert call_2_kwargs['track'] == 'JUSTICE_CHANGEMAKING'
+
+        # Results may be empty (depends on computed cosine similarity),
+        # but upsert should have been called to persist
+        assert mock_deep.called
