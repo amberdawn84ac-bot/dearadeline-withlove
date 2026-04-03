@@ -86,10 +86,10 @@ export type CitationFormat = "mla";
  * @param format  - Citation format; currently only "mla" is supported
  */
 export function downloadCitation(
-  lesson: Lesson,
+  lesson: LessonResponse,
   format: CitationFormat = "mla",
 ): void {
-  const text = formatMLA(lesson); // only mla for now; extend when Chicago/APA land
+  const text = formatMLA(lesson as any); // LessonResponse has lesson_id, blocks; compatible structure
   const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
