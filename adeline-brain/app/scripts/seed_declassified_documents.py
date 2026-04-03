@@ -25,6 +25,7 @@ from app.connections.pgvector_client import hippocampus
 from app.tools.declassified_parser import parse_declassified_document
 from app.tools.researcher import search_archive_async
 from app.schemas.api_models import SourceType
+from app.utils.structured_logger import get_structured_logger
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ async def _retry_search(
     max_retries: int,
     search_fn: Callable[..., Any],
     initial_delay: float = 0.5,
+    retry_logger: Optional[logging.Logger] = None,
 ) -> list:
     """
     Retry search function with exponential backoff + jitter.
@@ -61,6 +63,7 @@ async def _retry_search(
         max_retries: Maximum number of retries (not counting initial attempt)
         search_fn: Async search function to call
         initial_delay: Initial delay in seconds (default 0.5)
+        retry_logger: Optional structured logger with context (uses module logger if None)
 
     Returns:
         List of search results
@@ -70,6 +73,7 @@ async def _retry_search(
         TimeoutError if all retries exhausted
         Other exceptions are raised immediately without retry
     """
+    log = retry_logger or logger
     attempt = 0
     while attempt < max_retries:
         try:
@@ -84,8 +88,8 @@ async def _retry_search(
             jitter = delay * 0.1 * (random.random() - 0.5)
             sleep_time = delay + jitter
 
-            logger.warning(
-                f"[{archive}] Search failed (attempt {attempt}/{max_retries}): {e}. "
+            log.warning(
+                f"Search failed (attempt {attempt}/{max_retries}): {e}. "
                 f"Retrying in {sleep_time:.2f}s..."
             )
             await asyncio.sleep(sleep_time)
@@ -111,25 +115,27 @@ TRACK_QUERIES = {
 
 # ── Utility functions ──────────────────────────────────────────────────────
 
-async def fetch_document_text(url: str) -> Optional[str]:
+async def fetch_document_text(url: str, fetch_logger: Optional[logging.Logger] = None) -> Optional[str]:
     """
     Fetch document text from archive URL.
 
     Args:
         url: URL to fetch from
+        fetch_logger: Optional structured logger with context (uses module logger if None)
 
     Returns:
         Document text if successful, None on failure
     """
+    log = fetch_logger or logger
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(url, follow_redirects=True)
             if response.status_code == 200:
                 return response.text
             else:
-                logger.warning(f"[Fetch] HTTP {response.status_code}: {url}")
+                log.warning(f"HTTP {response.status_code}: {url}")
     except Exception as e:
-        logger.warning(f"[Fetch] Failed to fetch {url}: {e}")
+        log.warning(f"Failed to fetch {url}: {e}")
     return None
 
 
@@ -148,8 +154,14 @@ async def seed_nara_documents(track: str, limit: int = 10) -> int:
     Returns:
         Number of chunks ingested
     """
+    seed_logger = get_structured_logger(
+        name="seed_nara",
+        track=track,
+        archive_name="NARA",
+    )
+
     if not os.getenv("TAVILY_API_KEY"):
-        logger.warning("[NARA] TAVILY_API_KEY not set — skipping NARA seed")
+        seed_logger.warning("TAVILY_API_KEY not set — skipping NARA seed")
         return 0
 
     queries = TRACK_QUERIES.get(track, [f"{track} declassified documents"])
@@ -157,7 +169,7 @@ async def seed_nara_documents(track: str, limit: int = 10) -> int:
 
     for query in queries:
         try:
-            logger.info(f"[NARA] Searching: {query}")
+            seed_logger.info(f"Searching: {query}")
 
             async def nara_search(q):
                 return await search_archive_async(q, "NARA")
@@ -167,6 +179,7 @@ async def seed_nara_documents(track: str, limit: int = 10) -> int:
                 archive="NARA",
                 max_retries=3,
                 search_fn=nara_search,
+                retry_logger=seed_logger,
             )
 
             for result in results[:limit]:
@@ -176,7 +189,7 @@ async def seed_nara_documents(track: str, limit: int = 10) -> int:
                     snippet = result.get("snippet", "")
 
                     if not snippet:
-                        logger.warning(f"[NARA] No snippet for {title}")
+                        seed_logger.warning(f"No snippet for {title}")
                         continue
 
                     # Parse snippet into chunks
@@ -213,21 +226,21 @@ async def seed_nara_documents(track: str, limit: int = 10) -> int:
                                 citation_archive_name="NARA",
                             )
                             ingested_count += 1
-                            logger.info(f"[NARA] Ingested: {title[:50]}...")
+                            seed_logger.info(f"Ingested: {title[:50]}...")
 
                         except Exception as e:
-                            logger.warning(f"[NARA] Failed to embed/persist chunk: {e}")
+                            seed_logger.warning(f"Failed to embed/persist chunk: {e}")
                             continue
 
                 except Exception as e:
-                    logger.warning(f"[NARA] Failed to process document {title}: {e}")
+                    seed_logger.warning(f"Failed to process document {title}: {e}")
                     continue
 
         except Exception as e:
-            logger.error(f"[NARA] Error searching: {e}")
+            seed_logger.error(f"Error searching: {e}")
             continue
 
-    logger.info(f"[NARA] Seed complete: {ingested_count} chunks ingested")
+    seed_logger.info(f"Seed complete: {ingested_count} chunks ingested")
     return ingested_count
 
 
@@ -244,8 +257,14 @@ async def seed_cia_foia_documents(track: str, limit: int = 10) -> int:
     Returns:
         Number of chunks ingested
     """
+    seed_logger = get_structured_logger(
+        name="seed_cia_foia",
+        track=track,
+        archive_name="CIA_FOIA",
+    )
+
     if not os.getenv("TAVILY_API_KEY"):
-        logger.warning("[CIA FOIA] TAVILY_API_KEY not set — skipping CIA FOIA seed")
+        seed_logger.warning("TAVILY_API_KEY not set — skipping CIA FOIA seed")
         return 0
 
     queries = TRACK_QUERIES.get(track, [f"{track} CIA documents"])
@@ -253,7 +272,7 @@ async def seed_cia_foia_documents(track: str, limit: int = 10) -> int:
 
     for query in queries:
         try:
-            logger.info(f"[CIA FOIA] Searching: {query}")
+            seed_logger.info(f"Searching: {query}")
 
             async def cia_search(q):
                 return await search_archive_async(q, "CIA_FOIA")
@@ -263,6 +282,7 @@ async def seed_cia_foia_documents(track: str, limit: int = 10) -> int:
                 archive="CIA_FOIA",
                 max_retries=3,
                 search_fn=cia_search,
+                retry_logger=seed_logger,
             )
 
             for result in results[:limit]:
@@ -272,7 +292,7 @@ async def seed_cia_foia_documents(track: str, limit: int = 10) -> int:
                     snippet = result.get("snippet", "")
 
                     if not snippet:
-                        logger.warning(f"[CIA FOIA] No snippet for {title}")
+                        seed_logger.warning(f"No snippet for {title}")
                         continue
 
                     chunks = parse_declassified_document(
@@ -305,21 +325,21 @@ async def seed_cia_foia_documents(track: str, limit: int = 10) -> int:
                                 citation_archive_name="CIA_FOIA",
                             )
                             ingested_count += 1
-                            logger.info(f"[CIA FOIA] Ingested: {title[:50]}...")
+                            seed_logger.info(f"Ingested: {title[:50]}...")
 
                         except Exception as e:
-                            logger.warning(f"[CIA FOIA] Failed to embed/persist chunk: {e}")
+                            seed_logger.warning(f"Failed to embed/persist chunk: {e}")
                             continue
 
                 except Exception as e:
-                    logger.warning(f"[CIA FOIA] Failed to process document {title}: {e}")
+                    seed_logger.warning(f"Failed to process document {title}: {e}")
                     continue
 
         except Exception as e:
-            logger.error(f"[CIA FOIA] Error searching: {e}")
+            seed_logger.error(f"Error searching: {e}")
             continue
 
-    logger.info(f"[CIA FOIA] Seed complete: {ingested_count} chunks ingested")
+    seed_logger.info(f"Seed complete: {ingested_count} chunks ingested")
     return ingested_count
 
 
@@ -337,8 +357,14 @@ async def seed_fbi_vault_documents(track: str, limit: int = 10) -> int:
     Returns:
         Number of chunks ingested
     """
+    seed_logger = get_structured_logger(
+        name="seed_fbi_vault",
+        track=track,
+        archive_name="FBI_VAULT",
+    )
+
     if not os.getenv("TAVILY_API_KEY"):
-        logger.warning("[FBI Vault] TAVILY_API_KEY not set — skipping FBI Vault seed")
+        seed_logger.warning("TAVILY_API_KEY not set — skipping FBI Vault seed")
         return 0
 
     queries = TRACK_QUERIES.get(track, [f"{track} FBI documents"])
@@ -346,7 +372,7 @@ async def seed_fbi_vault_documents(track: str, limit: int = 10) -> int:
 
     for query in queries:
         try:
-            logger.info(f"[FBI Vault] Searching: {query}")
+            seed_logger.info(f"Searching: {query}")
 
             async def fbi_search(q):
                 return await search_archive_async(q, "FBI_VAULT")
@@ -356,6 +382,7 @@ async def seed_fbi_vault_documents(track: str, limit: int = 10) -> int:
                 archive="FBI_VAULT",
                 max_retries=3,
                 search_fn=fbi_search,
+                retry_logger=seed_logger,
             )
 
             for result in results[:limit]:
@@ -365,7 +392,7 @@ async def seed_fbi_vault_documents(track: str, limit: int = 10) -> int:
                     snippet = result.get("snippet", "")
 
                     if not snippet:
-                        logger.warning(f"[FBI Vault] No snippet for {title}")
+                        seed_logger.warning(f"No snippet for {title}")
                         continue
 
                     chunks = parse_declassified_document(
@@ -398,21 +425,21 @@ async def seed_fbi_vault_documents(track: str, limit: int = 10) -> int:
                                 citation_archive_name="FBI_VAULT",
                             )
                             ingested_count += 1
-                            logger.info(f"[FBI Vault] Ingested: {title[:50]}...")
+                            seed_logger.info(f"Ingested: {title[:50]}...")
 
                         except Exception as e:
-                            logger.warning(f"[FBI Vault] Failed to embed/persist chunk: {e}")
+                            seed_logger.warning(f"Failed to embed/persist chunk: {e}")
                             continue
 
                 except Exception as e:
-                    logger.warning(f"[FBI Vault] Failed to process document {title}: {e}")
+                    seed_logger.warning(f"Failed to process document {title}: {e}")
                     continue
 
         except Exception as e:
-            logger.error(f"[FBI Vault] Error searching: {e}")
+            seed_logger.error(f"Error searching: {e}")
             continue
 
-    logger.info(f"[FBI Vault] Seed complete: {ingested_count} chunks ingested")
+    seed_logger.info(f"Seed complete: {ingested_count} chunks ingested")
     return ingested_count
 
 
@@ -427,11 +454,15 @@ async def seed_all_declassified_documents() -> int:
     Returns:
         Total number of chunks ingested across all archives
     """
-    logger.info("[Seed] Starting declassified documents ingestion...")
+    master_logger = get_structured_logger(
+        name="seed_all",
+    )
+
+    master_logger.info("Starting declassified documents ingestion...")
 
     # Connect to Hippocampus
     await hippocampus.connect()
-    logger.info("[Seed] Connected to Hippocampus")
+    master_logger.info("Connected to Hippocampus")
 
     tasks = [
         seed_nara_documents(track="TRUTH_HISTORY", limit=5),
@@ -444,5 +475,5 @@ async def seed_all_declassified_documents() -> int:
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     total_count = sum(r for r in results if isinstance(r, int))
-    logger.info(f"[Seed] Complete: {total_count} total chunks ingested")
+    master_logger.info(f"Complete: {total_count} total chunks ingested")
     return total_count
