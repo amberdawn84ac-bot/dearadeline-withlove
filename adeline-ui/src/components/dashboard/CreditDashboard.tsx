@@ -65,7 +65,7 @@ export function CreditDashboardComponent({ studentId }: Props) {
         {currentProfile && (
           <div className="mt-4 flex items-center gap-2">
             <span className="text-sm font-medium text-gray-700">Compliance Profile:</span>
-            <span className="rounded-full bg-blue-100 px-3 py-1 text-sm text-blue-900">{currentProfile.label}</span>
+            <span className="rounded-full bg-blue-100 px-3 py-1 text-sm text-blue-900">{currentProfile.name}</span>
           </div>
         )}
       </div>
