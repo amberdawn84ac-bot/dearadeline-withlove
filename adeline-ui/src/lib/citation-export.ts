@@ -13,6 +13,29 @@ import type { LessonResponse, LessonBlockResponse, Evidence } from "@/lib/brain-
 // Re-export the brain-client types so consumers can import from one place.
 export type { LessonResponse, LessonBlockResponse, Evidence };
 
+// ── Local wrapper interfaces (as per spec) ────────────────────────────────────
+
+/**
+ * Lesson — local interface for citation functions.
+ * Structurally compatible with LessonResponse from brain-client.
+ * Uses `title` and `blocks` fields accessed by formatMLA.
+ */
+export interface Lesson {
+  id: string;
+  title: string;
+  blocks: LessonBlock[];
+}
+
+/**
+ * LessonBlock — local interface for citation functions.
+ * Structurally compatible with LessonBlockResponse from brain-client.
+ * Evidence array carries the Witness Protocol verdict + source metadata.
+ */
+export interface LessonBlock {
+  id: string;
+  evidence: Evidence[];
+}
+
 // ── MLA formatting ────────────────────────────────────────────────────────────
 
 /**
@@ -38,10 +61,10 @@ export function formatMLAWork(evidence: Evidence): string {
  * Deduplicates identical entries (same author + title + year may appear in
  * multiple blocks).  Returns a plain-text string safe for .txt download.
  */
-export function formatMLA(lesson: LessonResponse): string {
+export function formatMLA(lesson: Lesson): string {
   const citedWorks = lesson.blocks
-    .filter((b: LessonBlockResponse) => b.evidence.length > 0 && b.evidence[0])
-    .map((b: LessonBlockResponse) => formatMLAWork(b.evidence[0]));
+    .filter((b: LessonBlock) => b.evidence.length > 0 && b.evidence[0])
+    .map((b: LessonBlock) => formatMLAWork(b.evidence[0]));
 
   const uniqueCitations = [...new Set(citedWorks)];
 
@@ -63,7 +86,7 @@ export type CitationFormat = "mla";
  * @param format  - Citation format; currently only "mla" is supported
  */
 export function downloadCitation(
-  lesson: LessonResponse,
+  lesson: Lesson,
   format: CitationFormat = "mla",
 ): void {
   const text = formatMLA(lesson); // only mla for now; extend when Chicago/APA land

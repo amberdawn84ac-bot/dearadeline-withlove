@@ -38,6 +38,7 @@ const BADGE_LABELS: Record<SourceType, string> = {
   PERSONAL_COLLECTION: "Personal Collection",
 };
 
+// Named export used internally (EvidenceFooter, etc.)
 export function SourceBadge({
   sourceType,
   sourceTitle,
@@ -71,3 +72,6 @@ export function SourceBadge({
     </div>
   );
 }
+
+// Default export so tests can import SourceBadge from "@/components/SourceBadge"
+export default SourceBadge;
