@@ -2,6 +2,27 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { EPUBReader } from '../EPUBReader';
 
+// Mock EPUB.js at top of file before describe block
+vi.mock('epubjs', () => ({
+  default: vi.fn(() => ({
+    open: vi.fn().mockResolvedValue(undefined),
+    renderTo: vi.fn(() => ({
+      display: vi.fn().mockResolvedValue(undefined),
+      prev: vi.fn().mockResolvedValue(undefined),
+      next: vi.fn().mockResolvedValue(undefined),
+      on: vi.fn(),
+      off: vi.fn(),
+    })),
+    spine: { get: vi.fn(() => ({ next: vi.fn(() => null) })) },
+    locations: {
+      generate: vi.fn().mockResolvedValue(undefined),
+      percentage: vi.fn(() => 0.5),
+    },
+    ready: Promise.resolve(),
+    navigation: { toc: [] },
+  })),
+}));
+
 describe('EPUBReader', () => {
   const mockBook = {
     title: 'Test Book',
@@ -24,7 +45,7 @@ describe('EPUBReader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Mock EPUB.js
+    // Mock fetch
     vi.stubGlobal('fetch', vi.fn());
   });
 
@@ -33,50 +54,11 @@ describe('EPUBReader', () => {
   });
 
   it('renders loading state initially', () => {
-    // Mock the dynamic import to return a mock EPub class
-    vi.doMock('epubjs', () => ({
-      default: vi.fn(() => ({
-        open: vi.fn().mockResolvedValue(undefined),
-        renderTo: vi.fn(() => ({
-          display: vi.fn().mockResolvedValue(undefined),
-          prev: vi.fn().mockResolvedValue(undefined),
-          next: vi.fn().mockResolvedValue(undefined),
-          on: vi.fn(),
-        })),
-        spine: { get: vi.fn(() => ({ next: vi.fn(() => null) })) },
-        locations: {
-          generate: vi.fn().mockResolvedValue(undefined),
-          percentage: vi.fn(() => 0.5),
-        },
-        ready: Promise.resolve(),
-        navigation: { toc: [] },
-      })),
-    }));
-
     render(<EPUBReader {...mockProps} />);
     expect(screen.getByText('Loading book...')).toBeInTheDocument();
   });
 
   it('displays close button and control bar', async () => {
-    vi.doMock('epubjs', () => ({
-      default: vi.fn(() => ({
-        open: vi.fn().mockResolvedValue(undefined),
-        renderTo: vi.fn(() => ({
-          display: vi.fn().mockResolvedValue(undefined),
-          prev: vi.fn().mockResolvedValue(undefined),
-          next: vi.fn().mockResolvedValue(undefined),
-          on: vi.fn(),
-        })),
-        spine: { get: vi.fn(() => ({ next: vi.fn(() => null) })) },
-        locations: {
-          generate: vi.fn().mockResolvedValue(undefined),
-          percentage: vi.fn(() => 0.5),
-        },
-        ready: Promise.resolve(),
-        navigation: { toc: [] },
-      })),
-    }));
-
     render(<EPUBReader {...mockProps} />);
 
     await waitFor(() => {
@@ -85,25 +67,6 @@ describe('EPUBReader', () => {
   });
 
   it('displays book metadata in sidebar', async () => {
-    vi.doMock('epubjs', () => ({
-      default: vi.fn(() => ({
-        open: vi.fn().mockResolvedValue(undefined),
-        renderTo: vi.fn(() => ({
-          display: vi.fn().mockResolvedValue(undefined),
-          prev: vi.fn().mockResolvedValue(undefined),
-          next: vi.fn().mockResolvedValue(undefined),
-          on: vi.fn(),
-        })),
-        spine: { get: vi.fn(() => ({ next: vi.fn(() => null) })) },
-        locations: {
-          generate: vi.fn().mockResolvedValue(undefined),
-          percentage: vi.fn(() => 0.5),
-        },
-        ready: Promise.resolve(),
-        navigation: { toc: [] },
-      })),
-    }));
-
     render(<EPUBReader {...mockProps} />);
 
     await waitFor(() => {
@@ -113,25 +76,6 @@ describe('EPUBReader', () => {
   });
 
   it('shows TOC button and can toggle TOC modal', async () => {
-    vi.doMock('epubjs', () => ({
-      default: vi.fn(() => ({
-        open: vi.fn().mockResolvedValue(undefined),
-        renderTo: vi.fn(() => ({
-          display: vi.fn().mockResolvedValue(undefined),
-          prev: vi.fn().mockResolvedValue(undefined),
-          next: vi.fn().mockResolvedValue(undefined),
-          on: vi.fn(),
-        })),
-        spine: { get: vi.fn(() => ({ next: vi.fn(() => null) })) },
-        locations: {
-          generate: vi.fn().mockResolvedValue(undefined),
-          percentage: vi.fn(() => 0.5),
-        },
-        ready: Promise.resolve(),
-        navigation: { toc: [] },
-      })),
-    }));
-
     render(<EPUBReader {...mockProps} />);
 
     await waitFor(() => {
@@ -141,25 +85,6 @@ describe('EPUBReader', () => {
   });
 
   it('displays lexile level badge when provided', async () => {
-    vi.doMock('epubjs', () => ({
-      default: vi.fn(() => ({
-        open: vi.fn().mockResolvedValue(undefined),
-        renderTo: vi.fn(() => ({
-          display: vi.fn().mockResolvedValue(undefined),
-          prev: vi.fn().mockResolvedValue(undefined),
-          next: vi.fn().mockResolvedValue(undefined),
-          on: vi.fn(),
-        })),
-        spine: { get: vi.fn(() => ({ next: vi.fn(() => null) })) },
-        locations: {
-          generate: vi.fn().mockResolvedValue(undefined),
-          percentage: vi.fn(() => 0.5),
-        },
-        ready: Promise.resolve(),
-        navigation: { toc: [] },
-      })),
-    }));
-
     render(<EPUBReader {...mockProps} />);
 
     await waitFor(() => {
@@ -168,25 +93,6 @@ describe('EPUBReader', () => {
   });
 
   it('calls onBack when close button is clicked', async () => {
-    vi.doMock('epubjs', () => ({
-      default: vi.fn(() => ({
-        open: vi.fn().mockResolvedValue(undefined),
-        renderTo: vi.fn(() => ({
-          display: vi.fn().mockResolvedValue(undefined),
-          prev: vi.fn().mockResolvedValue(undefined),
-          next: vi.fn().mockResolvedValue(undefined),
-          on: vi.fn(),
-        })),
-        spine: { get: vi.fn(() => ({ next: vi.fn(() => null) })) },
-        locations: {
-          generate: vi.fn().mockResolvedValue(undefined),
-          percentage: vi.fn(() => 0.5),
-        },
-        ready: Promise.resolve(),
-        navigation: { toc: [] },
-      })),
-    }));
-
     render(<EPUBReader {...mockProps} />);
 
     await waitFor(() => {
@@ -197,25 +103,6 @@ describe('EPUBReader', () => {
   });
 
   it('displays progress percentage', async () => {
-    vi.doMock('epubjs', () => ({
-      default: vi.fn(() => ({
-        open: vi.fn().mockResolvedValue(undefined),
-        renderTo: vi.fn(() => ({
-          display: vi.fn().mockResolvedValue(undefined),
-          prev: vi.fn().mockResolvedValue(undefined),
-          next: vi.fn().mockResolvedValue(undefined),
-          on: vi.fn(),
-        })),
-        spine: { get: vi.fn(() => ({ next: vi.fn(() => null) })) },
-        locations: {
-          generate: vi.fn().mockResolvedValue(undefined),
-          percentage: vi.fn(() => 0.5),
-        },
-        ready: Promise.resolve(),
-        navigation: { toc: [] },
-      })),
-    }));
-
     render(<EPUBReader {...mockProps} />);
 
     await waitFor(() => {
@@ -225,25 +112,6 @@ describe('EPUBReader', () => {
   });
 
   it('renders reading time component', async () => {
-    vi.doMock('epubjs', () => ({
-      default: vi.fn(() => ({
-        open: vi.fn().mockResolvedValue(undefined),
-        renderTo: vi.fn(() => ({
-          display: vi.fn().mockResolvedValue(undefined),
-          prev: vi.fn().mockResolvedValue(undefined),
-          next: vi.fn().mockResolvedValue(undefined),
-          on: vi.fn(),
-        })),
-        spine: { get: vi.fn(() => ({ next: vi.fn(() => null) })) },
-        locations: {
-          generate: vi.fn().mockResolvedValue(undefined),
-          percentage: vi.fn(() => 0.5),
-        },
-        ready: Promise.resolve(),
-        navigation: { toc: [] },
-      })),
-    }));
-
     render(<EPUBReader {...mockProps} />);
 
     await waitFor(() => {
@@ -252,6 +120,29 @@ describe('EPUBReader', () => {
   });
 
   it('handles error state gracefully', async () => {
+    // Create a custom mock for this test that rejects on open
+    const EPubMock = vi.fn(() => ({
+      open: vi.fn().mockRejectedValue(new Error('404')),
+      renderTo: vi.fn(() => ({
+        display: vi.fn().mockResolvedValue(undefined),
+        prev: vi.fn().mockResolvedValue(undefined),
+        next: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn(),
+        off: vi.fn(),
+      })),
+      spine: { get: vi.fn(() => ({ next: vi.fn(() => null) })) },
+      locations: {
+        generate: vi.fn().mockResolvedValue(undefined),
+        percentage: vi.fn(() => 0.5),
+      },
+      ready: Promise.resolve(),
+      navigation: { toc: [] },
+    }));
+
+    vi.doMock('epubjs', () => ({
+      default: EPubMock,
+    }));
+
     const errorProps = {
       ...mockProps,
       book: {
@@ -264,25 +155,6 @@ describe('EPUBReader', () => {
     (global.fetch as any).mockRejectedValueOnce(
       new Error('Failed to load book')
     );
-
-    vi.doMock('epubjs', () => ({
-      default: vi.fn(() => ({
-        open: vi.fn().mockRejectedValue(new Error('404')),
-        renderTo: vi.fn(() => ({
-          display: vi.fn().mockResolvedValue(undefined),
-          prev: vi.fn().mockResolvedValue(undefined),
-          next: vi.fn().mockResolvedValue(undefined),
-          on: vi.fn(),
-        })),
-        spine: { get: vi.fn(() => ({ next: vi.fn(() => null) })) },
-        locations: {
-          generate: vi.fn().mockResolvedValue(undefined),
-          percentage: vi.fn(() => 0.5),
-        },
-        ready: Promise.resolve(),
-        navigation: { toc: [] },
-      })),
-    }));
 
     render(<EPUBReader {...errorProps} />);
 

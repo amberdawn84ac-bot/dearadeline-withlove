@@ -4,6 +4,11 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, BookOpen, Clock, X } from 'lucide-react';
 import { TRACK_CONFIG } from './BookCard';
 
+// epubjs doesn't provide TypeScript types (@types/epubjs not available)
+// Using `any` for EPUB book and rendition refs is necessary but safe
+// since epubjs has stable API and we validate through runtime behavior
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 interface EPUBReaderProps {
   bookId: string;
   sessionId: string;
@@ -41,7 +46,7 @@ export function EPUBReader({
   const [readingMinutes, setReadingMinutes] = useState(0);
   const [showTOC, setShowTOC] = useState(false);
   const [chapter, setChapter] = useState('');
-  const [bookmarks, setBookmarks] = useState<string[]>([]);
+  const [bookmarks, setBookmarks] = useState<Array<{ cfi: string; chapter: string }>>([]);
 
   const saveProgressRef = useRef<NodeJS.Timeout | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -65,10 +70,20 @@ export function EPUBReader({
       });
 
       if (!response.ok) {
-        console.error('Failed to save progress:', response.statusText);
+        const errorData = await response.json().catch(() => ({}));
+
+        if (response.status === 401) {
+          console.error('Unauthorized: session may have expired');
+        } else if (response.status === 404) {
+          console.error('Session not found');
+        } else if (response.status === 500) {
+          console.error('Server error while saving progress');
+        } else {
+          console.error('Failed to save progress:', response.statusText, errorData);
+        }
       }
     } catch (err) {
-      console.error('Error saving progress:', err);
+      console.error('Network error saving progress:', err);
     }
   }, [location, sessionId, studentId, readingMinutes, isAtEnd]);
 
@@ -125,18 +140,8 @@ export function EPUBReader({
 
         renditionRef.current = rendition;
 
-        // Handle display error
-        rendition.on('error', (err: any) => {
-          console.error('Rendition error:', err);
-          if (err.message && err.message.includes('404')) {
-            setError('Unable to load this book. Please try again later.');
-          } else {
-            setError('An error occurred while loading the book.');
-          }
-        });
-
-        // Handle location change
-        rendition.on('relocated', (location: any) => {
+        // Create event handlers with proper references for cleanup
+        const handleRelocated = (location: any) => {
           setLocation(location.start.cfi);
           setChapter(location.start.href);
 
@@ -150,7 +155,19 @@ export function EPUBReader({
           // Update progress percentage
           const progress = newBook.locations.percentage(location.start.cfi);
           setProgress(Math.round(progress * 100));
-        });
+        };
+
+        const handleError = (err: any) => {
+          console.error('Rendition error:', err);
+          if (err.message && err.message.includes('404')) {
+            setError('Unable to load this book. Please try again later.');
+          } else {
+            setError('An error occurred while loading the book.');
+          }
+        };
+
+        rendition.on('relocated', handleRelocated);
+        rendition.on('error', handleError);
 
         // Display first page
         await rendition.display();
@@ -161,6 +178,12 @@ export function EPUBReader({
         });
 
         setLoading(false);
+
+        // Cleanup event listeners when component unmounts
+        return () => {
+          rendition.off('relocated', handleRelocated);
+          rendition.off('error', handleError);
+        };
       } catch (err: any) {
         console.error('Error initializing EPUB:', err);
         setError(err.message || 'Failed to load book');
@@ -198,12 +221,27 @@ export function EPUBReader({
 
   // Handle bookmark toggle
   const handleBookmark = useCallback(() => {
-    if (location) {
-      setBookmarks((prev) =>
-        prev.includes(location) ? prev.filter((b) => b !== location) : [...prev, location]
-      );
+    if (location && chapter) {
+      setBookmarks((prev) => {
+        const exists = prev.some((b) => b.cfi === location);
+        return exists
+          ? prev.filter((b) => b.cfi !== location)
+          : [...prev, { cfi: location, chapter }];
+      });
     }
-  }, [location]);
+  }, [location, chapter]);
+
+  // Navigate to bookmark
+  const handleNavigateToBookmark = useCallback(
+    async (bookmark: { cfi: string; chapter: string }) => {
+      if (renditionRef.current) {
+        // Navigate using the stored chapter href
+        await renditionRef.current.display(bookmark.chapter);
+        saveProgress();
+      }
+    },
+    [saveProgress]
+  );
 
   // Get track color
   const trackColor = TRACK_CONFIG[book.track as keyof typeof TRACK_CONFIG]?.color || '#2F4731';
@@ -239,6 +277,7 @@ export function EPUBReader({
           <button
             onClick={onBack}
             className="flex items-center gap-2 text-[#2F4731] hover:text-[#BD6809] transition-colors"
+            aria-label="Close book and return to bookshelf"
           >
             <X className="w-5 h-5" />
             Close
@@ -248,30 +287,43 @@ export function EPUBReader({
               onClick={handlePrevious}
               className="p-2 hover:bg-[#E7DAC3] rounded-lg transition-colors"
               disabled={loading}
+              aria-label="Go to previous chapter"
             >
               <ChevronLeft className="w-5 h-5 text-[#2F4731]" />
             </button>
-            <span className="text-sm text-[#2F4731]/60 min-w-12 text-center">{progress}%</span>
+            <span
+              className="text-sm text-[#2F4731]/60 min-w-12 text-center"
+              aria-label={`Reading progress: ${progress} percent`}
+            >
+              {progress}%
+            </span>
             <button
               onClick={handleNext}
               className="p-2 hover:bg-[#E7DAC3] rounded-lg transition-colors"
               disabled={loading}
+              aria-label="Go to next chapter"
             >
               <ChevronRight className="w-5 h-5 text-[#2F4731]" />
             </button>
             <button
               onClick={() => setShowTOC(!showTOC)}
               className="px-3 py-1 text-sm bg-[#E7DAC3] hover:bg-[#BD6809] text-[#2F4731] rounded-lg transition-colors"
+              aria-label={showTOC ? 'Close table of contents' : 'Open table of contents'}
             >
               TOC
             </button>
             <button
               onClick={handleBookmark}
               className={`p-2 rounded-lg transition-colors ${
-                bookmarks.includes(location)
+                bookmarks.some((b) => b.cfi === location)
                   ? 'bg-[#BD6809] text-white'
                   : 'hover:bg-[#E7DAC3] text-[#2F4731]'
               }`}
+              aria-label={
+                bookmarks.some((b) => b.cfi === location)
+                  ? 'Remove bookmark'
+                  : 'Add bookmark'
+              }
             >
               <BookOpen className="w-5 h-5" />
             </button>
@@ -344,13 +396,16 @@ export function EPUBReader({
         {/* Bookmarks */}
         {bookmarks.length > 0 && (
           <div className="space-y-2 pt-4 border-t border-[#E7DAC3]">
-            <p className="text-sm font-semibold text-[#2F4731]">Bookmarks ({bookmarks.length})</p>
+            <p className="text-sm font-semibold text-[#2F4731]">
+              Bookmarks ({bookmarks.length})
+            </p>
             <div className="space-y-1 max-h-32 overflow-y-auto">
               {bookmarks.map((bookmark) => (
                 <button
-                  key={bookmark}
-                  onClick={() => handleTOC(bookmark)}
+                  key={bookmark.cfi}
+                  onClick={() => handleNavigateToBookmark(bookmark)}
                   className="text-xs text-[#BD6809] hover:text-[#2F4731] w-full text-left px-2 py-1 rounded hover:bg-[#E7DAC3] transition-colors"
+                  aria-label={`Jump to bookmark at ${bookmark.chapter}`}
                 >
                   Bookmark
                 </button>
@@ -362,13 +417,24 @@ export function EPUBReader({
 
       {/* ── TOC Modal ── */}
       {showTOC && bookRef.current && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg max-h-96 w-96 overflow-y-auto shadow-lg">
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setShowTOC(false)}
+        >
+          <div
+            className="bg-white rounded-lg max-h-96 w-96 overflow-y-auto shadow-lg"
+            role="dialog"
+            aria-labelledby="toc-title"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="sticky top-0 bg-white border-b border-[#E7DAC3] px-6 py-4 flex items-center justify-between">
-              <h3 className="font-bold text-[#2F4731]">Table of Contents</h3>
+              <h3 id="toc-title" className="font-bold text-[#2F4731]">
+                Table of Contents
+              </h3>
               <button
                 onClick={() => setShowTOC(false)}
                 className="text-[#2F4731]/60 hover:text-[#2F4731]"
+                aria-label="Close table of contents"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -378,7 +444,7 @@ export function EPUBReader({
                 <button
                   key={idx}
                   onClick={() => handleTOC(item.href)}
-                  className="w-full text-left px-6 py-3 hover:bg-[#E7DAC3] transition-colors text-sm text-[#2F4731] font-medium"
+                  className="w-full text-left px-6 py-3 hover:bg-[#E7DAC3] transition-colors text-sm text-[#2F4731] font-medium focus:outline-none focus:ring-2 focus:ring-[#BD6809] focus:ring-inset"
                 >
                   {item.label}
                 </button>
