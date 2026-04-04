@@ -435,7 +435,7 @@ async def patch_onboarding(
             param_index += 1
 
         if request.interests is not None:
-            updates.append(f'"interests" = ${param_index}::TEXT[]')
+            updates.append(f'"interests" = ${param_index}')
             params.append(request.interests)
             param_index += 1
 
