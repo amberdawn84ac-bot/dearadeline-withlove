@@ -129,9 +129,10 @@ model User {
   targetGraduationYear Int?     // Expected graduation year
   onboardingComplete   Boolean  @default(false)
 
-  lessons     StudentLesson[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  lessons         StudentLesson[]
+  readingSessions ReadingSession[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([role])
   @@index([email])
@@ -327,7 +328,8 @@ model Book {
   format        String   @default("epub")
   coverUrl      String?
 
-  studentBooks  StudentBook[]
+  studentBooks    StudentBook[]
+  readingSessions ReadingSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -347,6 +349,30 @@ model StudentBook {
 
   @@id([studentId, bookId])
   @@index([studentId])
+}
+
+model ReadingSession {
+  id                  String   @id @default(uuid())
+  studentId           String
+  bookId              String
+  status              String   // 'reading', 'finished', 'wishlist'
+  startedAt           DateTime @default(now())
+  completedAt         DateTime?
+  pagesRead           Int      @default(0)
+  totalPages          Int?
+  currentLocation     String?  // EPUB CFI for resume point
+  studentReflection   String?  // Optional note/rating from student
+  readingMinutes      Int      @default(0) // Total time spent reading
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  student User  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  book    Book  @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, bookId])
+  @@index([studentId])
+  @@index([bookId])
+  @@index([status])
 }
 
 // ── Student Ledgers (Standards / Credit / Evidence) ───────────────────────────
