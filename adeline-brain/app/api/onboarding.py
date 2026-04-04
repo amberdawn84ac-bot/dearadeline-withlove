@@ -232,7 +232,7 @@ async def post_onboarding(
             SET
                 "name" = $2,
                 "gradeLevel" = $3,
-                "interests" = $4,
+                "interests" = $4::TEXT[],
                 "learningStyle" = $5,
                 "state" = $6,
                 "targetGraduationYear" = $7,
