@@ -44,6 +44,21 @@ adeline-ui (Next.js 14, port 3000)
 | **DiscipleshipAgent** | Health, Government, Discipleship, Literature, Math, Creative Economy | Worldview synthesis; brand voice |
 | **RegistrarAgent** | All tracks | xAPI learning records + CASE transcript credit |
 
+## Student Onboarding & Personalization
+
+Every student starts with a required onboarding flow that Adeline uses to personalize all future lessons:
+
+- **Profile Data**: Name, grade level, interests (16 tags), learning style (EXPEDITION/CLASSIC), pace multiplier
+- **State Alignment**: Curriculum standards mapped to student's state (Oklahoma, Texas, etc.)
+- **Graduation Planning**: Target graduation year for long-term credit tracking
+- **Settings**: Fully editable at any time via `/settings` — changes apply immediately to next lesson
+
+Adeline adapts to:
+- **Grade-appropriate vocabulary & concepts** based on overall grade + subject-specific mastery overrides (Math, ELA, Science, History)
+- **Cross-curricular connections** (EXPEDITION mode) or single-subject focus (CLASSIC mode)
+- **Student interests** — examples and scenarios reference their declared interests
+- **Pacing** — lesson length scales from 1.0x (standard) to 2.0x (sprint acceleration)
+
 ## The Witness Protocol
 
 > "A matter must be established by the testimony of two or three witnesses." — Deuteronomy 19:15
@@ -62,6 +77,14 @@ Experiments over textbooks. Each experiment has:
 - **Film This** — social media kit for documenting discoveries
 - **Credit** — 0.25 Laboratory Science credit per completed experiment
 
+## Daily Bread Widget
+
+Scripture study integrated into every student dashboard:
+
+- **Daily verse** with original language (Hebrew/Greek), meaning, and translation notes
+- **Deep Dive Study** — generates a guided study prompt covering original context, word meanings, translation differences, and historical/cultural hints
+- **Integration** — study prompts seamlessly connect to Adeline chat for deeper exploration
+
 ## Portfolio Philosophy
 
 A portfolio is a record of **accomplishments, not assignments**.
@@ -71,6 +94,19 @@ A portfolio is a record of **accomplishments, not assignments**.
 - "I sold these at the farmers market — here's what I charged"
 
 Not: "I completed 20 assignments."
+
+## Roadmap
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Student Onboarding | ✅ Complete | Required first-login flow, all profile data stored in PostgreSQL |
+| Settings & Profile Edit | ✅ Complete | Live updates sync immediately to database and adapt next lesson |
+| Daily Bread Widget | ✅ Complete | Scripture study with original language context |
+| Reading Coach & Bookshelf | 🔄 In Design | Student library, reading level adaptation, comprehension tracking |
+| Project Catalog & Guide | 🔄 In Progress | Art/DIY + Farm projects with step-by-step runners |
+| Spaced Repetition Widget | 📋 Planned | SM-2 review queue for concept mastery |
+| Knowledge Tree UI | 📋 Planned | Visual mastery graph by track |
+| Parent Dashboard | 📋 Planned | Student progress, billing, family management |
 
 ## Pricing
 
