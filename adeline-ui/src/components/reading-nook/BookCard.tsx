@@ -1,4 +1,5 @@
 import type { BookSummary } from "@/lib/brain-client";
+import { TRACK_THEME, type Track } from "@adeline/core";
 
 interface Props {
   book: BookSummary;
@@ -9,6 +10,17 @@ const SOURCE_BADGES: Record<string, { bg: string; text: string }> = {
   "Standard Ebooks": { bg: "#EFF6FF", text: "#1E40AF" },
   "Gutenberg": { bg: "#FEF3C7", text: "#92400E" },
 };
+
+export const TRACK_CONFIG: Record<string, { color: string; label: string }> = Object.entries(TRACK_THEME).reduce(
+  (acc: Record<string, { color: string; label: string }>, [trackKey, trackValue]) => {
+    acc[trackKey] = {
+      color: trackValue.primary,
+      label: trackValue.label,
+    };
+    return acc;
+  },
+  {},
+);
 
 export function BookCard({ book, onDownload }: Props) {
   const badge = book.sourceLibrary ? SOURCE_BADGES[book.sourceLibrary] : null;
