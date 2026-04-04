@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { StudentStatusBar } from '@/components/StudentStatusBar';
 import { AdelineChatPanel } from '@/components/AdelineChatPanel';
+import { DailyBreadWidget } from '@/components/daily-bread/DailyBreadWidget';
 
 interface LessonSuggestion {
   id: string;
@@ -33,6 +34,12 @@ export default function DashboardPage() {
 
   const handleBackToSuggestions = () => {
     setActiveLessonId(null);
+  };
+
+  const handleDailyBreadStudy = (prompt: string) => {
+    // Pass the study prompt to Adeline chat panel
+    // For now, we'll just log it; actual integration depends on AdelineChatPanel implementation
+    console.log('[Dashboard] Daily Bread study requested:', prompt);
   };
 
   return (
@@ -111,9 +118,17 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* ── Right column: Adeline chat panel ── */}
-      <div className="w-[380px] shrink-0 hidden md:flex flex-col border-l-2 border-[#E7DAC3]">
-        <AdelineChatPanel studentId={STUDENT_ID} onLessonGenerated={handleLessonGenerated} />
+      {/* ── Right column: Daily Bread + Adeline chat panel ── */}
+      <div className="w-[380px] shrink-0 hidden md:flex flex-col border-l-2 border-[#E7DAC3] overflow-y-auto">
+        {/* Daily Bread Widget */}
+        <div className="flex-shrink-0 px-6 pt-6 pb-4">
+          <DailyBreadWidget onStudy={handleDailyBreadStudy} />
+        </div>
+
+        {/* Adeline Chat Panel */}
+        <div className="flex-1 min-h-0">
+          <AdelineChatPanel studentId={STUDENT_ID} onLessonGenerated={handleLessonGenerated} />
+        </div>
       </div>
     </div>
   );

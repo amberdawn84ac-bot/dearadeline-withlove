@@ -1,282 +1,152 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useCallback } from "react";
-import { BookOpen, ArrowRight, Loader2, RefreshCw } from "lucide-react";
+import { useState, useEffect } from 'react';
+import { BookOpen, Loader2, RotateCcw, ArrowRight } from 'lucide-react';
 
-interface DailyBreadData {
+interface DailyBread {
   verse: string;
   reference: string;
   original: string;
   originalMeaning: string;
-  translationNote: string | null;
+  translationNote: string;
   context: string;
 }
 
 interface DailyBreadWidgetProps {
-  onStudy?: (prompt: string) => void;
+  onStudy: (prompt: string) => void;
 }
 
 export function DailyBreadWidget({ onStudy }: DailyBreadWidgetProps) {
-  const [data, setData] = useState<DailyBreadData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [data, setData] = useState<DailyBread | null>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(false);
-    fetch("/brain/daily-bread")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.error) {
-          setError(true);
-        } else {
-          setData(d);
-        }
-        setLoading(false);
-      })
-      .catch(() => {
-        setError(true);
-        setLoading(false);
-      });
-  }, []);
+  const fetchDailyBread = async () => {
+    setStatus('loading');
+    setError(null);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+    try {
+      const response = await fetch('/api/daily-bread');
 
-  const handleStudy = () => {
-    if (!data || !onStudy) return;
-    onStudy(
-      `I want my Daily Bread deep-dive study on ${data.reference} today. ` +
-        `Translate it from the original text, keeping the original meaning. ` +
-        `The key word "${data.original}" means "${data.originalMeaning}".`
-    );
+      if (!response.ok) {
+        throw new Error('Failed to load daily verse');
+      }
+
+      const dailyBread: DailyBread = await response.json();
+
+      // Validate response has required fields
+      if (!dailyBread.verse || !dailyBread.reference) {
+        throw new Error('Invalid verse data');
+      }
+
+      setData(dailyBread);
+      setStatus('ready');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load today\'s verse';
+      setError(message);
+      setStatus('error');
+    }
   };
 
-  if (loading) {
+  useEffect(() => {
+    fetchDailyBread();
+  }, []);
+
+  const handleStudy = () => {
+    if (!data) return;
+
+    const prompt = `I want my Daily Bread deep-dive study on ${data.reference} today. Translate it directly from the original ${data.original || 'language'} text, keeping the original meaning and context. Note any differences with the translation we are used to hearing${
+      data.original ? ` — especially around the word "${data.original}" which means "${data.originalMeaning || 'original meaning'}"` : ''
+    }. Also share the historical and cultural context that makes this verse richer.`;
+
+    onStudy(prompt);
+  };
+
+  // Loading state
+  if (status === 'loading') {
     return (
-      <div
-        style={{
-          background: "#FFFDF5",
-          border: "1px solid #E7DAC3",
-          borderRadius: 16,
-          padding: "16px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 8,
-        }}
-      >
-        <Loader2 size={14} color="#BD6809" className="animate-spin" />
-        <span style={{ fontSize: 11, color: "#4B3424", opacity: 0.55 }}>
-          Loading today&apos;s verse…
-        </span>
+      <div className="bg-[#FFFDF5] rounded-2xl border-2 border-[#E7DAC3] p-6 flex flex-col items-center justify-center min-h-64">
+        <Loader2 className="w-6 h-6 animate-spin text-[#BD6809] mb-3" />
+        <p className="text-[#2F4731]/60 text-sm">Loading today's verse…</p>
       </div>
     );
   }
 
-  if (error || !data) {
+  // Error state
+  if (status === 'error') {
     return (
-      <div
-        style={{
-          background: "#FFFDF5",
-          border: "1px solid #E7DAC3",
-          borderRadius: 16,
-          padding: "16px 16px 14px",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
-          <BookOpen size={14} color="#2F4731" />
-          <span style={{ fontWeight: 800, color: "#2F4731", fontSize: 13 }}>
-            Daily Bread
-          </span>
+      <div className="bg-[#FFFDF5] rounded-2xl border-2 border-[#E7DAC3] p-6">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-[#BD6809]/10 flex items-center justify-center flex-shrink-0">
+            <BookOpen className="w-5 h-5 text-[#BD6809]" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-[#2F4731] text-sm mb-1">Daily Bread</h3>
+            <p className="text-[#2F4731]/60 text-xs">{error}</p>
+          </div>
         </div>
-        <p style={{ fontSize: 11, color: "#4B3424", opacity: 0.6, marginBottom: 10 }}>
-          Could not load today&apos;s verse.
-        </p>
         <button
-          onClick={load}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 5,
-            fontSize: 11,
-            color: "#BD6809",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            fontWeight: 700,
-          }}
+          onClick={fetchDailyBread}
+          className="w-full px-3 py-2 bg-[#BD6809] text-white rounded-lg text-sm font-medium hover:bg-[#A55708] transition-colors flex items-center justify-center gap-2"
         >
-          <RefreshCw size={11} /> Try again
+          <RotateCcw className="w-4 h-4" />
+          Retry
         </button>
       </div>
     );
   }
 
-  return (
-    <div
-      style={{
-        background: "#FFFDF5",
-        border: "1px solid #E7DAC3",
-        borderRadius: 16,
-        overflow: "hidden",
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          padding: "12px 16px 8px",
-          borderBottom: "1px solid #E7DAC3",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 2,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-            <BookOpen size={14} color="#2F4731" />
-            <span
-              style={{
-                fontWeight: 800,
-                color: "#2F4731",
-                fontSize: 13,
-                letterSpacing: "0.04em",
-              }}
-            >
-              Daily Bread
-            </span>
+  // Ready state
+  if (status === 'ready' && data) {
+    return (
+      <div className="bg-[#FFFDF5] rounded-2xl border-2 border-[#E7DAC3] p-6">
+        {/* Header */}
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-[#BD6809]/10 flex items-center justify-center flex-shrink-0">
+            <BookOpen className="w-5 h-5 text-[#BD6809]" />
           </div>
-          <span
-            style={{
-              fontSize: 9,
-              fontWeight: 800,
-              color: "#BD6809",
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-            }}
-          >
-            Restoring Truth
-          </span>
-        </div>
-        <p
-          style={{
-            fontSize: 11,
-            color: "#4B3424",
-            margin: 0,
-            opacity: 0.65,
-            lineHeight: 1.3,
-          }}
-        >
-          Get back to the original context.
-        </p>
-      </div>
-
-      {/* Body */}
-      <div style={{ padding: "12px 16px 14px" }}>
-        {/* Verse card */}
-        <div
-          style={{
-            background: "#FDF6E9",
-            border: "1px solid #E7DAC3",
-            borderRadius: 12,
-            padding: "12px 14px",
-            marginBottom: 10,
-          }}
-        >
-          <p
-            style={{
-              fontStyle: "italic",
-              color: "#2F4731",
-              fontSize: 13,
-              lineHeight: 1.65,
-              margin: "0 0 8px",
-            }}
-          >
-            &ldquo;{data.verse}&rdquo;
-          </p>
-          <p
-            style={{
-              fontWeight: 700,
-              color: "#BD6809",
-              fontSize: 11,
-              margin: 0,
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-            }}
-          >
-            — {data.reference}
-          </p>
+          <div className="flex-1">
+            <h3 className="font-bold text-[#2F4731] text-sm">Daily Bread</h3>
+            <p className="text-[#2F4731]/50 text-xs">Daily scripture study</p>
+          </div>
         </div>
 
-        {/* Original language note */}
-        <div style={{ marginBottom: 12 }}>
-          <p
-            style={{
-              fontSize: 11,
-              color: "#2F4731",
-              margin: "0 0 3px",
-              fontWeight: 700,
-            }}
-          >
-            {data.original}
-          </p>
-          <p
-            style={{
-              fontSize: 11,
-              color: "#4B3424",
-              margin: "0 0 4px",
-              opacity: 0.8,
-              lineHeight: 1.4,
-            }}
-          >
-            <em>{data.originalMeaning}</em>
-          </p>
-          {data.translationNote && (
-            <p
-              style={{
-                fontSize: 11,
-                color: "#4B3424",
-                margin: 0,
-                opacity: 0.65,
-                lineHeight: 1.4,
-              }}
-            >
-              {data.translationNote}
+        {/* Verse */}
+        <p className="text-[#2F4731] text-sm italic mb-2 leading-relaxed">"{data.verse}"</p>
+
+        {/* Reference */}
+        <p className="text-[#BD6809] font-semibold text-xs mb-4">{data.reference}</p>
+
+        {/* Original language section */}
+        {data.original && (
+          <div className="mb-4 p-3 bg-white rounded-lg border border-[#E7DAC3]">
+            <p className="text-xs text-[#2F4731]/60 mb-1">Original Language</p>
+            <p className="text-[#2F4731] font-medium text-sm mb-2">{data.original}</p>
+            <p className="text-xs text-[#2F4731]/70 italic">
+              {data.originalMeaning || 'See how the original language enriches the meaning'}
             </p>
-          )}
-        </div>
-
-        {onStudy && (
-          <button
-            onClick={handleStudy}
-            style={{
-              width: "100%",
-              background: "#BD6809",
-              color: "#FFF",
-              border: "none",
-              borderRadius: 10,
-              padding: "11px 14px",
-              fontWeight: 800,
-              fontSize: 11,
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 7,
-              boxShadow: "0 4px 10px rgba(189,104,9,0.25)",
-            }}
-          >
-            Start Deep Dive Study <ArrowRight size={13} />
-          </button>
+          </div>
         )}
+
+        {/* Translation note */}
+        {data.translationNote && (
+          <div className="mb-4 p-3 bg-[#F5E6D3] rounded-lg border border-[#E7DAC3]">
+            <p className="text-xs text-[#2F4731]/60 mb-1">Translation Note</p>
+            <p className="text-xs text-[#2F4731] leading-relaxed">{data.translationNote}</p>
+          </div>
+        )}
+
+        {/* CTA Button */}
+        <button
+          onClick={handleStudy}
+          className="w-full px-4 py-2 bg-[#2F4731] text-white rounded-lg text-sm font-semibold hover:bg-[#1F3321] transition-colors flex items-center justify-center gap-2 group"
+        >
+          Start Deep Dive Study
+          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+        </button>
       </div>
-    </div>
-  );
+    );
+  }
+
+  return null;
 }
