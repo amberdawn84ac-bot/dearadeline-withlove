@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.schemas.api_models import TRUTH_THRESHOLD
 from app.connections.neo4j_client import neo4j_client
 from app.connections.pgvector_client import hippocampus
+from app.connections.bookshelf_search import bookshelf_search
 from app.api.lessons import router as lessons_router
 from app.api.opportunities import router as opportunities_router
 from app.api.journal import router as journal_router
@@ -40,11 +41,13 @@ async def lifespan(app: FastAPI):
     logger.info("[adeline-brain] Starting up...")
     await neo4j_client.connect()
     await hippocampus.connect()
+    await bookshelf_search.connect()
     await journal_store.connect()
     await startup_seed_scheduler()
     yield
     logger.info("[adeline-brain] Shutting down...")
     await shutdown_seed_scheduler()
+    await bookshelf_search.disconnect()
     await neo4j_client.close()
 
 
