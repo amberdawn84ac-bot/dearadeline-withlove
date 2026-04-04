@@ -320,12 +320,20 @@ model Book {
   title         String
   author        String
   gutenbergId   String?  @unique
-  sourceLibrary String?  // "Standard Ebooks" | "Gutenberg"
+  sourceLibrary String?  // "Standard Ebooks" | "Project Gutenberg"
   downloadUrl   String?
   storageKey    String?  // Supabase Storage object path
   isDownloaded  Boolean  @default(false)
   format        String   @default("epub")
   coverUrl      String?
+
+  // Bookshelf v1: semantic metadata + pgvector embedding
+  source_url    String?  @unique // Full URL from source (Standard Ebooks, Project Gutenberg, etc.)
+  lexile_level  Int?     // e.g., 600, 800, 1000 for guided reading levels
+  grade_band    String?  // e.g., "3-4", "5-6", "7-8", "9-10", "11-12"
+  description   String?  // Book summary or blurb
+  track         String   @default("ENGLISH_LITERATURE") // One of 10 curriculum tracks
+  embedding     Unsupported("vector(1536)")? // pgvector: OpenAI text-embedding-3-small
 
   studentBooks  StudentBook[]
 
@@ -334,6 +342,9 @@ model Book {
 
   @@index([author])
   @@index([isDownloaded])
+  @@index([track])
+  @@index([lexile_level])
+  @@index([sourceLibrary])
 }
 
 model StudentBook {
