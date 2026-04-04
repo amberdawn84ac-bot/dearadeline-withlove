@@ -104,7 +104,32 @@
       "Bash(grep:*)",
       "Bash(vercel env:*)",
       "Bash(cat:*)",
-      "Bash(cat /tmp/cascade-adeline/src/app/\\\\\\(routes\\\\\\)/layout.tsx)"
+      "Bash(cat /tmp/cascade-adeline/src/app/\\\\\\(routes\\\\\\)/layout.tsx)",
+      "Bash(find /tmp/cascade-adeline -name *Settings* -o -name *DailyBread* -o -name *ReadingNook* -o -name *onboard* -o -name *setup*)",
+      "Bash(find /tmp/cascade-adeline -name *reading* -o -name *ReadingNook* -o -name *book*)",
+      "Bash(find /tmp/cascade-adeline -name *coach* -o -name *voice* -o -name *speech* -o -name *audio*)",
+      "Bash(bash --noprofile --norc -c 'npx prisma migrate dev --name add_onboarding_fields')",
+      "Bash(cd:*)",
+      "Bash(rm prisma.config.js)",
+      "Bash(bash --noprofile --norc -c 'export DATABASE_URL=\"\"postgresql://postgres:9fbMRQRnpAy8MrTL@db.gyxowttfwqbajoapfebf.supabase.co:5432/postgres\"\" && npx prisma migrate dev --name add_onboarding_fields')",
+      "Bash(bash --noprofile --norc -c 'pnpm exec -r --filter adeline-brain -- prisma migrate dev --name add_onboarding_fields')",
+      "Bash(bash --noprofile --norc -c 'pnpm exec prisma migrate dev --name add_onboarding_fields')",
+      "Bash(bash --noprofile --norc -c 'python -m prisma migrate dev --name add_onboarding_fields')",
+      "Bash(bash --noprofile --norc -c 'prisma migrate dev --name add_onboarding_fields')",
+      "Bash(bash --noprofile --norc -c 'pip list | grep -i prisma')",
+      "Bash(bash --noprofile --norc -c 'pip install -q prisma python-dotenv')",
+      "Bash(bash --noprofile --norc -c 'export PATH=\"\"/c/Users/Aarons/AppData/Roaming/Python/Python314/Scripts:$PATH\"\" && prisma migrate dev --name add_onboarding_fields')",
+      "Bash(bash --noprofile --norc -c 'export PATH=\"\"\"\"/c/Users/Aarons/AppData/Roaming/Python/Python314/Scripts:$PATH\"\"\"\" && export PRISMA_CLI_BINARY_TARGETS=\"\"\"\"windows\"\"\"\" && prisma migrate dev --name add_onboarding_fields --skip-engine-check')",
+      "Bash(bash --noprofile --norc -c 'export PATH=\"\"\"\"/c/Users/Aarons/AppData/Roaming/Python/Python314/Scripts:$PATH\"\"\"\" && prisma migrate dev --name add_onboarding_fields 2>&1')",
+      "Bash(bash --noprofile --norc -c 'git status --short')",
+      "Bash(bash --noprofile --norc -c 'git add adeline-brain/prisma/schema.prisma adeline-brain/prisma/migrations/20260403_add_onboarding_fields/ && git commit -m \"\"feat\\(db\\): add onboarding fields to User model:*)",
+      "Bash(bash --noprofile --norc -c 'git log --oneline -n 5 2>&1')",
+      "Bash(bash --noprofile --norc -c 'git show --stat fcba88f 2>&1')",
+      "Bash(find adeline-brain/app/api -name *.py -type f)",
+      "Bash(find /c/Users/Aarons/dearadeline-withlove/adeline-brain -name *middleware* -o -name *auth*)",
+      "Bash(find /c/Users/Aarons/dearadeline-withlove -path */.git -prune -o -name *.py -type f -exec grep -l \"onboarding\\\\|/onboard\" {})",
+      "Bash(2)",
+      "Bash(find /c/Users/Aarons/dearadeline-withlove/adeline-brain/prisma/migrations -name *books* -o -name *20260404*)"
     ]
   }
 }

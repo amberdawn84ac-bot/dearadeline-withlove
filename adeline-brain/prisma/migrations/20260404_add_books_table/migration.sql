@@ -6,7 +6,7 @@ ALTER TABLE "Book" ADD COLUMN "source_url" TEXT;
 ALTER TABLE "Book" ADD COLUMN "lexile_level" INTEGER;
 ALTER TABLE "Book" ADD COLUMN "grade_band" TEXT;
 ALTER TABLE "Book" ADD COLUMN "description" TEXT;
-ALTER TABLE "Book" ADD COLUMN "track" TEXT NOT NULL DEFAULT 'ENGLISH_LITERATURE';
+ALTER TABLE "Book" ADD COLUMN "track" TEXT NOT NULL;
 ALTER TABLE "Book" ADD COLUMN "embedding" vector(1536);
 
 -- Add UNIQUE constraint on source_url to prevent duplicates

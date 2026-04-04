@@ -332,7 +332,7 @@ model Book {
   lexile_level  Int?     // e.g., 600, 800, 1000 for guided reading levels
   grade_band    String?  // e.g., "3-4", "5-6", "7-8", "9-10", "11-12"
   description   String?  // Book summary or blurb
-  track         String   @default("ENGLISH_LITERATURE") // One of 10 curriculum tracks
+  track         String   // One of 10 curriculum tracks — assigned by seed script, must not be NULL
   embedding     Unsupported("vector(1536)")? // pgvector: OpenAI text-embedding-3-small
 
   studentBooks  StudentBook[]
