@@ -119,10 +119,10 @@ model User {
   gradeLevel            String?  // Required when role = STUDENT (enforced in app layer)
 
   // Onboarding profile fields
-  mathLevel             String?
-  elaLevel              String?
-  scienceLevel          String?
-  historyLevel          String?
+  mathLevel             Int?
+  elaLevel              Int?
+  scienceLevel          Int?
+  historyLevel          Int?
   interests             String[]  @default([])
   learningStyle         String?
   pacingMultiplier      Float?    @default(1.0)
@@ -136,6 +136,7 @@ model User {
 
   @@index([role])
   @@index([email])
+  @@index([onboardingComplete])
 }
 
 model Lesson {

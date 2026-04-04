@@ -5,7 +5,7 @@ GET  /api/onboarding       — Fetch current student's complete profile
 POST /api/onboarding       — Create/update student onboarding profile
 PATCH /api/onboarding      — Update specific onboarding fields
 
-Requires X-User-Id header (student ID) for authentication.
+Requires Authorization header with Bearer token for authentication.
 """
 import logging
 import os
@@ -26,29 +26,16 @@ async def _get_conn():
     return await asyncpg.connect(_DSN)
 
 
-# ── Ensure User table has onboarding columns ──────────────────────────────────
+def _get_user_id_from_auth(authorization: Optional[str]) -> str:
+    """Extract user ID from Authorization header (Bearer {user_id})."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
 
-_INIT_SQL = """
-ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "mathLevel" TEXT;
-ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "elaLevel" TEXT;
-ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "scienceLevel" TEXT;
-ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "historyLevel" TEXT;
-ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "interests" TEXT[] DEFAULT '{}';
-ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "learningStyle" TEXT;
-ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "pacingMultiplier" FLOAT DEFAULT 1.0;
-ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "state" TEXT;
-ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "targetGraduationYear" INTEGER;
-ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "onboardingComplete" BOOLEAN DEFAULT false;
-"""
+    parts = authorization.split(" ")
+    if len(parts) != 2 or parts[0] != "Bearer":
+        raise HTTPException(status_code=401, detail="Invalid Authorization header format")
 
-
-async def ensure_table() -> None:
-    """Ensure all onboarding columns exist."""
-    conn = await _get_conn()
-    try:
-        await conn.execute(_INIT_SQL)
-    finally:
-        await conn.close()
+    return parts[1]
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -58,10 +45,10 @@ class UserProfile(BaseModel):
     id: str
     name: str
     gradeLevel: Optional[str] = None
-    mathLevel: Optional[str] = None
-    elaLevel: Optional[str] = None
-    scienceLevel: Optional[str] = None
-    historyLevel: Optional[str] = None
+    mathLevel: Optional[int] = None
+    elaLevel: Optional[int] = None
+    scienceLevel: Optional[int] = None
+    historyLevel: Optional[int] = None
     interests: list[str] = Field(default_factory=list)
     learningStyle: Optional[str] = None
     pacingMultiplier: float = Field(default=1.0)
@@ -79,21 +66,18 @@ class OnboardingResponse(BaseModel):
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.get("/", response_model=OnboardingResponse)
-async def get_onboarding(x_user_id: str = Header(default="")):
+async def get_onboarding(authorization: Optional[str] = Header(None)):
     """
     Fetch current student's complete profile.
 
-    Requires X-User-Id header containing the student ID.
+    Requires Authorization header with Bearer token.
     Returns 401 if not authenticated.
     Returns 404 if User not found.
     """
-    if not x_user_id:
-        raise HTTPException(status_code=401, detail="Unauthorized: X-User-Id header required")
+    user_id = _get_user_id_from_auth(authorization)
 
     conn = await _get_conn()
     try:
-        await conn.execute(_INIT_SQL)
-
         row = await conn.fetchrow(
             """
             SELECT
@@ -104,7 +88,7 @@ async def get_onboarding(x_user_id: str = Header(default="")):
             FROM "User"
             WHERE "id" = $1
             """,
-            x_user_id,
+            user_id,
         )
     except Exception as e:
         logger.exception("[GET /api/onboarding] DB error")
