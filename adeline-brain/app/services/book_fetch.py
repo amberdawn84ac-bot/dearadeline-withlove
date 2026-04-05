@@ -65,12 +65,14 @@ async def save_to_storage(book_id: str, epub_bytes: bytes, source: str = "Unknow
 
 
 async def fetch_book_with_waterfall(book_id: str, title: str, author: str) -> Optional[tuple[bytes, str]]:
+    """Try Standard Ebooks first, then Gutendex. Returns (epub_bytes, source_name) or None."""
     epub_bytes = await fetch_from_standard_ebooks(author, title)
     if epub_bytes:
-        await save_to_storage(book_id, epub_bytes, "Standard Ebooks")
+        logger.info(f"[BookFetch] Found '{title}' on Standard Ebooks ({len(epub_bytes)} bytes)")
         return (epub_bytes, "Standard Ebooks")
     epub_bytes = await fetch_from_gutendex(title)
     if epub_bytes:
-        await save_to_storage(book_id, epub_bytes, "Gutenberg")
+        logger.info(f"[BookFetch] Found '{title}' on Gutenberg ({len(epub_bytes)} bytes)")
         return (epub_bytes, "Gutenberg")
+    logger.warning(f"[BookFetch] '{title}' not found in any library")
     return None

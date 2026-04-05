@@ -1,11 +1,72 @@
-"""Bookshelf API — book CRUD and download endpoints."""
-from fastapi import APIRouter, HTTPException
+"""
+Bookshelf API — book CRUD and download endpoints.
+
+Endpoints:
+  GET    /bookshelf                   — List all books (with optional track filter)
+  GET    /bookshelf/{book_id}         — Get a single book's details
+  POST   /bookshelf/add               — Add a book by title/author, trigger waterfall fetch
+  GET    /bookshelf/{book_id}/download — Download the EPUB file
+"""
+import logging
+import os
+import uuid
+
+import asyncpg
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Response
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
 
+from app.services.book_fetch import fetch_book_with_waterfall
+
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/bookshelf", tags=["bookshelf"])
 
+_DSN = os.getenv(
+    "POSTGRES_DSN",
+    os.getenv("DATABASE_URL", "postgresql://adeline:adeline_local_dev@postgres:5432/hippocampus"),
+)
+
+_STORAGE_DIR = os.getenv("BOOK_STORAGE_DIR", os.path.join(os.path.dirname(__file__), "..", "..", "data", "books"))
+
+
+async def _get_conn():
+    return await asyncpg.connect(_DSN)
+
+
+# ── Ensure Book table exists (dev safety net — Prisma migrations are canonical) ─
+
+_INIT_SQL = """
+CREATE TABLE IF NOT EXISTS "Book" (
+    id             TEXT PRIMARY KEY,
+    title          TEXT NOT NULL,
+    author         TEXT NOT NULL,
+    "gutenbergId"  TEXT UNIQUE,
+    "sourceLibrary" TEXT,
+    "downloadUrl"  TEXT,
+    "storageKey"   TEXT,
+    "isDownloaded" BOOLEAN NOT NULL DEFAULT FALSE,
+    format         TEXT NOT NULL DEFAULT 'epub',
+    "coverUrl"     TEXT,
+    source_url     TEXT UNIQUE,
+    lexile_level   INT,
+    grade_band     TEXT,
+    description    TEXT,
+    track          TEXT NOT NULL DEFAULT '',
+    "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    "updatedAt"    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+
+async def ensure_table() -> None:
+    conn = await _get_conn()
+    try:
+        await conn.execute(_INIT_SQL)
+    finally:
+        await conn.close()
+
+
+# ── Models ────────────────────────────────────────────────────────────────────
 
 class BookResponse(BaseModel):
     id: str
@@ -34,25 +95,141 @@ class AddBookResponse(BaseModel):
     sourceLibrary: Optional[str] = None
 
 
+# ── Background waterfall fetch ────────────────────────────────────────────────
+
+async def _run_waterfall(book_id: str, title: str, author: str):
+    """Background task: fetch EPUB via waterfall, update Book row."""
+    result = await fetch_book_with_waterfall(book_id, title, author)
+    conn = await _get_conn()
+    try:
+        if result:
+            epub_bytes, source = result
+            # Save to local storage
+            book_dir = os.path.join(os.path.abspath(_STORAGE_DIR), book_id)
+            os.makedirs(book_dir, exist_ok=True)
+            file_path = os.path.join(book_dir, f"{source.replace(' ', '_')}.epub")
+            with open(file_path, "wb") as f:
+                f.write(epub_bytes)
+            storage_key = f"books/{book_id}/{source.replace(' ', '_')}.epub"
+
+            await conn.execute(
+                """
+                UPDATE "Book"
+                SET "isDownloaded" = TRUE,
+                    "sourceLibrary" = $2,
+                    "storageKey" = $3,
+                    "updatedAt" = now()
+                WHERE id = $1
+                """,
+                book_id, source, storage_key,
+            )
+            logger.info(f"[Bookshelf] Downloaded {title!r} from {source} ({len(epub_bytes)} bytes)")
+        else:
+            logger.warning(f"[Bookshelf] Waterfall failed for {title!r} — no source found")
+    except Exception:
+        logger.exception(f"[Bookshelf] Error in waterfall for book {book_id}")
+    finally:
+        await conn.close()
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
 @router.get("", response_model=list[BookResponse])
-async def list_books():
-    """List all books in the bookshelf."""
-    # Placeholder — in production, fetch from Prisma Book model
-    return []
+async def list_books(track: Optional[str] = Query(None, description="Filter by curriculum track")):
+    """List all books, optionally filtered by track."""
+    conn = await _get_conn()
+    try:
+        if track:
+            rows = await conn.fetch(
+                """
+                SELECT id, title, author, "sourceLibrary", "isDownloaded",
+                       format, "coverUrl", track, lexile_level, grade_band, description
+                FROM "Book"
+                WHERE track = $1
+                ORDER BY title
+                """,
+                track,
+            )
+        else:
+            rows = await conn.fetch(
+                """
+                SELECT id, title, author, "sourceLibrary", "isDownloaded",
+                       format, "coverUrl", track, lexile_level, grade_band, description
+                FROM "Book"
+                ORDER BY title
+                """
+            )
+        return [
+            BookResponse(
+                id=r["id"],
+                title=r["title"],
+                author=r["author"],
+                sourceLibrary=r["sourceLibrary"],
+                isDownloaded=r["isDownloaded"],
+                format=r["format"],
+                coverUrl=r["coverUrl"],
+                track=r["track"],
+                lexile_level=r["lexile_level"],
+                grade_band=r["grade_band"],
+                description=r["description"],
+            )
+            for r in rows
+        ]
+    finally:
+        await conn.close()
 
 
 @router.get("/{book_id}", response_model=BookResponse)
 async def get_book(book_id: str):
     """Get a single book's details."""
-    raise HTTPException(status_code=404, detail="Book not found")
+    conn = await _get_conn()
+    try:
+        r = await conn.fetchrow(
+            """
+            SELECT id, title, author, "sourceLibrary", "isDownloaded",
+                   format, "coverUrl", track, lexile_level, grade_band, description
+            FROM "Book"
+            WHERE id = $1
+            """,
+            book_id,
+        )
+        if not r:
+            raise HTTPException(status_code=404, detail="Book not found")
+        return BookResponse(
+            id=r["id"],
+            title=r["title"],
+            author=r["author"],
+            sourceLibrary=r["sourceLibrary"],
+            isDownloaded=r["isDownloaded"],
+            format=r["format"],
+            coverUrl=r["coverUrl"],
+            track=r["track"],
+            lexile_level=r["lexile_level"],
+            grade_band=r["grade_band"],
+            description=r["description"],
+        )
+    finally:
+        await conn.close()
 
 
 @router.post("/add", response_model=AddBookResponse)
-async def add_book(request: AddBookRequest):
-    """Add a book by title/author — triggers waterfall download."""
-    import uuid
+async def add_book(request: AddBookRequest, background_tasks: BackgroundTasks):
+    """Add a book by title/author — triggers waterfall download in background."""
     book_id = str(uuid.uuid4())
-    # In production: create Book record, trigger waterfall fetch in background
+    conn = await _get_conn()
+    try:
+        await conn.execute(
+            """
+            INSERT INTO "Book" (id, title, author, track, "updatedAt")
+            VALUES ($1, $2, $3, '', now())
+            """,
+            book_id, request.title, request.author,
+        )
+    finally:
+        await conn.close()
+
+    background_tasks.add_task(_run_waterfall, book_id, request.title, request.author)
+
     return AddBookResponse(
         id=book_id,
         title=request.title,
@@ -64,5 +241,33 @@ async def add_book(request: AddBookRequest):
 
 @router.get("/{book_id}/download")
 async def download_book(book_id: str):
-    """Download the epub file for a book."""
-    raise HTTPException(status_code=404, detail="Book not found or not yet downloaded")
+    """Download the EPUB file for a book."""
+    conn = await _get_conn()
+    try:
+        r = await conn.fetchrow(
+            'SELECT "isDownloaded", "storageKey", title FROM "Book" WHERE id = $1',
+            book_id,
+        )
+    finally:
+        await conn.close()
+
+    if not r:
+        raise HTTPException(status_code=404, detail="Book not found")
+    if not r["isDownloaded"] or not r["storageKey"]:
+        raise HTTPException(status_code=404, detail="Book not yet downloaded")
+
+    # Resolve local file path from storage key
+    # storageKey format: "books/{book_id}/Source_Name.epub"
+    local_path = os.path.join(os.path.abspath(_STORAGE_DIR), r["storageKey"].removeprefix("books/"))
+    if not os.path.isfile(local_path):
+        raise HTTPException(status_code=404, detail="EPUB file not found on disk")
+
+    with open(local_path, "rb") as f:
+        epub_bytes = f.read()
+
+    filename = f"{r['title'][:60].replace(chr(34), '')}.epub"
+    return Response(
+        content=epub_bytes,
+        media_type="application/epub+zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

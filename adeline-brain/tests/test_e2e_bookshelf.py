@@ -6,16 +6,27 @@ Tests the full student workflow:
 
 Also tests error scenarios (404, validation) and the waterfall fetch service.
 """
+import os
 import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
 from httpx import AsyncClient, ASGITransport
 from fastapi import FastAPI
 
-from app.api.bookshelf import router as bookshelf_router
+from app.api.bookshelf import router as bookshelf_router, ensure_table
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
+def _make_mock_conn(rows=None, row=None):
+    """Create a mock asyncpg connection with configurable returns."""
+    conn = AsyncMock()
+    conn.fetch = AsyncMock(return_value=rows or [])
+    conn.fetchrow = AsyncMock(return_value=row)
+    conn.execute = AsyncMock()
+    conn.close = AsyncMock()
+    return conn
+
 
 @pytest.fixture
 def app():
@@ -32,37 +43,106 @@ async def client(app):
         yield c
 
 
-# ── API Endpoint Tests ────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+SAMPLE_BOOK_ROW = {
+    "id": "book-001",
+    "title": "Pride and Prejudice",
+    "author": "Jane Austen",
+    "sourceLibrary": "Standard Ebooks",
+    "isDownloaded": True,
+    "format": "epub",
+    "coverUrl": "https://example.com/cover.jpg",
+    "track": "ENGLISH_LITERATURE",
+    "lexile_level": 1100,
+    "grade_band": "9-12",
+    "description": "A classic novel of manners.",
+}
+
+
+# ── API: GET /bookshelf ──────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_list_books_returns_empty(client):
-    """GET /bookshelf returns empty list (placeholder implementation)."""
-    resp = await client.get("/bookshelf")
+async def test_list_books_returns_books(client):
+    """GET /bookshelf returns books from DB."""
+    mock_conn = _make_mock_conn(rows=[SAMPLE_BOOK_ROW])
+    with patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn):
+        resp = await client.get("/bookshelf")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["title"] == "Pride and Prejudice"
+    assert data[0]["track"] == "ENGLISH_LITERATURE"
+    assert data[0]["lexile_level"] == 1100
+
+
+@pytest.mark.asyncio
+async def test_list_books_empty(client):
+    """GET /bookshelf returns empty list when no books exist."""
+    mock_conn = _make_mock_conn(rows=[])
+    with patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn):
+        resp = await client.get("/bookshelf")
     assert resp.status_code == 200
     assert resp.json() == []
 
 
 @pytest.mark.asyncio
+async def test_list_books_with_track_filter(client):
+    """GET /bookshelf?track=X passes track filter to query."""
+    mock_conn = _make_mock_conn(rows=[SAMPLE_BOOK_ROW])
+    with patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn):
+        resp = await client.get("/bookshelf?track=ENGLISH_LITERATURE")
+    assert resp.status_code == 200
+    # Verify the query was called with the track parameter
+    mock_conn.fetch.assert_called_once()
+    call_args = mock_conn.fetch.call_args
+    assert "ENGLISH_LITERATURE" in call_args.args
+
+
+# ── API: GET /bookshelf/{id} ─────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_get_book_found(client):
+    """GET /bookshelf/{id} returns book details."""
+    mock_conn = _make_mock_conn(row=SAMPLE_BOOK_ROW)
+    with patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn):
+        resp = await client.get("/bookshelf/book-001")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == "book-001"
+    assert data["author"] == "Jane Austen"
+    assert data["grade_band"] == "9-12"
+
+
+@pytest.mark.asyncio
 async def test_get_book_404(client):
     """GET /bookshelf/{id} returns 404 for unknown book."""
-    resp = await client.get("/bookshelf/nonexistent-id")
+    mock_conn = _make_mock_conn(row=None)
+    with patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn):
+        resp = await client.get("/bookshelf/nonexistent-id")
     assert resp.status_code == 404
     assert "not found" in resp.json()["detail"].lower()
 
 
+# ── API: POST /bookshelf/add ─────────────────────────────────────────────────
+
 @pytest.mark.asyncio
 async def test_add_book_success(client):
-    """POST /bookshelf/add returns a new book with 'fetching' status."""
-    resp = await client.post("/bookshelf/add", json={
-        "title": "Pride and Prejudice",
-        "author": "Jane Austen",
-    })
+    """POST /bookshelf/add creates book record and returns 'fetching' status."""
+    mock_conn = _make_mock_conn()
+    with patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn):
+        resp = await client.post("/bookshelf/add", json={
+            "title": "Moby Dick",
+            "author": "Herman Melville",
+        })
     assert resp.status_code == 200
     data = resp.json()
-    assert data["title"] == "Pride and Prejudice"
-    assert data["author"] == "Jane Austen"
+    assert data["title"] == "Moby Dick"
+    assert data["author"] == "Herman Melville"
     assert data["status"] == "fetching"
-    assert data["id"]  # UUID was generated
+    assert data["id"]
+    # Verify INSERT was called
+    mock_conn.execute.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -86,20 +166,66 @@ async def test_add_book_empty_body(client):
     assert resp.status_code == 422
 
 
+# ── API: GET /bookshelf/{id}/download ─────────────────────────────────────────
+
 @pytest.mark.asyncio
-async def test_download_book_404(client):
+async def test_download_book_not_found(client):
     """GET /bookshelf/{id}/download returns 404 for unknown book."""
-    resp = await client.get("/bookshelf/nonexistent-id/download")
+    mock_conn = _make_mock_conn(row=None)
+    with patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn):
+        resp = await client.get("/bookshelf/nonexistent-id/download")
     assert resp.status_code == 404
-    assert "not found" in resp.json()["detail"].lower()
 
 
 @pytest.mark.asyncio
-async def test_add_book_ids_are_unique(client):
-    """Two add requests generate different UUIDs."""
-    r1 = await client.post("/bookshelf/add", json={"title": "Book A", "author": "Author A"})
-    r2 = await client.post("/bookshelf/add", json={"title": "Book B", "author": "Author B"})
-    assert r1.json()["id"] != r2.json()["id"]
+async def test_download_book_not_yet_downloaded(client):
+    """GET /bookshelf/{id}/download returns 404 when book not yet downloaded."""
+    mock_conn = _make_mock_conn(row={
+        "isDownloaded": False,
+        "storageKey": None,
+        "title": "Pending Book",
+    })
+    with patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn):
+        resp = await client.get("/bookshelf/book-001/download")
+    assert resp.status_code == 404
+    assert "not yet downloaded" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_download_book_success(client, tmp_path):
+    """GET /bookshelf/{id}/download serves the EPUB file."""
+    # Create a fake EPUB on disk
+    book_dir = tmp_path / "book-001"
+    book_dir.mkdir()
+    epub_file = book_dir / "Standard_Ebooks.epub"
+    epub_file.write_bytes(b"fake-epub-content-for-testing")
+
+    mock_conn = _make_mock_conn(row={
+        "isDownloaded": True,
+        "storageKey": "books/book-001/Standard_Ebooks.epub",
+        "title": "Pride and Prejudice",
+    })
+    with patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn), \
+         patch("app.api.bookshelf._STORAGE_DIR", str(tmp_path)):
+        resp = await client.get("/bookshelf/book-001/download")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/epub+zip"
+    assert b"fake-epub-content-for-testing" in resp.content
+
+
+@pytest.mark.asyncio
+async def test_download_book_file_missing_on_disk(client, tmp_path):
+    """GET /bookshelf/{id}/download returns 404 when DB says downloaded but file is gone."""
+    mock_conn = _make_mock_conn(row={
+        "isDownloaded": True,
+        "storageKey": "books/book-001/Standard_Ebooks.epub",
+        "title": "Ghost Book",
+    })
+    with patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn), \
+         patch("app.api.bookshelf._STORAGE_DIR", str(tmp_path)):
+        resp = await client.get("/bookshelf/book-001/download")
+    assert resp.status_code == 404
+    assert "not found on disk" in resp.json()["detail"].lower()
 
 
 # ── Waterfall Fetch Service Tests ─────────────────────────────────────────────
@@ -158,7 +284,6 @@ async def test_standard_ebooks_url_construction():
 @pytest.mark.asyncio
 async def test_standard_ebooks_tries_both_epub_formats():
     """Standard Ebooks tries .epub then .kepub.epub paths."""
-    import httpx
     from app.services.book_fetch import fetch_from_standard_ebooks
 
     call_urls = []
@@ -235,3 +360,45 @@ async def test_storage_key_format():
 
     key2 = await save_to_storage("def-456", b"content", "Gutenberg")
     assert key2 == "books/def-456/Gutenberg.epub"
+
+
+# ── Background Waterfall Integration Test ─────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_run_waterfall_updates_db_on_success(tmp_path):
+    """Background waterfall task saves EPUB and updates Book row."""
+    from app.api.bookshelf import _run_waterfall
+
+    fake_epub = b"real-epub-content"
+    mock_conn = _make_mock_conn()
+
+    with patch("app.api.bookshelf.fetch_book_with_waterfall", new_callable=AsyncMock, return_value=(fake_epub, "Standard Ebooks")), \
+         patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn), \
+         patch("app.api.bookshelf._STORAGE_DIR", str(tmp_path)):
+        await _run_waterfall("book-test", "Test Book", "Test Author")
+
+    # Verify DB was updated
+    mock_conn.execute.assert_called_once()
+    call_args = mock_conn.execute.call_args.args
+    assert "UPDATE" in call_args[0]
+    assert "book-test" in call_args
+
+    # Verify file was written to disk
+    epub_path = tmp_path / "book-test" / "Standard_Ebooks.epub"
+    assert epub_path.exists()
+    assert epub_path.read_bytes() == fake_epub
+
+
+@pytest.mark.asyncio
+async def test_run_waterfall_handles_not_found():
+    """Background waterfall handles 'not found' gracefully (no crash)."""
+    from app.api.bookshelf import _run_waterfall
+
+    mock_conn = _make_mock_conn()
+
+    with patch("app.api.bookshelf.fetch_book_with_waterfall", new_callable=AsyncMock, return_value=None), \
+         patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn):
+        await _run_waterfall("book-missing", "Ghost Book", "Nobody")
+
+    # DB should NOT have been updated (no execute call for UPDATE)
+    mock_conn.execute.assert_not_called()
