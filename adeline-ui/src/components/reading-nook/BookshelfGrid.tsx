@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { listBooks, downloadBook } from "@/lib/brain-client";
 import type { BookSummary } from "@/lib/brain-client";
 import { BookCard } from "./BookCard";
+import type { Book } from "./BookCard";
 
 export function BookshelfGrid() {
   const [books, setBooks] = useState<BookSummary[]>([]);
@@ -49,9 +50,19 @@ export function BookshelfGrid() {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {books.map((book) => (
-        <BookCard key={book.id} book={book} onDownload={handleDownload} />
-      ))}
+      {books.map((book) => {
+        const cardBook: Book = {
+          id: book.id,
+          title: book.title,
+          author: book.author,
+          lexile_level: book.lexile_level ?? 0,
+          grade_band: book.grade_band ?? "",
+          track: book.track ?? "",
+          cover_url: book.coverUrl ?? undefined,
+          source_library: book.sourceLibrary ?? undefined,
+        };
+        return <BookCard key={book.id} book={cardBook} onStart={() => handleDownload(book.id)} />;
+      })}
     </div>
   );
 }

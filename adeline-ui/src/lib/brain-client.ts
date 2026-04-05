@@ -662,6 +662,10 @@ export interface BookSummary {
   isDownloaded: boolean;
   format: string;
   coverUrl: string | null;
+  track: string | null;
+  lexile_level: number | null;
+  grade_band: string | null;
+  description: string | null;
 }
 
 export interface AddBookResult {

@@ -15,6 +15,10 @@ class BookResponse(BaseModel):
     isDownloaded: bool = False
     format: str = "epub"
     coverUrl: Optional[str] = None
+    track: Optional[str] = None
+    lexile_level: Optional[int] = None
+    grade_band: Optional[str] = None
+    description: Optional[str] = None
 
 
 class AddBookRequest(BaseModel):
