@@ -48,14 +48,14 @@ export interface ReadingSession {
 export interface BookCardProps {
   book: Book;
   session?: ReadingSession;
-  onStart: (bookId: string) => void;
+  onStart?: (bookId: string) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TRACK CONFIG — Colors & Labels for curriculum tracks
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TRACK_CONFIG: Record<
+export const TRACK_CONFIG: Record<
   string,
   { color: string; label: string }
 > = {
@@ -140,7 +140,7 @@ export function BookCard({ book, session, onStart }: BookCardProps) {
   const handleClick = (e: React.MouseEvent) => {
     // Prevent triggering onStart if clicking the button
     if ((e.target as HTMLElement).closest("button")) return;
-    onStart(book.id);
+    onStart?.(book.id);
   };
 
   return (
@@ -231,7 +231,7 @@ export function BookCard({ book, session, onStart }: BookCardProps) {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onStart(book.id);
+              onStart?.(book.id);
             }}
             className={`
               w-full py-2 rounded-lg font-semibold text-sm

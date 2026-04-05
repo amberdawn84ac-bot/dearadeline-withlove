@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.schemas.api_models import TRUTH_THRESHOLD
 from app.connections.neo4j_client import neo4j_client
 from app.connections.pgvector_client import hippocampus
+from app.connections.bookshelf_search import bookshelf_search
 from app.api.lessons import router as lessons_router
 from app.api.opportunities import router as opportunities_router
 from app.api.journal import router as journal_router
@@ -27,6 +28,8 @@ from app.api.projects import router as projects_router
 from app.api.subscriptions import router as subscriptions_router
 from app.api.credits import router as credits_router
 from app.api.bookshelf import router as bookshelf_router
+from app.api.books import router as books_router
+from app.api.reading_session import router as reading_session_router
 from app.api.onboarding import router as onboarding_router
 from app.connections.journal_store import journal_store
 from app.jobs.seed_scheduler import startup_seed_scheduler, shutdown_seed_scheduler
@@ -40,11 +43,13 @@ async def lifespan(app: FastAPI):
     logger.info("[adeline-brain] Starting up...")
     await neo4j_client.connect()
     await hippocampus.connect()
+    await bookshelf_search.connect()
     await journal_store.connect()
     await startup_seed_scheduler()
     yield
     logger.info("[adeline-brain] Shutting down...")
     await shutdown_seed_scheduler()
+    await bookshelf_search.disconnect()
     await neo4j_client.close()
 
 
@@ -86,6 +91,8 @@ app.include_router(projects_router)
 app.include_router(subscriptions_router)
 app.include_router(credits_router)
 app.include_router(bookshelf_router)
+app.include_router(books_router)
+app.include_router(reading_session_router)
 app.include_router(onboarding_router)
 
 
