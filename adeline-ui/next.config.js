@@ -1,11 +1,7 @@
-const path = require("path");
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "standalone",
-  // Tell Next.js to trace files from the monorepo root so pnpm-hoisted
-  // packages (like `next` itself) are included in the standalone bundle.
-  outputFileTracingRoot: path.join(__dirname, "../"),
+  // "standalone" is for Docker; Vercel uses the default output mode automatically.
+  ...(process.env.VERCEL ? {} : { output: "standalone" }),
 
   /**
    * All adeline-brain calls go through /brain/* on the same origin.
