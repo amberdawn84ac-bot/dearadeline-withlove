@@ -2,7 +2,7 @@
 
 **Architecture:** Truth-First K-12 AI Mentor · Oklahoma
 **Date:** 2026-03-27
-**Status:** MVP Complete — Brain + UI wired, auth stubbed, DB connected
+**Status:** MVP Complete — Brain + UI wired, JWT auth in production, DB connected
 
 ---
 
@@ -27,7 +27,7 @@ Start everything: `docker-compose up --build`
 | GET | `/health` | Service alive check |
 | GET | `/health/truth` | Runs a Douglass query against Hippocampus, returns score + verdict |
 | GET | `/lessons/health` | Hippocampus document count |
-| GET | `/tracks` | Returns all 8 Track IDs and labels |
+| GET | `/tracks` | Returns all 10 Track IDs and labels |
 
 ### Lessons (requires `X-User-Role: STUDENT` or `ADMIN`)
 | Method | Path | Description |
@@ -70,16 +70,18 @@ Start everything: `docker-compose up --build`
 
 ---
 
-## The Witness Protocol (0.85 Truth Gate)
+## The Witness Protocol (0.82 Truth Gate)
 
 Every lesson block is evaluated by cosine similarity against the Hippocampus corpus:
 
 ```
-similarity_score >= 0.85  →  verdict: VERIFIED      →  PRIMARY_SOURCE block + Verified Seal
-similarity_score  < 0.85  →  verdict: ARCHIVE_SILENT →  RESEARCH_MISSION block assigned
+similarity_score >= 0.82  →  verdict: VERIFIED           →  PRIMARY_SOURCE block + Verified Seal
+similarity_score >= 0.65  →  verdict: INVESTIGATING      →  SearchWitnesses fallback
+similarity_score  < 0.65  →  verdict: ARCHIVE_SILENT     →  RESEARCH_MISSION block assigned
 ```
 
-- Threshold constant: `TRUTH_THRESHOLD = 0.85` in `app/schemas/api_models.py`
+- Threshold constant: `TRUTH_THRESHOLD = 0.82` in `app/protocols/witness.py`
+- Health check: 3-tier (VERIFIED >= 0.82, INVESTIGATING >= 0.65, ARCHIVE_SILENT < 0.65)
 - Hippocampus table: `hippocampus_documents` (pgvector, 1536-dim embeddings)
 - Embedding model: `text-embedding-3-small` (OpenAI)
 
@@ -92,7 +94,7 @@ similarity_score  < 0.85  →  verdict: ARCHIVE_SILENT →  RESEARCH_MISSION blo
 |-------|-------------|-------------|
 | `Student` | `id` | Student user (student_id from lesson request) |
 | `OASStandard` | `id` | Oklahoma Academic Standard (e.g. `OK.US.H.5.4`) |
-| `Track` | `name` | One of the 8 constitutional tracks |
+| `Track` | `name` | One of the 10 constitutional tracks |
 
 ### Relationship types
 | Relationship | From → To | Created when |
@@ -122,19 +124,19 @@ Tracks sealed lessons per student.
 |--------|------|-------|
 | `student_id` | varchar | PK part 1 |
 | `lesson_id` | varchar | PK part 2 |
-| `track` | varchar | One of 8 track IDs |
+| `track` | varchar | One of 10 track IDs |
 | `completed_blocks` | int | Count of VERIFIED blocks at seal time |
 | `sealed_at` | timestamptz | Upserted on each seal |
 
 ---
 
-## Auth (Current: Header Stub)
+## Auth (Supabase JWT)
 
-All protected routes read two headers:
-- `X-User-Role: STUDENT | PARENT | ADMIN`
-- `X-User-Id: <student_id>` *(not yet validated — used in seal payload)*
+**Production** (`SUPABASE_JWT_SECRET` set): All protected routes verify the `Authorization: Bearer <token>` header as a Supabase-issued JWT (HS256, audience `authenticated`). User role is extracted from `app_metadata.role`.
 
-**To upgrade to JWT:** Replace `require_role()` in `app/api/middleware.py` with a token-decode function. No route signatures need to change.
+**Development** (`SUPABASE_JWT_SECRET` not set): Falls back to header-based auth (`X-User-Role` + `X-User-Id`) with a logged warning. This fallback is blocked if `ADELINE_ENV=production`.
+
+Rate limiting: 120 req/min per IP via slowapi middleware.
 
 ---
 
@@ -154,8 +156,8 @@ All protected routes read two headers:
 - [ ] Load curated source documents into Hippocampus: `python scripts/seed_curriculum.py`
 - [ ] Set `OPENAI_API_KEY` in `.env`
 - [ ] Replace `demo-student-001` with real student auth/session
-- [ ] Build Neo4j OAS Standards graph: `python scripts/seed_neo4j.py`
-- [ ] Add JWT auth to replace header stub
+- [ ] Build Neo4j OAS Standards graph: `python scripts/seed_knowledge_graph.py`
+- [x] ~~Add JWT auth to replace header stub~~ (done — Supabase JWT via `middleware.py`)
 
 ---
 
@@ -180,9 +182,7 @@ python scripts/generate_founder_codes.py
 | `createdAt` | TIMESTAMP | Auto |
 
 **Next step — POST /auth/register:**
-When JWT auth is built, wire redemption into the register endpoint:
+Wire invite code redemption into the Supabase sign-up flow:
 1. Validate `invite_code` is present, exists, and `isUsed = false`
 2. Set `isUsed = true`, `claimedByEmail = new user's email`
-3. Issue JWT and create `User` row
-
-Auth upgrade path: replace `require_role()` in `app/api/middleware.py` with a token-decode function — no route signatures need to change.
+3. Create Supabase user (JWT issued by Supabase) and `User` row

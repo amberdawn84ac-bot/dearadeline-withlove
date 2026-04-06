@@ -1,11 +1,11 @@
 # Dear Adeline 2.0 — Truth-First K-12 AI Mentor
 
-A three-repo ecosystem grounded in the **10-Track Constitution**. Built for Christian homeschool families who want their kids to think clearly, act courageously, and know how to survive in the real world.
+A monorepo ecosystem grounded in the **10-Track Constitution**. Built for Christian homeschool families who want their kids to think clearly, act courageously, and know how to survive in the real world.
 
-## Repositories
+## Packages
 
-| Repo | Tech | Role |
-|------|------|------|
+| Package | Tech | Role |
+|---------|------|------|
 | `adeline-core` | TypeScript + Zod | Shared types, enums, schemas — source of truth |
 | `adeline-brain` | FastAPI + Python | Intelligence layer, Witness Protocol, 4-agent orchestration |
 | `adeline-ui` | Next.js 14 + Tailwind | Experience layer, GenUIRenderer, pricing, dashboard |
@@ -30,10 +30,18 @@ A three-repo ecosystem grounded in the **10-Track Constitution**. Built for Chri
 ```
 adeline-ui (Next.js 14, port 3000)
     └── REST → adeline-brain (FastAPI, port 8000)
-                    ├── pgvector (Hippocampus) — 40+ primary source chunks, semantic search
-                    ├── neo4j   (GraphRAG)     — 64 concept nodes, 55 edges
-                    └── redis   (Upstash)      — session cache, daily bread
+                    ├── pgvector  (Hippocampus) — primary source chunks, semantic search
+                    ├── neo4j     (GraphRAG)    — 64 concept nodes, 55 prerequisite edges
+                    └── redis     (Upstash)     — session cache, daily bread
 ```
+
+### Production Security
+
+- **Auth**: Supabase JWT verification (HS256) in production; header-based fallback in development only
+- **Rate limiting**: 120 req/min per IP via slowapi
+- **Config**: Centralized `app/config.py` — production refuses to start without explicit credentials
+- **Migrations**: `entrypoint.sh` runs Prisma migrations before uvicorn startup
+- **CORS**: Configurable via `CORS_ORIGINS` environment variable
 
 ## 4-Agent Orchestration
 
@@ -102,7 +110,9 @@ Not: "I completed 20 assignments."
 | Student Onboarding | ✅ Complete | Required first-login flow, all profile data stored in PostgreSQL |
 | Settings & Profile Edit | ✅ Complete | Live updates sync immediately to database and adapt next lesson |
 | Daily Bread Widget | ✅ Complete | Scripture study with original language context |
-| Reading Coach & Bookshelf | 🔄 In Design | Student library, reading level adaptation, comprehension tracking |
+| Production Hardening | ✅ Complete | JWT auth, rate limiting, centralized config, migration entrypoint |
+| Bookshelf & Reading Coach | 🔄 In Progress | Books table (pgvector), BookCard component, EPUB fetch (Standard Ebooks + Gutendex) |
+| Declassified Documents | ✅ Complete | NARA/CIA/FBI full-text document seeds for history tracks |
 | Project Catalog & Guide | 🔄 In Progress | Art/DIY + Farm projects with step-by-step runners |
 | Spaced Repetition Widget | 📋 Planned | SM-2 review queue for concept mastery |
 | Knowledge Tree UI | 📋 Planned | Visual mastery graph by track |
@@ -145,11 +155,14 @@ open http://localhost:8000/docs
 
 See `adeline-brain/.env.example` for all required keys:
 
+- `ADELINE_ENV` — `development` (default) or `production` (enables fail-fast credential checks)
 - `POSTGRES_DSN` — pgvector database (Hippocampus)
 - `OPENAI_API_KEY` — embeddings (`text-embedding-3-small`)
 - `ANTHROPIC_API_KEY` — lesson synthesis (`claude-sonnet-4-6`)
-- `NEO4J_URI` / `NEO4J_USERNAME` / `NEO4J_PASSWORD` — GraphRAG (Neo4j Aura)
-- `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` — session cache
+- `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` — GraphRAG (Neo4j Aura or local bolt)
+- `SUPABASE_JWT_SECRET` — JWT verification (required in production)
+- `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` — session cache (or `REDIS_URL` for local)
+- `CORS_ORIGINS` — comma-separated allowed origins (default: `http://localhost:3000`)
 - `TAVILY_API_KEY` — Researcher tool (web archive search)
 - `STRIPE_SECRET_KEY` + price IDs — subscription billing
 - `HYGRAPH_ENDPOINT` / `HYGRAPH_TOKEN` — headless CMS
