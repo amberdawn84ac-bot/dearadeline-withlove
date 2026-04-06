@@ -111,7 +111,7 @@ Not: "I completed 20 assignments."
 | Project Catalog & Guide | 🔄 In Progress | Models written; router, ProjectCard, ProjectGuide not wired |
 | Spaced Repetition Widget | 📋 Planned | SM-2 review queue for concept mastery |
 | Knowledge Tree UI | 📋 Planned | Visual mastery graph by track |
-| Parent Dashboard | 📋 Planned | Student progress, billing, family management |
+| Parent Dashboard | 📋 Not Started | Advertised on pricing page (Family/Co-op tiers) but no UI, API, or multi-student view exists |
 
 ## Pricing
 

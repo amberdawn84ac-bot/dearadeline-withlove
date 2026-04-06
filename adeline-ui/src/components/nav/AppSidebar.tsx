@@ -4,12 +4,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import React, { useState } from "react";
-import { BookOpen, Briefcase, Settings, Menu, X, GraduationCap } from "lucide-react";
+import { BookOpen, Briefcase, Settings, Menu, X, GraduationCap, Hammer } from "lucide-react";
 import { DailyBreadWidget } from "@/components/daily-bread/DailyBreadWidget";
 
 const NAV_ITEMS = [
   { label: "My Learning Plan", href: "/dashboard", icon: BookOpen },
   { label: "Reading Nook",     href: "/dashboard/reading-nook", icon: BookOpen },
+  { label: "Projects",         href: "/dashboard/projects", icon: Hammer },
   { label: "Transcript",       href: "/dashboard/transcript", icon: GraduationCap },
 ];
 
