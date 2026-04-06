@@ -80,6 +80,12 @@ const TIERS = [
   },
 ]
 
+// Founder access codes — bypass Stripe, grant full FAMILY tier
+const FOUNDER_CODES = new Set([
+  'ADELINE-FOUNDER-2026',
+  'ADELINE-PREVIEW-2026',
+])
+
 // TODO: replace with real user from session/auth
 const DEMO_USER = { id: 'demo-user-001', email: 'demo@example.com' }
 
@@ -87,6 +93,19 @@ export default function PricingPage() {
   const router = useRouter()
   const [billing, setBilling]   = useState<Billing>('monthly')
   const [checkout, setCheckout] = useState<string | null>(null)
+  const [promoCode, setPromoCode] = useState('')
+  const [promoError, setPromoError] = useState('')
+
+  const handlePromoRedeem = () => {
+    if (FOUNDER_CODES.has(promoCode.trim().toUpperCase())) {
+      // Store tier in localStorage so the app knows the user has full access
+      localStorage.setItem('adeline_tier', 'FAMILY')
+      localStorage.setItem('adeline_founder_code', promoCode.trim().toUpperCase())
+      router.push('/dashboard')
+    } else {
+      setPromoError('Invalid code. Check your spelling and try again.')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#FFFEF7] py-16 px-6">
@@ -200,6 +219,30 @@ export default function PricingPage() {
         <p className="text-center text-sm text-[#4B3424] mt-8">
           All paid plans include a 7-day free trial. Cancel anytime.
         </p>
+
+        {/* Promo / Founder code */}
+        <div className="max-w-sm mx-auto mt-10 text-center">
+          <p className="text-sm font-medium text-[#2F4731]/60 mb-3">Have a promo code?</p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={promoCode}
+              onChange={(e) => { setPromoCode(e.target.value); setPromoError(''); }}
+              placeholder="Enter code"
+              className="flex-1 px-4 py-2.5 rounded-xl border border-[#E7DAC3] text-sm text-[#2F4731] bg-white focus:outline-none focus:border-[#BD6809]"
+            />
+            <button
+              onClick={handlePromoRedeem}
+              disabled={!promoCode.trim()}
+              className="px-5 py-2.5 rounded-xl bg-[#2F4731] text-white text-sm font-bold hover:bg-[#243828] disabled:opacity-40 transition-colors"
+            >
+              Redeem
+            </button>
+          </div>
+          {promoError && (
+            <p className="text-xs text-[#9A3F4A] mt-2">{promoError}</p>
+          )}
+        </div>
       </div>
     </div>
   )
