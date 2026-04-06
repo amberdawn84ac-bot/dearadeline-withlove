@@ -186,15 +186,16 @@ async def seed_nara_documents(track: str, limit: int = 10) -> int:
                 try:
                     url = result.get("url", "")
                     title = result.get("title", "Untitled NARA Document")
-                    snippet = result.get("snippet", "")
 
-                    if not snippet:
-                        seed_logger.warning(f"No snippet for {title}")
+                    # Fetch full document text (not just snippet)
+                    doc_text = await fetch_document_text(url, fetch_logger=seed_logger)
+                    if not doc_text:
+                        seed_logger.warning(f"Could not fetch full text for {title}")
                         continue
 
-                    # Parse snippet into chunks
+                    # Parse full document into chunks
                     chunks = parse_declassified_document(
-                        raw_text=snippet,
+                        raw_text=doc_text,
                         archive_name="NARA",
                         source_url=url,
                     )
@@ -289,14 +290,15 @@ async def seed_cia_foia_documents(track: str, limit: int = 10) -> int:
                 try:
                     url = result.get("url", "")
                     title = result.get("title", "Untitled CIA Document")
-                    snippet = result.get("snippet", "")
 
-                    if not snippet:
-                        seed_logger.warning(f"No snippet for {title}")
+                    # Fetch full document text (not just snippet)
+                    doc_text = await fetch_document_text(url, fetch_logger=seed_logger)
+                    if not doc_text:
+                        seed_logger.warning(f"Could not fetch full text for {title}")
                         continue
 
                     chunks = parse_declassified_document(
-                        raw_text=snippet,
+                        raw_text=doc_text,
                         archive_name="CIA_FOIA",
                         source_url=url,
                     )
@@ -389,14 +391,15 @@ async def seed_fbi_vault_documents(track: str, limit: int = 10) -> int:
                 try:
                     url = result.get("url", "")
                     title = result.get("title", "Untitled FBI Document")
-                    snippet = result.get("snippet", "")
 
-                    if not snippet:
-                        seed_logger.warning(f"No snippet for {title}")
+                    # Fetch full document text (not just snippet)
+                    doc_text = await fetch_document_text(url, fetch_logger=seed_logger)
+                    if not doc_text:
+                        seed_logger.warning(f"Could not fetch full text for {title}")
                         continue
 
                     chunks = parse_declassified_document(
-                        raw_text=snippet,
+                        raw_text=doc_text,
                         archive_name="FBI_VAULT",
                         source_url=url,
                     )
