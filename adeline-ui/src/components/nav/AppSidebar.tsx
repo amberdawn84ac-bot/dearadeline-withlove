@@ -11,7 +11,7 @@ const NAV_ITEMS = [
   { label: "My Learning Plan", href: "/dashboard", icon: BookOpen },
   { label: "Reading Nook",     href: "/dashboard/reading-nook", icon: BookOpen },
   { label: "Projects",         href: "/dashboard/projects", icon: Hammer },
-  { label: "My Portfolio",     href: "/dashboard/journey", icon: Trophy },
+  { label: "My Portfolio",     href: "/dashboard/portfolio", icon: Trophy },
 ];
 
 export function AppSidebar({ children }: { children: React.ReactNode }) {

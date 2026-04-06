@@ -125,8 +125,8 @@ def _build_pdf(
     story.append(Paragraph(f"Generated:   {date.today().strftime('%B %d, %Y')}", body_style))
     story.append(Spacer(1, 0.2 * inch))
 
-    # ── 8-Track summary table ─────────────────────────────────────────────────
-    story.append(Paragraph("8-TRACK CREDIT SUMMARY", section_style))
+    # ── 10-Track summary table ────────────────────────────────────────────────
+    story.append(Paragraph("10-TRACK CREDIT SUMMARY", section_style))
 
     total_lessons = sum(track_progress.values())
     total_blocks = 0  # aggregated below
@@ -263,7 +263,7 @@ def _build_pdf(
                 ))
             # Truth score (static — all sources passed the 0.85 gate)
             story.append(Paragraph(
-                "    Truth Score: \u2265\u20090.85 \u2014 Witness Protocol verified",
+                "    Truth Score: \u2265\u20090.82 \u2014 Witness Protocol verified",
                 italic_style,
             ))
             # OAS standard tags for this source's track
@@ -358,6 +358,133 @@ async def generate_transcript(
     )
 
     filename = f"adeline-transcript-{student_id}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{student_id}/portfolio/download")
+async def download_portfolio(
+    student_id: str,
+    _role: str = Depends(require_role(UserRole.STUDENT, UserRole.PARENT, UserRole.ADMIN)),
+):
+    """
+    Generate a Mastery Portfolio PDF — accomplishments, not assignments.
+
+    Pulls sealed projects and activities from the journal, then renders
+    them through the portfolio_generator PDF builder.
+    """
+    from app.services.portfolio_generator import build_mastery_portfolio_pdf
+
+    logger.info(f"[/transcripts/portfolio] Generating portfolio for {student_id}")
+
+    try:
+        # Get student info
+        import asyncpg
+        from app.config import POSTGRES_DSN
+        conn = await asyncpg.connect(POSTGRES_DSN)
+        try:
+            student_row = await conn.fetchrow(
+                'SELECT name, id, "gradeLevel" FROM "User" WHERE id = $1',
+                student_id,
+            )
+        finally:
+            await conn.close()
+
+        student = {
+            "name": student_row["name"] if student_row else student_id,
+            "id": student_id,
+            "gradeLevel": student_row["gradeLevel"] if student_row else "",
+        }
+
+        # Get portfolio items from journal (sealed projects + activities)
+        portfolio_items = []
+
+        # Sealed projects — stored with lesson_id prefix "project-"
+        journal_entries = await journal_store.get_recent(student_id, limit=100)
+        for entry in journal_entries:
+            lesson_id = entry.get("lesson_id", "")
+            if lesson_id.startswith("project-"):
+                portfolio_items.append({
+                    "title": entry.get("topic", lesson_id.replace("project-", "").replace("-", " ").title()),
+                    "category": TRACK_LABELS.get(entry.get("track", ""), entry.get("track", "")),
+                    "description": entry.get("reflection", ""),
+                    "dateCompleted": entry.get("sealed_at", ""),
+                })
+
+        # Activities from the activities table
+        try:
+            conn = await asyncpg.connect(POSTGRES_DSN)
+            try:
+                activities = await conn.fetch(
+                    """
+                    SELECT course_title, activity_description, primary_track,
+                           credit_hours, activity_date, sealed_at
+                    FROM activities
+                    WHERE student_id = $1
+                    ORDER BY sealed_at DESC
+                    """,
+                    student_id,
+                )
+                for act in activities:
+                    portfolio_items.append({
+                        "title": act["course_title"],
+                        "category": TRACK_LABELS.get(act["primary_track"], act["primary_track"]),
+                        "description": act["activity_description"],
+                        "dateCompleted": str(act["activity_date"] or act["sealed_at"] or ""),
+                        "impact": f"{act['credit_hours']} credit hours earned",
+                    })
+            finally:
+                await conn.close()
+        except Exception as e:
+            logger.warning(f"[/transcripts/portfolio] Activities fetch failed (non-fatal): {e}")
+
+        # Reading completions
+        try:
+            conn = await asyncpg.connect(POSTGRES_DSN)
+            try:
+                readings = await conn.fetch(
+                    """
+                    SELECT rs."studentReflection", rs.completed_at, rs."readingMinutes",
+                           b.title, b.author, b.track
+                    FROM "ReadingSession" rs
+                    JOIN "Book" b ON rs."bookId" = b.id
+                    WHERE rs."studentId" = $1 AND rs.status = 'finished'
+                    ORDER BY rs.completed_at DESC
+                    """,
+                    student_id,
+                )
+                for r in readings:
+                    hours = round((r["readingMinutes"] or 0) / 60, 1)
+                    portfolio_items.append({
+                        "title": f"Read: {r['title']} by {r['author']}",
+                        "category": TRACK_LABELS.get(r["track"] or "", r["track"] or "Literature"),
+                        "description": r["studentReflection"] or "",
+                        "dateCompleted": str(r["completed_at"] or ""),
+                        "impact": f"{hours} hours of reading" if hours else "",
+                    })
+            finally:
+                await conn.close()
+        except Exception as e:
+            logger.warning(f"[/transcripts/portfolio] Readings fetch failed (non-fatal): {e}")
+
+    except Exception as e:
+        logger.exception("[/transcripts/portfolio] Data fetch failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    try:
+        pdf_bytes = build_mastery_portfolio_pdf(student, portfolio_items)
+    except Exception as e:
+        logger.exception("[/transcripts/portfolio] PDF build failed")
+        raise HTTPException(status_code=500, detail=f"Portfolio PDF generation failed: {e}")
+
+    logger.info(
+        f"[/transcripts/portfolio] PDF ready — {len(portfolio_items)} items, {len(pdf_bytes):,} bytes"
+    )
+
+    filename = f"adeline-portfolio-{student_id}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",

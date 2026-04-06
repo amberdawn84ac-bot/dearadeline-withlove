@@ -19,14 +19,16 @@ const BAND_COLOR: Record<MasteryBand, string> = {
 };
 
 const TRACK_LABELS: Record<string, string> = {
-  TRUTH_HISTORY:        "Truth & History",
   CREATION_SCIENCE:     "Creation Science",
-  ENGLISH_LITERATURE:   "English & Literature",
-  DISCIPLESHIP:         "Discipleship",
-  GOVERNMENT_ECONOMICS: "Government & Economics",
-  HOMESTEADING:         "Homesteading",
   HEALTH_NATUROPATHY:   "Health & Naturopathy",
+  HOMESTEADING:         "Homesteading",
+  GOVERNMENT_ECONOMICS: "Government & Economics",
   JUSTICE_CHANGEMAKING: "Justice & Changemaking",
+  DISCIPLESHIP:         "Discipleship",
+  TRUTH_HISTORY:        "Truth & History",
+  ENGLISH_LITERATURE:   "English & Literature",
+  APPLIED_MATHEMATICS:  "Applied Mathematics",
+  CREATIVE_ECONOMY:     "Creative Economy",
 };
 
 // Demo student list — replace with real auth-based lookup when auth is wired
@@ -92,7 +94,7 @@ export default function TeacherDashboard() {
           Teacher Dashboard
         </h1>
         <p className="text-sm text-[#2F4731]/60 italic mt-1">
-          Monitor student mastery across the 8-Track Constitution
+          Monitor student mastery across the 10-Track Constitution
         </p>
       </div>
 
@@ -178,7 +180,7 @@ export default function TeacherDashboard() {
                 <div className="bg-white border border-[#E7DAC3] rounded-2xl overflow-hidden">
                   <div className="px-6 py-4 border-b border-[#E7DAC3]">
                     <h2 className="font-bold text-[#2F4731]">
-                      8-Track Mastery Overview
+                      10-Track Mastery Overview
                     </h2>
                     <p className="text-sm text-[#2F4731]/60">
                       Average across all students
