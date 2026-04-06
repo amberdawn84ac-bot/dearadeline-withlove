@@ -13,7 +13,7 @@ interface DailyBread {
 }
 
 interface DailyBreadWidgetProps {
-  onStudy: (prompt: string) => void;
+  onStudy?: (prompt: string) => void;
 }
 
 export function DailyBreadWidget({ onStudy }: DailyBreadWidgetProps) {
@@ -59,7 +59,7 @@ export function DailyBreadWidget({ onStudy }: DailyBreadWidgetProps) {
       data.original ? ` — especially around the word "${data.original}" which means "${data.originalMeaning || 'original meaning'}"` : ''
     }. Also share the historical and cultural context that makes this verse richer.`;
 
-    onStudy(prompt);
+    onStudy?.(prompt);
   };
 
   // Loading state
