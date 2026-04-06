@@ -28,7 +28,7 @@ class AdaptiveBKTParams(BKTParams):
     student_learning_rate:  float = 0.15
     concept_difficulty:     float = 0.5
     historical_performance: list  = field(default_factory=list)
-    confidence_interval:    float = 0.1
+    confidence_interval:    float = 0.2
 
 
 def bkt_update(params: BKTParams, correct: bool) -> float:
@@ -71,9 +71,45 @@ def compute_priority(prereq: float, mastery: float, deps: int, max_deps: int) ->
     return 0.6 * prereq + 0.3 * (1 - mastery) + 0.1 * leverage
 
 
-def blend_mastery(bkt: float, delta: float) -> float:
-    """80% BKT + 20% delta, clamped to [0, 1]."""
-    return max(0.0, min(1.0, 0.8 * bkt + 0.2 * delta))
+def blend_mastery(bkt: float, delta: float, interaction_count: int = 10) -> float:
+    """
+    Blend BKT mastery with quality delta.
+    Early interactions (<=3): delta-dominant (0.2*bkt + 0.8*delta) for rapid calibration.
+    Steady state (>3): BKT-dominant (0.8*bkt + 0.2*delta).
+    Default interaction_count=10 preserves backward compatibility.
+    Clamped to [0, 1].
+    """
+    if interaction_count <= 3:
+        blended = 0.2 * bkt + 0.8 * delta
+    else:
+        blended = 0.8 * bkt + 0.2 * delta
+    return max(0.0, min(1.0, blended))
+
+
+def get_anchor_difficulty(interaction_count: int) -> str | None:
+    """
+    Return 'EXPANDING' for first 3 interactions (mid-level anchor probe).
+    After interaction 3, return None — ZPD candidate selection takes over.
+    Pure computation; no DB calls.
+    """
+    return "EXPANDING" if interaction_count <= 3 else None
+
+
+def apply_cross_track_bias(params: AdaptiveBKTParams, bias: float) -> AdaptiveBKTParams:
+    """
+    Inflate initial BKT pL based on cross-track mastery evidence.
+    - bias clamped to [0.0, 0.3]
+    - pL capped at 0.35 (student still must prove mastery; never pre-grants 0.7 threshold)
+    """
+    clamped_bias = max(0.0, min(0.3, bias))
+    new_pL = min(0.35, params.pL + clamped_bias)
+    return AdaptiveBKTParams(
+        pL=new_pL, pT=params.pT, pS=params.pS, pG=params.pG,
+        student_learning_rate=params.student_learning_rate,
+        concept_difficulty=params.concept_difficulty,
+        historical_performance=params.historical_performance,
+        confidence_interval=params.confidence_interval,
+    )
 
 
 def quality_to_mastery_delta(quality: int) -> float:
