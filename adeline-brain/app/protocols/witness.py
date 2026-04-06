@@ -2,7 +2,7 @@
 The Witness Protocol
 "A matter must be established by the testimony of two or three witnesses." — Deuteronomy 19:15
 
-Enforces the 0.85 similarity threshold for all historical truth claims.
+Enforces the 0.82 similarity threshold for all historical truth claims.
 If evidence does not meet the threshold, ARCHIVE_SILENT is returned
 and no content is generated — a Research Mission is assigned instead.
 """
