@@ -21,9 +21,10 @@ prisma==0.13.1
 # GraphRAG
 neo4j==5.20.0
 
-# Auth sessions + rate-limiting
+# Auth + sessions + rate-limiting
 redis==5.0.4
-fastapi-limiter==0.1.6
+slowapi==0.1.9
+PyJWT[crypto]==2.8.0
 
 # Background jobs and scheduling
 APScheduler==3.10.4

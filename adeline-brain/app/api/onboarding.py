@@ -19,7 +19,7 @@ from pydantic import BaseModel, validator
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
-_DSN = os.getenv("POSTGRES_DSN", "postgresql://adeline:adeline_local_dev@postgres:5432/hippocampus")
+from app.config import POSTGRES_DSN as _DSN
 
 # US States for validation (alphabetical)
 _VALID_STATES = {

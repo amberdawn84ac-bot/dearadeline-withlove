@@ -18,11 +18,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 logger = logging.getLogger(__name__)
 
-POSTGRES_DSN = os.getenv(
-    "POSTGRES_DSN",
-    "postgresql://adeline:adeline_local_dev@postgres:5432/hippocampus",
-)
-ASYNC_DSN = POSTGRES_DSN.replace("postgresql://", "postgresql+asyncpg://")
+from app.config import ASYNC_POSTGRES_DSN as ASYNC_DSN
 
 
 class JournalBase(DeclarativeBase):

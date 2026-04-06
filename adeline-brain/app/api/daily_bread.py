@@ -119,8 +119,8 @@ async def daily_bread():
         try:
             from app.connections.redis_client import redis_client
             await redis_client.set(cache_key, result.model_dump_json(), ex=86400)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[DailyBread] Redis cache write failed (non-fatal): {e}")
 
         return result
 

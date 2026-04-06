@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/books", tags=["books"])
 
 # OpenAI configuration
 EMBED_MODEL = "text-embedding-3-small"
-_DSN = os.getenv("POSTGRES_DSN", "postgresql://adeline:adeline_local_dev@postgres:5432/hippocampus")
+from app.config import POSTGRES_DSN as _DSN
 
 # Grade to Lexile mapping for grade-appropriate filtering
 GRADE_TO_LEXILE = {

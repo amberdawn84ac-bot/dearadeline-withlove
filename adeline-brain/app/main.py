@@ -9,6 +9,10 @@ import openai
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.schemas.api_models import TRUTH_THRESHOLD
 from app.connections.neo4j_client import neo4j_client
@@ -53,18 +57,27 @@ async def lifespan(app: FastAPI):
     await neo4j_client.close()
 
 
+# ── Rate limiter (in-memory; swap to Redis storage for multi-process) ─────────
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["120/minute"],       # Global: 120 req/min per IP
+    storage_uri="memory://",
+)
+
+
 app = FastAPI(
     title="adeline-brain",
     description="Intelligence Layer — Dear Adeline 2.0 Truth-First K-12 AI Mentor",
     version="0.2.0",
     lifespan=lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
-_CORS_ORIGINS = [
-    o.strip()
-    for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
-    if o.strip()
-]
+
+from app.config import CORS_ORIGINS as _cors_env
+_CORS_ORIGINS = [o.strip() for o in _cors_env.split(",") if o.strip()]
 # Always include Docker-internal UI hostname
 if "http://adeline-ui:3000" not in _CORS_ORIGINS:
     _CORS_ORIGINS.append("http://adeline-ui:3000")

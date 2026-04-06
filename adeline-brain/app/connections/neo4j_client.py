@@ -17,10 +17,7 @@ from neo4j import AsyncGraphDatabase
 
 logger = logging.getLogger(__name__)
 
-NEO4J_URI      = os.getenv("NEO4J_URI",      "bolt://neo4j:7687")
-# Accept NEO4J_USERNAME (Aura) or NEO4J_USER (local Docker)
-NEO4J_USER     = os.getenv("NEO4J_USERNAME") or os.getenv("NEO4J_USER", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "adeline_local_dev")
+from app.config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 NEO4J_DATABASE = os.getenv("NEO4J_DATABASE")  # optional — required for Neo4j Aura
 
 

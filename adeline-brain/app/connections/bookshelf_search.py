@@ -12,14 +12,7 @@ import asyncpg
 
 logger = logging.getLogger(__name__)
 
-# Database connection configuration
-_pg_password = os.getenv("POSTGRES_PASSWORD", "placeholder_password")
-DATABASE_URL = (
-    os.getenv("DATABASE_URL")           # Supabase transaction pooler
-    or os.getenv("DIRECT_DATABASE_URL")  # Supabase direct connection
-    or os.getenv("POSTGRES_DSN")
-    or f"postgresql://adeline:{_pg_password}@postgres:5432/adeline"
-)
+from app.config import POSTGRES_DSN as DATABASE_URL
 
 EMBEDDING_DIM = 1536  # text-embedding-3-small
 

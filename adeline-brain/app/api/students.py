@@ -21,7 +21,7 @@ from app.models.student import load_student_state
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/students", tags=["students"])
 
-_DSN = os.getenv("POSTGRES_DSN", "postgresql://adeline:adeline_local_dev@postgres:5432/hippocampus")
+from app.config import POSTGRES_DSN as _DSN
 
 
 async def _get_conn():

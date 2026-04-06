@@ -21,10 +21,7 @@ from app.services.book_fetch import fetch_book_with_waterfall
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/bookshelf", tags=["bookshelf"])
 
-_DSN = os.getenv(
-    "POSTGRES_DSN",
-    os.getenv("DATABASE_URL", "postgresql://adeline:adeline_local_dev@postgres:5432/hippocampus"),
-)
+from app.config import POSTGRES_DSN as _DSN
 
 from app.services.storage import upload_epub, download_epub
 

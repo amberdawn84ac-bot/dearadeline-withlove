@@ -16,15 +16,7 @@ from pgvector.sqlalchemy import Vector
 
 logger = logging.getLogger(__name__)
 
-_pg_password = os.getenv("POSTGRES_PASSWORD", "placeholder_password")
-POSTGRES_DSN = (
-    os.getenv("POSTGRES_DSN")
-    or os.getenv("DATABASE_URL")           # Supabase transaction pooler
-    or os.getenv("DIRECT_DATABASE_URL")    # Supabase direct connection
-    or f"postgresql://adeline:{_pg_password}@postgres:5432/hippocampus"
-)
-# SQLAlchemy async requires the asyncpg driver
-ASYNC_DSN = POSTGRES_DSN.replace("postgresql://", "postgresql+asyncpg://")
+from app.config import ASYNC_POSTGRES_DSN as ASYNC_DSN
 
 EMBEDDING_DIM = 1536  # text-embedding-3-small
 
