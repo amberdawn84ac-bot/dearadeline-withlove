@@ -107,13 +107,8 @@ Not: "I completed 20 assignments."
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Student Onboarding | ✅ Complete | Required first-login flow, all profile data stored in PostgreSQL |
-| Settings & Profile Edit | ✅ Complete | Live updates sync immediately to database and adapt next lesson |
-| Daily Bread Widget | ✅ Complete | Scripture study with original language context |
-| Production Hardening | ✅ Complete | JWT auth, rate limiting, centralized config, migration entrypoint |
-| Bookshelf & Reading Coach | 🔄 In Progress | Books table (pgvector), BookCard component, EPUB fetch (Standard Ebooks + Gutendex) |
-| Declassified Documents | ✅ Complete | NARA/CIA/FBI full-text document seeds for history tracks |
-| Project Catalog & Guide | 🔄 In Progress | Art/DIY + Farm projects with step-by-step runners |
+| Bookshelf & Reading Coach | 🔄 In Progress | Books table + BookCard built; EPUB reader, progress tracking, fetch waterfall not wired |
+| Project Catalog & Guide | 🔄 In Progress | Models written; router, ProjectCard, ProjectGuide not wired |
 | Spaced Repetition Widget | 📋 Planned | SM-2 review queue for concept mastery |
 | Knowledge Tree UI | 📋 Planned | Visual mastery graph by track |
 | Parent Dashboard | 📋 Planned | Student progress, billing, family management |
