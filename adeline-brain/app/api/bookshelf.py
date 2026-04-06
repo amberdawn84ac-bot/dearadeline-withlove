@@ -26,7 +26,7 @@ _DSN = os.getenv(
     os.getenv("DATABASE_URL", "postgresql://adeline:adeline_local_dev@postgres:5432/hippocampus"),
 )
 
-_STORAGE_DIR = os.getenv("BOOK_STORAGE_DIR", os.path.join(os.path.dirname(__file__), "..", "..", "data", "books"))
+from app.services.storage import upload_epub, download_epub
 
 
 async def _get_conn():
@@ -104,13 +104,7 @@ async def _run_waterfall(book_id: str, title: str, author: str):
     try:
         if result:
             epub_bytes, source = result
-            # Save to local storage
-            book_dir = os.path.join(os.path.abspath(_STORAGE_DIR), book_id)
-            os.makedirs(book_dir, exist_ok=True)
-            file_path = os.path.join(book_dir, f"{source.replace(' ', '_')}.epub")
-            with open(file_path, "wb") as f:
-                f.write(epub_bytes)
-            storage_key = f"books/{book_id}/{source.replace(' ', '_')}.epub"
+            storage_key = await upload_epub(book_id, epub_bytes, source)
 
             await conn.execute(
                 """
@@ -256,14 +250,9 @@ async def download_book(book_id: str):
     if not r["isDownloaded"] or not r["storageKey"]:
         raise HTTPException(status_code=404, detail="Book not yet downloaded")
 
-    # Resolve local file path from storage key
-    # storageKey format: "books/{book_id}/Source_Name.epub"
-    local_path = os.path.join(os.path.abspath(_STORAGE_DIR), r["storageKey"].removeprefix("books/"))
-    if not os.path.isfile(local_path):
-        raise HTTPException(status_code=404, detail="EPUB file not found on disk")
-
-    with open(local_path, "rb") as f:
-        epub_bytes = f.read()
+    epub_bytes = await download_epub(r["storageKey"])
+    if not epub_bytes:
+        raise HTTPException(status_code=404, detail="EPUB file not found in storage")
 
     filename = f"{r['title'][:60].replace(chr(34), '')}.epub"
     return Response(

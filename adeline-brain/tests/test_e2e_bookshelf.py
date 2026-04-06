@@ -192,21 +192,15 @@ async def test_download_book_not_yet_downloaded(client):
 
 
 @pytest.mark.asyncio
-async def test_download_book_success(client, tmp_path):
+async def test_download_book_success(client):
     """GET /bookshelf/{id}/download serves the EPUB file."""
-    # Create a fake EPUB on disk
-    book_dir = tmp_path / "book-001"
-    book_dir.mkdir()
-    epub_file = book_dir / "Standard_Ebooks.epub"
-    epub_file.write_bytes(b"fake-epub-content-for-testing")
-
     mock_conn = _make_mock_conn(row={
         "isDownloaded": True,
         "storageKey": "books/book-001/Standard_Ebooks.epub",
         "title": "Pride and Prejudice",
     })
     with patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn), \
-         patch("app.api.bookshelf._STORAGE_DIR", str(tmp_path)):
+         patch("app.api.bookshelf.download_epub", new_callable=AsyncMock, return_value=b"fake-epub-content-for-testing"):
         resp = await client.get("/bookshelf/book-001/download")
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "application/epub+zip"
@@ -214,18 +208,18 @@ async def test_download_book_success(client, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_download_book_file_missing_on_disk(client, tmp_path):
-    """GET /bookshelf/{id}/download returns 404 when DB says downloaded but file is gone."""
+async def test_download_book_file_missing_in_storage(client):
+    """GET /bookshelf/{id}/download returns 404 when storage returns None."""
     mock_conn = _make_mock_conn(row={
         "isDownloaded": True,
         "storageKey": "books/book-001/Standard_Ebooks.epub",
         "title": "Ghost Book",
     })
     with patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn), \
-         patch("app.api.bookshelf._STORAGE_DIR", str(tmp_path)):
+         patch("app.api.bookshelf.download_epub", new_callable=AsyncMock, return_value=None):
         resp = await client.get("/bookshelf/book-001/download")
     assert resp.status_code == 404
-    assert "not found on disk" in resp.json()["detail"].lower()
+    assert "not found in storage" in resp.json()["detail"].lower()
 
 
 # ── Waterfall Fetch Service Tests ─────────────────────────────────────────────
@@ -365,28 +359,27 @@ async def test_storage_key_format():
 # ── Background Waterfall Integration Test ─────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_run_waterfall_updates_db_on_success(tmp_path):
-    """Background waterfall task saves EPUB and updates Book row."""
+async def test_run_waterfall_updates_db_on_success():
+    """Background waterfall task uploads EPUB via storage and updates Book row."""
     from app.api.bookshelf import _run_waterfall
 
     fake_epub = b"real-epub-content"
     mock_conn = _make_mock_conn()
+    mock_upload = AsyncMock(return_value="books/book-test/Standard_Ebooks.epub")
 
     with patch("app.api.bookshelf.fetch_book_with_waterfall", new_callable=AsyncMock, return_value=(fake_epub, "Standard Ebooks")), \
          patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn), \
-         patch("app.api.bookshelf._STORAGE_DIR", str(tmp_path)):
+         patch("app.api.bookshelf.upload_epub", mock_upload):
         await _run_waterfall("book-test", "Test Book", "Test Author")
+
+    # Verify upload_epub was called with correct args
+    mock_upload.assert_called_once_with("book-test", fake_epub, "Standard Ebooks")
 
     # Verify DB was updated
     mock_conn.execute.assert_called_once()
     call_args = mock_conn.execute.call_args.args
     assert "UPDATE" in call_args[0]
     assert "book-test" in call_args
-
-    # Verify file was written to disk
-    epub_path = tmp_path / "book-test" / "Standard_Ebooks.epub"
-    assert epub_path.exists()
-    assert epub_path.read_bytes() == fake_epub
 
 
 @pytest.mark.asyncio

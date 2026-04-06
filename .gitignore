@@ -18,6 +18,9 @@ dist/
 # Docker
 *.log
 
+# EPUB book storage (local dev)
+adeline-brain/data/books/
+
 # OS
 .DS_Store
 Thumbs.db
