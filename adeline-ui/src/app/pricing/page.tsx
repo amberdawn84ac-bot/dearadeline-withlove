@@ -101,7 +101,8 @@ export default function PricingPage() {
       // Store tier in localStorage so the app knows the user has full access
       localStorage.setItem('adeline_tier', 'FAMILY')
       localStorage.setItem('adeline_founder_code', promoCode.trim().toUpperCase())
-      router.push('/dashboard')
+      // Send to onboarding first — they need a profile before the dashboard works
+      router.push('/onboarding')
     } else {
       setPromoError('Invalid code. Check your spelling and try again.')
     }
