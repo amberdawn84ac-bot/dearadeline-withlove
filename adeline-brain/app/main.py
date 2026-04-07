@@ -45,7 +45,13 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("[adeline-brain] Starting up...")
-    await neo4j_client.connect()
+
+    # Neo4j is optional — ZPD reasoning degrades but the app still works
+    try:
+        await neo4j_client.connect()
+    except Exception as e:
+        logger.warning(f"[adeline-brain] Neo4j unavailable — ZPD/graph features disabled: {e}")
+
     await hippocampus.connect()
     await bookshelf_search.connect()
     await journal_store.connect()
@@ -54,7 +60,10 @@ async def lifespan(app: FastAPI):
     logger.info("[adeline-brain] Shutting down...")
     await shutdown_seed_scheduler()
     await bookshelf_search.disconnect()
-    await neo4j_client.close()
+    try:
+        await neo4j_client.close()
+    except Exception:
+        pass
 
 
 # ── Rate limiter (in-memory; swap to Redis storage for multi-process) ─────────
