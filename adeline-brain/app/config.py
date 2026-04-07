@@ -37,6 +37,17 @@ if POSTGRES_DSN is None:
 if not IS_PRODUCTION and POSTGRES_DSN == _DEV_FALLBACK_DSN:
     logger.warning("[Config] Using development fallback DSN — set POSTGRES_DSN for production")
 
+# Log DSN details (no password) so we can debug connection issues
+try:
+    from urllib.parse import urlparse as _urlparse
+    _parsed = _urlparse(POSTGRES_DSN)
+    logger.info(
+        f"[Config] DSN: user={_parsed.username}, host={_parsed.hostname}, "
+        f"port={_parsed.port}, db={_parsed.path}, source={'POSTGRES_DSN' if os.getenv('POSTGRES_DSN') else 'DATABASE_URL' if os.getenv('DATABASE_URL') else 'fallback'}"
+    )
+except Exception:
+    pass
+
 # Async variant for SQLAlchemy
 ASYNC_POSTGRES_DSN = POSTGRES_DSN.replace("postgresql://", "postgresql+asyncpg://")
 
