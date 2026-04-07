@@ -24,11 +24,22 @@ from pydantic import BaseModel, Field
 
 from app.schemas.api_models import Track, UserRole
 from app.api.middleware import require_role
-from app.connections.pgvector_client import hippocampus
 from app.connections.journal_store import journal_store
+from contextlib import asynccontextmanager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/activities", tags=["activities"])
+
+
+@asynccontextmanager
+async def _get_conn():
+    """Get an asyncpg connection via config helper (SSL + Supabase pooler compatible)."""
+    from app.config import get_db_conn
+    conn = await get_db_conn()
+    try:
+        yield conn
+    finally:
+        await conn.close()
 
 
 # ── Life-to-Credit mapping (mirrors adeline.config.toml [life_to_credit]) ─────
@@ -386,11 +397,10 @@ async def report_activity(
         logger.warning(f"[activities] Journal seal failed (non-fatal): {e}")
 
     # ── 6. Seal TranscriptEntry for each credited track ────────────────────────
-    pool = hippocampus.pool
     transcript_entry_id = str(uuid.uuid4())
 
     try:
-        async with pool.acquire() as conn:
+        async with _get_conn() as conn:
             await conn.execute(
                 """
                 INSERT INTO "TranscriptEntry" (
@@ -468,8 +478,7 @@ async def list_activities(
     List all activity-based transcript entries for a student.
     These are entries where lessonId starts with 'activity-'.
     """
-    pool = hippocampus.pool
-    async with pool.acquire() as conn:
+    async with _get_conn() as conn:
         rows = await conn.fetch(
             """
             SELECT id, "lessonId", "courseTitle", track,

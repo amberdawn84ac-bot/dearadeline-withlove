@@ -20,8 +20,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.connections.pgvector_client import hippocampus
 from app.algorithms.spaced_repetition import sm2, is_due, overdue_days
+from contextlib import asynccontextmanager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/learning", tags=["learning"])
@@ -115,9 +115,15 @@ class DueReviewsResponse(BaseModel):
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-async def _get_pool():
-    """Get asyncpg pool from hippocampus client."""
-    return hippocampus.pool
+@asynccontextmanager
+async def _get_conn():
+    """Get an asyncpg connection via config helper (SSL + Supabase pooler compatible)."""
+    from app.config import get_db_conn
+    conn = await get_db_conn()
+    try:
+        yield conn
+    finally:
+        await conn.close()
 
 
 # ── POST /learning/record ─────────────────────────────────────────────────────
@@ -129,10 +135,9 @@ async def record_learning(payload: RecordLearningRequest):
     Called automatically by /lesson/generate after lesson assembly.
     Idempotent — duplicate statement IDs are silently ignored.
     """
-    pool = await _get_pool()
     recorded = 0
 
-    async with pool.acquire() as conn:
+    async with _get_conn() as conn:
         for stmt in payload.statements:
             ts = stmt.timestamp or _now_iso()
             try:
@@ -179,11 +184,10 @@ async def seal_transcript(entry: TranscriptEntryIn):
     Persist a CASE-compatible TranscriptEntry for a completed lesson.
     Upserts on (studentId, lessonId) — resealing a lesson updates the record.
     """
-    pool = await _get_pool()
     completed_at = entry.completed_at or _now_iso()
     sealed_at    = _now_iso()
 
-    async with pool.acquire() as conn:
+    async with _get_conn() as conn:
         await conn.execute(
             """
             INSERT INTO "TranscriptEntry" (
@@ -234,8 +238,7 @@ async def seal_transcript(entry: TranscriptEntryIn):
 @router.get("/transcript/{student_id}")
 async def get_transcript(student_id: str, limit: int = Query(50, le=200)):
     """Return paginated transcript entries for a student, newest first."""
-    pool = await _get_pool()
-    async with pool.acquire() as conn:
+    async with _get_conn() as conn:
         rows = await conn.fetch(
             """
             SELECT id, "lessonId", "courseTitle", track,
@@ -268,10 +271,9 @@ async def get_due_reviews(student_id: str, limit: int = Query(20, le=50)):
     Return SpacedRepetitionCards that are due for review today.
     Ordered by most overdue first.
     """
-    pool = await _get_pool()
     now  = datetime.now(timezone.utc)
 
-    async with pool.acquire() as conn:
+    async with _get_conn() as conn:
         rows = await conn.fetch(
             """
             SELECT id, "conceptId", "conceptName", track, repetitions, "dueAt"
@@ -310,10 +312,9 @@ async def submit_review(payload: SM2ReviewSubmit):
     if not 0 <= payload.quality <= 5:
         raise HTTPException(status_code=422, detail="quality must be 0–5")
 
-    pool = await _get_pool()
     now  = datetime.now(timezone.utc)
 
-    async with pool.acquire() as conn:
+    async with _get_conn() as conn:
         row = await conn.fetchrow(
             """
             SELECT interval, "easeFactor", repetitions
