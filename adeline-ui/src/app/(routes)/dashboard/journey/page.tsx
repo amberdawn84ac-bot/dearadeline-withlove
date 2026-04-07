@@ -7,7 +7,7 @@ import type { LessonResponse, Track } from "@/lib/brain-client";
 import LessonRenderer from "@/components/lessons/LessonRenderer";
 import { AdelineChatPanel } from "@/components/AdelineChatPanel";
 import { StudentStatusBar } from "@/components/StudentStatusBar";
-import { useAuth } from "@/lib/useAuth";
+import { useStudent } from "@/lib/useStudent";
 
 // ── Lesson suggestion cards ───────────────────────────────────────────────────
 
@@ -56,13 +56,12 @@ const LESSON_SUGGESTIONS: LessonSuggestion[] = [
   },
 ];
 
-const GRADE_LEVEL = "8";
-
 // ── JourneyPage ───────────────────────────────────────────────────────────────
 
 export default function JourneyPage() {
-  const { user } = useAuth();
-  const STUDENT_ID = user?.id ?? '';
+  const { student } = useStudent();
+  const STUDENT_ID = student?.id ?? '';
+  const GRADE_LEVEL_VAL = student?.gradeLevel ?? '8';
   const [activeLesson, setActiveLesson] = useState<LessonResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +75,7 @@ export default function JourneyPage() {
         track,
         topic,
         is_homestead: false,
-        grade_level: GRADE_LEVEL,
+        grade_level: GRADE_LEVEL_VAL,
       });
       setActiveLesson(lesson);
     } catch (err) {
@@ -84,7 +83,7 @@ export default function JourneyPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [STUDENT_ID, GRADE_LEVEL_VAL]);
 
   const handleSuggestionClick = (suggestion: LessonSuggestion) => {
     handleLessonRequest(suggestion.topic, suggestion.track);
@@ -123,7 +122,7 @@ export default function JourneyPage() {
 
         {/* Status bar */}
         <div className="px-6 pt-4">
-          <StudentStatusBar studentId={STUDENT_ID} />
+          <StudentStatusBar />
         </div>
 
         {/* Error banner */}
@@ -203,7 +202,7 @@ export default function JourneyPage() {
       <div className="w-[380px] shrink-0 hidden md:flex flex-col border-l-2 border-[#E7DAC3]">
         <AdelineChatPanel
           studentId={STUDENT_ID}
-          gradeLevel={GRADE_LEVEL}
+          gradeLevel={GRADE_LEVEL_VAL}
           activeLessonContext={
             activeLesson
               ? {

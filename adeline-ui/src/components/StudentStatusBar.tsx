@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { fetchStudentState } from "@/lib/brain-client";
 import type { StudentState, MasteryBand } from "@/lib/brain-client";
+import { useStudent } from "@/lib/useStudent";
 
 const BAND_COLOR: Record<MasteryBand, string> = {
   NOVICE:      "#94A3B8",
@@ -20,20 +21,20 @@ const TRACK_LABELS: Record<string, string> = {
   HOMESTEADING:         "Homestead",
   HEALTH_NATUROPATHY:   "Health",
   JUSTICE_CHANGEMAKING: "Justice",
+  APPLIED_MATHEMATICS:  "Math",
+  CREATIVE_ECONOMY:     "Creative",
 };
 
-interface StudentStatusBarProps {
-  studentId?: string;
-}
-
-export function StudentStatusBar({ studentId = "demo-student-001" }: StudentStatusBarProps) {
+export function StudentStatusBar() {
+  const { student } = useStudent();
   const [state, setState] = useState<StudentState | null>(null);
 
   useEffect(() => {
-    fetchStudentState(studentId)
+    if (!student?.id) return;
+    fetchStudentState(student.id)
       .then(setState)
       .catch(() => {/* silently fail — status bar is non-critical */});
-  }, [studentId]);
+  }, [student?.id]);
 
   if (!state) return null;
 

@@ -138,7 +138,7 @@ export async function generateLesson(request: LessonRequest): Promise<LessonResp
 }
 
 export async function listTracks(): Promise<{ tracks: { id: Track; label: string }[] }> {
-  const res = await fetch(`${BRAIN_URL}/tracks`);
+  const res = await fetch(`${BRAIN_URL}/tracks`, { headers: getAuthHeaders() });
   if (!res.ok) throw new Error(`Failed to fetch tracks: ${res.status}`);
   return res.json();
 }
@@ -295,7 +295,7 @@ export async function registerStudent(profile: {
 }): Promise<StudentProfile> {
   const res = await fetch(`${BRAIN_URL}/students/register`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(profile),
     cache: "no-store",
   });
@@ -326,7 +326,7 @@ export async function postJournalEntry(
 ): Promise<JournalEntryResponse> {
   const res = await fetch(`${BRAIN_URL}/journal/entries`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(payload),
     cache: "no-store",
   });
@@ -580,7 +580,9 @@ export interface OklahomaProfile {
 // ── Credit Engine Functions ───────────────────────────────────────────────────
 
 export async function listAvailableProfiles(): Promise<OklahomaProfile[]> {
-  const res = await fetch(`${BRAIN_URL}/credits/available-profiles`);
+  const res = await fetch(`${BRAIN_URL}/credits/available-profiles`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error(`Failed to fetch profiles: ${res.status}`);
   return res.json();
 }
@@ -588,7 +590,9 @@ export async function listAvailableProfiles(): Promise<OklahomaProfile[]> {
 export async function getStudentProfile(
   studentId: string,
 ): Promise<{ studentId: string; profileKey: string; profile: Record<string, unknown> }> {
-  const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}/profile`);
+  const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}/profile`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error(`Failed to fetch profile: ${res.status}`);
   return res.json();
 }
@@ -599,6 +603,7 @@ export async function setStudentProfile(
 ): Promise<{ studentId: string; profileKey: string; message: string }> {
   const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}/profile?profile_key=${encodeURIComponent(profileKey)}`, {
     method: "PUT",
+    headers: getAuthHeaders(),
   });
   if (!res.ok) throw new Error(`Failed to set profile: ${res.status}`);
   return res.json();
@@ -607,7 +612,9 @@ export async function setStudentProfile(
 export async function getCreditDashboard(
   studentId: string,
 ): Promise<CreditDashboard> {
-  const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}`);
+  const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error(`Failed to fetch credit dashboard: ${res.status}`);
   return res.json();
 }
@@ -618,7 +625,7 @@ export async function approveCourseProposal(
 ): Promise<{ proposalId: string; isApproved: boolean; message: string }> {
   const res = await fetch(
     `${BRAIN_URL}/credits/${encodeURIComponent(studentId)}/approve/${encodeURIComponent(proposalId)}`,
-    { method: "POST" },
+    { method: "POST", headers: getAuthHeaders() },
   );
   if (!res.ok) throw new Error(`Failed to approve proposal: ${res.status}`);
   return res.json();
@@ -646,6 +653,7 @@ export interface OSRHEProgress {
 export async function getOSRHEProgress(studentId: string): Promise<OSRHEProgress> {
   const res = await fetch(
     `${BRAIN_URL}/transcripts/${encodeURIComponent(studentId)}/osrhe-progress`,
+    { headers: getAuthHeaders() },
   );
   if (!res.ok) throw new Error(`Failed to fetch OSRHE progress: ${res.status}`);
   return res.json();
@@ -654,6 +662,7 @@ export async function getOSRHEProgress(studentId: string): Promise<OSRHEProgress
 export async function downloadOfficialTranscript(studentId: string): Promise<Blob> {
   const res = await fetch(
     `${BRAIN_URL}/transcripts/${encodeURIComponent(studentId)}/official/download`,
+    { headers: getAuthHeaders() },
   );
   if (!res.ok) throw new Error(`Failed to download official transcript: ${res.status}`);
   return res.blob();
@@ -662,6 +671,7 @@ export async function downloadOfficialTranscript(studentId: string): Promise<Blo
 export async function downloadMasteryPortfolio(studentId: string): Promise<Blob> {
   const res = await fetch(
     `${BRAIN_URL}/transcripts/${encodeURIComponent(studentId)}/portfolio/download`,
+    { headers: getAuthHeaders() },
   );
   if (!res.ok) throw new Error(`Failed to download mastery portfolio: ${res.status}`);
   return res.blob();
@@ -694,13 +704,15 @@ export interface AddBookResult {
 // ── Bookshelf Functions ───────────────────────────────────────────────────────
 
 export async function listBooks(): Promise<BookSummary[]> {
-  const res = await fetch(`${BRAIN_URL}/bookshelf`);
+  const res = await fetch(`${BRAIN_URL}/bookshelf`, { headers: getAuthHeaders() });
   if (!res.ok) throw new Error(`Failed to list books: ${res.status}`);
   return res.json();
 }
 
 export async function getBook(bookId: string): Promise<BookSummary> {
-  const res = await fetch(`${BRAIN_URL}/bookshelf/${encodeURIComponent(bookId)}`);
+  const res = await fetch(`${BRAIN_URL}/bookshelf/${encodeURIComponent(bookId)}`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error(`Failed to get book: ${res.status}`);
   return res.json();
 }
@@ -708,7 +720,7 @@ export async function getBook(bookId: string): Promise<BookSummary> {
 export async function addBook(title: string, author: string): Promise<AddBookResult> {
   const res = await fetch(`${BRAIN_URL}/bookshelf/add`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({ title, author }),
   });
   if (!res.ok) throw new Error(`Failed to add book: ${res.status}`);
@@ -716,7 +728,9 @@ export async function addBook(title: string, author: string): Promise<AddBookRes
 }
 
 export async function downloadBook(bookId: string): Promise<Blob> {
-  const res = await fetch(`${BRAIN_URL}/bookshelf/${encodeURIComponent(bookId)}/download`);
+  const res = await fetch(`${BRAIN_URL}/bookshelf/${encodeURIComponent(bookId)}/download`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error(`Failed to download book: ${res.status}`);
   return res.blob();
 }

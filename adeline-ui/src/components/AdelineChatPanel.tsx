@@ -32,15 +32,13 @@ interface LessonContext {
 }
 
 interface AdelineChatPanelProps {
-  studentId?: string;
-  gradeLevel?: string;
+  studentId: string;
+  gradeLevel: string;
   activeLessonContext?: LessonContext | null;
   onLessonGenerated?: (lesson: LessonResponse) => void;
   onLessonRequest?: (topic: string) => void;
 }
 
-const STUDENT_ID = "demo-student-001";
-const GRADE_LEVEL = "8";
 const DEFAULT_TRACK: Track = "TRUTH_HISTORY";
 
 const WELCOME_MSG: Message = {
@@ -133,8 +131,8 @@ function ActivityCreditCard({ result }: { result: ActivityReportResponse }) {
 // ── AdelineChatPanel ───────────────────────────────────────────────────────────
 
 export function AdelineChatPanel({
-  studentId = STUDENT_ID,
-  gradeLevel = GRADE_LEVEL,
+  studentId,
+  gradeLevel,
   activeLessonContext,
   onLessonGenerated,
   onLessonRequest,
@@ -324,7 +322,7 @@ export function AdelineChatPanel({
               {msg.rich?.type === "projectDetail" && (
                 <ProjectGuide
                   projectId={msg.rich.project.id}
-                  studentId={studentId || STUDENT_ID}
+                  studentId={studentId}
                   onSeal={() => {
                     // Project sealed — refresh student state if needed
                   }}

@@ -4,8 +4,8 @@ import { useState, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import { StudentStatusBar } from '@/components/StudentStatusBar';
 import { AdelineChatPanel } from '@/components/AdelineChatPanel';
-import { DailyBreadWidget } from '@/components/daily-bread/DailyBreadWidget';
-import { useAuth } from '@/lib/useAuth';
+import { SpacedRepWidget } from '@/components/dashboard/SpacedRepWidget';
+import { useStudent } from '@/lib/useStudent';
 
 interface LessonSuggestion {
   id: string;
@@ -23,8 +23,9 @@ const LESSON_SUGGESTIONS: LessonSuggestion[] = [
 ];
 
 export default function DashboardPage() {
-  const { user, loading: authLoading } = useAuth();
-  const studentId = user?.id ?? '';
+  const { student, loading: profileLoading } = useStudent();
+  const studentId = student?.id ?? '';
+  const gradeLevel = student?.gradeLevel ?? '8';
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
 
@@ -35,12 +36,6 @@ export default function DashboardPage() {
 
   const handleBackToSuggestions = () => {
     setActiveLessonId(null);
-  };
-
-  const handleDailyBreadStudy = (prompt: string) => {
-    // Pass the study prompt to Adeline chat panel
-    // For now, we'll just log it; actual integration depends on AdelineChatPanel implementation
-    console.log('[Dashboard] Daily Bread study requested:', prompt);
   };
 
   return (
@@ -119,16 +114,16 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* ── Right column: Daily Bread + Adeline chat panel ── */}
+      {/* ── Right column: Spaced Rep + Adeline chat panel ── */}
       <div className="w-[380px] shrink-0 hidden md:flex flex-col border-l-2 border-[#E7DAC3] overflow-y-auto">
-        {/* Daily Bread Widget */}
+        {/* Spaced Repetition Review */}
         <div className="flex-shrink-0 px-6 pt-6 pb-4">
-          <DailyBreadWidget onStudy={handleDailyBreadStudy} />
+          <SpacedRepWidget />
         </div>
 
         {/* Adeline Chat Panel */}
         <div className="flex-1 min-h-0">
-          <AdelineChatPanel studentId={studentId} onLessonGenerated={handleLessonGenerated} />
+          <AdelineChatPanel studentId={studentId} gradeLevel={gradeLevel} onLessonGenerated={handleLessonGenerated} />
         </div>
       </div>
     </div>

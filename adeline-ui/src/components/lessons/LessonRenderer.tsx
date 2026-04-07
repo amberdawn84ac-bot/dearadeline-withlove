@@ -22,7 +22,7 @@ interface LessonRendererProps {
   lesson: LessonResponse;
   isHomestead?: boolean;
   showScores?: boolean;
-  /** student_id to use when sealing — defaults to demo */
+  /** student_id to use when sealing — required for authenticated pages */
   studentId?: string;
 }
 
@@ -241,7 +241,7 @@ export default function LessonRenderer({
   lesson,
   isHomestead = false,
   showScores = false,
-  studentId = "demo-student-001",
+  studentId = '',
 }: LessonRendererProps) {
   return (
     <article className="space-y-6 max-w-2xl">

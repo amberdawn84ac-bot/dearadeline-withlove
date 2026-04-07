@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Brain, CheckCircle, RefreshCw, ChevronRight } from "lucide-react";
+import { useStudent } from "@/lib/useStudent";
 
 interface DueReview {
   review_id: string;
@@ -34,11 +35,9 @@ const QUALITY_LABELS = [
   { value: 5, label: "Easy",   styles: { background: "#F0FDF4", color: "#166534", border: "1px solid #86EFAC" } },
 ];
 
-interface SpacedRepWidgetProps {
-  studentId?: string;
-}
-
-export function SpacedRepWidget({ studentId = "demo-student-001" }: SpacedRepWidgetProps) {
+export function SpacedRepWidget() {
+  const { student } = useStudent();
+  const studentId = student?.id ?? '';
   const [dueReviews, setDueReviews] = useState<DueReview[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [phase, setPhase]           = useState<ReviewPhase>("idle");
@@ -46,9 +45,13 @@ export function SpacedRepWidget({ studentId = "demo-student-001" }: SpacedRepWid
   const [reviewed, setReviewed]     = useState(0);
 
   const fetchDue = useCallback(async () => {
+    if (!studentId) return;
     setLoading(true);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     try {
-      const res = await fetch(`/brain/lesson/reviews/${encodeURIComponent(studentId)}`);
+      const res = await fetch(`/brain/lesson/reviews/${encodeURIComponent(studentId)}`, { headers });
       if (!res.ok) return;
       const data: ReviewsApiResponse = await res.json();
       setDueReviews(data.reviews ?? []);
@@ -75,9 +78,12 @@ export function SpacedRepWidget({ studentId = "demo-student-001" }: SpacedRepWid
   const submitRating = async (quality: number) => {
     if (!current) return;
 
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     await fetch("/brain/lesson/reviews", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         student_id: studentId,
         concept_id: current.concept_id,
