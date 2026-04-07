@@ -26,11 +26,16 @@ class BookshelfSearch:
     async def connect(self):
         """Initialize asyncpg connection pool."""
         try:
+            import ssl as _ssl
+            ctx = _ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = _ssl.CERT_NONE
             self._pool = await asyncpg.create_pool(
                 DATABASE_URL,
                 min_size=2,
                 max_size=10,
                 command_timeout=10,
+                ssl=ctx,
             )
             # Verify pgvector extension exists
             async with self._pool.acquire() as conn:

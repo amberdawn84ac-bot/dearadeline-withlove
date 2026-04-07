@@ -65,7 +65,15 @@ class HippocampusClient:
         self._session_factory: Optional[async_sessionmaker] = None
 
     async def connect(self):
-        self._engine = create_async_engine(ASYNC_DSN, echo=False)
+        import ssl as _ssl
+        ctx = _ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = _ssl.CERT_NONE
+        self._engine = create_async_engine(
+            ASYNC_DSN,
+            echo=False,
+            connect_args={"ssl": ctx},
+        )
         self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
 
         async with self._engine.begin() as conn:

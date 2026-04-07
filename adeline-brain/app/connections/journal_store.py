@@ -54,11 +54,16 @@ class JournalStore:
         last_exc: Exception = RuntimeError("never connected")
         for attempt in range(1, retries + 1):
             try:
+                import ssl as _ssl
+                ctx = _ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = _ssl.CERT_NONE
                 self._engine = create_async_engine(
                     ASYNC_DSN,
                     echo=False,
                     pool_pre_ping=True,   # validate connections before use
                     pool_recycle=300,     # recycle stale connections every 5 min
+                    connect_args={"ssl": ctx},
                 )
                 self._session_factory = async_sessionmaker(
                     self._engine, expire_on_commit=False
