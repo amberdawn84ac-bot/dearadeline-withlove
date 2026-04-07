@@ -287,7 +287,7 @@ async def get_onboarding(authorization: Optional[str] = Header(None)):
     interests = list(row["interests"]) if row["interests"] else []
 
     user_profile = UserProfile(
-        id=row["id"],
+        id=str(row["id"]),
         name=row["name"],
         gradeLevel=row["gradeLevel"],
         mathLevel=row["mathLevel"],
@@ -371,7 +371,7 @@ async def post_onboarding(
     interests = list(row["interests"]) if row["interests"] else []
 
     user_profile = UserProfile(
-        id=row["id"],
+        id=str(row["id"]),
         name=row["name"],
         gradeLevel=row["gradeLevel"],
         mathLevel=row["mathLevel"],
@@ -527,7 +527,7 @@ async def patch_onboarding(
     interests = list(row["interests"]) if row["interests"] else []
 
     user_profile = UserProfile(
-        id=row["id"],
+        id=str(row["id"]),
         name=row["name"],
         gradeLevel=row["gradeLevel"],
         mathLevel=row["mathLevel"],
