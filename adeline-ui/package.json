@@ -14,6 +14,7 @@
     "@adeline/core": "file:../adeline-core",
     "@stripe/react-stripe-js": "^2.4.0",
     "@stripe/stripe-js": "^3.0.0",
+    "@supabase/supabase-js": "^2.101.1",
     "@tailwindcss/typography": "^0.5.19",
     "clsx": "^2.1.1",
     "epubjs": "^0.3.93",
