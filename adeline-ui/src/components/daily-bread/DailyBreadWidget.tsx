@@ -26,7 +26,7 @@ export function DailyBreadWidget({ onStudy }: DailyBreadWidgetProps) {
     setError(null);
 
     try {
-      const response = await fetch('/api/daily-bread');
+      const response = await fetch('/brain/daily-bread');
 
       if (!response.ok) {
         throw new Error('Failed to load daily verse');

@@ -37,6 +37,7 @@ interface AdelineChatPanelProps {
   activeLessonContext?: LessonContext | null;
   onLessonGenerated?: (lesson: LessonResponse) => void;
   onLessonRequest?: (topic: string) => void;
+  initialPrompt?: string | null;
 }
 
 const DEFAULT_TRACK: Track = "TRUTH_HISTORY";
@@ -136,10 +137,12 @@ export function AdelineChatPanel({
   activeLessonContext,
   onLessonGenerated,
   onLessonRequest,
+  initialPrompt,
 }: AdelineChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MSG]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [initialPromptSent, setInitialPromptSent] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -232,6 +235,38 @@ export function AdelineChatPanel({
       setIsLoading(false);
     }
   }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, onLessonGenerated, addMessage]);
+
+  // Auto-send initial prompt (e.g. from Daily Bread "Start Deep Dive Study")
+  useEffect(() => {
+    if (initialPrompt && !initialPromptSent && studentId) {
+      setInitialPromptSent(true);
+      setInput(initialPrompt);
+      // Defer to next tick so input state is set before send
+      setTimeout(() => {
+        setInput('');
+        addMessage({ role: 'user', content: initialPrompt });
+        setIsLoading(true);
+        // Trigger the same flow as handleSend by calling the generate endpoint
+        (async () => {
+          try {
+            const lesson = await generateLesson({
+              student_id: studentId,
+              topic: initialPrompt,
+              track: 'DISCIPLESHIP' as Track,
+              grade_level: gradeLevel,
+              is_homestead: false,
+            });
+            addMessage({ role: 'adeline', content: lesson.title || 'Here is your Daily Bread study.' });
+            onLessonGenerated?.(lesson);
+          } catch {
+            addMessage({ role: 'adeline', content: 'The archive is temporarily unavailable. Please try again in a moment.' });
+          } finally {
+            setIsLoading(false);
+          }
+        })();
+      }, 100);
+    }
+  }, [initialPrompt, initialPromptSent, studentId, gradeLevel, addMessage, onLessonGenerated]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { StudentStatusBar } from '@/components/StudentStatusBar';
 import { AdelineChatPanel } from '@/components/AdelineChatPanel';
@@ -24,6 +25,8 @@ const LESSON_SUGGESTIONS: LessonSuggestion[] = [
 
 export default function DashboardPage() {
   const { student, loading: profileLoading } = useStudent();
+  const searchParams = useSearchParams();
+  const studyPrompt = searchParams.get('study');
   const studentId = student?.id ?? '';
   const gradeLevel = student?.gradeLevel ?? '8';
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
@@ -123,7 +126,7 @@ export default function DashboardPage() {
 
         {/* Adeline Chat Panel */}
         <div className="flex-1 min-h-0">
-          <AdelineChatPanel studentId={studentId} gradeLevel={gradeLevel} onLessonGenerated={handleLessonGenerated} />
+          <AdelineChatPanel studentId={studentId} gradeLevel={gradeLevel} onLessonGenerated={handleLessonGenerated} initialPrompt={studyPrompt} />
         </div>
       </div>
     </div>

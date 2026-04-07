@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import React, { useState } from "react";
 import { BookOpen, Briefcase, Settings, Menu, X, Trophy, Hammer } from "lucide-react";
 import { DailyBreadWidget } from "@/components/daily-bread/DailyBreadWidget";
@@ -16,7 +16,12 @@ const NAV_ITEMS = [
 
 export function AppSidebar({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+
+  const handleDailyBreadStudy = (prompt: string) => {
+    router.push(`/dashboard?study=${encodeURIComponent(prompt)}`);
+  };
 
   return (
     <div className="min-h-screen bg-[#FFFEF7] flex flex-col md:flex-row">
@@ -95,13 +100,13 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
           {/* Daily Bread */}
           <div className="mt-6 mb-6">
-            <DailyBreadWidget />
+            <DailyBreadWidget onStudy={handleDailyBreadStudy} />
           </div>
 
           {/* Bottom */}
           <div className="mt-auto pt-6 border-t border-[#E7DAC3]">
             <Link
-              href="/settings"
+              href="/dashboard/settings"
               className="flex items-center gap-3 px-4 py-2 text-sm font-medium text-[#2F4731]/60 hover:text-[#2F4731] transition-colors"
             >
               <Settings size={16} />
