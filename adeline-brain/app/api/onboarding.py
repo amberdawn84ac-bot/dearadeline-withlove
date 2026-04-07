@@ -43,8 +43,8 @@ def _get_user_id_from_auth(authorization: Optional[str]) -> str:
     """
     Extract user ID from Authorization Bearer token.
 
-    For now, we use the token value as the user ID directly.
-    In production, this would validate a JWT.
+    Decodes the Supabase JWT and returns the 'sub' claim (user UUID).
+    Falls back to using the raw token as user ID in dev if JWT secret is not set.
 
     Raises HTTPException(401) if token is missing or invalid.
     """
@@ -58,7 +58,28 @@ def _get_user_id_from_auth(authorization: Optional[str]) -> str:
     if not token:
         raise HTTPException(status_code=401, detail="Empty Authorization token")
 
-    return token
+    # Try to decode as Supabase JWT to get real user ID
+    from app.config import SUPABASE_JWT_SECRET
+    if SUPABASE_JWT_SECRET:
+        import jwt as pyjwt
+        try:
+            payload = pyjwt.decode(
+                token,
+                SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                audience="authenticated",
+            )
+            return payload.get("sub", token)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+    else:
+        # Dev fallback: decode without verification to get sub claim
+        import jwt as pyjwt
+        try:
+            payload = pyjwt.decode(token, options={"verify_signature": False})
+            return payload.get("sub", token)
+        except Exception:
+            return token
 
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
@@ -287,7 +308,10 @@ async def get_onboarding(authorization: Optional[str] = Header(None)):
 
 @router.post("", response_model=OnboardingResponse, status_code=201)
 @router.post("/", response_model=OnboardingResponse, status_code=201, include_in_schema=False)
-async def post_onboarding(request: OnboardingRequest):
+async def post_onboarding(
+    request: OnboardingRequest,
+    authorization: Optional[str] = Header(None),
+):
     """
     Complete initial onboarding (first-time setup after signup).
 
@@ -308,13 +332,9 @@ async def post_onboarding(request: OnboardingRequest):
     - 400: Validation error
     - 500: Database error
     """
+    user_id = _get_user_id_from_auth(authorization)
     conn = await _get_conn()
     try:
-        # For now, assume the student ID is passed separately or generated.
-        # In production, this would come from the authenticated session.
-        # For demo, we'll generate a UUID.
-        import uuid
-        user_id = str(uuid.uuid4())
 
         row = await conn.fetchrow(
             """
