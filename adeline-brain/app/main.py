@@ -156,7 +156,42 @@ app.include_router(parent_router)
 
 @app.get("/health")
 async def health():
-    return {"status": "alive", "service": "adeline-brain", "version": "0.2.0"}
+    """Health check with data population status."""
+    from app.config import get_db_conn
+    
+    health_status = {
+        "status": "alive",
+        "service": "adeline-brain",
+        "version": "0.2.0",
+        "hippocampus_documents": 0,
+        "neo4j_concepts": 0,
+        "neo4j_tracks": 0,
+    }
+    
+    # Check Hippocampus document count
+    try:
+        conn = await get_db_conn()
+        result = await conn.fetchval('SELECT COUNT(*) FROM "HippocampusDocument"')
+        health_status["hippocampus_documents"] = result
+        await conn.close()
+    except Exception as e:
+        health_status["hippocampus_error"] = str(e)
+    
+    # Check Neo4j concept/track counts
+    try:
+        if neo4j_client.driver:
+            async with neo4j_client.driver.session() as session:
+                concept_result = await session.run("MATCH (c:Concept) RETURN count(c) as count")
+                concept_record = await concept_result.single()
+                health_status["neo4j_concepts"] = concept_record["count"] if concept_record else 0
+                
+                track_result = await session.run("MATCH (t:Track) RETURN count(t) as count")
+                track_record = await track_result.single()
+                health_status["neo4j_tracks"] = track_record["count"] if track_record else 0
+    except Exception as e:
+        health_status["neo4j_error"] = str(e)
+    
+    return health_status
 
 
 @app.get("/health/truth")
