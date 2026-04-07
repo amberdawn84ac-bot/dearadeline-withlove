@@ -16,7 +16,7 @@ export default function OnboardingPage() {
     const checkOnboardingStatus = async () => {
       try {
         // Fetch current user profile to check onboarding status
-        const response = await fetch('/brain/api/onboarding/', {
+        const response = await fetch('/brain/api/onboarding', {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''}`,
@@ -74,7 +74,7 @@ export default function OnboardingPage() {
     try {
       setStatus('redirecting');
 
-      const response = await fetch('/brain/api/onboarding/', {
+      const response = await fetch('/brain/api/onboarding', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''}`,

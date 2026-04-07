@@ -96,11 +96,27 @@ app = FastAPI(
     description="Intelligence Layer — Dear Adeline 2.0 Truth-First K-12 AI Mentor",
     version="0.2.0",
     lifespan=lifespan,
-    redirect_slashes=False,
+    root_path="",
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+
+# Force HTTPS scheme when behind a TLS-terminating proxy (Railway, Vercel)
+# This prevents FastAPI's redirect_slashes from generating http:// URLs
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
+class ForceHTTPSMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # If behind a proxy that terminates TLS, trust the forwarded proto
+        if request.headers.get("x-forwarded-proto") == "https":
+            request.scope["scheme"] = "https"
+        response = await call_next(request)
+        return response
+
+app.add_middleware(ForceHTTPSMiddleware)
 
 
 from app.config import CORS_ORIGINS as _cors_env
