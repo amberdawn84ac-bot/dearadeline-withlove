@@ -28,7 +28,7 @@ _pg_dsn = (
     or os.getenv("DATABASE_URL")
     or f"postgresql://adeline:{_pg_pw}@localhost:5432/hippocampus"
 )
-os.environ["POSTGRES_DSN"] = _pg_dsn.replace("@postgres:", "@localhost:")
+os.environ["POSTGRES_DSN"] = _pg_dsn
 
 import openai
 from app.connections.pgvector_client import hippocampus

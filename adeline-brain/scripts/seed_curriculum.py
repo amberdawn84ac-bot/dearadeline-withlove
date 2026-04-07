@@ -43,7 +43,7 @@ POSTGRES_DSN = (
     or os.getenv("DIRECT_DATABASE_URL")   # Supabase direct (port 5432) — best for DDL
     or os.getenv("DATABASE_URL")           # Supabase pooler fallback
     or f"postgresql://adeline:{_pg_password}@localhost:5432/hippocampus"
-).replace("postgresql://", "postgresql+asyncpg://").replace("@postgres:", "@localhost:")
+).replace("postgresql://", "postgresql+asyncpg://")
 
 NEO4J_URI      = os.getenv("NEO4J_URI",      "bolt://localhost:7687")
 NEO4J_USER     = os.getenv("NEO4J_USERNAME") or os.getenv("NEO4J_USER", "neo4j")
@@ -127,10 +127,15 @@ class HippocampusDocument(Base):
     track                 = Column(String, nullable=False)
     chunk                 = Column(String, nullable=False)
     embedding             = Column(Vector(EMBED_DIM), nullable=False)
+    source_type           = Column(String, nullable=False, default="PRIMARY_SOURCE")
     citation_author       = Column(String, nullable=False, default="")
     citation_year         = Column(Integer, nullable=True)
     citation_archive_name = Column(String, nullable=False, default="")
     created_at            = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("source_type", "PRIMARY_SOURCE")
+        super().__init__(**kwargs)
 
     # Unique constraint: (source_url, track) pair must be unique
     __table_args__ = (
@@ -177,6 +182,14 @@ async def init_hippocampus(engine):
 
 async def insert_document(session_factory, embedding: list[float], **meta) -> str:
     async with session_factory() as session:
+        # Skip if (source_url, track) already exists
+        existing = await session.execute(
+            text("SELECT id FROM hippocampus_documents WHERE source_url = :url AND track = :track LIMIT 1"),
+            {"url": meta.get("source_url", ""), "track": meta.get("track", "")},
+        )
+        if existing.scalar():
+            log.info(f"  [skip] Already seeded: {meta.get('source_title', '?')} → {meta.get('track', '?')}")
+            return "existing"
         doc = HippocampusDocument(embedding=embedding, **meta)
         session.add(doc)
         await session.commit()
@@ -372,7 +385,14 @@ async def main():
     log.info(f"Loaded {len(mappings)} OAS standard mappings")
 
     # ── Postgres / pgvector ───────────────────────────────────────────────────
-    engine = create_async_engine(POSTGRES_DSN, echo=False)
+    import ssl as _ssl
+    ctx = _ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = _ssl.CERT_NONE
+    engine = create_async_engine(
+        POSTGRES_DSN, echo=False,
+        connect_args={"ssl": ctx, "statement_cache_size": 0},
+    )
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     await init_hippocampus(engine)
