@@ -129,7 +129,11 @@
       "Bash(find /c/Users/Aarons/dearadeline-withlove/adeline-brain -name *middleware* -o -name *auth*)",
       "Bash(find /c/Users/Aarons/dearadeline-withlove -path */.git -prune -o -name *.py -type f -exec grep -l \"onboarding\\\\|/onboard\" {})",
       "Bash(2)",
-      "Bash(find /c/Users/Aarons/dearadeline-withlove/adeline-brain/prisma/migrations -name *books* -o -name *20260404*)"
+      "Bash(find /c/Users/Aarons/dearadeline-withlove/adeline-brain/prisma/migrations -name *books* -o -name *20260404*)",
+      "Bash(find /c/Users/Aarons/dearadeline-withlove -type f -name *parent*)",
+      "Bash(find:*)",
+      "Bash(git rm:*)",
+      "Bash(npx next:*)"
     ]
   }
 }

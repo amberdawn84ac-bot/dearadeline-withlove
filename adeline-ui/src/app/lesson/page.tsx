@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useLesson } from "@/hooks/useLesson";
 import LessonRenderer from "@/components/lessons/LessonRenderer";
+import { useAuth } from "@/lib/useAuth";
 import { BotanicalDivider } from "@/components/icons";
 import type { Track } from "@/lib/brain-client";
 
@@ -88,6 +89,7 @@ function OpportunitiesPanel({ track }: { track: Track }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function LessonPage() {
+  const { user } = useAuth();
   const { lesson, loading, error, generate, reset } = useLesson();
 
   const [topic, setTopic]         = useState("");
@@ -100,7 +102,7 @@ export default function LessonPage() {
     e.preventDefault();
     if (!topic.trim()) return;
     generate({
-      student_id: "demo-student-001",
+      student_id: user?.id ?? '',
       topic: topic.trim(),
       track,
       grade_level: grade,

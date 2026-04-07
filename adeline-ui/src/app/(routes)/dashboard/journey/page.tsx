@@ -7,6 +7,7 @@ import type { LessonResponse, Track } from "@/lib/brain-client";
 import LessonRenderer from "@/components/lessons/LessonRenderer";
 import { AdelineChatPanel } from "@/components/AdelineChatPanel";
 import { StudentStatusBar } from "@/components/StudentStatusBar";
+import { useAuth } from "@/lib/useAuth";
 
 // ── Lesson suggestion cards ───────────────────────────────────────────────────
 
@@ -55,12 +56,13 @@ const LESSON_SUGGESTIONS: LessonSuggestion[] = [
   },
 ];
 
-const STUDENT_ID = "demo-student-001";
 const GRADE_LEVEL = "8";
 
 // ── JourneyPage ───────────────────────────────────────────────────────────────
 
 export default function JourneyPage() {
+  const { user } = useAuth();
+  const STUDENT_ID = user?.id ?? '';
   const [activeLesson, setActiveLesson] = useState<LessonResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -8,6 +8,7 @@ import {
   listActivities,
 } from "@/lib/brain-client";
 import type { ActivityEntry, Track } from "@/lib/brain-client";
+import { useAuth } from "@/lib/useAuth";
 
 const TRACK_LABELS: Record<string, string> = {
   CREATION_SCIENCE: "Creation Science",
@@ -35,10 +36,9 @@ const TRACK_COLOR: Record<string, string> = {
   CREATIVE_ECONOMY: "#BD6809",
 };
 
-// TODO: Replace with actual auth context
-const STUDENT_ID = "demo-student-001";
-
 export default function PortfolioPage() {
+  const { user } = useAuth();
+  const STUDENT_ID = user?.id ?? '';
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
   const [totalCredits, setTotalCredits] = useState(0);
   const [trackCount, setTrackCount] = useState(0);

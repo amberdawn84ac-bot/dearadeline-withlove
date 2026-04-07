@@ -4,12 +4,13 @@ import { useState } from "react";
 import { OSRHEDashboard } from "@/components/transcript/OSRHEDashboard";
 import { downloadOfficialTranscript, downloadMasteryPortfolio } from "@/lib/brain-client";
 import { Download } from "lucide-react";
-
-const DEMO_STUDENT_ID = "demo-student";
+import { useAuth } from "@/lib/useAuth";
 
 type TabType = "osrhe" | "official" | "portfolio";
 
 export default function TranscriptPage() {
+  const { user } = useAuth();
+  const DEMO_STUDENT_ID = user?.id ?? '';
   const [activeTab, setActiveTab] = useState<TabType>("osrhe");
   const [downloadingOfficial, setDownloadingOfficial] = useState(false);
   const [downloadingPortfolio, setDownloadingPortfolio] = useState(false);

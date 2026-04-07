@@ -12,6 +12,7 @@ import {
 } from '@/lib/bookshelf-client';
 import { EPUBReader } from '@/components/reading-nook/EPUBReader';
 import { ReflectionModal } from '@/components/reading-nook/ReflectionModal';
+import { useAuth } from '@/lib/useAuth';
 
 interface BookData {
   id: string;
@@ -32,8 +33,8 @@ export default function ReadingPage() {
   const router = useRouter();
   const bookId = params.bookId as string;
 
-  // TODO: Replace with actual auth context
-  const studentId = 'demo-student-001';
+  const { user } = useAuth();
+  const studentId = user?.id ?? '';
 
   const [book, setBook] = useState<BookData | null>(null);
   const [session, setSession] = useState<ReadingSession | null>(null);

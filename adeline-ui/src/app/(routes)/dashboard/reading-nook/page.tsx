@@ -4,13 +4,13 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import Bookshelf from '@/components/reading-nook/Bookshelf';
 import { AddBookDialog } from '@/components/reading-nook/AddBookDialog';
+import { useAuth } from '@/lib/useAuth';
 
 export default function ReadingNookPage() {
   const router = useRouter();
+  const { user } = useAuth();
+  const studentId = user?.id ?? '';
   const [refreshKey, setRefreshKey] = useState(0);
-
-  // TODO: Replace with actual auth context
-  const studentId = 'demo-student-001';
 
   const handleBookClick = useCallback(
     (bookId: string) => {

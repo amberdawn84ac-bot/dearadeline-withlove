@@ -3,14 +3,14 @@
 import { useParams, useRouter } from "next/navigation";
 import { useCallback } from "react";
 import { ProjectGuide } from "@/components/projects/ProjectGuide";
+import { useAuth } from "@/lib/useAuth";
 
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.projectId as string;
-
-  // TODO: Replace with actual auth context
-  const studentId = "demo-student-001";
+  const { user } = useAuth();
+  const studentId = user?.id ?? '';
 
   const handleSeal = useCallback(
     (_projectId: string) => {

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Loader2 } from 'lucide-react';
 import { StudentStatusBar } from '@/components/StudentStatusBar';
 import { AdelineChatPanel } from '@/components/AdelineChatPanel';
 import { DailyBreadWidget } from '@/components/daily-bread/DailyBreadWidget';
+import { useAuth } from '@/lib/useAuth';
 
 interface LessonSuggestion {
   id: string;
@@ -21,9 +22,9 @@ const LESSON_SUGGESTIONS: LessonSuggestion[] = [
   { id: '4', title: 'Scripture Study: Psalms', track: 'Discipleship', description: 'Hebrew poetry and original meanings', emoji: '📖' },
 ];
 
-const STUDENT_ID = 'demo-student-001';
-
 export default function DashboardPage() {
+  const { user, loading: authLoading } = useAuth();
+  const studentId = user?.id ?? '';
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
 
@@ -127,7 +128,7 @@ export default function DashboardPage() {
 
         {/* Adeline Chat Panel */}
         <div className="flex-1 min-h-0">
-          <AdelineChatPanel studentId={STUDENT_ID} onLessonGenerated={handleLessonGenerated} />
+          <AdelineChatPanel studentId={studentId} onLessonGenerated={handleLessonGenerated} />
         </div>
       </div>
     </div>
