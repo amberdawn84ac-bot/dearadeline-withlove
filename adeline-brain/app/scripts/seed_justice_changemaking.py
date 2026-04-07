@@ -38,7 +38,7 @@ TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Rate limiting: 5 requests per second for Tavily
-rate_limiter = TokenBucket(capacity=5, refill_rate=5)
+rate_limiter = TokenBucket(max_tokens=5, refill_rate=5)
 
 # Justice-specific search domains
 JUSTICE_DOMAINS = {
