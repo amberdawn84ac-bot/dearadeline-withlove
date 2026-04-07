@@ -43,44 +43,10 @@ async def _get_conn():
 def _get_user_id_from_auth(authorization: Optional[str]) -> str:
     """
     Extract user ID from Authorization Bearer token.
-
-    Decodes the Supabase JWT and returns the 'sub' claim (user UUID).
-    Falls back to using the raw token as user ID in dev if JWT secret is not set.
-
-    Raises HTTPException(401) if token is missing or invalid.
+    Delegates to the shared middleware for JWT verification.
     """
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing Authorization header")
-
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Invalid Authorization header format")
-
-    token = authorization[7:].strip()
-    if not token:
-        raise HTTPException(status_code=401, detail="Empty Authorization token")
-
-    # Try to decode as Supabase JWT to get real user ID
-    from app.config import SUPABASE_JWT_SECRET
-    if SUPABASE_JWT_SECRET:
-        import jwt as pyjwt
-        try:
-            payload = pyjwt.decode(
-                token,
-                SUPABASE_JWT_SECRET,
-                algorithms=["HS256"],
-                audience="authenticated",
-            )
-            return payload.get("sub", token)
-        except Exception:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-    else:
-        # Dev fallback: decode without verification to get sub claim
-        import jwt as pyjwt
-        try:
-            payload = pyjwt.decode(token, options={"verify_signature": False})
-            return payload.get("sub", token)
-        except Exception:
-            return token
+    from app.api.middleware import get_current_user_id
+    return get_current_user_id(authorization=authorization)
 
 
 # ── Pydantic models ──────────────────────────────────────────────────────────

@@ -10,6 +10,21 @@
  */
 const BRAIN_URL = "/brain";
 
+/**
+ * Get auth headers for brain API calls.
+ * Sends the Supabase JWT from localStorage (set by useAuth hook).
+ */
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("auth_token");
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+  }
+  return headers;
+}
+
 // ── Request / Response Types (mirrors adeline-core) ───────────────────────────
 
 export type Track =
@@ -110,7 +125,7 @@ export interface LessonResponse {
 export async function generateLesson(request: LessonRequest): Promise<LessonResponse> {
   const res = await fetch(`${BRAIN_URL}/lesson/generate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(request),
     cache: "no-store",
   });
@@ -154,7 +169,7 @@ export async function sealJournal(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-User-Role": role,
+      ...getAuthHeaders(),
     },
     body: JSON.stringify(payload),
     cache: "no-store",
@@ -168,7 +183,7 @@ export async function fetchTrackProgress(
   role: "STUDENT" | "ADMIN" = "STUDENT",
 ): Promise<Record<string, number>> {
   const res = await fetch(`${BRAIN_URL}/journal/progress/${encodeURIComponent(student_id)}`, {
-    headers: { "X-User-Role": role },
+    headers: getAuthHeaders(),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`progress fetch failed: ${res.status}`);
@@ -205,7 +220,7 @@ export async function scaffold(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-User-Role": role,
+      ...getAuthHeaders(),
     },
     body: JSON.stringify(request),
     cache: "no-store",
@@ -236,7 +251,7 @@ export async function fetchStudentState(
   const res = await fetch(
     `${BRAIN_URL}/students/${encodeURIComponent(student_id)}/state`,
     {
-      headers: { "X-User-Role": role },
+      headers: getAuthHeaders(),
       cache: "no-store",
     },
   );
@@ -333,7 +348,7 @@ export async function fetchOpportunities(role = "ADMIN"): Promise<{
   total: number;
 }> {
   const res = await fetch(`${BRAIN_URL}/api/opportunities`, {
-    headers: { "X-User-Role": role },
+    headers: getAuthHeaders(),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Opportunities fetch failed: ${res.status}`);
@@ -392,7 +407,7 @@ export async function listProjects(filters: {
   if (filters.grade_band) params.set("grade_band", filters.grade_band);
 
   const res = await fetch(`${BRAIN_URL}/projects?${params}`, {
-    headers: { "X-User-Role": role },
+    headers: getAuthHeaders(),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`listProjects failed: ${res.status}`);
@@ -404,7 +419,7 @@ export async function getProject(
   role: "STUDENT" | "ADMIN" = "STUDENT",
 ): Promise<ProjectDetail> {
   const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}`, {
-    headers: { "X-User-Role": role },
+    headers: getAuthHeaders(),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`getProject failed: ${res.status}`);
@@ -418,7 +433,7 @@ export async function sealProject(
 ): Promise<ProjectSealResponse> {
   const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}/seal`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-User-Role": role },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({ student_id: studentId }),
     cache: "no-store",
   });
@@ -446,7 +461,7 @@ export async function startProject(
 ): Promise<StartProjectResponse> {
   const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}/start`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-User-Role": role },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({ student_id: studentId }),
     cache: "no-store",
   });
@@ -504,7 +519,7 @@ export async function reportActivity(
 ): Promise<ActivityReportResponse> {
   const res = await fetch(`${BRAIN_URL}/activities/report`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-User-Role": role },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(payload),
     cache: "no-store",
   });
@@ -517,7 +532,7 @@ export async function listActivities(
   role: "STUDENT" | "ADMIN" = "STUDENT",
 ): Promise<ActivityListResponse> {
   const res = await fetch(`${BRAIN_URL}/activities/${encodeURIComponent(studentId)}`, {
-    headers: { "X-User-Role": role },
+    headers: getAuthHeaders(),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`listActivities failed: ${res.status}`);

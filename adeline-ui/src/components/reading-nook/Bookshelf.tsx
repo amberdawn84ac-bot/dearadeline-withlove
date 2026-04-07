@@ -154,6 +154,15 @@ export default function Bookshelf({
   const [error, setError] = useState<string | null>(null);
   const [addingToList, setAddingToList] = useState<string | null>(null);
 
+  // Get auth headers for brain API calls — JWT Bearer token from Supabase
+  const getAuthHeaders = useCallback((): Record<string, string> => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+    if (token) {
+      return { "Authorization": `Bearer ${token}` };
+    }
+    return {};
+  }, []);
+
   // Fetch shelf and recommendations
   const fetchShelf = useCallback(async () => {
     try {
@@ -162,9 +171,7 @@ export default function Bookshelf({
 
       // Fetch shelf from GET /api/reading-session
       const shelfRes = await fetch("/brain/api/reading-session", {
-        headers: {
-          "X-User-Id": studentId,
-        },
+        headers: getAuthHeaders(),
       });
 
       if (!shelfRes.ok) {
@@ -204,7 +211,7 @@ export default function Bookshelf({
       setError(message);
       console.error("[Bookshelf] Fetch shelf failed:", err);
     }
-  }, [studentId]);
+  }, [studentId, getAuthHeaders]);
 
   const fetchRecommendations = useCallback(async () => {
     try {
@@ -212,9 +219,7 @@ export default function Bookshelf({
       const recRes = await fetch(
         "/brain/api/books/recommendations?limit=12",
         {
-          headers: {
-            "X-User-Id": studentId,
-          },
+          headers: getAuthHeaders(),
         }
       );
 
@@ -250,7 +255,7 @@ export default function Bookshelf({
       console.warn("[Bookshelf] Fetch recommendations failed:", err);
       setRecommendations([]);
     }
-  }, [studentId]);
+  }, [studentId, getAuthHeaders]);
 
   // useEffect: Fetch on mount and studentId change
   useEffect(() => {
@@ -279,7 +284,7 @@ export default function Bookshelf({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-User-Id": studentId,
+            ...getAuthHeaders(),
           },
           body: JSON.stringify({
             book_id: bookId,
@@ -312,7 +317,7 @@ export default function Bookshelf({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-User-Id": studentId,
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           book_id: bookId,

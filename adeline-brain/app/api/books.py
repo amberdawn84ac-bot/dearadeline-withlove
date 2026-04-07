@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends, Header
 from pydantic import BaseModel
 
 from app.schemas.api_models import UserRole
-from app.api.middleware import require_role
+from app.api.middleware import require_role, get_current_user_id
 from app.connections.bookshelf_search import bookshelf_search
 
 logger = logging.getLogger(__name__)
@@ -349,16 +349,13 @@ async def get_book(book_id: str) -> BookDetailResponse:
 )
 async def get_recommendations(
     limit: int = Query(12, ge=1, le=12, description="Number of recommendations (max 12)"),
-    x_user_id: str = Header(..., description="User ID from Authorization header"),
+    user_id: str = Depends(get_current_user_id),
 ) -> RecommendationsResponse:
     """
     Get AI-recommended books based on student profile using pgvector semantic search.
 
     Query Parameters:
     - limit: Number of recommendations (1-12, default 12)
-
-    Request Headers:
-    - X-User-Id: Student UUID (required)
 
     Returns:
     - List of recommended books ranked by relevance_score (highest first)
@@ -368,6 +365,7 @@ async def get_recommendations(
     - 500: OpenAI or database error
     - 200 with empty list if no books match
     """
+    x_user_id = user_id
     logger.info(f"[Books/Recommendations] Fetching recommendations for student: {x_user_id}, limit={limit}")
 
     try:

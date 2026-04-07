@@ -101,11 +101,14 @@ async function fetchAPI<T>(
   const { studentId, ...fetchOptions } = options;
   const url = `${BASE_URL}${endpoint}`;
 
+  // JWT Bearer token from Supabase auth
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+
   const response = await fetch(url, {
     ...fetchOptions,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${studentId}`,
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       ...fetchOptions.headers,
     },
     cache: 'no-store',

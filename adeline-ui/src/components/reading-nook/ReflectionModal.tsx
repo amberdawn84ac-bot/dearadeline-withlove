@@ -33,7 +33,7 @@ export function ReflectionModal({
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${studentId}`,
+            Authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''}`,
           },
           body: JSON.stringify({
             status: 'finished',
@@ -78,7 +78,7 @@ export function ReflectionModal({
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${studentId}`,
+          Authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''}`,
         },
         body: JSON.stringify({
           status: 'finished',

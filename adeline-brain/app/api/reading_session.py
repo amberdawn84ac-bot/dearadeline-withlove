@@ -14,10 +14,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Query, Header
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 
-from app.connections.pgvector_client import hippocampus
+from app.api.middleware import get_current_user_id
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/reading-session", tags=["reading-session"])
@@ -84,38 +85,17 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _extract_student_id(
-    authorization: Optional[str] = None,
-    x_user_id: Optional[str] = None,
-) -> str:
-    """
-    Extract student_id from Authorization header or X-User-Id header.
+from contextlib import asynccontextmanager
 
-    Args:
-        authorization: Authorization header value (Bearer {student_id})
-        x_user_id: X-User-Id header value
-
-    Returns:
-        student_id string
-
-    Raises:
-        HTTPException: 401 if neither header is present or valid
-    """
-    if x_user_id:
-        return x_user_id
-
-    if authorization and authorization.startswith("Bearer "):
-        return authorization[7:]
-
-    raise HTTPException(
-        status_code=401,
-        detail="Missing or invalid Authorization header. Use 'Bearer {student_id}' or X-User-Id header.",
-    )
-
-
-async def _get_pool():
-    """Get asyncpg pool from hippocampus client."""
-    return hippocampus.pool
+@asynccontextmanager
+async def _get_conn():
+    """Get an asyncpg connection for reading session queries."""
+    from app.config import get_db_conn
+    conn = await get_db_conn()
+    try:
+        yield conn
+    finally:
+        await conn.close()
 
 
 # ── POST /api/reading-session ────────────────────────────────────────────────────
@@ -123,8 +103,7 @@ async def _get_pool():
 @router.post("", status_code=201, response_model=SessionResponse)
 async def create_reading_session(
     payload: SessionCreateRequest,
-    authorization: Optional[str] = Header(None),
-    x_user_id: Optional[str] = Header(None),
+    student_id: str = Depends(get_current_user_id),
 ) -> SessionResponse:
     """
     Start a new reading session for a book.
@@ -142,7 +121,6 @@ async def create_reading_session(
     - 404: Book not found
     - 500: Database error
     """
-    student_id = _extract_student_id(authorization, x_user_id)
 
     # Validate status
     valid_statuses = {"reading", "finished", "wishlist"}
@@ -152,11 +130,10 @@ async def create_reading_session(
             detail=f"status must be one of {valid_statuses}",
         )
 
-    pool = await _get_pool()
     now = _now_iso()
     session_id = str(uuid.uuid4())
 
-    async with pool.acquire() as conn:
+    async with _get_conn() as conn:
         # Check if book exists
         book_row = await conn.fetchrow(
             'SELECT id FROM "Book" WHERE id = $1',
@@ -252,8 +229,7 @@ class SessionUpdateRequest(BaseModel):
 async def update_reading_session(
     session_id: str,
     payload: SessionUpdateRequest,
-    authorization: Optional[str] = Header(None),
-    x_user_id: Optional[str] = Header(None),
+    student_id: str = Depends(get_current_user_id),
 ) -> SessionResponse:
     """
     Update a reading session's progress or mark it complete.
@@ -280,7 +256,6 @@ async def update_reading_session(
     - 422: Invalid status value
     - 500: Database error
     """
-    student_id = _extract_student_id(authorization, x_user_id)
 
     # Validate status if provided
     if payload.status is not None:
@@ -291,10 +266,9 @@ async def update_reading_session(
                 detail=f"status must be one of {valid_statuses}",
             )
 
-    pool = await _get_pool()
     now = _now_iso()
 
-    async with pool.acquire() as conn:
+    async with _get_conn() as conn:
         # Verify session exists and belongs to student (security check)
         existing = await conn.fetchrow(
             """
@@ -413,8 +387,7 @@ async def update_reading_session(
 @router.get("", response_model=ShelfResponse)
 async def get_reading_shelf(
     status: Optional[str] = Query(None, description="Filter by status: 'reading', 'finished', 'wishlist', or None for all"),
-    authorization: Optional[str] = Header(None),
-    x_user_id: Optional[str] = Header(None),
+    student_id: str = Depends(get_current_user_id),
 ) -> ShelfResponse:
     """
     Get student's bookshelf: all reading sessions grouped by status.
@@ -430,7 +403,6 @@ async def get_reading_shelf(
     - 401: Missing/invalid Authorization
     - 500: Database error
     """
-    student_id = _extract_student_id(authorization, x_user_id)
 
     if status is not None:
         valid_statuses = {"reading", "finished", "wishlist"}
@@ -440,9 +412,7 @@ async def get_reading_shelf(
                 detail=f"status must be one of {valid_statuses}",
             )
 
-    pool = await _get_pool()
-
-    async with pool.acquire() as conn:
+    async with _get_conn() as conn:
         # Query all sessions for this student (optionally filtered by status)
         if status:
             rows = await conn.fetch(
