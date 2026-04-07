@@ -1,10 +1,22 @@
 """Admin endpoints for maintenance tasks."""
 import logging
+import os
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@router.get("/env-check")
+async def check_env():
+    """Check if required environment variables are set."""
+    return {
+        "openai_key_set": bool(os.getenv("OPENAI_API_KEY")),
+        "database_url_set": bool(os.getenv("DATABASE_URL") or os.getenv("DIRECT_DATABASE_URL")),
+        "neo4j_uri_set": bool(os.getenv("NEO4J_URI")),
+        "neo4j_password_set": bool(os.getenv("NEO4J_PASSWORD")),
+    }
 
 
 class SeedResponse(BaseModel):
