@@ -25,7 +25,8 @@ from app.config import POSTGRES_DSN as _DSN
 
 
 async def _get_conn():
-    return await asyncpg.connect(_DSN)
+    from app.config import get_db_conn
+    return await get_db_conn()
 
 
 # ── Ensure student_profiles table exists ─────────────────────────────────────

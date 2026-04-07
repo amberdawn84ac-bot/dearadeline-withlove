@@ -36,7 +36,8 @@ _VALID_STATES = {
 
 async def _get_conn():
     """Get a PostgreSQL connection."""
-    return await asyncpg.connect(_DSN)
+    from app.config import get_db_conn
+    return await get_db_conn()
 
 
 def _get_user_id_from_auth(authorization: Optional[str]) -> str:

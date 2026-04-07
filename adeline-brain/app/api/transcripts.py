@@ -382,9 +382,8 @@ async def download_portfolio(
 
     try:
         # Get student info
-        import asyncpg
-        from app.config import POSTGRES_DSN
-        conn = await asyncpg.connect(POSTGRES_DSN)
+        from app.config import get_db_conn
+        conn = await get_db_conn()
         try:
             student_row = await conn.fetchrow(
                 'SELECT name, id, "gradeLevel" FROM "User" WHERE id = $1',
@@ -416,7 +415,7 @@ async def download_portfolio(
 
         # Activities from the activities table
         try:
-            conn = await asyncpg.connect(POSTGRES_DSN)
+            conn = await get_db_conn()
             try:
                 activities = await conn.fetch(
                     """
@@ -443,7 +442,7 @@ async def download_portfolio(
 
         # Reading completions
         try:
-            conn = await asyncpg.connect(POSTGRES_DSN)
+            conn = await get_db_conn()
             try:
                 readings = await conn.fetch(
                     """

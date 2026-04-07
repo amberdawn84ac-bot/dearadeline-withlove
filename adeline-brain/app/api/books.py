@@ -96,7 +96,8 @@ class RecommendationsResponse(BaseModel):
 
 async def _get_conn():
     """Get an asyncpg connection for database queries."""
-    return await asyncpg.connect(_DSN)
+    from app.config import get_db_conn
+    return await get_db_conn()
 
 
 async def _embed(text: str) -> List[float]:

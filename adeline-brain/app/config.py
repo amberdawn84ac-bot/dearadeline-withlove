@@ -83,3 +83,15 @@ if IS_PRODUCTION and not SUPABASE_JWT_SECRET:
 # ── CORS ─────────────────────────────────────────────────────────────────────
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+
+
+# ── Shared DB connection helper ──────────────────────────────────────────────
+
+async def get_db_conn():
+    """Get an asyncpg connection with SSL for Supabase pooler compatibility."""
+    import asyncpg
+    import ssl as _ssl
+    ctx = _ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = _ssl.CERT_NONE
+    return await asyncpg.connect(POSTGRES_DSN, ssl=ctx)

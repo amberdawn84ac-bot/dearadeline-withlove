@@ -27,7 +27,8 @@ from app.services.storage import upload_epub, download_epub
 
 
 async def _get_conn():
-    return await asyncpg.connect(_DSN)
+    from app.config import get_db_conn
+    return await get_db_conn()
 
 
 # ── Ensure Book table exists (dev safety net — Prisma migrations are canonical) ─
