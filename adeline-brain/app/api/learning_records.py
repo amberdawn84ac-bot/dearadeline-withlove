@@ -271,33 +271,38 @@ async def get_due_reviews(student_id: str, limit: int = Query(20, le=50)):
     Return SpacedRepetitionCards that are due for review today.
     Ordered by most overdue first.
     """
-    now  = datetime.now(timezone.utc)
+    try:
+        now  = datetime.now(timezone.utc)
 
-    async with _get_conn() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT id, "conceptId", "conceptName", track, repetitions, "dueAt"
-            FROM "SpacedRepetitionCard"
-            WHERE "studentId" = $1
-              AND "dueAt" <= $2
-            ORDER BY "dueAt" ASC
-            LIMIT $3
-            """,
-            student_id, now, limit,
-        )
+        async with _get_conn() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, "conceptId", "conceptName", track, repetitions, "dueAt"
+                FROM "SpacedRepetitionCard"
+                WHERE "studentId" = $1
+                  AND "dueAt" <= $2
+                ORDER BY "dueAt" ASC
+                LIMIT $3
+                """,
+                student_id, now, limit,
+            )
 
-    reviews = [
-        DueReview(
-            review_id=str(r["id"]),
-            concept_id=str(r["conceptId"]),
-            concept_name=str(r["conceptName"]),
-            track=str(r["track"]),
-            repetitions=int(r["repetitions"]),
-            overdue_days=overdue_days(r["dueAt"]),
-        )
-        for r in rows
-    ]
-    return DueReviewsResponse(reviews=reviews, total=len(reviews))
+        reviews = [
+            DueReview(
+                review_id=str(r["id"]),
+                concept_id=str(r["conceptId"]),
+                concept_name=str(r["conceptName"]),
+                track=str(r["track"]),
+                repetitions=int(r["repetitions"]),
+                overdue_days=overdue_days(r["dueAt"]),
+            )
+            for r in rows
+        ]
+        return DueReviewsResponse(reviews=reviews, total=len(reviews))
+    except Exception as e:
+        logger.error(f"[Reviews] Failed to fetch due reviews for {student_id}: {e}")
+        # Return empty list instead of 500 error
+        return DueReviewsResponse(reviews=[], total=0)
 
 
 # ── POST /learning/reviews ────────────────────────────────────────────────────
