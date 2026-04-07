@@ -222,7 +222,8 @@ class SettingsUpdateRequest(BaseModel):
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 
-@router.get("/", response_model=OnboardingResponse)
+@router.get("", response_model=OnboardingResponse)
+@router.get("/", response_model=OnboardingResponse, include_in_schema=False)
 async def get_onboarding(authorization: Optional[str] = Header(None)):
     """
     Fetch current student profile (used by Settings page on load).
@@ -284,7 +285,8 @@ async def get_onboarding(authorization: Optional[str] = Header(None)):
     return OnboardingResponse(ok=True, user=user_profile)
 
 
-@router.post("/", response_model=OnboardingResponse, status_code=201)
+@router.post("", response_model=OnboardingResponse, status_code=201)
+@router.post("/", response_model=OnboardingResponse, status_code=201, include_in_schema=False)
 async def post_onboarding(request: OnboardingRequest):
     """
     Complete initial onboarding (first-time setup after signup).
@@ -371,7 +373,8 @@ async def post_onboarding(request: OnboardingRequest):
     return OnboardingResponse(ok=True, user=user_profile)
 
 
-@router.patch("/", response_model=OnboardingResponse)
+@router.patch("", response_model=OnboardingResponse)
+@router.patch("/", response_model=OnboardingResponse, include_in_schema=False)
 async def patch_onboarding(
     request: SettingsUpdateRequest,
     authorization: Optional[str] = Header(None)
