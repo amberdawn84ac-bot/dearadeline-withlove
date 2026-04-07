@@ -13,7 +13,6 @@ interface UserProfile {
   scienceLevel?: number;
   historyLevel?: number;
   interests: string[];
-  learningStyle?: string;
   pacingMultiplier: number;
   state?: string;
   targetGraduationYear?: number;

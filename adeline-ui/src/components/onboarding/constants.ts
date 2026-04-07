@@ -17,21 +17,6 @@ export const INTERESTS_OPTIONS = [
   'Writing',
 ];
 
-export const LEARNING_STYLES = [
-  {
-    value: 'EXPEDITION',
-    label: 'Expedition Mode',
-    description:
-      'Cross-curricular journey — explore topics by connecting science, history, art, and more. Perfect for curious learners who love making connections.',
-  },
-  {
-    value: 'CLASSIC',
-    label: 'Classic Mode',
-    description:
-      'Traditional subjects — focus on core academics (math, ELA, science, history) with clear learning objectives. Great for structured learners.',
-  },
-];
-
 export const US_STATES = [
   'Alabama',
   'Alaska',

@@ -434,7 +434,7 @@ export async function sealProject(
   const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}/seal`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-    body: JSON.stringify({ student_id: studentId }),
+    body: JSON.stringify({ student_id: studentId, project_id: projectId }),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`sealProject failed: ${res.status}`);
@@ -462,7 +462,7 @@ export async function startProject(
   const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-    body: JSON.stringify({ student_id: studentId }),
+    body: JSON.stringify({ student_id: studentId, project_id: projectId }),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`startProject failed: ${res.status}`);

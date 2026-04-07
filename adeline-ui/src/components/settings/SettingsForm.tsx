@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Loader2, Check, AlertCircle } from 'lucide-react';
-import { INTERESTS_OPTIONS, LEARNING_STYLES, US_STATES } from '@/components/onboarding/constants';
+import { INTERESTS_OPTIONS, US_STATES } from '@/components/onboarding/constants';
 
 interface UserProfile {
   id: string;
@@ -13,7 +13,6 @@ interface UserProfile {
   scienceLevel?: number;
   historyLevel?: number;
   interests: string[];
-  learningStyle?: string;
   pacingMultiplier: number;
   state?: string;
   targetGraduationYear?: number;
@@ -42,7 +41,6 @@ export function SettingsForm({ initialProfile }: SettingsFormProps) {
   const [scienceLevel, setScienceLevel] = useState<number | null>(initialProfile.scienceLevel || null);
   const [historyLevel, setHistoryLevel] = useState<number | null>(initialProfile.historyLevel || null);
   const [interests, setInterests] = useState(initialProfile.interests);
-  const [learningStyle, setLearningStyle] = useState(initialProfile.learningStyle || 'EXPEDITION');
   const [pacingMultiplier, setPacingMultiplier] = useState(initialProfile.pacingMultiplier);
   const [state, setState] = useState(initialProfile.state || '');
   const [targetGraduationYear, setTargetGraduationYear] = useState(initialProfile.targetGraduationYear || CURRENT_YEAR + 4);
@@ -72,7 +70,6 @@ export function SettingsForm({ initialProfile }: SettingsFormProps) {
       const updateData: Record<string, unknown> = {
         gradeLevel,
         interests,
-        learningStyle,
         pacingMultiplier,
         state,
         targetGraduationYear,
@@ -271,31 +268,6 @@ export function SettingsForm({ initialProfile }: SettingsFormProps) {
           </div>
         </div>
 
-        {/* Learning Style */}
-        <div className="bg-white rounded-2xl border-2 border-[#E7DAC3] p-6">
-          <h3 className="text-lg font-bold text-[#2F4731] mb-4">Learning Mode</h3>
-          <div className="space-y-3">
-            {LEARNING_STYLES.map((style) => (
-              <label key={style.value} className="block p-4 border-2 border-[#E7DAC3] rounded-lg cursor-pointer hover:border-[#BD6809] transition-colors">
-                <div className="flex items-start gap-3">
-                  <input
-                    type="radio"
-                    name="learningStyle"
-                    value={style.value}
-                    checked={learningStyle === style.value}
-                    onChange={(e) => setLearningStyle(e.target.value)}
-                    className="w-5 h-5 text-[#BD6809] mt-0.5"
-                  />
-                  <div>
-                    <h4 className="font-semibold text-[#2F4731]">{style.label}</h4>
-                    <p className="text-sm text-[#2F4731]/60 mt-1">{style.description}</p>
-                  </div>
-                </div>
-              </label>
-            ))}
-          </div>
-        </div>
-
         {/* Interests */}
         <div className="bg-white rounded-2xl border-2 border-[#E7DAC3] p-6">
           <h3 className="text-lg font-bold text-[#2F4731] mb-4">Interests</h3>
@@ -382,11 +354,6 @@ export function SettingsForm({ initialProfile }: SettingsFormProps) {
             <div>
               <p className="text-[#2F4731]/60">Pace</p>
               <p className="font-semibold text-[#2F4731]">{pacingMultiplier.toFixed(2)}x</p>
-            </div>
-
-            <div>
-              <p className="text-[#2F4731]/60">Learning Mode</p>
-              <p className="font-semibold text-[#2F4731]">{learningStyle === 'EXPEDITION' ? 'Expedition' : 'Classic'}</p>
             </div>
 
             <div>

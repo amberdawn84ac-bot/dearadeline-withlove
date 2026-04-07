@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
-import { INTERESTS_OPTIONS, LEARNING_STYLES, US_STATES } from './constants';
+import { INTERESTS_OPTIONS, US_STATES } from './constants';
 
 interface WelcomeFlowProps {
   onComplete: (data: {
@@ -14,6 +14,7 @@ interface WelcomeFlowProps {
     targetGraduationYear: number;
     coppaConsent: boolean;
   }) => void;
+  // learningStyle kept in interface for backend compat — always defaults to 'EXPEDITION'
 }
 
 const GRADE_OPTIONS = ['K', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
@@ -26,7 +27,6 @@ export function WelcomeFlow({ onComplete }: WelcomeFlowProps) {
   const [name, setName] = useState('');
   const [gradeLevel, setGradeLevel] = useState('');
   const [interests, setInterests] = useState<string[]>([]);
-  const [learningStyle, setLearningStyle] = useState('EXPEDITION');
   const [state, setState] = useState('');
   const [targetGraduationYear, setTargetGraduationYear] = useState(CURRENT_YEAR + 4);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -42,7 +42,7 @@ export function WelcomeFlow({ onComplete }: WelcomeFlowProps) {
       if (!name.trim()) newErrors.name = 'Child name is required';
       if (!gradeLevel) newErrors.gradeLevel = 'Grade level is required';
       if (interests.length === 0) newErrors.interests = 'Please select at least one interest';
-    } else if (stepNum === 4) {
+    } else if (stepNum === 3) {
       if (!state) newErrors.state = 'Please select a state';
       if (!targetGraduationYear) newErrors.year = 'Please select a graduation year';
     }
@@ -53,13 +53,13 @@ export function WelcomeFlow({ onComplete }: WelcomeFlowProps) {
 
   const handleNext = () => {
     if (validateStep(step)) {
-      if (step === 4) {
+      if (step === 3) {
         // Final step — submit
         onComplete({
           name,
           gradeLevel,
           interests,
-          learningStyle,
+          learningStyle: 'EXPEDITION',
           state,
           targetGraduationYear,
           coppaConsent,
@@ -93,13 +93,13 @@ export function WelcomeFlow({ onComplete }: WelcomeFlowProps) {
             Welcome to Adeline
           </h1>
           <p className="text-white/80 text-sm">
-            Step {step + 1} of 5 — Let's set up your learning plan
+            Step {step + 1} of 4 — Let's set up your learning plan
           </p>
           {/* Progress bar */}
           <div className="mt-4 h-1 bg-white/20 rounded-full overflow-hidden">
             <div
               className="h-full bg-[#BD6809] transition-all duration-300"
-              style={{ width: `${((step + 1) / 5) * 100}%` }}
+              style={{ width: `${((step + 1) / 4) * 100}%` }}
             />
           </div>
         </div>
@@ -227,40 +227,8 @@ export function WelcomeFlow({ onComplete }: WelcomeFlowProps) {
             </div>
           )}
 
-          {/* Step 3: Learning Style */}
+          {/* Step 3: Graduation Plan */}
           {step === 3 && (
-            <div className="space-y-4">
-              <h2 className="text-2xl font-bold text-[#2F4731]">Learning Style</h2>
-              <p className="text-[#2F4731]/70">How does your learner prefer to explore topics?</p>
-
-              <div className="space-y-3">
-                {LEARNING_STYLES.map((style) => (
-                  <label
-                    key={style.value}
-                    className="block p-4 border-2 border-[#E7DAC3] rounded-lg cursor-pointer hover:border-[#BD6809] transition-colors"
-                  >
-                    <div className="flex items-start gap-3">
-                      <input
-                        type="radio"
-                        name="learningStyle"
-                        value={style.value}
-                        checked={learningStyle === style.value}
-                        onChange={(e) => setLearningStyle(e.target.value)}
-                        className="w-5 h-5 text-[#BD6809] border-[#BD6809] focus:ring-[#BD6809] mt-0.5"
-                      />
-                      <div>
-                        <h3 className="font-semibold text-[#2F4731]">{style.label}</h3>
-                        <p className="text-sm text-[#2F4731]/60 mt-1">{style.description}</p>
-                      </div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: Graduation Plan */}
-          {step === 4 && (
             <div className="space-y-4">
               <h2 className="text-2xl font-bold text-[#2F4731]">Create Your Learning Plan</h2>
 
@@ -327,7 +295,7 @@ export function WelcomeFlow({ onComplete }: WelcomeFlowProps) {
             onClick={handleNext}
             className="flex items-center gap-2 px-6 py-2 bg-[#BD6809] text-white rounded-lg font-semibold hover:bg-[#A55708] transition-colors"
           >
-            {step === 4 ? 'Complete Setup' : 'Next'}
+            {step === 3 ? 'Complete Setup' : 'Next'}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>

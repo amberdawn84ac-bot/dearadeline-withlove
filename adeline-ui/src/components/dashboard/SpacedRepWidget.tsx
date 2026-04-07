@@ -51,7 +51,7 @@ export function SpacedRepWidget() {
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     try {
-      const res = await fetch(`/brain/lesson/reviews/${encodeURIComponent(studentId)}`, { headers });
+      const res = await fetch(`/brain/learning/reviews/${encodeURIComponent(studentId)}`, { headers });
       if (!res.ok) return;
       const data: ReviewsApiResponse = await res.json();
       setDueReviews(data.reviews ?? []);
@@ -81,7 +81,7 @@ export function SpacedRepWidget() {
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    await fetch("/brain/lesson/reviews", {
+    await fetch("/brain/learning/reviews", {
       method: "POST",
       headers,
       body: JSON.stringify({

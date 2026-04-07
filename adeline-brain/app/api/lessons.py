@@ -152,8 +152,20 @@ async def generate_lesson(request: LessonRequest):
 async def lesson_health():
     """Quick check that the lesson pipeline's dependencies are reachable."""
     doc_count = await hippocampus.count_documents()
+
+    # Test OpenAI embedding connectivity
+    openai_status = "ok"
+    openai_error = None
+    try:
+        await _embed("health check")
+    except Exception as e:
+        openai_status = "error"
+        openai_error = str(e)
+
     return {
-        "status": "ok",
+        "status": "ok" if openai_status == "ok" else "degraded",
         "hippocampus_documents": doc_count,
         "witness_threshold": TRUTH_THRESHOLD,
+        "openai_embeddings": openai_status,
+        "openai_error": openai_error,
     }
