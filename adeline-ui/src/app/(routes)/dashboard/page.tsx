@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { Suspense, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { StudentStatusBar } from '@/components/StudentStatusBar';
@@ -23,7 +23,7 @@ const LESSON_SUGGESTIONS: LessonSuggestion[] = [
   { id: '4', title: 'Scripture Study: Psalms', track: 'Discipleship', description: 'Hebrew poetry and original meanings', emoji: '📖' },
 ];
 
-export default function DashboardPage() {
+function DashboardContent() {
   const { student, loading: profileLoading } = useStudent();
   const searchParams = useSearchParams();
   const studyPrompt = searchParams.get('study');
@@ -130,5 +130,17 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-screen bg-[#FFFEF7]">
+        <Loader2 className="w-8 h-8 animate-spin text-[#BD6809]" />
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
   );
 }
