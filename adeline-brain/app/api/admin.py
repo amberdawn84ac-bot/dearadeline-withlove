@@ -22,8 +22,15 @@ async def run_seeds():
     """
     try:
         # Import here to avoid loading on every request
-        from app.scripts.seed_curriculum import main as seed_curriculum
-        from app.scripts.seed_knowledge_graph import main as seed_kg
+        import sys
+        from pathlib import Path
+        
+        # Add scripts directory to path
+        scripts_dir = Path(__file__).resolve().parents[2] / "scripts"
+        sys.path.insert(0, str(scripts_dir))
+        
+        from seed_curriculum import main as seed_curriculum
+        from seed_knowledge_graph import main as seed_kg
         
         logger.info("[Admin] Starting curriculum seed...")
         await seed_curriculum()
