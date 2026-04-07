@@ -16,7 +16,7 @@ export default function OnboardingPage() {
     const checkOnboardingStatus = async () => {
       try {
         // Fetch current user profile to check onboarding status
-        const response = await fetch('/api/onboarding', {
+        const response = await fetch('/brain/api/onboarding', {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''}`,
@@ -27,6 +27,12 @@ export default function OnboardingPage() {
         if (response.status === 401) {
           // Not authenticated, redirect to login
           window.location.href = '/login';
+          return;
+        }
+
+        if (response.status === 404) {
+          // New user — no profile yet, show onboarding form
+          setStatus('onboarding');
           return;
         }
 
@@ -68,7 +74,7 @@ export default function OnboardingPage() {
     try {
       setStatus('redirecting');
 
-      const response = await fetch('/api/onboarding', {
+      const response = await fetch('/brain/api/onboarding', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''}`,

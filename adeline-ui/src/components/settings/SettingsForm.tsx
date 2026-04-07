@@ -84,7 +84,7 @@ export function SettingsForm({ initialProfile }: SettingsFormProps) {
       if (useScienceOverride) updateData.scienceLevel = scienceLevel;
       if (useHistoryOverride) updateData.historyLevel = historyLevel;
 
-      const response = await fetch('/api/onboarding', {
+      const response = await fetch('/brain/api/onboarding', {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
