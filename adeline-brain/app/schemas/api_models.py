@@ -36,18 +36,30 @@ class EvidenceVerdict(str, Enum):
 
 class SourceType(str, Enum):
     """What kind of archive this evidence came from."""
-    PRIMARY_SOURCE      = "PRIMARY_SOURCE"
-    DECLASSIFIED_GOV    = "DECLASSIFIED_GOV"
-    ARCHIVE_ORG         = "ARCHIVE_ORG"
-    ACADEMIC_JOURNAL    = "ACADEMIC_JOURNAL"
-    PERSONAL_COLLECTION = "PERSONAL_COLLECTION"
+    PRIMARY_SOURCE        = "PRIMARY_SOURCE"        # Historical primary sources (TRUTH_HISTORY)
+    DECLASSIFIED_GOV      = "DECLASSIFIED_GOV"      # Declassified government documents
+    ARCHIVE_ORG           = "ARCHIVE_ORG"           # Archive.org materials
+    ACADEMIC_JOURNAL      = "ACADEMIC_JOURNAL"      # Academic research
+    PERSONAL_COLLECTION   = "PERSONAL_COLLECTION"   # Personal archives
+    INVESTIGATIVE_REPORT  = "INVESTIGATIVE_REPORT"  # Investigative journalism (Justice)
+    LEGAL_DOCUMENT        = "LEGAL_DOCUMENT"        # Court opinions, legal filings (Justice)
+    LEGISLATIVE_RECORD    = "LEGISLATIVE_RECORD"    # Congressional records (Justice)
+    DISCLOSURE_FORM       = "DISCLOSURE_FORM"       # Lobbying disclosures (Justice)
+    TESTIMONY             = "TESTIMONY"             # Testimonies and oral histories (Justice)
+    DOCUMENT              = "DOCUMENT"              # Generic document
 
 SOURCE_TYPE_LABELS = {
-    "PRIMARY_SOURCE":      "Primary Source",
-    "DECLASSIFIED_GOV":    "Declassified Document",
-    "ARCHIVE_ORG":         "Archive.org",
-    "ACADEMIC_JOURNAL":    "Academic Journal",
-    "PERSONAL_COLLECTION": "Personal Collection",
+    "PRIMARY_SOURCE":        "Primary Source",
+    "DECLASSIFIED_GOV":      "Declassified Document",
+    "ARCHIVE_ORG":           "Archive.org",
+    "ACADEMIC_JOURNAL":      "Academic Journal",
+    "PERSONAL_COLLECTION":   "Personal Collection",
+    "INVESTIGATIVE_REPORT":  "Investigative Report",
+    "LEGAL_DOCUMENT":        "Legal Document",
+    "LEGISLATIVE_RECORD":    "Legislative Record",
+    "DISCLOSURE_FORM":       "Disclosure Form",
+    "TESTIMONY":             "Testimony",
+    "DOCUMENT":              "Document",
 }
 
 DECLASSIFIED_COLLECTIONS = {

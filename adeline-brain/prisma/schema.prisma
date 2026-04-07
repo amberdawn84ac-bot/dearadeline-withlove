@@ -129,6 +129,11 @@ model User {
   targetGraduationYear Int?     // Expected graduation year
   onboardingComplete   Boolean  @default(false)
 
+  // Parent-child relationship for multi-student families
+  parentId     String?
+  parent       User?   @relation("ParentChildren", fields: [parentId], references: [id])
+  children     User[]  @relation("ParentChildren")
+
   lessons         StudentLesson[]
   readingSessions ReadingSession[]
   createdAt       DateTime @default(now())
@@ -137,6 +142,7 @@ model User {
   @@index([role])
   @@index([email])
   @@index([onboardingComplete])
+  @@index([parentId])
 }
 
 model Lesson {

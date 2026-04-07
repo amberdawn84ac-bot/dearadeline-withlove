@@ -133,7 +133,22 @@
       "Bash(find /c/Users/Aarons/dearadeline-withlove -type f -name *parent*)",
       "Bash(find:*)",
       "Bash(git rm:*)",
-      "Bash(npx next:*)"
+      "Bash(npx next:*)",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__get_project",
+      "mcp__claude_ai_Supabase__get_publishable_keys",
+      "Bash(export DATABASE_URL=\"postgresql://postgres:9fbMRQRnpAy8MrTL@db.gyxowttfwqbajoapfebf.supabase.co:5432/postgres\")",
+      "Bash(export DIRECT_DATABASE_URL=\"postgresql://postgres:9fbMRQRnpAy8MrTL@db.gyxowttfwqbajoapfebf.supabase.co:5432/postgres\")",
+      "Bash(export NEO4J_URI=\"neo4j+s://9e4ae87b.databases.neo4j.io\")",
+      "Bash(export NEO4J_USER=\"9e4ae87b\")",
+      "Bash(export NEO4J_PASSWORD=\"_JxqLCuJrhLE9IazaVj_M-q6bW2DgvFYLPVd0w9_dys\")",
+      "Bash(export POSTGRES_DSN=\"postgresql://postgres.gyxowttfwqbajoapfebf:zJCtEAPSCJWAtzTu@aws-0-us-west-2.pooler.supabase.com:5432/postgres\")",
+      "Bash(export DATABASE_URL=\"$POSTGRES_DSN\")",
+      "Bash(export DIRECT_DATABASE_URL=\"$POSTGRES_DSN\")",
+      "Bash(export OPENAI_API_KEY=\"your-openai-api-key-here\")",
+      "Bash(NEO4J_URI=\"neo4j+s://9e4ae87b.databases.neo4j.io\" NEO4J_USER=\"9e4ae87b\" NEO4J_PASSWORD=\"_JxqLCuJrhLE9IazaVj_M-q6bW2DgvFYLPVd0w9_dys\" python scripts/seed_knowledge_graph.py 2>&1)",
+      "Bash(ls)"
     ]
   }
 }
