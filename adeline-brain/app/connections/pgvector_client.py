@@ -72,7 +72,7 @@ class HippocampusClient:
         self._engine = create_async_engine(
             ASYNC_DSN,
             echo=False,
-            connect_args={"ssl": ctx},
+            connect_args={"ssl": ctx, "statement_cache_size": 0},
         )
         self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
 

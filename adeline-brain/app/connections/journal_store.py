@@ -63,7 +63,7 @@ class JournalStore:
                     echo=False,
                     pool_pre_ping=True,   # validate connections before use
                     pool_recycle=300,     # recycle stale connections every 5 min
-                    connect_args={"ssl": ctx},
+                    connect_args={"ssl": ctx, "statement_cache_size": 0},
                 )
                 self._session_factory = async_sessionmaker(
                     self._engine, expire_on_commit=False

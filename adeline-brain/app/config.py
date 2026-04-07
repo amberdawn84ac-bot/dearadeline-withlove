@@ -108,4 +108,4 @@ async def get_db_conn():
     ctx = _ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = _ssl.CERT_NONE
-    return await asyncpg.connect(POSTGRES_DSN, ssl=ctx)
+    return await asyncpg.connect(POSTGRES_DSN, ssl=ctx, statement_cache_size=0)

@@ -36,6 +36,7 @@ class BookshelfSearch:
                 max_size=10,
                 command_timeout=10,
                 ssl=ctx,
+                statement_cache_size=0,
             )
             # Verify pgvector extension exists
             async with self._pool.acquire() as conn:
