@@ -96,6 +96,7 @@ app = FastAPI(
     description="Intelligence Layer — Dear Adeline 2.0 Truth-First K-12 AI Mentor",
     version="0.2.0",
     lifespan=lifespan,
+    redirect_slashes=False,
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

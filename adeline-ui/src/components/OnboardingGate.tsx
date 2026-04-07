@@ -57,7 +57,7 @@ export function OnboardingGate() {
           return;
         }
 
-        const response = await fetch('/brain/api/onboarding', {
+        const response = await fetch('/brain/api/onboarding/', {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,

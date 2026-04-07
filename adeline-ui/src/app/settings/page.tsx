@@ -30,7 +30,7 @@ export default function SettingsPage() {
       try {
         const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : '';
 
-        const response = await fetch('/brain/api/onboarding', {
+        const response = await fetch('/brain/api/onboarding/', {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
