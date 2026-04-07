@@ -1,45 +1,83 @@
 """
 Authentication middleware for adeline-brain.
 
-All environments use JWT verification via SUPABASE_JWT_SECRET.
-The JWT is a Supabase access_token sent as `Authorization: Bearer <token>`.
-The 'sub' claim is the user UUID; role comes from app_metadata.role.
+Verifies Supabase JWTs using either:
+  1. JWKS (ES256) — fetches public key from Supabase's well-known endpoint
+  2. Shared secret (HS256) — uses SUPABASE_JWT_SECRET env var
 
-There is NO unverified fallback. If the secret is missing, requests are rejected.
+The token's 'kid' header determines the path. User access tokens from
+Supabase Auth v2 use ES256 with a kid; legacy tokens use HS256.
+
+Every request must send: Authorization: Bearer <supabase_access_token>
 """
 import logging
 from typing import Optional
 
 import jwt
+from jwt import PyJWKClient
 from fastapi import Header, HTTPException, Depends
 from app.schemas.api_models import UserRole
-from app.config import SUPABASE_JWT_SECRET
+from app.config import SUPABASE_JWT_SECRET, SUPABASE_JWKS_URL
 
 logger = logging.getLogger(__name__)
+
+_jwks_client: Optional[PyJWKClient] = None
+
+
+def _get_jwks_client() -> PyJWKClient:
+    """Lazy-init the JWKS client so import doesn't block on network."""
+    global _jwks_client
+    if _jwks_client is None:
+        _jwks_client = PyJWKClient(SUPABASE_JWKS_URL, cache_keys=True, lifespan=3600)
+    return _jwks_client
 
 
 def _decode_jwt(token: str) -> dict:
     """
     Decode and verify a Supabase-issued JWT.
-    Raises HTTPException on any failure.
+    Uses JWKS (ES256) if token has a 'kid' header, otherwise falls back
+    to SUPABASE_JWT_SECRET (HS256).
     """
-    if not SUPABASE_JWT_SECRET:
-        raise HTTPException(
-            status_code=500,
-            detail="Server misconfiguration: JWT secret not set.",
-        )
     try:
-        payload = jwt.decode(
-            token,
-            SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            audience="authenticated",
-        )
+        header = jwt.get_unverified_header(token)
+    except jwt.DecodeError as e:
+        raise HTTPException(status_code=401, detail=f"Malformed token: {e}")
+
+    kid = header.get("kid")
+    alg = header.get("alg", "HS256")
+
+    try:
+        if kid:
+            # ES256 path — verify with JWKS public key
+            client = _get_jwks_client()
+            signing_key = client.get_signing_key_from_jwt(token)
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=[alg],
+                audience="authenticated",
+            )
+        elif SUPABASE_JWT_SECRET:
+            # HS256 path — verify with shared secret
+            payload = jwt.decode(
+                token,
+                SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                audience="authenticated",
+            )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Server misconfiguration: no JWKS kid and no JWT secret.",
+            )
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired.")
     except jwt.InvalidTokenError as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
+    except Exception as e:
+        logger.error(f"[Auth] JWT verification error: {e}")
+        raise HTTPException(status_code=401, detail="Token verification failed.")
 
 
 def _extract_bearer_token(authorization: Optional[str]) -> str:

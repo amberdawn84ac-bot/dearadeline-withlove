@@ -83,16 +83,12 @@ if IS_PRODUCTION and not OPENAI_API_KEY:
     )
 
 # ── Auth (Supabase JWT) ──────────────────────────────────────────────────────
-# SUPABASE_JWT_SECRET is required in production for token verification.
-# In development, if unset, falls back to permissive header-based auth.
+# Primary: JWKS (ES256) — public key fetched from Supabase's well-known endpoint.
+# Fallback: SUPABASE_JWT_SECRET (HS256) — for legacy tokens or local dev.
 
+SUPABASE_PROJECT_REF = os.getenv("SUPABASE_PROJECT_REF", "gyxowttfwqbajoapfebf")
+SUPABASE_JWKS_URL = f"https://{SUPABASE_PROJECT_REF}.supabase.co/auth/v1/.well-known/jwks.json"
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
-
-if IS_PRODUCTION and not SUPABASE_JWT_SECRET:
-    raise RuntimeError(
-        "FATAL: SUPABASE_JWT_SECRET not set. "
-        "Required for JWT auth in production."
-    )
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
 
