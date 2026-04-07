@@ -52,14 +52,31 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[adeline-brain] Neo4j unavailable — ZPD/graph features disabled: {e}")
 
-    await hippocampus.connect()
-    await bookshelf_search.connect()
-    await journal_store.connect()
+    # DB connections are optional at startup so the app doesn't crash
+    # if a service is temporarily unreachable
+    try:
+        await hippocampus.connect()
+    except Exception as e:
+        logger.warning(f"[adeline-brain] Hippocampus (pgvector) unavailable: {e}")
+
+    try:
+        await bookshelf_search.connect()
+    except Exception as e:
+        logger.warning(f"[adeline-brain] Bookshelf search unavailable: {e}")
+
+    try:
+        await journal_store.connect()
+    except Exception as e:
+        logger.warning(f"[adeline-brain] Journal store unavailable: {e}")
+
     await startup_seed_scheduler()
     yield
     logger.info("[adeline-brain] Shutting down...")
     await shutdown_seed_scheduler()
-    await bookshelf_search.disconnect()
+    try:
+        await bookshelf_search.disconnect()
+    except Exception:
+        pass
     try:
         await neo4j_client.close()
     except Exception:
