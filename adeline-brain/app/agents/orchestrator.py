@@ -371,6 +371,7 @@ async def historian_agent(state: AdelineState) -> AdelineState:
             citation_archive_name=result.get("citation_archive_name", ""),
             similarity_score=float(result["similarity_score"]),
             chunk=result["chunk"],
+            track=request.track.value,
         )
 
         if evidence.verdict == EvidenceVerdict.ARCHIVE_SILENT:
@@ -658,6 +659,7 @@ async def science_agent(state: AdelineState) -> AdelineState:
                 citation_archive_name=result.get("citation_archive_name", ""),
                 similarity_score=float(result["similarity_score"]),
                 chunk=result["chunk"],
+                track=request.track.value,
             )
 
             if evidence.verdict == EvidenceVerdict.ARCHIVE_SILENT:
@@ -747,11 +749,56 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
     framing (scripture context, character formation, cultural discernment).
     VERIFIED sources are presented with interpretive narrative wrap.
     ARCHIVE_SILENT: tries Researcher; falls back to RESEARCH_MISSION.
+    
+    NOW WITH SEFARIA INTEGRATION: Detects biblical references and fetches
+    Everett Fox translation from Sefaria API, then lazy caches to Hippocampus.
     """
     request = state["request"]
     state["agent_name"] = "DiscipleshipAgent"
     blocks: list[dict] = []
 
+    # NEW: Check for biblical references in topic (Sefaria integration)
+    from app.services.sefaria import detect_biblical_reference, fetch_biblical_text, cache_to_hippocampus, format_sefaria_content
+    
+    biblical_ref = detect_biblical_reference(request.topic)
+    
+    if biblical_ref and request.track == Track.DISCIPLESHIP:
+        # Fetch from Sefaria API
+        logger.info(f"[DiscipleshipAgent] Detected biblical reference: {biblical_ref}")
+        sefaria_data = await fetch_biblical_text(biblical_ref)
+        
+        if sefaria_data:
+            # Cache to Hippocampus for future similarity searches
+            await cache_to_hippocampus(biblical_ref, sefaria_data, request.track.value)
+            
+            # Create NARRATIVE block with Sefaria content
+            content = format_sefaria_content(sefaria_data, request.grade_level)
+            
+            blocks.append({
+                "block_type": BlockType.NARRATIVE.value,
+                "content": _worldview_wrap(content, request.track),
+                "evidence": [{
+                    "source_id": f"sefaria-{biblical_ref}",
+                    "source_title": f"{sefaria_data['ref']} (Everett Fox Translation)",
+                    "source_url": sefaria_data['url'],
+                    "witness_citation": {
+                        "author": "Everett Fox (Translator)",
+                        "year": 1995,
+                        "archive_name": "Sefaria / Schocken Books",
+                    },
+                    "similarity_score": 1.0,  # Direct fetch, not similarity search
+                    "verdict": "VERIFIED",
+                    "chunk": sefaria_data['english'],
+                }],
+                "is_silenced": False,
+            })
+            
+            state["blocks"] = blocks
+            return state
+        else:
+            logger.warning(f"[DiscipleshipAgent] Failed to fetch {biblical_ref} from Sefaria, falling back to Hippocampus")
+    
+    # EXISTING LOGIC: Hippocampus similarity search
     raw_results = await hippocampus.similarity_search(
         query_embedding=state["query_embedding"],
         track=request.track.value,
@@ -768,6 +815,7 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
             citation_archive_name=result.get("citation_archive_name", ""),
             similarity_score=float(result["similarity_score"]),
             chunk=result["chunk"],
+            track=request.track.value,
         )
 
         if evidence.verdict == EvidenceVerdict.ARCHIVE_SILENT:
