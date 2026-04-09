@@ -70,6 +70,16 @@ enum CreditType {
   HOMESTEAD
 }
 
+enum CreditBucket {
+  ENGLISH_CORE      // English Literature - 4 credits required
+  MATH_CORE         // Applied Mathematics - 3 credits required
+  SCIENCE_CORE      // Creation Science - 3 credits required
+  SOCIAL_STUDIES    // Truth History, Government Economics - 3 credits required
+  PHYSICAL_ED       // Health Naturopathy - 1 credit required
+  FINE_ARTS         // Creative Economy - 1 credit required
+  ELECTIVES         // Homesteading, Discipleship, Justice Changemaking - 6 credits required
+}
+
 enum GradeLetter {
   A_PLUS
   A

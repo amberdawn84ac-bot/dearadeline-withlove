@@ -35,6 +35,32 @@ from app.connections.neo4j_client import neo4j_client
 from app.connections.pgvector_client import hippocampus
 from app.tools.graph_query import tool_get_zpd_candidates, ZPDCandidate
 
+# Graduation requirements (Oklahoma homeschool standards)
+GRADUATION_REQUIREMENTS = {
+    "ENGLISH_CORE": 4.0,      # English Literature
+    "MATH_CORE": 3.0,         # Applied Mathematics  
+    "SCIENCE_CORE": 3.0,      # Creation Science
+    "SOCIAL_STUDIES": 3.0,    # Truth History + Government Economics
+    "PHYSICAL_ED": 1.0,       # Health Naturopathy
+    "FINE_ARTS": 1.0,         # Creative Economy
+    "ELECTIVES": 6.0,        # Homesteading + Discipleship + Justice Changemaking
+}
+TOTAL_REQUIRED = sum(GRADUATION_REQUIREMENTS.values())  # 21.0 credits
+
+# Map tracks to credit buckets
+TRACK_TO_BUCKET = {
+    "ENGLISH_LITERATURE": "ENGLISH_CORE",
+    "APPLIED_MATHEMATICS": "MATH_CORE",
+    "CREATION_SCIENCE": "SCIENCE_CORE",
+    "TRUTH_HISTORY": "SOCIAL_STUDIES",
+    "GOVERNMENT_ECONOMICS": "SOCIAL_STUDIES",
+    "HEALTH_NATUROPATHY": "PHYSICAL_ED",
+    "CREATIVE_ECONOMY": "FINE_ARTS",
+    "HOMESTEADING": "ELECTIVES",
+    "DISCIPLESHIP": "ELECTIVES",
+    "JUSTICE_CHANGEMAKING": "ELECTIVES",
+}
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/learning-plan", tags=["learning-plan"])
 
@@ -66,6 +92,20 @@ class ProjectSuggestion(BaseModel):
     portfolio_credit: bool = True  # Projects always earn portfolio credit
 
 
+class CreditGap(BaseModel):
+    bucket: str
+    required: float
+    earned: float
+    remaining: float
+    priority: int  # 1=highest priority, 7=lowest
+
+class GraduationProgress(BaseModel):
+    total_required: float
+    total_earned: float
+    percentage_complete: float
+    credits_remaining: float
+    on_track: bool  # Based on grade level and expected progress
+
 class LearningPlanResponse(BaseModel):
     student_id: str
     suggestions: list[LessonSuggestion]
@@ -75,6 +115,8 @@ class LearningPlanResponse(BaseModel):
     weakest_track: Optional[str] = None
     total_credits_earned: float = 0.0
     credits_this_week: float = 0.0
+    graduation_progress: GraduationProgress
+    credit_gaps: list[CreditGap]  # What's still needed for graduation
     generated_at: str
 
 
@@ -354,6 +396,84 @@ async def _get_credit_summary(student_id: str) -> tuple[float, float]:
     return 0.0, 0.0
 
 
+async def _get_credits_by_bucket(student_id: str) -> dict[str, float]:
+    """Get earned credits grouped by graduation bucket."""
+    from app.config import get_db_conn
+    credits_by_bucket = {bucket: 0.0 for bucket in GRADUATION_REQUIREMENTS}
+    
+    try:
+        conn = await get_db_conn()
+        rows = await conn.fetch(
+            """
+            SELECT track, SUM("creditHours") as hours
+            FROM "TranscriptEntry" 
+            WHERE "studentId" = $1
+            GROUP BY track
+            """,
+            student_id,
+        )
+        await conn.close()
+        
+        for row in rows:
+            track = row["track"]
+            hours = float(row["hours"] or 0)
+            bucket = TRACK_TO_BUCKET.get(track)
+            if bucket:
+                credits_by_bucket[bucket] += hours
+                
+    except Exception as e:
+        logger.warning(f"[LearningPlan] Failed to get credits by bucket: {e}")
+        
+    return credits_by_bucket
+
+
+def _calculate_credit_gaps(credits_by_bucket: dict[str, float]) -> list[CreditGap]:
+    """Calculate what credits are still needed for graduation."""
+    gaps = []
+    
+    # Priority order: core subjects first, then electives
+    priority_order = [
+        "ENGLISH_CORE", "MATH_CORE", "SCIENCE_CORE", "SOCIAL_STUDIES",
+        "PHYSICAL_ED", "FINE_ARTS", "ELECTIVES"
+    ]
+    
+    for i, bucket in enumerate(priority_order, 1):
+        required = GRADUATION_REQUIREMENTS[bucket]
+        earned = credits_by_bucket.get(bucket, 0.0)
+        remaining = max(0.0, required - earned)
+        
+        gaps.append(CreditGap(
+            bucket=bucket,
+            required=required,
+            earned=earned,
+            remaining=remaining,
+            priority=i,
+        ))
+    
+    return gaps
+
+
+def _calculate_graduation_progress(credits_by_bucket: dict[str, float], grade_level: str) -> GraduationProgress:
+    """Calculate overall graduation progress and check if on track."""
+    total_earned = sum(credits_by_bucket.values())
+    percentage = (total_earned / TOTAL_REQUIRED) * 100 if TOTAL_REQUIRED > 0 else 0
+    remaining = max(0.0, TOTAL_REQUIRED - total_earned)
+    
+    # Check if on track based on grade level
+    # Rough guide: should have ~3 credits per year completed
+    grade_num = int(grade_level.replace("K", "0").replace("st", "").replace("nd", "").replace("rd", "").replace("th", ""))
+    expected_credits = min(grade_num * 3.0, TOTAL_REQUIRED)
+    on_track = total_earned >= expected_credits * 0.8  # 80% of expected progress
+    
+    return GraduationProgress(
+        total_required=TOTAL_REQUIRED,
+        total_earned=total_earned,
+        percentage_complete=round(percentage, 1),
+        credits_remaining=round(remaining, 1),
+        on_track=on_track,
+    )
+
+
 async def _get_available_projects(track: str = None, limit: int = 3) -> list[ProjectSuggestion]:
     """Get available projects from the catalog, optionally filtered by track."""
     from app.api.projects import PROJECTS
@@ -434,12 +554,24 @@ async def get_learning_plan(
         logger.warning(f"[LearningPlan] Failed to load student state: {e}")
         student_state = None
 
-    # 3. Get credit summary
+    # 3. Get credit summary and graduation progress
     try:
         total_credits, weekly_credits = await _get_credit_summary(student_id)
+        credits_by_bucket = await _get_credits_by_bucket(student_id)
+        graduation_progress = _calculate_graduation_progress(credits_by_bucket, grade_level)
+        credit_gaps = _calculate_credit_gaps(credits_by_bucket)
     except Exception as e:
-        logger.warning(f"[LearningPlan] Failed to get credit summary: {e}")
+        logger.warning(f"[LearningPlan] Failed to get graduation data: {e}")
         total_credits, weekly_credits = 0.0, 0.0
+        credits_by_bucket = {bucket: 0.0 for bucket in GRADUATION_REQUIREMENTS}
+        graduation_progress = GraduationProgress(
+            total_required=TOTAL_REQUIRED,
+            total_earned=0.0,
+            percentage_complete=0.0,
+            credits_remaining=TOTAL_REQUIRED,
+            on_track=False,
+        )
+        credit_gaps = _calculate_credit_gaps(credits_by_bucket)
 
     # 4. Get recent lessons to avoid repetition
     recent_lesson_ids: set[str] = set()
@@ -470,12 +602,53 @@ async def get_learning_plan(
         strongest_track = max(track_scores, key=track_scores.get)
         weakest_track = min(track_scores, key=track_scores.get)
 
-    # 6. Generate interest-based suggestions FIRST (highest priority for engagement)
-    for interest in interests[:3]:  # Top 3 interests
+    # 6. PRIORITIZE BASED ON CREDIT GAPS (graduation requirements first)
+    # Map gaps to tracks and prioritize suggestions for missing credits
+    gap_priorities = {}
+    for gap in credit_gaps:
+        if gap.remaining > 0:
+            # Find tracks that fulfill this bucket
+            for track, bucket in TRACK_TO_BUCKET.items():
+                if bucket == gap.bucket and track in active_tracks:
+                    gap_priorities[track] = gap.priority
+                    break
+    
+    # 7. Generate gap-based suggestions (highest priority)
+    for track in sorted(gap_priorities.keys(), key=lambda t: gap_priorities[t]):
+        # Boost priority significantly for missing credits
+        priority_boost = (1.0 - track_scores.get(track, 0.0)) * 0.2  # Up to 0.2 boost
+        
+        try:
+            candidates = await tool_get_zpd_candidates(student_id, track, limit=2)
+            
+            for candidate in candidates:
+                suggestion = _zpd_to_suggestion(candidate, priority_boost + 0.3)  # Extra boost for gaps
+                # Don't add duplicates
+                if not any(s.title == suggestion.title for s in suggestions):
+                    suggestions.append(suggestion)
+                    
+            # If no ZPD candidates, add starter topics for gaps
+            if not candidates and track in STARTER_TOPICS:
+                starters = STARTER_TOPICS[track][:1]  # Just 1 starter for gaps
+                for topic in starters:
+                    suggestion = _starter_suggestion(track, topic, 0)
+                    suggestion.priority = 0.8  # High priority for gaps
+                    if not any(s.title == suggestion.title for s in suggestions):
+                        suggestions.append(suggestion)
+                        
+        except Exception as e:
+            logger.warning(f"[LearningPlan] Gap-based suggestions failed for track={track}: {e}")
+
+    # 8. Generate interest-based suggestions (medium priority)
+    for interest in interests[:2]:  # Top 2 interests (reduced to make room for gaps)
         if interest in INTEREST_TRACK_MAP:
             track, topics = INTEREST_TRACK_MAP[interest]
+            # Lower priority if this track isn't a gap
+            priority = 0.6 if track not in gap_priorities else 0.75
+            
             for idx, topic in enumerate(topics[:1]):  # 1 topic per interest
                 suggestion = _interest_suggestion(interest, topic, track, idx)
+                suggestion.priority = priority
                 # Don't add duplicates
                 if not any(s.title == suggestion.title for s in suggestions):
                     suggestions.append(suggestion)
@@ -558,5 +731,7 @@ async def get_learning_plan(
         weakest_track=weakest_track,
         total_credits_earned=total_credits,
         credits_this_week=weekly_credits,
+        graduation_progress=graduation_progress,
+        credit_gaps=credit_gaps,
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
