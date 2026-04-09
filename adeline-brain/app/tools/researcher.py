@@ -35,6 +35,7 @@ from app.schemas.api_models import (
     Evidence, EvidenceVerdict, WitnessCitation, TRUTH_THRESHOLD, SourceType,
 )
 from app.connections.pgvector_client import hippocampus
+from app.protocols.witness import get_witness_threshold
 from app.protocols.content_filter import should_return_document
 from app.utils.rate_limiter import TokenBucket
 
@@ -196,10 +197,12 @@ async def search_witnesses(
             top_k=top_k,
         )
 
-        # Step 3: Filter by TRUTH_THRESHOLD (0.82)
+        # Step 3: Filter by track-aware threshold
+        threshold = get_witness_threshold(track)
+        logger.info(f"[Researcher] Using threshold {threshold} for track {track}")
         verified_results = [
             r for r in hippo_results
-            if r.get('similarity_score', 0) >= TRUTH_THRESHOLD
+            if r.get('similarity_score', 0) >= threshold
         ]
 
         if verified_results:
@@ -232,8 +235,13 @@ async def search_witnesses(
             logger.info(f"[Researcher] Found {len(filtered_evidence)} verified in Hippocampus after age filtering")
             return filtered_evidence
 
-        # Step 4: Hippocampus empty → deep web search
-        logger.info(f"[Researcher] Hippocampus empty. Triggering deep web search.")
+        # Step 4: No verified results → deep web search
+        # This triggers when Hippocampus is empty OR when results exist but are below threshold
+        if hippo_results:
+            best_score = max(r.get('similarity_score', 0) for r in hippo_results)
+            logger.info(f"[Researcher] Hippocampus returned {len(hippo_results)} results (best score: {best_score:.3f}) but none met {threshold} threshold. Triggering deep web search.")
+        else:
+            logger.info(f"[Researcher] Hippocampus empty. Triggering deep web search.")
         archive_results = await search_all_archives_parallel(query)
 
         if not archive_results:
@@ -250,8 +258,8 @@ async def search_witnesses(
                 # Cosine similarity
                 similarity_score = _cosine_similarity(query_embedding, doc_embedding)
 
-                # Step 5b: Persist to Hippocampus if >= 0.82
-                if similarity_score >= TRUTH_THRESHOLD:
+                # Step 5b: Persist to Hippocampus if meets track threshold
+                if similarity_score >= threshold:
                     doc_id = await hippocampus.upsert_document(
                         source_title=doc['title'],
                         track=track,
