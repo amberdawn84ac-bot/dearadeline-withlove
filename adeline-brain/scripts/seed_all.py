@@ -43,6 +43,8 @@ async def run_seed_script(script_name: str, description: str):
             from seed_key_passages import main as seed_main
         elif script_name == "seed_founding_documents":
             from seed_founding_documents import main as seed_main
+        elif script_name == "seed_history_primary_sources":
+            from seed_history_primary_sources import main as seed_main
         elif script_name == "seed_creation_science":
             from seed_creation_science import main as seed_main
         else:
@@ -74,7 +76,8 @@ async def main():
     # Seed in priority order
     seed_order = [
         ("seed_key_passages", "Key Bible Passages (Discipleship Track)"),
-        ("seed_founding_documents", "U.S. Founding Documents (Truth-Based History)"),
+        ("seed_founding_documents", "U.S. Founding Documents (Declaration, Constitution, Bill of Rights)"),
+        ("seed_history_primary_sources", "Historical Primary Sources (20+ documents across all eras)"),
         ("seed_curriculum", "Frederick Douglass & OAS Standards"),
         ("seed_creation_science", "Creation Science Experiments"),
     ]

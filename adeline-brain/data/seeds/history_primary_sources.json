@@ -1,0 +1,191 @@
+{
+  "civil_war_emancipation_proclamation": {
+    "title": "Emancipation Proclamation",
+    "author": "Abraham Lincoln",
+    "year": 1863,
+    "source_url": "https://www.archives.gov/exhibits/featured-documents/emancipation-proclamation",
+    "archive": "National Archives",
+    "track": "TRUTH_HISTORY",
+    "text": "That on the first day of January, in the year of our Lord one thousand eight hundred and sixty-three, all persons held as slaves within any State or designated part of a State, the people whereof shall then be in rebellion against the United States, shall be then, thenceforward, and forever free; and the Executive Government of the United States, including the military and naval authority thereof, will recognize and maintain the freedom of such persons, and will do no act or acts to repress such persons, or any of them, in any efforts they may make for their actual freedom."
+  },
+  "civil_war_gettysburg_address": {
+    "title": "Gettysburg Address",
+    "author": "Abraham Lincoln",
+    "year": 1863,
+    "source_url": "https://www.abrahamlincolnonline.org/lincoln/speeches/gettysburg.htm",
+    "archive": "Library of Congress",
+    "track": "TRUTH_HISTORY",
+    "text": "Four score and seven years ago our fathers brought forth on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal. Now we are engaged in a great civil war, testing whether that nation, or any nation so conceived and so dedicated, can long endure. We are met on a great battle-field of that war. We have come to dedicate a portion of that field, as a final resting place for those who here gave their lives that that nation might live. It is altogether fitting and proper that we should do this. But, in a larger sense, we can not dedicate -- we can not consecrate -- we can not hallow -- this ground. The brave men, living and dead, who struggled here, have consecrated it, far above our poor power to add or detract."
+  },
+  "civil_war_robert_e_lee_surrender": {
+    "title": "Robert E. Lee's Farewell to His Army",
+    "author": "Robert E. Lee",
+    "year": 1865,
+    "source_url": "https://www.nps.gov/apco/learn/historyculture/lee-farewell.htm",
+    "archive": "National Park Service",
+    "track": "TRUTH_HISTORY",
+    "text": "After four years of arduous service marked by unsurpassed courage and fortitude, the Army of Northern Virginia has been compelled to yield to overwhelming numbers and resources. I need not tell the survivors of so many hard-fought battles who have remained steadfast to the last that I have consented to this result from no distrust of them; but feeling that valor and devotion could accomplish nothing that could compensate for the loss that would have attended the continuance of the contest, I determined to avoid the useless sacrifice of those whose past services have endeared them to their countrymen."
+  },
+  "revolutionary_war_common_sense": {
+    "title": "Common Sense",
+    "author": "Thomas Paine",
+    "year": 1776,
+    "source_url": "https://www.gutenberg.org/ebooks/147",
+    "archive": "Project Gutenberg",
+    "track": "TRUTH_HISTORY",
+    "text": "Society in every state is a blessing, but government even in its best state is but a necessary evil; in its worst state an intolerable one; for when we suffer, or are exposed to the same miseries by a government, which we might expect in a country without government, our calamity is heightened by reflecting that we furnish the means by which we suffer. Government, like dress, is the badge of lost innocence; the palaces of kings are built on the ruins of the bowers of paradise."
+  },
+  "revolutionary_war_patrick_henry": {
+    "title": "Give Me Liberty or Give Me Death",
+    "author": "Patrick Henry",
+    "year": 1775,
+    "source_url": "https://www.history.org/almanack/life/politics/giveme.cfm",
+    "archive": "Colonial Williamsburg Foundation",
+    "track": "TRUTH_HISTORY",
+    "text": "Is life so dear, or peace so sweet, as to be purchased at the price of chains and slavery? Forbid it, Almighty God! I know not what course others may take; but as for me, give me liberty or give me death!"
+  },
+  "native_american_chief_joseph": {
+    "title": "I Will Fight No More Forever",
+    "author": "Chief Joseph (Nez Perce)",
+    "year": 1877,
+    "source_url": "https://www.pbs.org/weta/thewest/resources/archives/four/chief.htm",
+    "archive": "PBS - The West",
+    "track": "TRUTH_HISTORY",
+    "text": "Tell General Howard I know his heart. What he told me before, I have it in my heart. I am tired of fighting. Our Chiefs are killed; Looking Glass is dead, Ta Hool Hool Shute is dead. The old men are all dead. It is the young men who say yes or no. He who led on the young men is dead. It is cold, and we have no blankets; the little children are freezing to death. My people, some of them, have run away to the hills, and have no blankets, no food. No one knows where they are - perhaps freezing to death. I want to have time to look for my children, and see how many of them I can find. Maybe I shall find them among the dead. Hear me, my Chiefs! I am tired; my heart is sick and sad. From where the sun now stands I will fight no more forever."
+  },
+  "native_american_tecumseh": {
+    "title": "Tecumseh's Speech to Governor Harrison",
+    "author": "Tecumseh (Shawnee)",
+    "year": 1810,
+    "source_url": "https://www.americanrhetoric.com/speeches/nativeamericans/tecumseh.htm",
+    "archive": "American Rhetoric",
+    "track": "TRUTH_HISTORY",
+    "text": "The way, the only way to stop this evil is for the red man to unite in claiming a common and equal right in the land, as it was first, and should be now, for it was never divided. We gave them forest-clad mountains and valleys full of game, and in return what did they give our warriors and our women? Rum, trinkets, and a grave."
+  },
+  "womens_suffrage_seneca_falls": {
+    "title": "Declaration of Sentiments - Seneca Falls Convention",
+    "author": "Elizabeth Cady Stanton",
+    "year": 1848,
+    "source_url": "https://www.nps.gov/wori/learn/historyculture/declaration-of-sentiments.htm",
+    "archive": "National Park Service",
+    "track": "TRUTH_HISTORY",
+    "text": "We hold these truths to be self-evident: that all men and women are created equal; that they are endowed by their Creator with certain inalienable rights; that among these are life, liberty, and the pursuit of happiness; that to secure these rights governments are instituted, deriving their just powers from the consent of the governed. The history of mankind is a history of repeated injuries and usurpations on the part of man toward woman, having in direct object the establishment of an absolute tyranny over her."
+  },
+  "womens_suffrage_sojourner_truth": {
+    "title": "Ain't I a Woman?",
+    "author": "Sojourner Truth",
+    "year": 1851,
+    "source_url": "https://www.nps.gov/articles/sojourner-truth.htm",
+    "archive": "National Park Service",
+    "track": "TRUTH_HISTORY",
+    "text": "That man over there says that women need to be helped into carriages, and lifted over ditches, and to have the best place everywhere. Nobody ever helps me into carriages, or over mud-puddles, or gives me any best place! And ain't I a woman? Look at me! Look at my arm! I have ploughed and planted, and gathered into barns, and no man could head me! And ain't I a woman? I could work as much and eat as much as a man - when I could get it - and bear the lash as well! And ain't I a woman? I have borne thirteen children, and seen most all sold off to slavery, and when I cried out with my mother's grief, none but Jesus heard me! And ain't I a woman?"
+  },
+  "civil_rights_mlk_letter_birmingham": {
+    "title": "Letter from Birmingham Jail",
+    "author": "Martin Luther King Jr.",
+    "year": 1963,
+    "source_url": "https://www.africa.upenn.edu/Articles_Gen/Letter_Birmingham.html",
+    "archive": "University of Pennsylvania",
+    "track": "TRUTH_HISTORY",
+    "text": "Injustice anywhere is a threat to justice everywhere. We are caught in an inescapable network of mutuality, tied in a single garment of destiny. Whatever affects one directly, affects all indirectly. Never again can we afford to live with the narrow, provincial 'outside agitator' idea. Anyone who lives inside the United States can never be considered an outsider anywhere within its bounds."
+  },
+  "civil_rights_mlk_i_have_a_dream": {
+    "title": "I Have a Dream",
+    "author": "Martin Luther King Jr.",
+    "year": 1963,
+    "source_url": "https://www.archives.gov/files/press/exhibits/dream-speech.pdf",
+    "archive": "National Archives",
+    "track": "TRUTH_HISTORY",
+    "text": "I have a dream that one day this nation will rise up and live out the true meaning of its creed: 'We hold these truths to be self-evident, that all men are created equal.' I have a dream that one day on the red hills of Georgia, the sons of former slaves and the sons of former slave owners will be able to sit down together at the table of brotherhood. I have a dream that my four little children will one day live in a nation where they will not be judged by the color of their skin but by the content of their character."
+  },
+  "oklahoma_land_run_proclamation": {
+    "title": "Oklahoma Land Run Proclamation",
+    "author": "President Benjamin Harrison",
+    "year": 1889,
+    "source_url": "https://www.okhistory.org/publications/enc/entry.php?entry=LA014",
+    "archive": "Oklahoma Historical Society",
+    "track": "HOMESTEADING",
+    "text": "Whereas, pursuant to section 13 of the act of Congress approved March 2, 1889, entitled 'An act making appropriations for the current and contingent expenses of the Indian Department,' certain lands in the Indian Territory commonly known as the Oklahoma lands are required to be opened to settlement by proclamation: Now, therefore, I, Benjamin Harrison, President of the United States, do hereby declare and make known that all of the lands acquired from the Muscogee (Creek) and Seminole tribes of Indians, saving and excepting the lands set apart and reserved, will, at and after the hour of twelve o'clock noon on the 22nd day of April, Anno Domini eighteen hundred and eighty-nine, and not before, be open to settlement."
+  },
+  "homesteading_act": {
+    "title": "Homestead Act of 1862",
+    "author": "U.S. Congress",
+    "year": 1862,
+    "source_url": "https://www.archives.gov/education/lessons/homestead-act",
+    "archive": "National Archives",
+    "track": "HOMESTEADING",
+    "text": "Be it enacted by the Senate and House of Representatives of the United States of America in Congress assembled, That any person who is the head of a family, or who has arrived at the age of twenty-one years, and is a citizen of the United States, or who shall have filed his declaration of intention to become such, as required by the naturalization laws of the United States, and who has never borne arms against the United States Government or given aid and comfort to its enemies, shall, from and after the first January, eighteen hundred and sixty-three, be entitled to enter one quarter section or a less quantity of unappropriated public lands."
+  },
+  "wwi_wilson_fourteen_points": {
+    "title": "Fourteen Points",
+    "author": "Woodrow Wilson",
+    "year": 1918,
+    "source_url": "https://www.ourdocuments.gov/doc.php?flash=false&doc=62",
+    "archive": "Our Documents",
+    "track": "TRUTH_HISTORY",
+    "text": "What we demand in this war, therefore, is nothing peculiar to ourselves. It is that the world be made fit and safe to live in; and particularly that it be made safe for every peace-loving nation which, like our own, wishes to live its own life, determine its own institutions, be assured of justice and fair dealing by the other peoples of the world as against force and selfish aggression. All the peoples of the world are in effect partners in this interest, and for our own part we see very clearly that unless justice be done to others it will not be done to us."
+  },
+  "wwii_fdr_day_of_infamy": {
+    "title": "Day of Infamy Speech",
+    "author": "Franklin D. Roosevelt",
+    "year": 1941,
+    "source_url": "https://www.archives.gov/milestone-documents/president-franklin-roosevelts-day-of-infamy-speech",
+    "archive": "National Archives",
+    "track": "TRUTH_HISTORY",
+    "text": "Yesterday, December 7th, 1941 -- a date which will live in infamy -- the United States of America was suddenly and deliberately attacked by naval and air forces of the Empire of Japan. The United States was at peace with that nation and, at the solicitation of Japan, was still in conversation with its government and its emperor looking toward the maintenance of peace in the Pacific. Indeed, one hour after Japanese air squadrons had commenced bombing in the American island of Oahu, the Japanese ambassador to the United States and his colleague delivered to our Secretary of State a formal reply to a recent American message. And while this reply stated that it seemed useless to continue the existing diplomatic negotiations, it contained no threat or hint of war or of armed attack."
+  },
+  "great_depression_fdr_inaugural": {
+    "title": "First Inaugural Address - The Only Thing We Have to Fear",
+    "author": "Franklin D. Roosevelt",
+    "year": 1933,
+    "source_url": "https://www.archives.gov/milestone-documents/president-franklin-roosevelts-first-inaugural-address",
+    "archive": "National Archives",
+    "track": "TRUTH_HISTORY",
+    "text": "This is preeminently the time to speak the truth, the whole truth, frankly and boldly. Nor need we shrink from honestly facing conditions in our country today. This great Nation will endure as it has endured, will revive and will prosper. So, first of all, let me assert my firm belief that the only thing we have to fear is fear itself—nameless, unreasoning, unjustified terror which paralyzes needed efforts to convert retreat into advance."
+  },
+  "cold_war_jfk_inaugural": {
+    "title": "Inaugural Address - Ask Not What Your Country Can Do",
+    "author": "John F. Kennedy",
+    "year": 1961,
+    "source_url": "https://www.jfklibrary.org/learn/about-jfk/historic-speeches/inaugural-address",
+    "archive": "JFK Presidential Library",
+    "track": "TRUTH_HISTORY",
+    "text": "And so, my fellow Americans: ask not what your country can do for you—ask what you can do for your country. My fellow citizens of the world: ask not what America will do for you, but what together we can do for the freedom of man. Finally, whether you are citizens of America or citizens of the world, ask of us the same high standards of strength and sacrifice which we ask of you."
+  },
+  "cold_war_reagan_tear_down_wall": {
+    "title": "Tear Down This Wall",
+    "author": "Ronald Reagan",
+    "year": 1987,
+    "source_url": "https://www.reaganlibrary.gov/archives/speech/remarks-brandenburg-gate",
+    "archive": "Reagan Presidential Library",
+    "track": "TRUTH_HISTORY",
+    "text": "General Secretary Gorbachev, if you seek peace, if you seek prosperity for the Soviet Union and Eastern Europe, if you seek liberalization: Come here to this gate! Mr. Gorbachev, open this gate! Mr. Gorbachev, tear down this wall!"
+  },
+  "mayflower_compact": {
+    "title": "Mayflower Compact",
+    "author": "Pilgrims",
+    "year": 1620,
+    "source_url": "https://www.plimoth.org/for-students/homework-help/mayflower-and-mayflower-compact",
+    "archive": "Plimoth Patuxet Museums",
+    "track": "TRUTH_HISTORY",
+    "text": "In the name of God, Amen. We, whose names are underwritten, the Loyal Subjects of our dread Sovereign Lord King James, by the Grace of God, of Great Britain, France, and Ireland, King, Defender of the Faith, &c. Having undertaken for the Glory of God, and Advancement of the Christian Faith, and the Honour of our King and Country, a Voyage to plant the first Colony in the northern Parts of Virginia; Do by these Presents, solemnly and mutually, in the Presence of God and one another, covenant and combine ourselves together into a civil Body Politick, for our better Ordering and Preservation, and Furtherance of the Ends aforesaid."
+  },
+  "washington_farewell_address": {
+    "title": "Washington's Farewell Address",
+    "author": "George Washington",
+    "year": 1796,
+    "source_url": "https://www.ourdocuments.gov/doc.php?flash=false&doc=15",
+    "archive": "Our Documents",
+    "track": "TRUTH_HISTORY",
+    "text": "The unity of government which constitutes you one people is also now dear to you. It is justly so, for it is a main pillar in the edifice of your real independence, the support of your tranquility at home, your peace abroad; of your safety; of your prosperity; of that very liberty which you so highly prize. But as it is easy to foresee that, from different causes and from different quarters, much pains will be taken, many artifices employed to weaken in your minds the conviction of this truth; as this is the point in your political fortress against which the batteries of internal and external enemies will be most constantly and actively (though often covertly and insidiously) directed, it is of infinite moment that you should properly estimate the immense value of your national union to your collective and individual happiness."
+  },
+  "jefferson_religious_freedom": {
+    "title": "Virginia Statute for Religious Freedom",
+    "author": "Thomas Jefferson",
+    "year": 1786,
+    "source_url": "https://www.monticello.org/site/research-and-collections/virginia-statute-religious-freedom",
+    "archive": "Monticello",
+    "track": "TRUTH_HISTORY",
+    "text": "Be it enacted by the General Assembly, That no man shall be compelled to frequent or support any religious worship, place, or ministry whatsoever, nor shall be enforced, restrained, molested, or burthened in his body or goods, nor shall otherwise suffer on account of his religious opinions or belief; but that all men shall be free to profess, and by argument to maintain, their opinion in matters of religion, and that the same shall in no wise diminish, enlarge, or affect their civil capacities."
+  }
+}
