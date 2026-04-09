@@ -35,7 +35,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 from app.services.sefaria import fetch_biblical_text, normalize_reference
-from app.config import get_db_conn
+from app.connections.pgvector_client import hippocampus
 import openai
 
 logging.basicConfig(
@@ -181,45 +181,19 @@ async def seed_passage(ref: str, title: str, notes: str, track: str) -> bool:
         log.info(f"  Embedding {ref}...")
         embedding = await embed_text(chunk)
         
-        # Connect to database
-        conn = await get_db_conn()
-        
-        # Check if already exists
-        existing = await conn.fetchrow(
-            'SELECT id FROM "HippocampusDocument" WHERE source_url = $1 AND track = $2',
-            sefaria_data['url'],
-            track
+        # Use hippocampus.upsert_document() to handle embedding format
+        doc_id = await hippocampus.upsert_document(
+            source_title=f"{ref} - {title}",
+            source_url=sefaria_data['url'],
+            source_type="SEFARIA_TEXT",
+            track=track,
+            chunk=chunk,
+            embedding=embedding,
+            citation_author="Everett Fox (Translator)" if sefaria_data['is_fox'] else "Sefaria.org",
+            citation_year=1995 if sefaria_data['is_fox'] else None,
+            citation_archive_name="Sefaria / Schocken Books" if sefaria_data['is_fox'] else "Sefaria.org",
         )
         
-        if existing:
-            log.info(f"  [skip] Already seeded: {ref}")
-            await conn.close()
-            return True
-        
-        # Insert new document
-        result = await conn.fetchrow(
-            '''
-            INSERT INTO "HippocampusDocument" (
-                source_title, source_url, source_type, track,
-                chunk, embedding, citation_author, citation_year,
-                citation_archive_name, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-            RETURNING id
-            ''',
-            f"{ref} - {title}",
-            sefaria_data['url'],
-            "SEFARIA_TEXT",
-            track,
-            chunk,
-            embedding,
-            "Everett Fox (Translator)" if sefaria_data['is_fox'] else "Sefaria.org",
-            1995 if sefaria_data['is_fox'] else None,
-            "Sefaria / Schocken Books" if sefaria_data['is_fox'] else "Sefaria.org",
-        )
-        
-        await conn.close()
-        
-        doc_id = result['id']
         fox_indicator = "🦊" if sefaria_data['is_fox'] else ""
         log.info(f"  ✓ Seeded {ref} {fox_indicator} → {doc_id}")
         return True
