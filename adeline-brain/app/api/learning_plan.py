@@ -95,6 +95,17 @@ class ProjectSuggestion(BaseModel):
     portfolio_credit: bool = True  # Projects always earn portfolio credit
 
 
+class BookRecommendation(BaseModel):
+    id: str
+    title: str
+    author: str
+    track: str
+    lexile_level: int
+    grade_band: Optional[str] = None
+    cover_url: Optional[str] = None
+    relevance_score: float = 0.0
+
+
 class CreditGap(BaseModel):
     bucket: str
     required: float
@@ -122,6 +133,7 @@ class LearningPlanResponse(BaseModel):
     student_id: str
     suggestions: list[LessonSuggestion]
     projects: list[ProjectSuggestion]  # Portfolio projects ready to start
+    recommended_books: list[BookRecommendation] = []
     total_tracks_active: int
     strongest_track: Optional[str] = None
     weakest_track: Optional[str] = None
@@ -850,15 +862,47 @@ async def get_learning_plan(
         logger.warning(f"[LearningPlan] Failed to get projects: {e}")
         projects = []
 
+    # 13. Fetch gap-weighted book recommendations
+    recommended_books: list[BookRecommendation] = []
+    try:
+        from app.api.books import get_gap_weighted_recommendations
+        gap_dicts = [{"bucket": g.bucket, "remaining": g.remaining} for g in credit_gaps]
+        raw_books = await get_gap_weighted_recommendations(
+            student_id=student_id,
+            grade_level=grade_level,
+            interests=interests,
+            credit_gaps=gap_dicts,
+            weakest_track=weakest_track,
+            is_high_school=graduation_progress.is_high_school,
+            limit=4,
+        )
+        recommended_books = [
+            BookRecommendation(
+                id=b["id"],
+                title=b["title"],
+                author=b["author"],
+                track=b.get("track", ""),
+                lexile_level=b.get("lexile_level", 0),
+                grade_band=b.get("grade_band"),
+                cover_url=b.get("cover_url"),
+                relevance_score=b.get("relevance_score", 0.0),
+            )
+            for b in raw_books
+        ]
+    except Exception as e:
+        logger.warning(f"[LearningPlan] Failed to get book recommendations: {e}")
+
     logger.info(
         f"[LearningPlan] Generated {len(final_suggestions)} suggestions, "
-        f"{len(projects)} projects, {len(grade_standards)} standards for student={student_id}"
+        f"{len(projects)} projects, {len(recommended_books)} books, "
+        f"{len(grade_standards)} standards for student={student_id}"
     )
 
     return LearningPlanResponse(
         student_id=student_id,
         suggestions=final_suggestions,
         projects=projects,
+        recommended_books=recommended_books,
         total_tracks_active=len(active_tracks),
         strongest_track=strongest_track,
         weakest_track=weakest_track,

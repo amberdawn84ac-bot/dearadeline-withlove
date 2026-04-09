@@ -597,3 +597,103 @@ async def get_book(book_id: str) -> BookDetailResponse:
         raise HTTPException(status_code=500, detail="Failed to retrieve book details")
 
 
+# ── Helper: gap-weighted book recommendations for learning plan ───────────────
+
+
+async def get_gap_weighted_recommendations(
+    student_id: str,
+    grade_level: str,
+    interests: list,
+    credit_gaps: list,
+    weakest_track: str | None,
+    is_high_school: bool,
+    limit: int = 4,
+) -> list:
+    """
+    Return gap-weighted book recommendations for the learning plan.
+
+    For 9-12 students, books matching tracks with outstanding credit gaps
+    are boosted proportionally to the gap remaining.
+    For K-8 students, books matching the weakest track get a 1.3x boost.
+
+    Returns list of dicts with keys: id, title, author, track, lexile_level,
+    grade_band, cover_url, relevance_score.
+    """
+    # 1. Build embedding query from grade + interests
+    query_text = _format_embedding_query(grade_level, interests)
+
+    # 2. Create embedding
+    embedding = await _embed(query_text)
+    if not embedding:
+        logger.warning("[Books] Empty embedding for gap-weighted recommendations")
+        return []
+
+    # 3. Get adaptive lexile range (fall back to static range on error)
+    try:
+        lexile_min, lexile_max = await _calculate_adaptive_reading_level(
+            student_id, grade_level
+        )
+    except Exception as e:
+        logger.warning(f"[Books] Adaptive lexile failed, using static: {e}")
+        lexile_min, lexile_max = _get_lexile_range(grade_level)
+
+    # 4. Fetch more candidates than needed for re-ranking
+    candidates = await bookshelf_search.search_books_by_embedding(
+        embedding, lexile_min, lexile_max, limit=limit * 3
+    )
+    if not candidates:
+        return []
+
+    # 5. Build gap_boost dict
+    gap_boost: dict[str, float] = {}
+
+    if is_high_school and credit_gaps:
+        # Reverse mapping: bucket → list of tracks
+        from app.api.learning_plan import TRACK_TO_BUCKET
+
+        bucket_to_tracks: dict[str, list[str]] = {}
+        for track, buckets in TRACK_TO_BUCKET.items():
+            if isinstance(buckets, list):
+                for b in buckets:
+                    bucket_to_tracks.setdefault(b, []).append(track)
+            else:
+                bucket_to_tracks.setdefault(buckets, []).append(track)
+
+        for gap in credit_gaps:
+            bucket = gap.get("bucket", "") if isinstance(gap, dict) else getattr(gap, "bucket", "")
+            remaining = gap.get("remaining", 0) if isinstance(gap, dict) else getattr(gap, "remaining", 0)
+            if remaining > 0:
+                tracks_for_bucket = bucket_to_tracks.get(bucket, [])
+                for t in tracks_for_bucket:
+                    # Boost proportional to gap: 1.0 base + 0.2 per credit remaining
+                    gap_boost[t] = 1.0 + (0.2 * remaining)
+    else:
+        # K-8: boost weakest track
+        if weakest_track:
+            gap_boost[weakest_track] = 1.3
+
+    # 6. Re-rank by multiplying relevance_score by boost
+    for book in candidates:
+        track = book.get("track", "")
+        boost = gap_boost.get(track, 1.0)
+        book["relevance_score"] = book.get("relevance_score", 0.0) * boost
+
+    candidates.sort(key=lambda b: b.get("relevance_score", 0.0), reverse=True)
+
+    # 7. Deduplicate: max 2 books per track
+    track_counts: dict[str, int] = {}
+    result: list[dict] = []
+    for book in candidates:
+        track = book.get("track", "")
+        if track_counts.get(track, 0) >= 2:
+            continue
+        track_counts[track] = track_counts.get(track, 0) + 1
+        result.append(book)
+        if len(result) >= limit:
+            break
+
+    logger.info(
+        f"[Books] Gap-weighted recommendations: {len(result)} books for student={student_id}, "
+        f"boosts={gap_boost}"
+    )
+    return result
