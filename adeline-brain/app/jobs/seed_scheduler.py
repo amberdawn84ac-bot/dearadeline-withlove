@@ -3,6 +3,7 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.scripts.seed_declassified_documents import seed_all_declassified_documents
 from app.scripts.seed_justice_changemaking import main as seed_justice_changemaking
+from app.jobs.seed_thin_tracks import seed_thin_tracks
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +47,23 @@ async def startup_seed_scheduler():
             max_instances=1,
         )
 
+        # Thin tracks (Gov/Math/Creative): 3:00 AM UTC every day
+        _scheduler.add_job(
+            seed_thin_tracks,
+            'cron',
+            hour=3,
+            minute=0,
+            timezone='UTC',
+            id='seed_thin_tracks_nightly',
+            name='Seed Thin Tracks (Nightly)',
+            max_instances=1,
+        )
+
         _scheduler.start()
         logger.info("[Scheduler] Started APScheduler with nightly seeding jobs:")
         logger.info("  - Declassified Documents: 02:00 UTC")
         logger.info("  - Justice Track: 02:30 UTC")
+        logger.info("  - Thin Tracks (Gov/Math/Creative): 03:00 UTC")
 
 
 async def shutdown_seed_scheduler():
