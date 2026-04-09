@@ -8,21 +8,22 @@ import { AdelineChatPanel } from '@/components/AdelineChatPanel';
 import { SpacedRepWidget } from '@/components/dashboard/SpacedRepWidget';
 import { useStudent } from '@/lib/useStudent';
 import LessonRenderer from '@/components/lessons/LessonRenderer';
-import type { LessonResponse } from '@/lib/brain-client';
+import { generateLesson } from '@/lib/brain-client';
+import type { LessonResponse, Track } from '@/lib/brain-client';
 
 interface LessonSuggestion {
   id: string;
   title: string;
-  track: string;
+  track: Track;
   description: string;
   emoji: string;
 }
 
 const LESSON_SUGGESTIONS: LessonSuggestion[] = [
-  { id: '1', title: 'Butterflies of North America', track: 'Science', description: 'Investigate butterfly life cycles and adaptations', emoji: '🦋' },
-  { id: '2', title: 'The American Revolution', track: 'History', description: 'Primary sources from the founding era', emoji: '🏛️' },
-  { id: '3', title: 'Water Cycle Investigation', track: 'Science', description: 'Hands-on experiments with evaporation and condensation', emoji: '💧' },
-  { id: '4', title: 'Scripture Study: Psalms', track: 'Discipleship', description: 'Hebrew poetry and original meanings', emoji: '📖' },
+  { id: '1', title: 'Butterflies of North America', track: 'CREATION_SCIENCE' as Track, description: 'Investigate butterfly life cycles and adaptations', emoji: '🦋' },
+  { id: '2', title: 'The American Revolution', track: 'TRUTH_HISTORY' as Track, description: 'Primary sources from the founding era', emoji: '🏛️' },
+  { id: '3', title: 'Water Cycle Investigation', track: 'CREATION_SCIENCE' as Track, description: 'Hands-on experiments with evaporation and condensation', emoji: '💧' },
+  { id: '4', title: 'Scripture Study: Psalms', track: 'DISCIPLESHIP' as Track, description: 'Hebrew poetry and original meanings', emoji: '📖' },
 ];
 
 function DashboardContent() {
@@ -37,7 +38,29 @@ function DashboardContent() {
   const handleLessonGenerated = useCallback((lesson: LessonResponse) => {
     console.log('[Dashboard] Lesson generated:', lesson.title);
     setActiveLesson(lesson);
+    setIsStreaming(false);
   }, []);
+
+  const handleSuggestionClick = useCallback(async (suggestion: LessonSuggestion) => {
+    if (isStreaming || !studentId) return;
+    
+    setIsStreaming(true);
+    setActiveLesson(null);
+    
+    try {
+      const lesson = await generateLesson({
+        student_id: studentId,
+        track: suggestion.track,
+        topic: suggestion.title,
+        is_homestead: false,
+        grade_level: gradeLevel,
+      });
+      handleLessonGenerated(lesson);
+    } catch (error) {
+      console.error('[Dashboard] Lesson generation failed:', error);
+      setIsStreaming(false);
+    }
+  }, [studentId, gradeLevel, isStreaming, handleLessonGenerated]);
 
   const handleBackToSuggestions = () => {
     setActiveLesson(null);
@@ -82,7 +105,7 @@ function DashboardContent() {
                 {LESSON_SUGGESTIONS.map(suggestion => (
                   <button
                     key={suggestion.id}
-                    onClick={() => handleLessonGenerated(suggestion as any)}
+                    onClick={() => handleSuggestionClick(suggestion)}
                     disabled={isStreaming}
                     className="text-left p-6 rounded-2xl border-2 border-[#E7DAC3] hover:border-[#BD6809] hover:shadow-lg transition-all bg-white group disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -94,7 +117,7 @@ function DashboardContent() {
                         </h3>
                         <p className="text-sm text-[#2F4731]/60 mb-2">{suggestion.description}</p>
                         <span className="inline-block px-3 py-1 bg-[#2F4731]/10 text-[#2F4731] text-xs font-bold rounded-full">
-                          {suggestion.track}
+                          {suggestion.track.replace(/_/g, ' ')}
                         </span>
                       </div>
                     </div>

@@ -1,0 +1,64 @@
+{
+  "declaration_of_independence": {
+    "title": "The Declaration of Independence",
+    "track": "TRUTH_HISTORY",
+    "citation_author": "Thomas Jefferson et al.",
+    "citation_year": 1776,
+    "source_url": "https://www.archives.gov/founding-docs/declaration-transcript",
+    "archive": "National Archives",
+    "chunks": [
+      {
+        "section": "Preamble",
+        "text": "When in the Course of human events, it becomes necessary for one people to dissolve the political bands which have connected them with another, and to assume among the powers of the earth, the separate and equal station to which the Laws of Nature and of Nature's God entitle them, a decent respect to the opinions of mankind requires that they should declare the causes which impel them to the separation. We hold these truths to be self-evident, that all men are created equal, that they are endowed by their Creator with certain unalienable Rights, that among these are Life, Liberty and the pursuit of Happiness."
+      },
+      {
+        "section": "Right to Alter or Abolish Government",
+        "text": "That to secure these rights, Governments are instituted among Men, deriving their just powers from the consent of the governed, That whenever any Form of Government becomes destructive of these ends, it is the Right of the People to alter or to abolish it, and to institute new Government, laying its foundation on such principles and organizing its powers in such form, as to them shall seem most likely to effect their Safety and Happiness."
+      }
+    ]
+  },
+  "constitution": {
+    "title": "The Constitution of the United States",
+    "track": "TRUTH_HISTORY",
+    "citation_author": "Constitutional Convention",
+    "citation_year": 1787,
+    "source_url": "https://www.archives.gov/founding-docs/constitution-transcript",
+    "archive": "National Archives",
+    "chunks": [
+      {
+        "section": "Preamble",
+        "text": "We the People of the United States, in Order to form a more perfect Union, establish Justice, insure domestic Tranquility, provide for the common defence, promote the general Welfare, and secure the Blessings of Liberty to ourselves and our Posterity, do ordain and establish this Constitution for the United States of America."
+      },
+      {
+        "section": "Article I - Legislative Powers",
+        "text": "All legislative Powers herein granted shall be vested in a Congress of the United States, which shall consist of a Senate and House of Representatives. The House of Representatives shall be composed of Members chosen every second Year by the People of the several States."
+      }
+    ]
+  },
+  "bill_of_rights": {
+    "title": "The Bill of Rights - First Ten Amendments",
+    "track": "TRUTH_HISTORY",
+    "citation_author": "James Madison et al.",
+    "citation_year": 1791,
+    "source_url": "https://www.archives.gov/founding-docs/bill-of-rights-transcript",
+    "archive": "National Archives",
+    "chunks": [
+      {
+        "section": "First Amendment",
+        "text": "Congress shall make no law respecting an establishment of religion, or prohibiting the free exercise thereof; or abridging the freedom of speech, or of the press; or the right of the people peaceably to assemble, and to petition the Government for a redress of grievances."
+      },
+      {
+        "section": "Second Amendment",
+        "text": "A well regulated Militia, being necessary to the security of a free State, the right of the people to keep and bear Arms, shall not be infringed."
+      },
+      {
+        "section": "Fourth Amendment",
+        "text": "The right of the people to be secure in their persons, houses, papers, and effects, against unreasonable searches and seizures, shall not be violated, and no Warrants shall issue, but upon probable cause, supported by Oath or affirmation, and particularly describing the place to be searched, and the persons or things to be seized."
+      },
+      {
+        "section": "Tenth Amendment",
+        "text": "The powers not delegated to the United States by the Constitution, nor prohibited by it to the States, are reserved to the States respectively, or to the people."
+      }
+    ]
+  }
+}

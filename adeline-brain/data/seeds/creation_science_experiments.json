@@ -1,0 +1,116 @@
+{
+  "seed_germination": {
+    "title": "Seed Germination - God's Design in Plant Life",
+    "track": "CREATION_SCIENCE",
+    "citation_author": "Adeline Curriculum Team",
+    "citation_year": 2026,
+    "source_url": "https://dearadeline.com/experiments/seed-germination",
+    "archive": "Adeline Sovereign Lab",
+    "scripture_connection": "Genesis 1:11-12 - Then God said, 'Let the earth sprout vegetation, plants yielding seed, and fruit trees bearing fruit after their kind with seed in them, on the earth'; and it was so.",
+    "experiment": {
+      "objective": "Observe how seeds contain the blueprint for life, demonstrating God's intelligent design in creation.",
+      "materials": ["Bean seeds (lima or kidney)", "Paper towels", "Clear plastic bag", "Water", "Sunny windowsill"],
+      "procedure": [
+        "Fold a paper towel and dampen it with water",
+        "Place 3-4 bean seeds on the damp towel",
+        "Fold the towel over the seeds and place in a clear plastic bag",
+        "Seal the bag and place on a sunny windowsill",
+        "Observe daily for 7-10 days, keeping the towel moist"
+      ],
+      "observations": "Students will observe roots emerging first (seeking water and nutrients), then the shoot emerging (seeking light). The seed contains all the genetic information needed to produce a complete plant.",
+      "biblical_worldview": "Just as God designed seeds with the information to produce 'plants after their kind,' He has designed all living things with purpose and order. The seed demonstrates: 1) Information requires an intelligent source, 2) Life comes from life (biogenesis), 3) Organisms reproduce after their kind (Genesis 1)."
+    }
+  },
+  "water_cycle": {
+    "title": "The Water Cycle - God's Recycling System",
+    "track": "CREATION_SCIENCE",
+    "citation_author": "Adeline Curriculum Team",
+    "citation_year": 2026,
+    "source_url": "https://dearadeline.com/experiments/water-cycle",
+    "archive": "Adeline Sovereign Lab",
+    "scripture_connection": "Ecclesiastes 1:7 - All the rivers run into the sea, yet the sea is not full; to the place from which the rivers come, there they return again.",
+    "experiment": {
+      "objective": "Model the water cycle and understand God's sustainable design for Earth's water system.",
+      "materials": ["Large clear bowl", "Small cup", "Plastic wrap", "Small rock or weight", "Water", "Sunny location"],
+      "procedure": [
+        "Fill the large bowl with 2 inches of water",
+        "Place the empty cup in the center of the bowl (it should not have water in it)",
+        "Cover the bowl tightly with plastic wrap",
+        "Place a small rock on the plastic wrap directly above the cup, creating a depression",
+        "Put the setup in a sunny location",
+        "Observe over 24-48 hours"
+      ],
+      "observations": "Water evaporates from the bowl, condenses on the plastic wrap, and drips into the cup - modeling evaporation, condensation, and precipitation.",
+      "biblical_worldview": "The water cycle, described in Ecclesiastes thousands of years before modern science, shows God's wisdom in creating a self-sustaining system. The same water that existed at creation is recycled through this elegant design, providing for all living things generation after generation."
+    }
+  },
+  "photosynthesis_demo": {
+    "title": "Photosynthesis - Plants as God's Food Factories",
+    "track": "CREATION_SCIENCE",
+    "citation_author": "Adeline Curriculum Team",
+    "citation_year": 2026,
+    "source_url": "https://dearadeline.com/experiments/photosynthesis",
+    "archive": "Adeline Sovereign Lab",
+    "scripture_connection": "Genesis 1:29-30 - Then God said, 'Behold, I have given you every plant yielding seed that is on the surface of all the earth, and every tree which has fruit yielding seed; it shall be food for you.'",
+    "experiment": {
+      "objective": "Demonstrate that plants produce oxygen through photosynthesis, showing God's provision for all breathing creatures.",
+      "materials": ["Elodea or other aquatic plant", "Clear glass jar", "Funnel", "Test tube", "Water", "Baking soda (optional)", "Sunny location"],
+      "procedure": [
+        "Fill the jar with water (add a pinch of baking soda for extra CO2)",
+        "Place the plant in the jar, stems up",
+        "Invert the funnel over the plant",
+        "Fill a test tube with water and invert it over the funnel stem (no air bubbles)",
+        "Place in bright sunlight",
+        "Observe bubbles rising from the plant and collecting in the test tube"
+      ],
+      "observations": "Oxygen bubbles will rise from the plant and displace water in the test tube, proving that plants produce oxygen during photosynthesis.",
+      "biblical_worldview": "God designed plants to convert sunlight, water, and carbon dioxide into food and oxygen - exactly what animals and humans need to survive. This interdependent design shows intentional creation, not random chance. Plants give us oxygen; we give them carbon dioxide. This is symbiosis by design."
+    }
+  },
+  "density_layers": {
+    "title": "Density and the Flood - Sorting by Design",
+    "track": "CREATION_SCIENCE",
+    "citation_author": "Adeline Curriculum Team",
+    "citation_year": 2026,
+    "source_url": "https://dearadeline.com/experiments/density-layers",
+    "archive": "Adeline Sovereign Lab",
+    "scripture_connection": "Genesis 7:11-12 - On that day all the fountains of the great deep burst forth, and the windows of the heavens were opened. And rain fell upon the earth forty days and forty nights.",
+    "experiment": {
+      "objective": "Demonstrate how liquids and solids of different densities naturally separate into layers, illustrating how geological layers could form rapidly during catastrophic events.",
+      "materials": ["Clear glass jar", "Honey", "Dish soap", "Water (with food coloring)", "Vegetable oil", "Rubbing alcohol", "Small objects (grape, plastic bead, cork, metal washer)"],
+      "procedure": [
+        "Pour honey into the jar (bottom layer)",
+        "Slowly pour dish soap on top",
+        "Add colored water carefully",
+        "Pour vegetable oil",
+        "Finally add rubbing alcohol",
+        "Drop in small objects and observe where they settle"
+      ],
+      "observations": "Liquids form distinct layers based on density. Objects settle at different levels based on their density relative to the liquids.",
+      "biblical_worldview": "This demonstrates that layers can form rapidly when materials of different densities are mixed and allowed to settle - supporting the possibility of rapid geological layer formation during the Genesis Flood, rather than requiring millions of years. God's physical laws (like density) work the same whether processes are slow or catastrophic."
+    }
+  },
+  "dna_extraction": {
+    "title": "DNA Extraction - The Language of Life",
+    "track": "CREATION_SCIENCE",
+    "citation_author": "Adeline Curriculum Team",
+    "citation_year": 2026,
+    "source_url": "https://dearadeline.com/experiments/dna-extraction",
+    "archive": "Adeline Sovereign Lab",
+    "scripture_connection": "Psalm 139:13-14 - For you formed my inward parts; you knitted me together in my mother's womb. I praise you, for I am fearfully and wonderfully made.",
+    "experiment": {
+      "objective": "Extract DNA from strawberries to visualize the information-carrying molecule that contains the instructions for life.",
+      "materials": ["Fresh strawberries", "Ziplock bag", "Dish soap", "Salt", "Water", "Coffee filter", "Rubbing alcohol (cold)", "Clear glass"],
+      "procedure": [
+        "Mash 2 strawberries in a ziplock bag",
+        "Mix 1 tbsp dish soap, 1 tsp salt, and 1/2 cup water",
+        "Add soap mixture to strawberries and gently mix",
+        "Filter mixture through coffee filter into glass",
+        "Slowly pour cold rubbing alcohol down the side of the glass",
+        "Watch DNA precipitate at the alcohol-water interface"
+      ],
+      "observations": "White, stringy DNA will appear at the boundary between the water and alcohol layers. This is the genetic code that contains instructions for making a strawberry.",
+      "biblical_worldview": "DNA is a language - a code that requires an intelligent author. The information in DNA doesn't arise from matter and energy alone; information requires intelligence. This points to God as the Author of the genetic code, the One who 'knitted us together' with purpose and design."
+    }
+  }
+}
