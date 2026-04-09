@@ -153,7 +153,7 @@ async def list_books(track: Optional[str] = Query(None, description="Filter by c
             )
         return [
             BookResponse(
-                id=r["id"],
+                id=str(r["id"]),
                 title=r["title"],
                 author=r["author"],
                 sourceLibrary=r["sourceLibrary"],
@@ -188,7 +188,7 @@ async def get_book(book_id: str):
         if not r:
             raise HTTPException(status_code=404, detail="Book not found")
         return BookResponse(
-            id=r["id"],
+            id=str(r["id"]),
             title=r["title"],
             author=r["author"],
             sourceLibrary=r["sourceLibrary"],
