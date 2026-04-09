@@ -35,17 +35,18 @@ from app.connections.neo4j_client import neo4j_client
 from app.connections.pgvector_client import hippocampus
 from app.tools.graph_query import tool_get_zpd_candidates, ZPDCandidate
 
-# Graduation requirements (Oklahoma homeschool standards)
+# Graduation requirements (Oklahoma public school standards - 23 credits)
 GRADUATION_REQUIREMENTS = {
-    "ENGLISH_CORE": 4.0,      # English Literature
-    "MATH_CORE": 3.0,         # Applied Mathematics  
-    "SCIENCE_CORE": 3.0,      # Creation Science
-    "SOCIAL_STUDIES": 3.0,    # Truth History + Government Economics
-    "PHYSICAL_ED": 1.0,       # Health Naturopathy
-    "FINE_ARTS": 1.0,         # Creative Economy
-    "ELECTIVES": 6.0,        # Homesteading + Discipleship + Justice Changemaking
+    "ENGLISH_CORE": 4.0,      # Language Arts (English Literature)
+    "MATH_CORE": 3.0,         # Math (Applied Mathematics, Algebra 1+)
+    "SCIENCE_CORE": 3.0,      # Lab Science (Creation Science + Physical Science + Biology)
+    "SOCIAL_STUDIES": 3.0,    # Social Studies (Truth History + Oklahoma History + Government)
+    "WORLD_LANGUAGE": 2.0,     # Technology or World Language (2 units same language)
+    "PERSONAL_FINANCE": 0.5,   # Personal Financial Literacy
+    "FINE_ARTS": 1.0,          # Art or Speech (Creative Economy)
+    "ELECTIVES": 6.5,        # Additional electives (Homesteading + Discipleship + Justice Changemaking)
 }
-TOTAL_REQUIRED = sum(GRADUATION_REQUIREMENTS.values())  # 21.0 credits
+TOTAL_REQUIRED = sum(GRADUATION_REQUIREMENTS.values())  # 23.0 credits
 
 # Map tracks to credit buckets
 TRACK_TO_BUCKET = {
@@ -54,11 +55,13 @@ TRACK_TO_BUCKET = {
     "CREATION_SCIENCE": "SCIENCE_CORE",
     "TRUTH_HISTORY": "SOCIAL_STUDIES",
     "GOVERNMENT_ECONOMICS": "SOCIAL_STUDIES",
-    "HEALTH_NATUROPATHY": "PHYSICAL_ED",
+    "HEALTH_NATUROPATHY": "PERSONAL_FINANCE",  # Health + Financial Literacy
     "CREATIVE_ECONOMY": "FINE_ARTS",
     "HOMESTEADING": "ELECTIVES",
     "DISCIPLESHIP": "ELECTIVES",
     "JUSTICE_CHANGEMAKING": "ELECTIVES",
+    # Note: WORLD_LANGUAGE requirement can be met with Technology track or 2 units of same language
+    # We'll map Technology requirements to existing tracks where applicable
 }
 
 logger = logging.getLogger(__name__)
@@ -444,23 +447,25 @@ def _calculate_credit_gaps(credits_by_bucket: dict[str, float], grade_level: str
     # Different priority orders for K-8 vs 9-12
     if grade_num <= 8:  # K-8: Foundational skills first
         priority_order = [
-            "ENGLISH_CORE",    # Reading/writing fundamentals
-            "MATH_CORE",       # Math fundamentals
-            "SCIENCE_CORE",    # Science exploration
-            "SOCIAL_STUDIES",  # History/civics basics
-            "PHYSICAL_ED",     # Health/physical development
-            "FINE_ARTS",       # Creativity and arts
-            "ELECTIVES"        # Interest-based learning
+            "ENGLISH_CORE",      # Reading/writing fundamentals
+            "MATH_CORE",         # Math fundamentals
+            "SCIENCE_CORE",      # Science exploration
+            "SOCIAL_STUDIES",    # History/civics basics
+            "PERSONAL_FINANCE",  # Health/financial literacy basics
+            "FINE_ARTS",         # Creativity and arts
+            "WORLD_LANGUAGE",    # Technology/second language exposure
+            "ELECTIVES"          # Interest-based learning
         ]
-    else:  # 9-12: Credit accumulation for graduation
+    else:  # 9-12: Credit accumulation for graduation (Oklahoma standards)
         priority_order = [
-            "ENGLISH_CORE",    # 4 credits required
-            "MATH_CORE",       # 3 credits required
-            "SCIENCE_CORE",    # 3 credits required
-            "SOCIAL_STUDIES",  # 3 credits required
-            "PHYSICAL_ED",     # 1 credit required
-            "FINE_ARTS",       # 1 credit required
-            "ELECTIVES"        # 6 credits required
+            "ENGLISH_CORE",      # 4 credits required
+            "MATH_CORE",         # 3 credits required (Algebra 1+)
+            "SCIENCE_CORE",      # 3 credits required (Physical Science + Biology + above)
+            "SOCIAL_STUDIES",    # 3 credits required (US History + OK History + Government)
+            "WORLD_LANGUAGE",    # 2 credits required (Technology or language)
+            "PERSONAL_FINANCE",  # 0.5 credits required
+            "FINE_ARTS",         # 1 credit required
+            "ELECTIVES"          # 6.5 credits required
         ]
     
     for i, bucket in enumerate(priority_order, 1):

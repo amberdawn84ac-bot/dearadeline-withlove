@@ -71,13 +71,14 @@ enum CreditType {
 }
 
 enum CreditBucket {
-  ENGLISH_CORE      // English Literature - 4 credits required
-  MATH_CORE         // Applied Mathematics - 3 credits required
-  SCIENCE_CORE      // Creation Science - 3 credits required
-  SOCIAL_STUDIES    // Truth History, Government Economics - 3 credits required
-  PHYSICAL_ED       // Health Naturopathy - 1 credit required
-  FINE_ARTS         // Creative Economy - 1 credit required
-  ELECTIVES         // Homesteading, Discipleship, Justice Changemaking - 6 credits required
+  ENGLISH_CORE      // Language Arts - 4 credits required
+  MATH_CORE         // Math (Algebra 1+) - 3 credits required
+  SCIENCE_CORE      // Lab Science (Physical Science + Biology + above) - 3 credits required
+  SOCIAL_STUDIES    // US History + Oklahoma History + Government - 3 credits required
+  WORLD_LANGUAGE    // Technology or 2 units same language - 2 credits required
+  PERSONAL_FINANCE  // Personal Financial Literacy - 0.5 credits required
+  FINE_ARTS         // Art or Speech - 1 credit required
+  ELECTIVES         // Additional electives - 6.5 credits required
 }
 
 enum GradeLetter {
