@@ -412,82 +412,92 @@ async def get_reading_shelf(
                 detail=f"status must be one of {valid_statuses}",
             )
 
-    async with _get_conn() as conn:
-        # Query all sessions for this student (optionally filtered by status)
-        if status:
-            rows = await conn.fetch(
-                """
-                SELECT
-                    rs.id, rs."studentId", rs."bookId", rs.status,
-                    rs."startedAt", rs."completedAt", rs."pagesRead", rs."totalPages",
-                    rs."currentLocation", rs."studentReflection", rs."readingMinutes",
-                    b.id as book_id, b.title, b.author, b."gutenbergId",
-                    b."lexileLevel", b.track, b."coverUrl"
-                FROM "ReadingSession" rs
-                JOIN "Book" b ON rs."bookId" = b.id
-                WHERE rs."studentId" = $1 AND rs.status = $2
-                ORDER BY rs."startedAt" DESC
-                """,
-                student_id, status,
-            )
-        else:
-            rows = await conn.fetch(
-                """
-                SELECT
-                    rs.id, rs."studentId", rs."bookId", rs.status,
-                    rs."startedAt", rs."completedAt", rs."pagesRead", rs."totalPages",
-                    rs."currentLocation", rs."studentReflection", rs."readingMinutes",
-                    b.id as book_id, b.title, b.author, b."gutenbergId",
-                    b."lexileLevel", b.track, b."coverUrl"
-                FROM "ReadingSession" rs
-                JOIN "Book" b ON rs."bookId" = b.id
-                WHERE rs."studentId" = $1
-                ORDER BY rs."startedAt" DESC
-                """,
-                student_id,
+    try:
+        async with _get_conn() as conn:
+            # Query all sessions for this student (optionally filtered by status)
+            if status:
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        rs.id, rs."studentId", rs."bookId", rs.status,
+                        rs."startedAt", rs."completedAt", rs."pagesRead", rs."totalPages",
+                        rs."currentLocation", rs."studentReflection", rs."readingMinutes",
+                        b.id as book_id, b.title, b.author, b."gutenbergId",
+                        b."lexileLevel", b.track, b."coverUrl"
+                    FROM "ReadingSession" rs
+                    JOIN "Book" b ON rs."bookId" = b.id
+                    WHERE rs."studentId" = $1 AND rs.status = $2
+                    ORDER BY rs."startedAt" DESC
+                    """,
+                    student_id, status,
+                )
+            else:
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        rs.id, rs."studentId", rs."bookId", rs.status,
+                        rs."startedAt", rs."completedAt", rs."pagesRead", rs."totalPages",
+                        rs."currentLocation", rs."studentReflection", rs."readingMinutes",
+                        b.id as book_id, b.title, b.author, b."gutenbergId",
+                        b."lexileLevel", b.track, b."coverUrl"
+                    FROM "ReadingSession" rs
+                    JOIN "Book" b ON rs."bookId" = b.id
+                    WHERE rs."studentId" = $1
+                    ORDER BY rs."startedAt" DESC
+                    """,
+                    student_id,
+                )
+
+        # Group by status
+        reading_sessions = []
+        finished_sessions = []
+        wishlist_sessions = []
+
+        for row in rows:
+            session = SessionDetailResponse(
+                id=row["id"],
+                book_id=row["bookId"],
+                book=BookInShelf(
+                    id=row["book_id"],
+                    title=row["title"],
+                    author=row["author"],
+                    lexile_level=row.get("lexileLevel"),
+                    track=row.get("track"),
+                    cover_url=row.get("coverUrl"),
+                ),
+                started_at=row["startedAt"].isoformat() if row["startedAt"] else None,
+                completed_at=row["completedAt"].isoformat() if row["completedAt"] else None,
+                pages_read=row["pagesRead"] or 0,
+                total_pages=row["totalPages"],
+                current_location=row["currentLocation"],
+                student_reflection=row["studentReflection"],
+                reading_minutes=row["readingMinutes"] or 0,
             )
 
-    # Group by status
-    reading_sessions = []
-    finished_sessions = []
-    wishlist_sessions = []
+            if row["status"] == "reading":
+                reading_sessions.append(session)
+            elif row["status"] == "finished":
+                finished_sessions.append(session)
+            elif row["status"] == "wishlist":
+                wishlist_sessions.append(session)
 
-    for row in rows:
-        session = SessionDetailResponse(
-            id=row["id"],
-            book_id=row["bookId"],
-            book=BookInShelf(
-                id=row["book_id"],
-                title=row["title"],
-                author=row["author"],
-                lexile_level=row.get("lexileLevel"),
-                track=row.get("track"),
-                cover_url=row.get("coverUrl"),
-            ),
-            started_at=row["startedAt"].isoformat() if row["startedAt"] else None,
-            completed_at=row["completedAt"].isoformat() if row["completedAt"] else None,
-            pages_read=row["pagesRead"] or 0,
-            total_pages=row["totalPages"],
-            current_location=row["currentLocation"],
-            student_reflection=row["studentReflection"],
-            reading_minutes=row["readingMinutes"] or 0,
+        logger.info(
+            f"[ReadingSession/Shelf] Retrieved shelf for student={student_id}: "
+            f"reading={len(reading_sessions)}, finished={len(finished_sessions)}, "
+            f"wishlist={len(wishlist_sessions)}"
         )
 
-        if row["status"] == "reading":
-            reading_sessions.append(session)
-        elif row["status"] == "finished":
-            finished_sessions.append(session)
-        elif row["status"] == "wishlist":
-            wishlist_sessions.append(session)
-
-    logger.info(
-        f"[ReadingSession/Shelf] Retrieved shelf for student={student_id}: "
-        f"reading={len(reading_sessions)}, finished={len(finished_sessions)}, "
-        f"wishlist={len(wishlist_sessions)}"
-    )
-
-    return ShelfResponse(
-        reading=reading_sessions,
-        finished=finished_sessions,
-        wishlist=wishlist_sessions,
-    )
+        return ShelfResponse(
+            reading=reading_sessions,
+            finished=finished_sessions,
+            wishlist=wishlist_sessions,
+        )
+    
+    except Exception as e:
+        logger.error(f"[ReadingSession/Shelf] Failed to fetch shelf for student={student_id}: {e}")
+        # Return empty shelf instead of 500 error
+        return ShelfResponse(
+            reading=[],
+            finished=[],
+            wishlist=[],
+        )
