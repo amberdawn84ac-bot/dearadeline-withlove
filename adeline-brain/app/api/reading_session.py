@@ -370,7 +370,7 @@ async def update_reading_session(
             try:
                 from app.services.reading_credit import award_reading_credit
                 book_row = await conn.fetchrow(
-                    'SELECT title, track, "lexileLevel" FROM "Book" WHERE id = $1',
+                    'SELECT title, track, lexile_level FROM "Book" WHERE id = $1',
                     result["bookId"],
                 )
                 if book_row:
@@ -378,7 +378,7 @@ async def update_reading_session(
                         'SELECT "gradeLevel" FROM "User" WHERE id = $1',
                         student_id,
                     )
-                    grade_level = student_row["gradeLevel"] if student_row else "8"
+                    grade_level = int(student_row["gradeLevel"]) if student_row and student_row["gradeLevel"] else 8
 
                     credit_result = await award_reading_credit(
                         session_id=session_id,
@@ -386,7 +386,7 @@ async def update_reading_session(
                         book_id=str(result["bookId"]),
                         book_title=book_row["title"],
                         book_track=book_row["track"] or "ELECTIVES",
-                        book_lexile=book_row["lexileLevel"] or 0,
+                        book_lexile=book_row["lexile_level"] or 0,
                         reading_minutes=result["readingMinutes"] or 0,
                         student_reflection=result["studentReflection"],
                         grade_level=grade_level,
