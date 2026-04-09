@@ -361,6 +361,41 @@ async def update_reading_session(
             )
             raise HTTPException(status_code=500, detail="Failed to update session")
 
+        # ── Award reading credit if finished with reflection ─────────
+        if (
+            result["status"] == "finished"
+            and result["studentReflection"]
+            and result["studentReflection"].strip()
+        ):
+            try:
+                from app.services.reading_credit import award_reading_credit
+                book_row = await conn.fetchrow(
+                    'SELECT title, track, "lexileLevel" FROM "Book" WHERE id = $1',
+                    result["bookId"],
+                )
+                if book_row:
+                    student_row = await conn.fetchrow(
+                        'SELECT "gradeLevel" FROM "User" WHERE id = $1',
+                        student_id,
+                    )
+                    grade_level = student_row["gradeLevel"] if student_row else "8"
+
+                    credit_result = await award_reading_credit(
+                        session_id=session_id,
+                        student_id=student_id,
+                        book_id=str(result["bookId"]),
+                        book_title=book_row["title"],
+                        book_track=book_row["track"] or "ELECTIVES",
+                        book_lexile=book_row["lexileLevel"] or 0,
+                        reading_minutes=result["readingMinutes"] or 0,
+                        student_reflection=result["studentReflection"],
+                        grade_level=grade_level,
+                        completed_at=result["completedAt"],
+                    )
+                    logger.info(f"[ReadingSession] Credit awarded: {credit_result}")
+            except Exception as e:
+                logger.error(f"[ReadingSession] Credit award failed: {e}")
+
     logger.info(
         f"[ReadingSession] Updated session: "
         f"id={session_id}, student={student_id}, "
