@@ -90,7 +90,7 @@ async def search_archive_async(query: str, archive_name: str) -> list[dict]:
 
     api_key = os.getenv("TAVILY_API_KEY", "")
     if not api_key:
-        logger.warning(f"[Researcher] TAVILY_API_KEY not set — skipping {archive_name}")
+        logger.error(f"[Researcher] TAVILY_API_KEY not set in environment — cannot search {archive_name}. Web search disabled.")
         return []
 
     # Rate limit Tavily API calls
@@ -179,6 +179,11 @@ async def search_witnesses(
     """
     try:
         logger.info(f"[Researcher] Searching for witnesses — query='{query}' track={track}")
+        
+        # Check if Tavily is configured for deep web search
+        tavily_configured = bool(os.getenv("TAVILY_API_KEY"))
+        if not tavily_configured:
+            logger.warning("[Researcher] TAVILY_API_KEY not set — deep web search will be disabled. Only Hippocampus search available.")
 
         # Step 1: Embed the query
         embedding_response = await _embed(query)
