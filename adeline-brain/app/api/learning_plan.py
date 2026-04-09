@@ -39,11 +39,11 @@ from app.tools.graph_query import tool_get_zpd_candidates, ZPDCandidate
 GRADUATION_REQUIREMENTS = {
     "ENGLISH_CORE": 4.0,      # Language Arts (English Literature)
     "MATH_CORE": 3.0,         # Math (Applied Mathematics, Algebra 1+)
-    "SCIENCE_CORE": 3.0,      # Lab Science (Creation Science + Physical Science + Biology)
+    "SCIENCE_CORE": 3.0,      # Lab Science (Creation Science + Health Naturopathy + Physical Science + Biology)
     "SOCIAL_STUDIES": 3.0,    # Social Studies (Truth History + Oklahoma History + Government)
     "WORLD_LANGUAGE": 2.0,     # Technology or World Language (2 units same language)
-    "PERSONAL_FINANCE": 0.5,   # Personal Financial Literacy
-    "FINE_ARTS": 1.0,          # Art or Speech (Creative Economy)
+    "PERSONAL_FINANCE": 0.5,   # Personal Financial Literacy (Creative Economics - business, pricing)
+    "FINE_ARTS": 1.0,          # Art or Speech (Creative Economics - art projects, creative work)
     "ELECTIVES": 6.5,        # Additional electives (Homesteading + Discipleship + Justice Changemaking)
 }
 TOTAL_REQUIRED = sum(GRADUATION_REQUIREMENTS.values())  # 23.0 credits
@@ -51,12 +51,12 @@ TOTAL_REQUIRED = sum(GRADUATION_REQUIREMENTS.values())  # 23.0 credits
 # Map tracks to credit buckets
 TRACK_TO_BUCKET = {
     "ENGLISH_LITERATURE": "ENGLISH_CORE",
-    "APPLIED_MATHEMATICS": "MATH_CORE",
+    "APPLIED_MATHEMATICS": ["MATH_CORE", "PERSONAL_FINANCE"],  # Math + financial literacy
     "CREATION_SCIENCE": "SCIENCE_CORE",
+    "HEALTH_NATUROPATHY": "SCIENCE_CORE",  # Health science + naturopathy
     "TRUTH_HISTORY": "SOCIAL_STUDIES",
     "GOVERNMENT_ECONOMICS": "SOCIAL_STUDIES",
-    "HEALTH_NATUROPATHY": "PERSONAL_FINANCE",  # Health + Financial Literacy
-    "CREATIVE_ECONOMY": "FINE_ARTS",
+    "CREATIVE_ECONOMY": "FINE_ARTS",  # Art projects, creative work, business
     "HOMESTEADING": "ELECTIVES",
     "DISCIPLESHIP": "ELECTIVES",
     "JUSTICE_CHANGEMAKING": "ELECTIVES",
@@ -422,7 +422,12 @@ async def _get_credits_by_bucket(student_id: str) -> dict[str, float]:
             hours = float(row["hours"] or 0)
             bucket = TRACK_TO_BUCKET.get(track)
             if bucket:
-                credits_by_bucket[bucket] += hours
+                if isinstance(bucket, list):
+                    # Track maps to multiple buckets - count toward ALL of them
+                    for b in bucket:
+                        credits_by_bucket[b] += hours
+                else:
+                    credits_by_bucket[bucket] += hours
                 
     except Exception as e:
         logger.warning(f"[LearningPlan] Failed to get credits by bucket: {e}")
