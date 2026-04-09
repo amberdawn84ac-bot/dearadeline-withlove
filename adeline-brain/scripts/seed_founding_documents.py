@@ -69,7 +69,7 @@ async def seed_document_chunk(
         
         # Check if already exists
         existing = await conn.fetchrow(
-            'SELECT id FROM "HippocampusDocument" WHERE "sourceUrl" = $1 AND chunk LIKE $2',
+            'SELECT id FROM "HippocampusDocument" WHERE source_url = $1 AND chunk LIKE $2',
             source_url,
             f"%{section}%"
         )
@@ -83,9 +83,9 @@ async def seed_document_chunk(
         result = await conn.fetchrow(
             '''
             INSERT INTO "HippocampusDocument" (
-                "sourceTitle", "sourceUrl", "sourceType", track,
-                chunk, embedding, "citationAuthor", "citationYear",
-                "citationArchiveName", "createdAt", "updatedAt"
+                source_title, source_url, source_type, track,
+                chunk, embedding, citation_author, citation_year,
+                citation_archive_name, created_at, updated_at
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
             RETURNING id
             ''',
