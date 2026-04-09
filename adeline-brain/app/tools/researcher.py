@@ -58,6 +58,21 @@ DECLASSIFIED_DOMAINS = {
     'DNSA': 'nsarchive.gwu.edu',
 }
 
+# Science-focused domains for CREATION_SCIENCE and HOMESTEADING tracks
+SCIENCE_DOMAINS = {
+    'KHAN_ACADEMY': 'khanacademy.org',
+    'SCIENCE_BUDDIES': 'sciencebuddies.org',
+    'EXPLORATORIUM': 'exploratorium.edu',
+    'NATURE_EDUCATION': 'nature.com/scitable',
+    'SMITHSONIAN': 'si.edu',
+}
+
+# Tracks that should use science domains instead of declassified archives
+SCIENCE_TRACKS = {'CREATION_SCIENCE', 'HOMESTEADING', 'HEALTH_NATUROPATHY'}
+
+# Tracks that should use declassified archives (history/justice)
+HISTORY_TRACKS = {'TRUTH_HISTORY', 'JUSTICE_CHANGEMAKING'}
+
 
 # ── Cosine similarity helper ───────────────────────────────────────────────────
 
@@ -80,12 +95,20 @@ async def _embed(text: str) -> list[float]:
 
 # ── Deep web search helpers ────────────────────────────────────────────────────
 
-async def search_archive_async(query: str, archive_name: str) -> list[dict]:
+async def search_archive_async(query: str, archive_name: str, domains_map: dict = None) -> list[dict]:
     """
-    Search a single declassified archive via Tavily.
+    Search a single archive/domain via Tavily.
     Returns list of documents with title, url, archive, snippet.
+    
+    Args:
+        query: Search query
+        archive_name: Name of the archive/domain to search
+        domains_map: Which domain map to use (defaults to DECLASSIFIED_DOMAINS)
     """
-    domain = DECLASSIFIED_DOMAINS.get(archive_name)
+    if domains_map is None:
+        domains_map = DECLASSIFIED_DOMAINS
+    
+    domain = domains_map.get(archive_name)
     if not domain:
         return []
 
@@ -127,13 +150,26 @@ async def search_archive_async(query: str, archive_name: str) -> list[dict]:
         return []
 
 
-async def search_all_archives_parallel(query: str) -> list[dict]:
+async def search_all_archives_parallel(query: str, track: str = None) -> list[dict]:
     """
-    Search all 6 declassified archives in parallel.
-    Returns deduplicated list of documents across all archives.
+    Search archives in parallel based on track type.
+    
+    - TRUTH_HISTORY, JUSTICE_CHANGEMAKING: Search declassified government archives
+    - CREATION_SCIENCE, HOMESTEADING, HEALTH_NATUROPATHY: Search science education domains
+    - Other tracks: Search science domains (more general content)
+    
+    Returns deduplicated list of documents across all searched domains.
     """
-    archives = list(DECLASSIFIED_DOMAINS.keys())
-    tasks = [search_archive_async(query, archive) for archive in archives]
+    # Choose domains based on track
+    if track in HISTORY_TRACKS:
+        domains_map = DECLASSIFIED_DOMAINS
+        logger.info(f"[Researcher] Using declassified archives for track={track}")
+    else:
+        domains_map = SCIENCE_DOMAINS
+        logger.info(f"[Researcher] Using science domains for track={track}")
+    
+    archives = list(domains_map.keys())
+    tasks = [search_archive_async(query, archive, domains_map) for archive in archives]
     all_results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Deduplicate by URL
@@ -242,7 +278,7 @@ async def search_witnesses(
             logger.info(f"[Researcher] Hippocampus returned {len(hippo_results)} results (best score: {best_score:.3f}) but none met {threshold} threshold. Triggering deep web search.")
         else:
             logger.info(f"[Researcher] Hippocampus empty. Triggering deep web search.")
-        archive_results = await search_all_archives_parallel(query)
+        archive_results = await search_all_archives_parallel(query, track=track)
 
         if not archive_results:
             logger.info(f"[Researcher] No results from deep web search either.")
@@ -260,13 +296,19 @@ async def search_witnesses(
 
                 # Step 5b: Persist to Hippocampus if meets track threshold
                 if similarity_score >= threshold:
+                    # Use appropriate source type based on track
+                    if track in HISTORY_TRACKS:
+                        source_type = SourceType.DECLASSIFIED_GOV.value
+                    else:
+                        source_type = "EDUCATIONAL"  # Science/education content
+                    
                     doc_id = await hippocampus.upsert_document(
                         source_title=doc['title'],
                         track=track,
                         chunk=doc['snippet'],
                         embedding=doc_embedding,
                         source_url=doc['url'],
-                        source_type=SourceType.DECLASSIFIED_GOV.value,
+                        source_type=source_type,
                         citation_author='',
                         citation_year=None,
                         citation_archive_name=doc['archive'],
@@ -276,7 +318,7 @@ async def search_witnesses(
                         'source_id': doc_id,
                         'source_title': doc['title'],
                         'source_url': doc['url'],
-                        'source_type': SourceType.DECLASSIFIED_GOV.value,
+                        'source_type': source_type,
                         'witness_citation': {
                             'author': '',
                             'year': None,

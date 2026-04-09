@@ -1,4 +1,27 @@
 {
+  "scientific_method": {
+    "title": "The Scientific Method - Observation and Discovery",
+    "track": "CREATION_SCIENCE",
+    "citation_author": "Adeline Curriculum Team",
+    "citation_year": 2026,
+    "source_url": "https://dearadeline.com/experiments/scientific-method",
+    "archive": "Adeline Sovereign Lab",
+    "scripture_connection": "Proverbs 25:2 - It is the glory of God to conceal a matter; to search out a matter is the glory of kings.",
+    "experiment": {
+      "objective": "Learn and practice the scientific method through careful observation, hypothesis formation, experimentation, and conclusion - the tools God gave us to explore His creation.",
+      "materials": ["Science journal or notebook", "Pencil", "Magnifying glass", "Ruler", "Timer", "Natural objects to observe (leaves, rocks, insects, etc.)"],
+      "procedure": [
+        "OBSERVE: Go outside and carefully observe something in nature for 5 minutes. Write down everything you notice - colors, textures, sizes, behaviors, smells.",
+        "QUESTION: Based on your observations, write down a question you want to answer. Example: 'Why do leaves change color in fall?' or 'How do ants find food?'",
+        "HYPOTHESIZE: Make an educated guess (hypothesis) about the answer to your question. Write it as an 'If... then...' statement.",
+        "EXPERIMENT: Design a simple test to check your hypothesis. What will you measure? What will you keep the same? What will you change?",
+        "RECORD DATA: Carry out your experiment and write down exactly what happens. Use numbers and measurements when possible.",
+        "CONCLUDE: Did your results support your hypothesis? What did you learn? What new questions do you have?"
+      ],
+      "observations": "Students will discover that careful observation is the foundation of all science. They will learn that the scientific method is a systematic way to ask questions about God's creation and find reliable answers.",
+      "biblical_worldview": "The scientific method works because God created an orderly, consistent universe that follows laws He established. Science is possible because creation reflects the mind of a rational Creator. When we do science, we are 'thinking God's thoughts after Him' as Johannes Kepler said. Observation, the first step of the scientific method, is an act of worship - paying attention to what God has made."
+    }
+  },
   "seed_germination": {
     "title": "Seed Germination - God's Design in Plant Life",
     "track": "CREATION_SCIENCE",
