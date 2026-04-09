@@ -9,7 +9,8 @@ import { SpacedRepWidget } from '@/components/dashboard/SpacedRepWidget';
 import { useStudent } from '@/lib/useStudent';
 import LessonRenderer from '@/components/lessons/LessonRenderer';
 import { generateLesson, getLearningPlan } from '@/lib/brain-client';
-import type { LessonResponse, Track, LessonSuggestion, ProjectSuggestion, LearningPlanResponse } from '@/lib/brain-client';
+import type { LessonResponse, Track, LessonSuggestion, ProjectSuggestion, LearningPlanResponse, BookRecommendation } from '@/lib/brain-client';
+import { RecommendedBooks } from '@/components/dashboard/RecommendedBooks';
 
 // Source badge colors for learning plan suggestions
 const SOURCE_BADGES: Record<string, { bg: string; text: string; label: string }> = {
@@ -39,6 +40,7 @@ function DashboardContent() {
   const [projects, setProjects] = useState<ProjectSuggestion[]>([]);
   const [totalCredits, setTotalCredits] = useState(0);
   const [weeklyCredits, setWeeklyCredits] = useState(0);
+  const [recommendedBooks, setRecommendedBooks] = useState<BookRecommendation[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const router = useRouter();
@@ -56,6 +58,7 @@ function DashboardContent() {
       setProjects(plan.projects || []);
       setTotalCredits(plan.total_credits_earned || 0);
       setWeeklyCredits(plan.credits_this_week || 0);
+      setRecommendedBooks(plan.recommended_books || []);
     } catch (error) {
       console.error('[Dashboard] Failed to fetch learning plan:', error);
       setSuggestionsError('Unable to load your learning plan. Please try again.');
@@ -230,6 +233,9 @@ function DashboardContent() {
                     );
                   })}
                 </div>
+
+                {/* Recommended Reading */}
+                <RecommendedBooks books={recommendedBooks} />
 
                 {/* Projects Section */}
                 {projects.length > 0 && (

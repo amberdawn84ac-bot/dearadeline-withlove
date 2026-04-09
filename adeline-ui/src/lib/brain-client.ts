@@ -762,10 +762,22 @@ export interface ProjectSuggestion {
   portfolio_credit: boolean;
 }
 
+export interface BookRecommendation {
+  id: string;
+  title: string;
+  author: string;
+  track: string;
+  lexile_level: number;
+  grade_band?: string;
+  cover_url?: string;
+  relevance_score: number;
+}
+
 export interface LearningPlanResponse {
   student_id: string;
   suggestions: LessonSuggestion[];
   projects: ProjectSuggestion[];  // Portfolio projects ready to start
+  recommended_books: BookRecommendation[];
   total_tracks_active: number;
   strongest_track?: string;
   weakest_track?: string;
