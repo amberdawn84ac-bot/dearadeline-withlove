@@ -4,20 +4,30 @@ SearchWitnesses Tool — Adeline's Auto-Search Capability
 Two-layer search for primary evidence:
 
 Layer 1 (Hippocampus): Semantic search in verified corpus
-  - Query all source types (PRIMARY_SOURCE, DECLASSIFIED_GOV, etc)
-  - Return any result >= 0.82 TRUTH_THRESHOLD
+  - Query all source types (PRIMARY_SOURCE, EDUCATIONAL, etc)
+  - Return any result >= track-aware threshold (0.82 for history, 0.75 for science)
 
-Layer 2 (Deep Web): Parallel search across 6 declassified archives
-  - NARA, CIA FOIA, FBI Vault, Congressional Record, Federal Register, DNSA
-  - Embed results and filter by 0.82 threshold
+Layer 2 (Deep Web): Parallel search across primary source repositories
+  
+  For HISTORY tracks (TRUTH_HISTORY, JUSTICE_CHANGEMAKING):
+    - Government archives: NARA, CIA FOIA, FBI Vault, Congressional Record, Federal Register, DNSA
+    - Primary source repositories: Library of Congress, Internet Archive, DPLA, Europeana
+    - Academic collections: Avalon Project (Yale Law), Perseus (Tufts)
+    → Returns PRIMARY_SOURCE documents (letters, diaries, speeches, court records, etc.)
+  
+  For SCIENCE tracks (CREATION_SCIENCE, HOMESTEADING, HEALTH_NATUROPATHY):
+    - Educational domains: Khan Academy, Science Buddies, Exploratorium, Nature Education, Smithsonian
+    → Returns EDUCATIONAL documents
+  
+  - Embed results and filter by track-aware threshold
   - Persist newly acquired documents to Hippocampus (self-improving)
 
 Flow:
   1. Embed query
   2. Unified Hippocampus search (all source types)
-  3. If results >= 0.82: Return as VERIFIED
-  4. If empty: Trigger parallel deep web search
-  5. Embed found documents and filter by 0.82
+  3. If results >= threshold: Return as VERIFIED
+  4. If empty: Trigger parallel deep web search (track-appropriate domains)
+  5. Embed found documents and filter by threshold
   6. Persist acquired docs to Hippocampus
   7. Return newly acquired docs
   8. If both empty: Return [] (triggers RESEARCH_MISSION)
@@ -49,13 +59,22 @@ EMBED_MODEL       = "text-embedding-3-small"
 TAVILY_URL        = "https://api.tavily.com/search"
 TAVILY_TIMEOUT    = 15.0
 
-DECLASSIFIED_DOMAINS = {
+PRIMARY_SOURCE_DOMAINS = {
+    # Government declassified archives
     'NARA': 'catalog.archives.gov',
     'CIA_FOIA': 'cia.gov/information-freedom',
     'FBI_VAULT': 'vault.fbi.gov',
     'CONGRESSIONAL_RECORD': 'congress.gov/congressional-record',
     'FEDERAL_REGISTER': 'federalregister.gov',
     'DNSA': 'nsarchive.gwu.edu',
+    
+    # Primary source repositories
+    'LOC_DIGITAL': 'loc.gov/collections',  # Library of Congress digital collections
+    'INTERNET_ARCHIVE': 'archive.org',  # Internet Archive - historical documents
+    'DPLA': 'dp.la',  # Digital Public Library of America
+    'EUROPEANA': 'europeana.eu',  # European cultural heritage
+    'AVALON_PROJECT': 'avalon.law.yale.edu',  # Yale Law School - historical documents
+    'PERSEUS': 'perseus.tufts.edu',  # Tufts - classical texts and primary sources
 }
 
 # Science-focused domains for CREATION_SCIENCE and HOMESTEADING tracks
@@ -103,10 +122,10 @@ async def search_archive_async(query: str, archive_name: str, domains_map: dict 
     Args:
         query: Search query
         archive_name: Name of the archive/domain to search
-        domains_map: Which domain map to use (defaults to DECLASSIFIED_DOMAINS)
+        domains_map: Which domain map to use (defaults to PRIMARY_SOURCE_DOMAINS)
     """
     if domains_map is None:
-        domains_map = DECLASSIFIED_DOMAINS
+        domains_map = PRIMARY_SOURCE_DOMAINS
     
     domain = domains_map.get(archive_name)
     if not domain:
@@ -154,7 +173,8 @@ async def search_all_archives_parallel(query: str, track: str = None) -> list[di
     """
     Search archives in parallel based on track type.
     
-    - TRUTH_HISTORY, JUSTICE_CHANGEMAKING: Search declassified government archives
+    - TRUTH_HISTORY, JUSTICE_CHANGEMAKING: Search primary source repositories (government archives, 
+      Library of Congress, Internet Archive, university digital collections, etc.)
     - CREATION_SCIENCE, HOMESTEADING, HEALTH_NATUROPATHY: Search science education domains
     - Other tracks: Search science domains (more general content)
     
@@ -162,11 +182,11 @@ async def search_all_archives_parallel(query: str, track: str = None) -> list[di
     """
     # Choose domains based on track
     if track in HISTORY_TRACKS:
-        domains_map = DECLASSIFIED_DOMAINS
-        logger.info(f"[Researcher] Using declassified archives for track={track}")
+        domains_map = PRIMARY_SOURCE_DOMAINS
+        logger.info(f"[Researcher] Using primary source repositories for track={track} ({len(domains_map)} sources)")
     else:
         domains_map = SCIENCE_DOMAINS
-        logger.info(f"[Researcher] Using science domains for track={track}")
+        logger.info(f"[Researcher] Using science domains for track={track} ({len(domains_map)} sources)")
     
     archives = list(domains_map.keys())
     tasks = [search_archive_async(query, archive, domains_map) for archive in archives]
@@ -277,11 +297,17 @@ async def search_witnesses(
             best_score = max(r.get('similarity_score', 0) for r in hippo_results)
             logger.info(f"[Researcher] Hippocampus returned {len(hippo_results)} results (best score: {best_score:.3f}) but none met {threshold} threshold. Triggering deep web search.")
         else:
-            logger.info(f"[Researcher] Hippocampus empty. Triggering deep web search.")
+            logger.info(f"[Researcher] Hippocampus empty for track={track}. Triggering deep web search.")
+        
+        if not tavily_configured:
+            logger.error(f"[Researcher] Cannot search web — TAVILY_API_KEY not configured. Returning empty.")
+            return []
+        
         archive_results = await search_all_archives_parallel(query, track=track)
+        logger.info(f"[Researcher] Deep web search returned {len(archive_results)} raw results")
 
         if not archive_results:
-            logger.info(f"[Researcher] No results from deep web search either.")
+            logger.info(f"[Researcher] No results from deep web search either. Student gets RESEARCH_MISSION.")
             return []
 
         # Step 5: Embed and score found documents
@@ -298,7 +324,7 @@ async def search_witnesses(
                 if similarity_score >= threshold:
                     # Use appropriate source type based on track
                     if track in HISTORY_TRACKS:
-                        source_type = SourceType.DECLASSIFIED_GOV.value
+                        source_type = SourceType.PRIMARY_SOURCE.value
                     else:
                         source_type = "EDUCATIONAL"  # Science/education content
                     
