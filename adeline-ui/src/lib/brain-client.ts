@@ -734,3 +734,54 @@ export async function downloadBook(bookId: string): Promise<Blob> {
   if (!res.ok) throw new Error(`Failed to download book: ${res.status}`);
   return res.blob();
 }
+
+// ── Learning Plan (Dynamic Suggestions) ───────────────────────────────────────
+
+export interface LessonSuggestion {
+  id: string;
+  title: string;
+  track: Track;
+  description: string;
+  emoji: string;
+  priority: number;
+  source: "zpd" | "cross_track" | "continue" | "explore" | "interest";
+  concept_id?: string;
+  standard_code?: string;
+  grade_band?: string;
+  agent?: string;  // Which agent handles this: HistorianAgent, ScienceAgent, DiscipleshipAgent
+}
+
+export interface ProjectSuggestion {
+  id: string;
+  title: string;
+  track: Track;
+  tagline: string;
+  emoji: string;
+  difficulty: string;
+  estimated_hours: number;
+  portfolio_credit: boolean;
+}
+
+export interface LearningPlanResponse {
+  student_id: string;
+  suggestions: LessonSuggestion[];
+  projects: ProjectSuggestion[];  // Portfolio projects ready to start
+  total_tracks_active: number;
+  strongest_track?: string;
+  weakest_track?: string;
+  total_credits_earned: number;
+  credits_this_week: number;
+  generated_at: string;
+}
+
+export async function getLearningPlan(
+  studentId: string,
+  limit: number = 6,
+): Promise<LearningPlanResponse> {
+  const res = await fetch(
+    `${BRAIN_URL}/learning-plan/${encodeURIComponent(studentId)}?limit=${limit}&include_all_tracks=true`,
+    { headers: getAuthHeaders(), cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`Failed to fetch learning plan: ${res.status}`);
+  return res.json();
+}

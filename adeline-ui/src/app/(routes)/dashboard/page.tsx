@@ -1,30 +1,31 @@
 'use client';
 
-import { Suspense, useState, useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { Loader2, ArrowLeft } from 'lucide-react';
+import { Suspense, useState, useCallback, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { Loader2, ArrowLeft, RefreshCw, Award, Hammer, Clock } from 'lucide-react';
 import { StudentStatusBar } from '@/components/StudentStatusBar';
 import { AdelineChatPanel } from '@/components/AdelineChatPanel';
 import { SpacedRepWidget } from '@/components/dashboard/SpacedRepWidget';
 import { useStudent } from '@/lib/useStudent';
 import LessonRenderer from '@/components/lessons/LessonRenderer';
-import { generateLesson } from '@/lib/brain-client';
-import type { LessonResponse, Track } from '@/lib/brain-client';
+import { generateLesson, getLearningPlan } from '@/lib/brain-client';
+import type { LessonResponse, Track, LessonSuggestion, ProjectSuggestion, LearningPlanResponse } from '@/lib/brain-client';
 
-interface LessonSuggestion {
-  id: string;
-  title: string;
-  track: Track;
-  description: string;
-  emoji: string;
-}
+// Source badge colors for learning plan suggestions
+const SOURCE_BADGES: Record<string, { bg: string; text: string; label: string }> = {
+  zpd: { bg: '#F0FDF4', text: '#166534', label: 'Ready to Learn' },
+  cross_track: { bg: '#EFF6FF', text: '#1D4ED8', label: 'Cross-Track' },
+  continue: { bg: '#FDF6E9', text: '#BD6809', label: 'Continue' },
+  explore: { bg: '#F3F4F6', text: '#374151', label: 'Explore' },
+  interest: { bg: '#FDF2F8', text: '#BE185D', label: 'Your Interest' },
+};
 
-const LESSON_SUGGESTIONS: LessonSuggestion[] = [
-  { id: '1', title: 'Butterflies of North America', track: 'CREATION_SCIENCE' as Track, description: 'Investigate butterfly life cycles and adaptations', emoji: '🦋' },
-  { id: '2', title: 'The American Revolution', track: 'TRUTH_HISTORY' as Track, description: 'Primary sources from the founding era', emoji: '🏛️' },
-  { id: '3', title: 'Water Cycle Investigation', track: 'CREATION_SCIENCE' as Track, description: 'Hands-on experiments with evaporation and condensation', emoji: '💧' },
-  { id: '4', title: 'Scripture Study: Psalms', track: 'DISCIPLESHIP' as Track, description: 'Hebrew poetry and original meanings', emoji: '📖' },
-];
+// Difficulty badge colors for projects
+const DIFFICULTY_BADGES: Record<string, { bg: string; text: string }> = {
+  SEEDLING: { bg: '#F0FDF4', text: '#166534' },
+  GROWING: { bg: '#FEF3C7', text: '#92400E' },
+  HARVEST: { bg: '#FEE2E2', text: '#991B1B' },
+};
 
 function DashboardContent() {
   const { student, loading: profileLoading } = useStudent();
@@ -34,6 +35,40 @@ function DashboardContent() {
   const gradeLevel = student?.gradeLevel ?? '8';
   const [activeLesson, setActiveLesson] = useState<LessonResponse | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [suggestions, setSuggestions] = useState<LessonSuggestion[]>([]);
+  const [projects, setProjects] = useState<ProjectSuggestion[]>([]);
+  const [totalCredits, setTotalCredits] = useState(0);
+  const [weeklyCredits, setWeeklyCredits] = useState(0);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(true);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const router = useRouter();
+
+  // Fetch dynamic learning plan suggestions
+  const fetchSuggestions = useCallback(async () => {
+    if (!studentId) return;
+    
+    setLoadingSuggestions(true);
+    setSuggestionsError(null);
+    
+    try {
+      const plan = await getLearningPlan(studentId, 6);
+      setSuggestions(plan.suggestions);
+      setProjects(plan.projects || []);
+      setTotalCredits(plan.total_credits_earned || 0);
+      setWeeklyCredits(plan.credits_this_week || 0);
+    } catch (error) {
+      console.error('[Dashboard] Failed to fetch learning plan:', error);
+      setSuggestionsError('Unable to load your learning plan. Please try again.');
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  }, [studentId]);
+
+  useEffect(() => {
+    if (studentId) {
+      fetchSuggestions();
+    }
+  }, [studentId, fetchSuggestions]);
 
   const handleLessonGenerated = useCallback((lesson: LessonResponse) => {
     console.log('[Dashboard] Lesson generated:', lesson.title);
@@ -50,7 +85,7 @@ function DashboardContent() {
     try {
       const lesson = await generateLesson({
         student_id: studentId,
-        track: suggestion.track,
+        track: suggestion.track as Track,
         topic: suggestion.title,
         is_homestead: false,
         grade_level: gradeLevel,
@@ -100,30 +135,148 @@ function DashboardContent() {
               </div>
             )}
 
-            {!isStreaming && (
-              <div className="grid sm:grid-cols-2 gap-4">
-                {LESSON_SUGGESTIONS.map(suggestion => (
-                  <button
-                    key={suggestion.id}
-                    onClick={() => handleSuggestionClick(suggestion)}
-                    disabled={isStreaming}
-                    className="text-left p-6 rounded-2xl border-2 border-[#E7DAC3] hover:border-[#BD6809] hover:shadow-lg transition-all bg-white group disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <div className="flex items-start gap-4">
-                      <span className="text-4xl">{suggestion.emoji}</span>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-bold text-[#2F4731] mb-1 group-hover:text-[#BD6809] transition-colors">
-                          {suggestion.title}
-                        </h3>
-                        <p className="text-sm text-[#2F4731]/60 mb-2">{suggestion.description}</p>
-                        <span className="inline-block px-3 py-1 bg-[#2F4731]/10 text-[#2F4731] text-xs font-bold rounded-full">
-                          {suggestion.track.replace(/_/g, ' ')}
-                        </span>
-                      </div>
-                    </div>
-                  </button>
-                ))}
+            {!isStreaming && loadingSuggestions && (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-[#BD6809]" />
+                <p className="ml-3 text-[#2F4731]/60">Loading your learning plan…</p>
               </div>
+            )}
+
+            {!isStreaming && suggestionsError && (
+              <div className="text-center py-12">
+                <p className="text-[#991B1B] mb-4">{suggestionsError}</p>
+                <button
+                  onClick={fetchSuggestions}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#2F4731] text-white rounded-lg hover:bg-[#2F4731]/90 transition-colors"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Try Again
+                </button>
+              </div>
+            )}
+
+            {!isStreaming && !loadingSuggestions && !suggestionsError && (
+              <>
+                {/* Credits Summary */}
+                <div className="flex items-center gap-6 mb-6 p-4 bg-white rounded-xl border border-[#E7DAC3]">
+                  <div className="flex items-center gap-2">
+                    <Award className="w-5 h-5 text-[#BD6809]" />
+                    <div>
+                      <p className="text-xs text-[#2F4731]/60">Total Credits</p>
+                      <p className="text-lg font-bold text-[#2F4731]">{totalCredits.toFixed(1)}</p>
+                    </div>
+                  </div>
+                  <div className="h-8 w-px bg-[#E7DAC3]" />
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-[#2F4731]/60" />
+                    <div>
+                      <p className="text-xs text-[#2F4731]/60">This Week</p>
+                      <p className="text-lg font-bold text-[#2F4731]">{weeklyCredits.toFixed(1)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Lessons Section */}
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm text-[#2F4731]/60">
+                    {suggestions.length} lessons recommended for you
+                  </p>
+                  <button
+                    onClick={fetchSuggestions}
+                    className="text-sm text-[#BD6809] hover:text-[#2F4731] flex items-center gap-1 transition-colors"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Refresh
+                  </button>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {suggestions.map(suggestion => {
+                    const sourceBadge = SOURCE_BADGES[suggestion.source] || SOURCE_BADGES.explore;
+                    return (
+                      <button
+                        key={suggestion.id}
+                        onClick={() => handleSuggestionClick(suggestion)}
+                        disabled={isStreaming}
+                        className="text-left p-6 rounded-2xl border-2 border-[#E7DAC3] hover:border-[#BD6809] hover:shadow-lg transition-all bg-white group disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <div className="flex items-start gap-4">
+                          <span className="text-4xl">{suggestion.emoji}</span>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="text-lg font-bold text-[#2F4731] group-hover:text-[#BD6809] transition-colors">
+                                {suggestion.title}
+                              </h3>
+                            </div>
+                            <p className="text-sm text-[#2F4731]/60 mb-2">{suggestion.description}</p>
+                            <div className="flex flex-wrap gap-2">
+                              <span className="inline-block px-3 py-1 bg-[#2F4731]/10 text-[#2F4731] text-xs font-bold rounded-full">
+                                {suggestion.track.replace(/_/g, ' ')}
+                              </span>
+                              <span
+                                className="inline-block px-2 py-0.5 text-[10px] font-bold rounded-full"
+                                style={{ backgroundColor: sourceBadge.bg, color: sourceBadge.text }}
+                              >
+                                {sourceBadge.label}
+                              </span>
+                              {suggestion.grade_band && (
+                                <span className="inline-block px-2 py-0.5 text-[10px] text-[#2F4731]/50 rounded-full border border-[#E7DAC3]">
+                                  {suggestion.grade_band}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Projects Section */}
+                {projects.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-2 mt-8 mb-4">
+                      <Hammer className="w-4 h-4 text-[#BD6809]" />
+                      <p className="text-sm font-bold text-[#2F4731]">
+                        Portfolio Projects
+                      </p>
+                      <span className="text-xs text-[#2F4731]/50">
+                        — Real accomplishments, not assignments
+                      </span>
+                    </div>
+                    <div className="grid sm:grid-cols-3 gap-4">
+                      {projects.map(project => {
+                        const diffBadge = DIFFICULTY_BADGES[project.difficulty] || DIFFICULTY_BADGES.SEEDLING;
+                        return (
+                          <button
+                            key={project.id}
+                            onClick={() => router.push(`/dashboard/projects?id=${project.id}`)}
+                            className="text-left p-4 rounded-xl border-2 border-[#E7DAC3] hover:border-[#BD6809] hover:shadow-lg transition-all bg-white group"
+                          >
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className="text-2xl">{project.emoji}</span>
+                              <h4 className="text-sm font-bold text-[#2F4731] group-hover:text-[#BD6809] transition-colors">
+                                {project.title}
+                              </h4>
+                            </div>
+                            <p className="text-xs text-[#2F4731]/60 mb-3 line-clamp-2">{project.tagline}</p>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="inline-block px-2 py-0.5 text-[10px] font-bold rounded-full"
+                                style={{ backgroundColor: diffBadge.bg, color: diffBadge.text }}
+                              >
+                                {project.difficulty}
+                              </span>
+                              <span className="text-[10px] text-[#2F4731]/50">
+                                ~{project.estimated_hours}h
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </>
             )}
           </main>
         )}

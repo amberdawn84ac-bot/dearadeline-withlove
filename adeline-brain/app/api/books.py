@@ -216,6 +216,105 @@ def _get_lexile_range(grade_level: Optional[str]) -> tuple:
 # ── Routes ─────────────────────────────────────────────────────────────────
 
 @router.get(
+    "/recommendations",
+    response_model=RecommendationsResponse,
+    dependencies=[Depends(require_role(UserRole.STUDENT, UserRole.PARENT, UserRole.ADMIN))],
+)
+async def get_recommendations(
+    limit: int = Query(12, ge=1, le=12, description="Number of recommendations (max 12)"),
+    user_id: str = Depends(get_current_user_id),
+) -> RecommendationsResponse:
+    """
+    Get AI-recommended books based on student profile using pgvector semantic search.
+
+    Query Parameters:
+    - limit: Number of recommendations (1-12, default 12)
+
+    Returns:
+    - List of recommended books ranked by relevance_score (highest first)
+
+    Errors:
+    - 404: Student profile not found
+    - 500: OpenAI or database error
+    - 200 with empty list if no books match
+    """
+    x_user_id = user_id
+    logger.info(f"[Books/Recommendations] Fetching recommendations for student: {x_user_id}, limit={limit}")
+
+    try:
+        # Step 1: Fetch student profile
+        profile = await _fetch_student_profile(x_user_id)
+        if not profile:
+            logger.warning(f"[Books/Recommendations] Student not found: {x_user_id}")
+            raise HTTPException(status_code=404, detail="Student profile not found")
+
+        grade_level = profile.get("gradeLevel")
+        interests = profile.get("interests", [])
+
+        logger.debug(
+            f"[Books/Recommendations] Student profile: grade={grade_level}, "
+            f"interests={interests}"
+        )
+
+        # Step 2: Format embedding query text
+        query_text = _format_embedding_query(grade_level, interests)
+
+        # Step 3: Create embedding via OpenAI
+        logger.info(f"[Books/Recommendations] Creating embedding for query")
+        embedding = await _embed(query_text)
+        logger.debug(f"[Books/Recommendations] Embedding created (dims: {len(embedding)})")
+
+        # Step 4: Get grade-appropriate lexile range
+        lexile_min, lexile_max = _get_lexile_range(grade_level)
+        logger.debug(
+            f"[Books/Recommendations] Lexile range for grade {grade_level}: "
+            f"{lexile_min}-{lexile_max}"
+        )
+
+        # Step 5: Search books by embedding with lexile filtering
+        logger.info(
+            f"[Books/Recommendations] Searching books by embedding "
+            f"(limit={limit}, lexile={lexile_min}-{lexile_max})"
+        )
+        books = await bookshelf_search.search_books_by_embedding(
+            embedding=embedding,
+            lexile_min=lexile_min,
+            lexile_max=lexile_max,
+            limit=limit,
+        )
+
+        logger.info(
+            f"[Books/Recommendations] Found {len(books)} recommendations for {x_user_id}"
+        )
+
+        # Step 6: Convert to BookRecommendation response
+        recommendations = [
+            BookRecommendation(
+                id=book["id"],
+                title=book["title"],
+                author=book["author"],
+                lexile_level=book["lexile_level"],
+                grade_band=book["grade_band"],
+                track=book["track"],
+                cover_url=book.get("cover_url"),
+                relevance_score=book.get("relevance_score", 0.0),
+            )
+            for book in books
+        ]
+
+        logger.debug(
+            f"[Books/Recommendations] Returning {len(recommendations)} recommendations"
+        )
+        return RecommendationsResponse(recommendations=recommendations)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Books/Recommendations] Unexpected error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate recommendations")
+
+
+@router.get(
     "",
     response_model=BookListResponse,
     dependencies=[Depends(require_role(UserRole.STUDENT, UserRole.PARENT, UserRole.ADMIN))],
@@ -342,100 +441,3 @@ async def get_book(book_id: str) -> BookDetailResponse:
         raise HTTPException(status_code=500, detail="Failed to retrieve book details")
 
 
-@router.get(
-    "/recommendations",
-    response_model=RecommendationsResponse,
-    dependencies=[Depends(require_role(UserRole.STUDENT, UserRole.PARENT, UserRole.ADMIN))],
-)
-async def get_recommendations(
-    limit: int = Query(12, ge=1, le=12, description="Number of recommendations (max 12)"),
-    user_id: str = Depends(get_current_user_id),
-) -> RecommendationsResponse:
-    """
-    Get AI-recommended books based on student profile using pgvector semantic search.
-
-    Query Parameters:
-    - limit: Number of recommendations (1-12, default 12)
-
-    Returns:
-    - List of recommended books ranked by relevance_score (highest first)
-
-    Errors:
-    - 404: Student profile not found
-    - 500: OpenAI or database error
-    - 200 with empty list if no books match
-    """
-    x_user_id = user_id
-    logger.info(f"[Books/Recommendations] Fetching recommendations for student: {x_user_id}, limit={limit}")
-
-    try:
-        # Step 1: Fetch student profile
-        profile = await _fetch_student_profile(x_user_id)
-        if not profile:
-            logger.warning(f"[Books/Recommendations] Student not found: {x_user_id}")
-            raise HTTPException(status_code=404, detail="Student profile not found")
-
-        grade_level = profile.get("gradeLevel")
-        interests = profile.get("interests", [])
-
-        logger.debug(
-            f"[Books/Recommendations] Student profile: grade={grade_level}, "
-            f"interests={interests}"
-        )
-
-        # Step 2: Format embedding query text
-        query_text = _format_embedding_query(grade_level, interests)
-
-        # Step 3: Create embedding via OpenAI
-        logger.info(f"[Books/Recommendations] Creating embedding for query")
-        embedding = await _embed(query_text)
-        logger.debug(f"[Books/Recommendations] Embedding created (dims: {len(embedding)})")
-
-        # Step 4: Get grade-appropriate lexile range
-        lexile_min, lexile_max = _get_lexile_range(grade_level)
-        logger.debug(
-            f"[Books/Recommendations] Lexile range for grade {grade_level}: "
-            f"{lexile_min}-{lexile_max}"
-        )
-
-        # Step 5: Search books by embedding with lexile filtering
-        logger.info(
-            f"[Books/Recommendations] Searching books by embedding "
-            f"(limit={limit}, lexile={lexile_min}-{lexile_max})"
-        )
-        books = await bookshelf_search.search_books_by_embedding(
-            embedding=embedding,
-            lexile_min=lexile_min,
-            lexile_max=lexile_max,
-            limit=limit,
-        )
-
-        logger.info(
-            f"[Books/Recommendations] Found {len(books)} recommendations for {x_user_id}"
-        )
-
-        # Step 6: Convert to BookRecommendation response
-        recommendations = [
-            BookRecommendation(
-                id=book["id"],
-                title=book["title"],
-                author=book["author"],
-                lexile_level=book["lexile_level"],
-                grade_band=book["grade_band"],
-                track=book["track"],
-                cover_url=book.get("cover_url"),
-                relevance_score=book.get("relevance_score", 0.0),
-            )
-            for book in books
-        ]
-
-        logger.debug(
-            f"[Books/Recommendations] Returning {len(recommendations)} recommendations"
-        )
-        return RecommendationsResponse(recommendations=recommendations)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"[Books/Recommendations] Unexpected error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to generate recommendations")

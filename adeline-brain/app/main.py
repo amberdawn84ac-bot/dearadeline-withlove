@@ -37,6 +37,7 @@ from app.api.reading_session import router as reading_session_router
 from app.api.onboarding import router as onboarding_router
 from app.api.parent import router as parent_router
 from app.api.admin import router as admin_router
+from app.api.learning_plan import router as learning_plan_router
 from app.connections.journal_store import journal_store
 from app.jobs.seed_scheduler import startup_seed_scheduler, shutdown_seed_scheduler
 
@@ -154,6 +155,7 @@ app.include_router(reading_session_router)
 app.include_router(onboarding_router)
 app.include_router(parent_router)
 app.include_router(admin_router)
+app.include_router(learning_plan_router)
 
 
 @app.get("/health")
