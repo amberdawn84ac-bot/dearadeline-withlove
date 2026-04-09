@@ -683,22 +683,26 @@ async def seal_project(
 ):
     """
     Student seals a completed project.
-    Records credit hours to the journal and returns a ProjectSealResponse.
+    Records credit hours to the journal and official transcript.
 
     Credit is calculated at 0.5 Carnegie units per estimated hour of project work,
     rounded to one decimal place.
     """
+    from uuid import uuid4
+    from app.api.learning_records import seal_transcript, TranscriptEntryIn
+    
     project = PROJECTS.get(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found.")
 
     credit_hours = round(project.estimated_hours * 0.5, 1)
     credit_type  = "CREATIVE" if project.track == Track.CREATIVE_ECONOMY else "HOMESTEAD"
+    lesson_id    = f"project-{project_id}"
 
     try:
         await journal_store.seal(
             student_id=body.student_id,
-            lesson_id=f"project-{project_id}",
+            lesson_id=lesson_id,
             track=project.track.value,
             completed_blocks=int(project.estimated_hours * 2),  # 30-min blocks
             sources=[],
@@ -709,6 +713,25 @@ async def seal_project(
         )
     except Exception as e:
         logger.warning(f"[/projects/seal] Journal seal failed (non-fatal): {e}")
+
+    try:
+        await seal_transcript(TranscriptEntryIn(
+            id=str(uuid4()),
+            student_id=body.student_id,
+            lesson_id=lesson_id,
+            course_title=project.title,
+            track=project.track.value,
+            oas_standards=[],
+            activity_description=f"Completed {project.title} project — {project.tagline}",
+            credit_hours=credit_hours,
+            credit_type=credit_type,
+            is_homestead_credit=(project.track == Track.HOMESTEADING),
+            agent_name="ProjectCatalog",
+            researcher_activated=False,
+        ))
+        logger.info(f"[/projects/seal] Transcript entry created for {project_id}")
+    except Exception as e:
+        logger.warning(f"[/projects/seal] Transcript seal failed (non-fatal): {e}")
 
     return ProjectSealResponse(
         project_id=project_id,
