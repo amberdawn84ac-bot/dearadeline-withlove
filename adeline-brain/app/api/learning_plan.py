@@ -427,15 +427,41 @@ async def _get_credits_by_bucket(student_id: str) -> dict[str, float]:
     return credits_by_bucket
 
 
-def _calculate_credit_gaps(credits_by_bucket: dict[str, float]) -> list[CreditGap]:
-    """Calculate what credits are still needed for graduation."""
+def _calculate_credit_gaps(credits_by_bucket: dict[str, float], grade_level: str) -> list[CreditGap]:
+    """Calculate what credits are still needed for graduation with grade-level priorities."""
     gaps = []
     
-    # Priority order: core subjects first, then electives
-    priority_order = [
-        "ENGLISH_CORE", "MATH_CORE", "SCIENCE_CORE", "SOCIAL_STUDIES",
-        "PHYSICAL_ED", "FINE_ARTS", "ELECTIVES"
-    ]
+    # Parse grade level
+    if grade_level == "K":
+        grade_num = 0
+    elif grade_level.startswith("K"):
+        grade_num = 0
+    else:
+        import re
+        match = re.match(r'(\d+)', grade_level)
+        grade_num = int(match.group(1)) if match else 0
+    
+    # Different priority orders for K-8 vs 9-12
+    if grade_num <= 8:  # K-8: Foundational skills first
+        priority_order = [
+            "ENGLISH_CORE",    # Reading/writing fundamentals
+            "MATH_CORE",       # Math fundamentals
+            "SCIENCE_CORE",    # Science exploration
+            "SOCIAL_STUDIES",  # History/civics basics
+            "PHYSICAL_ED",     # Health/physical development
+            "FINE_ARTS",       # Creativity and arts
+            "ELECTIVES"        # Interest-based learning
+        ]
+    else:  # 9-12: Credit accumulation for graduation
+        priority_order = [
+            "ENGLISH_CORE",    # 4 credits required
+            "MATH_CORE",       # 3 credits required
+            "SCIENCE_CORE",    # 3 credits required
+            "SOCIAL_STUDIES",  # 3 credits required
+            "PHYSICAL_ED",     # 1 credit required
+            "FINE_ARTS",       # 1 credit required
+            "ELECTIVES"        # 6 credits required
+        ]
     
     for i, bucket in enumerate(priority_order, 1):
         required = GRADUATION_REQUIREMENTS[bucket]
@@ -454,16 +480,36 @@ def _calculate_credit_gaps(credits_by_bucket: dict[str, float]) -> list[CreditGa
 
 
 def _calculate_graduation_progress(credits_by_bucket: dict[str, float], grade_level: str) -> GraduationProgress:
-    """Calculate overall graduation progress and check if on track."""
+    """Calculate overall graduation progress with grade-level specific expectations."""
     total_earned = sum(credits_by_bucket.values())
     percentage = (total_earned / TOTAL_REQUIRED) * 100 if TOTAL_REQUIRED > 0 else 0
     remaining = max(0.0, TOTAL_REQUIRED - total_earned)
     
-    # Check if on track based on grade level
-    # Rough guide: should have ~3 credits per year completed
-    grade_num = int(grade_level.replace("K", "0").replace("st", "").replace("nd", "").replace("rd", "").replace("th", ""))
-    expected_credits = min(grade_num * 3.0, TOTAL_REQUIRED)
-    on_track = total_earned >= expected_credits * 0.8  # 80% of expected progress
+    # Parse grade level to numeric
+    if grade_level == "K":
+        grade_num = 0
+    elif grade_level.startswith("K"):
+        grade_num = 0
+    else:
+        # Extract number from grade (e.g., "1st" -> 1, "11th" -> 11)
+        import re
+        match = re.match(r'(\d+)', grade_level)
+        grade_num = int(match.group(1)) if match else 0
+    
+    # Grade-level specific expectations
+    on_track = False
+    expected_credits = 0.0
+    
+    if grade_num <= 8:  # K-8: No credit accumulation, focus on foundational skills
+        # K-8 doesn't accumulate credits toward graduation
+        # They should be building foundational knowledge across all subjects
+        on_track = True  # All K-8 students are "on track" by default
+        expected_credits = 0.0
+    else:  # 9-12: Credit accumulation toward graduation
+        # High school students should earn ~6 credits per year
+        years_completed = grade_num - 8  # 9th grade = 1 year of high school
+        expected_credits = min(years_completed * 6.0, TOTAL_REQUIRED)
+        on_track = total_earned >= expected_credits * 0.8  # 80% of expected progress
     
     return GraduationProgress(
         total_required=TOTAL_REQUIRED,
@@ -559,7 +605,7 @@ async def get_learning_plan(
         total_credits, weekly_credits = await _get_credit_summary(student_id)
         credits_by_bucket = await _get_credits_by_bucket(student_id)
         graduation_progress = _calculate_graduation_progress(credits_by_bucket, grade_level)
-        credit_gaps = _calculate_credit_gaps(credits_by_bucket)
+        credit_gaps = _calculate_credit_gaps(credits_by_bucket, grade_level)
     except Exception as e:
         logger.warning(f"[LearningPlan] Failed to get graduation data: {e}")
         total_credits, weekly_credits = 0.0, 0.0
@@ -571,7 +617,7 @@ async def get_learning_plan(
             credits_remaining=TOTAL_REQUIRED,
             on_track=False,
         )
-        credit_gaps = _calculate_credit_gaps(credits_by_bucket)
+        credit_gaps = _calculate_credit_gaps(credits_by_bucket, grade_level)
 
     # 4. Get recent lessons to avoid repetition
     recent_lesson_ids: set[str] = set()
