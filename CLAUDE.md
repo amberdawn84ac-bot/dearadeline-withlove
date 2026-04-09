@@ -212,16 +212,16 @@ The project catalog (`projects.py`) returns structured `Project` objects — ste
 
 ---
 
-## Known Gaps (as of 2026-03-29)
+## Known Gaps (as of 2026-04-09)
 
 | Gap | Notes |
 |-----|-------|
-| `projects.py` router | Models written; router in progress |
-| `ProjectCard.tsx` / `ProjectGuide.tsx` | Not started — blocked on projects.py |
-| Justice track seeds | Hippocampus needs JUSTICE_CHANGEMAKING primary sources (lobbying docs, civil rights, regulatory capture) |
-| Knowledge tree UI | Visual mastery graph — not started |
-| Tracks 9+10 in transcript PDF | `TRACK_LABELS` in `transcripts.py` still shows 8 tracks — needs APPLIED_MATHEMATICS + CREATIVE_ECONOMY added |
-| CLAUDE.md ↔ adeline.config.toml sync | config.toml may still reference 8 tracks |
+| Justice track seeds | Hippocampus needs more JUSTICE_CHANGEMAKING primary sources (lobbying docs, civil rights, regulatory capture) |
+| Content depth | Nightly self-seeding runs, but corpus needs manual expansion across all 10 tracks for launch quality |
+| Learning Path UI | Visual path through year-end (K-8) or graduation (9-12) — not started |
+| Parent dashboard polish | Per-kid recommendations view, co-op teacher bulk management |
+| Custom domain | DearAdeline.co — DNS/SSL needs pointing to Railway |
+| COPPA verification | `coppaConsent` field exists but no formal parent verification flow for under-13 |
 
 ---
 

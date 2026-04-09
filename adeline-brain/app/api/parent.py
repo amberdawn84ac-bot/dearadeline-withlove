@@ -142,6 +142,22 @@ async def list_students(
             parent_id,
         )
         
+        # Get last activity for each student
+        student_ids = [str(row["id"]) for row in rows]
+        last_activity_map = {}
+        if student_ids:
+            activity_rows = await conn.fetch(
+                '''
+                SELECT "studentId", MAX("sealedAt") as last_sealed
+                FROM "JournalEntry"
+                WHERE "studentId" = ANY($1::uuid[]) AND sealed = true
+                GROUP BY "studentId"
+                ''',
+                student_ids,
+            )
+            for ar in activity_rows:
+                last_activity_map[str(ar["studentId"])] = ar["last_sealed"]
+
         students = [
             StudentSummary(
                 id=str(row["id"]),
@@ -150,11 +166,11 @@ async def list_students(
                 grade_level=row["gradeLevel"] or "8",
                 interests=row["interests"] or [],
                 created_at=row["createdAt"].isoformat() if row["createdAt"] else datetime.now(timezone.utc).isoformat(),
-                last_active=None,  # TODO: Track last activity timestamp
+                last_active=last_activity_map.get(str(row["id"]), row["createdAt"]).isoformat() if last_activity_map.get(str(row["id"]), row["createdAt"]) else None,
             )
             for row in rows
         ]
-        
+
         return students
 
 
@@ -281,6 +297,16 @@ async def get_family_dashboard(
                 student_id,
             ) or 0
             
+            # Get last activity and most recent track
+            last_entry = await conn.fetchrow(
+                '''
+                SELECT "sealedAt", track FROM "JournalEntry"
+                WHERE "studentId" = $1 AND sealed = true
+                ORDER BY "sealedAt" DESC LIMIT 1
+                ''',
+                student_id,
+            )
+
             students_progress.append(
                 StudentProgress(
                     student_id=student_id,
@@ -289,8 +315,8 @@ async def get_family_dashboard(
                     lessons_completed=lessons_count,
                     books_finished=books_count,
                     projects_sealed=projects_count,
-                    last_activity=None,  # TODO: Track last activity
-                    active_track=None,   # TODO: Get most recent track
+                    last_activity=last_entry["sealedAt"].isoformat() if last_entry and last_entry["sealedAt"] else None,
+                    active_track=last_entry["track"] if last_entry else None,
                 )
             )
             

@@ -182,7 +182,9 @@ function DashboardContent() {
                 {/* Lessons Section */}
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-sm text-[#2F4731]/60">
-                    {suggestions.length} lessons recommended for you
+                    {suggestions.length > 0
+                      ? `${suggestions.length} lessons recommended for you`
+                      : 'Getting your first lessons ready...'}
                   </p>
                   <button
                     onClick={fetchSuggestions}
@@ -192,6 +194,19 @@ function DashboardContent() {
                     Refresh
                   </button>
                 </div>
+
+                {suggestions.length === 0 && !loadingSuggestions && (
+                  <div className="text-center py-10 px-6 bg-white rounded-2xl border-2 border-dashed border-[#E7DAC3] mb-6">
+                    <p className="text-lg font-bold text-[#2F4731] mb-2">
+                      Welcome to Dear Adeline!
+                    </p>
+                    <p className="text-sm text-[#2F4731]/60 max-w-md mx-auto">
+                      Ask Adeline a question in the chat panel to get started, or hit Refresh above.
+                      Your personalized learning plan will build itself as you explore.
+                    </p>
+                  </div>
+                )}
+
                 <div className="grid sm:grid-cols-2 gap-4">
                   {suggestions.map(suggestion => {
                     const sourceBadge = SOURCE_BADGES[suggestion.source] || SOURCE_BADGES.explore;

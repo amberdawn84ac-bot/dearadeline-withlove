@@ -107,11 +107,12 @@ Not: "I completed 20 assignments."
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Bookshelf & Reading Coach | 🔄 In Progress | Books table + BookCard built; EPUB reader, progress tracking, fetch waterfall not wired |
-| Project Catalog & Guide | 🔄 In Progress | Models written; router, ProjectCard, ProjectGuide not wired |
-| Spaced Repetition Widget | 📋 Planned | SM-2 review queue for concept mastery |
-| Knowledge Tree UI | 📋 Planned | Visual mastery graph by track |
-| Parent Dashboard | 📋 Not Started | Advertised on pricing page (Family/Co-op tiers) but no UI, API, or multi-student view exists |
+| Bookshelf & Reading Coach | Done | EPUB reader, progress tracking, reading-to-credit pipeline, gap-weighted recommendations |
+| Project Catalog & Guide | Done | In-memory curated catalog, seal-to-credit flow, portfolio integration |
+| Spaced Repetition Widget | Done | SM-2 review queue with quality ratings on dashboard |
+| Parent Dashboard | Done | Multi-student management, per-kid progress, family activity feed |
+| Learning Path | Planned | Visual path through year-end (K-8) or graduation (9-12) |
+| Content Expansion | Ongoing | Nightly self-seeding + manual corpus expansion across all 10 tracks |
 
 ## Pricing
 
