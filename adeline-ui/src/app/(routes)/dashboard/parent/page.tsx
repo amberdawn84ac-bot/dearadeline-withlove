@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Users, BookOpen, Trophy, Plus, Settings, TrendingUp } from 'lucide-react';
+import { Loader2, Users, BookOpen, Trophy, Plus, Settings, TrendingUp, GraduationCap } from 'lucide-react';
 import { getFamilyDashboard, listStudents, addStudent, type FamilyDashboard, type StudentSummary } from '@/lib/parent-client';
+import { getLearningPlan, type LearningPlanResponse, type BookRecommendation, type LessonSuggestion } from '@/lib/brain-client';
 import { AddStudentDialog } from '@/components/parent/AddStudentDialog';
 import { FamilyProgressGrid } from '@/components/parent/FamilyProgressGrid';
 import { StudentSwitcher } from '@/components/parent/StudentSwitcher';
@@ -14,6 +15,8 @@ export default function ParentDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [studentPlan, setStudentPlan] = useState<LearningPlanResponse | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -41,6 +44,19 @@ export default function ParentDashboardPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Fetch selected student's learning plan
+  useEffect(() => {
+    if (!selectedStudentId) {
+      setStudentPlan(null);
+      return;
+    }
+    setPlanLoading(true);
+    getLearningPlan(selectedStudentId, 4)
+      .then(setStudentPlan)
+      .catch(() => setStudentPlan(null))
+      .finally(() => setPlanLoading(false));
+  }, [selectedStudentId]);
 
   const handleAddStudent = useCallback(async (name: string, email: string, gradeLevel: string) => {
     try {
@@ -159,6 +175,112 @@ export default function ParentDashboardPage() {
 
             {/* Progress Grid */}
             <FamilyProgressGrid students={dashboard.students} />
+
+            {/* Selected Student Detail */}
+            {selectedStudentId && (
+              <div className="mt-8">
+                <h2 className="text-2xl font-bold text-[#2F4731] mb-4" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>
+                  {students.find(s => s.id === selectedStudentId)?.name || 'Student'}&rsquo;s Plan
+                </h2>
+
+                {planLoading && (
+                  <div className="flex items-center gap-3 py-8 justify-center">
+                    <Loader2 className="w-5 h-5 animate-spin text-[#BD6809]" />
+                    <p className="text-sm text-[#2F4731]/60">Loading learning plan...</p>
+                  </div>
+                )}
+
+                {!planLoading && studentPlan && (
+                  <div className="space-y-6">
+                    {/* Credits + Progress */}
+                    <div className="flex items-center gap-6 p-4 bg-white rounded-xl border border-[#E7DAC3]">
+                      <div className="flex items-center gap-2">
+                        <GraduationCap className="w-5 h-5 text-[#BD6809]" />
+                        <div>
+                          <p className="text-xs text-[#2F4731]/60">Credits Earned</p>
+                          <p className="text-lg font-bold text-[#2F4731]">{studentPlan.total_credits_earned.toFixed(1)}</p>
+                        </div>
+                      </div>
+                      {studentPlan.strongest_track && (
+                        <>
+                          <div className="h-8 w-px bg-[#E7DAC3]" />
+                          <div>
+                            <p className="text-xs text-[#2F4731]/60">Strongest</p>
+                            <p className="text-sm font-bold text-[#166534]">{studentPlan.strongest_track.replace(/_/g, ' ')}</p>
+                          </div>
+                        </>
+                      )}
+                      {studentPlan.weakest_track && (
+                        <>
+                          <div className="h-8 w-px bg-[#E7DAC3]" />
+                          <div>
+                            <p className="text-xs text-[#2F4731]/60">Needs Focus</p>
+                            <p className="text-sm font-bold text-[#BD6809]">{studentPlan.weakest_track.replace(/_/g, ' ')}</p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Recommended Lessons */}
+                    {studentPlan.suggestions.length > 0 && (
+                      <div>
+                        <p className="text-sm font-bold text-[#2F4731] mb-3">Recommended Lessons</p>
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          {studentPlan.suggestions.slice(0, 4).map(s => (
+                            <div key={s.id} className="p-3 rounded-xl border border-[#E7DAC3] bg-white">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xl">{s.emoji}</span>
+                                <h4 className="text-sm font-bold text-[#2F4731]">{s.title}</h4>
+                              </div>
+                              <p className="text-xs text-[#2F4731]/60 line-clamp-2">{s.description}</p>
+                              <span className="inline-block mt-2 px-2 py-0.5 text-[10px] font-bold rounded-full bg-[#2F4731]/10 text-[#2F4731]">
+                                {s.track.replace(/_/g, ' ')}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recommended Books */}
+                    {studentPlan.recommended_books && studentPlan.recommended_books.length > 0 && (
+                      <div>
+                        <p className="text-sm font-bold text-[#2F4731] mb-3">Recommended Reading</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {studentPlan.recommended_books.map(book => (
+                            <div key={book.id} className="p-3 rounded-xl border border-[#E7DAC3] bg-white">
+                              <div className="w-full aspect-[2/3] rounded-lg mb-2 overflow-hidden bg-[#F5F0E8] flex items-center justify-center">
+                                {book.cover_url ? (
+                                  <img src={book.cover_url} alt={book.title} className="w-full h-full object-cover" />
+                                ) : (
+                                  <BookOpen className="w-6 h-6 text-[#2F4731]/20" />
+                                )}
+                              </div>
+                              <h4 className="text-xs font-bold text-[#2F4731] line-clamp-2">{book.title}</h4>
+                              <p className="text-[10px] text-[#2F4731]/50 mt-0.5">{book.author}</p>
+                              <div className="flex gap-1 mt-1">
+                                <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-[#2F4731]/10 text-[#2F4731]">
+                                  {book.track.replace(/_/g, ' ')}
+                                </span>
+                                <span className="px-1.5 py-0.5 text-[9px] rounded-full border border-[#E7DAC3] text-[#2F4731]/50">
+                                  {book.lexile_level}L
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!planLoading && !studentPlan && (
+                  <div className="p-6 text-center bg-white rounded-xl border border-[#E7DAC3]">
+                    <p className="text-sm text-[#2F4731]/60">Select a student above to see their learning plan and recommendations.</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Recent Activity */}
             <div className="mt-8">
