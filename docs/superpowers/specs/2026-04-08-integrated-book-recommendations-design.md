@@ -89,15 +89,18 @@ If the student later adds a reflection via another PATCH, credit is awarded at t
 ### Credit Calculation (9-12)
 
 ```
-base = reading_minutes / 120    # 2 hours reading = 1.0 base
+hours = reading_minutes / 60
+base_credit = hours / 120        # 120 hours = 1.0 credit
 lexile_multiplier =
     1.2 if book.lexile_level > grade_max
     1.0 if grade_min <= book.lexile_level <= grade_max
     0.8 if book.lexile_level < grade_min
-credit = min(base * lexile_multiplier, 0.5)   # cap at 0.5 per book
+credit = base_credit * lexile_multiplier    # no cap — hours are the natural limit
 ```
 
 Where `grade_min` and `grade_max` come from the existing `GRADE_TO_LEXILE` mapping.
+
+Example: A student reads a grade-level novel for 12 hours → `(12 / 120) * 1.0 = 0.1 credits`. A challenging book (above grade level) for 15 hours → `(15 / 120) * 1.2 = 0.15 credits`.
 
 ### Track-to-Bucket Mapping
 
@@ -131,7 +134,7 @@ Where `grade_min` and `grade_max` come from the existing `GRADE_TO_LEXILE` mappi
 
 **2. CreditLedgerEntry:**
 - `bucket`: same mapping
-- `hoursEarned`: calculated credit value (formula above)
+- `hoursEarned`: calculated credit value (reading_hours / 120 * lexile_multiplier)
 - `source`: `"reading"`
 - `sourceId`: reading session ID
 
