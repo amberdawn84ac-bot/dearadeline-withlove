@@ -758,19 +758,16 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
     blocks: list[dict] = []
 
     # NEW: Check for biblical references in topic (Sefaria integration)
-    from app.services.sefaria import detect_biblical_reference, fetch_biblical_text, cache_to_hippocampus, format_sefaria_content
+    from app.services.sefaria import detect_biblical_reference, fetch_biblical_text, format_sefaria_content
     
     biblical_ref = detect_biblical_reference(request.topic)
     
-    if biblical_ref and request.track == Track.DISCIPLESHIP:
+    if biblical_ref:
         # Fetch from Sefaria API
         logger.info(f"[DiscipleshipAgent] Detected biblical reference: {biblical_ref}")
         sefaria_data = await fetch_biblical_text(biblical_ref)
         
         if sefaria_data:
-            # Cache to Hippocampus for future similarity searches
-            await cache_to_hippocampus(biblical_ref, sefaria_data, request.track.value)
-            
             # Create NARRATIVE block with Sefaria content
             content = format_sefaria_content(sefaria_data, request.grade_level)
             
@@ -779,12 +776,12 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
                 "content": _worldview_wrap(content, request.track),
                 "evidence": [{
                     "source_id": f"sefaria-{biblical_ref}",
-                    "source_title": f"{sefaria_data['ref']} (Everett Fox Translation)",
+                    "source_title": f"{sefaria_data['ref']} ({sefaria_data['version_title']})",
                     "source_url": sefaria_data['url'],
                     "witness_citation": {
-                        "author": "Everett Fox (Translator)",
-                        "year": 1995,
-                        "archive_name": "Sefaria / Schocken Books",
+                        "author": "Everett Fox (Translator)" if sefaria_data['is_fox'] else "Sefaria.org",
+                        "year": 1995 if sefaria_data['is_fox'] else None,
+                        "archive_name": "Sefaria / Schocken Books" if sefaria_data['is_fox'] else "Sefaria.org",
                     },
                     "similarity_score": 1.0,  # Direct fetch, not similarity search
                     "verdict": "VERIFIED",
