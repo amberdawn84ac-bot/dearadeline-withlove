@@ -308,20 +308,21 @@ async def _get_student_profile(student_id: str) -> dict:
         conn = await get_db_conn()
         row = await conn.fetchrow(
             """
-            SELECT name, grade_level, interests, learning_style, pacing_multiplier, state
-            FROM student_profiles
-            WHERE id = $1
+            SELECT "name", "gradeLevel", "interests", "learningStyle", "pacingMultiplier", "state"
+            FROM "User"
+            WHERE "id" = $1
             """,
             student_id,
         )
         await conn.close()
         if row:
+            interests = list(row["interests"]) if row["interests"] else []
             return {
                 "name": row["name"],
-                "grade_level": row["grade_level"],
-                "interests": row["interests"] or [],
-                "learning_style": row["learning_style"],
-                "pacing_multiplier": row["pacing_multiplier"] or 1.0,
+                "grade_level": row["gradeLevel"],
+                "interests": interests,
+                "learning_style": row["learningStyle"],
+                "pacing_multiplier": row["pacingMultiplier"] or 1.0,
                 "state": row["state"],
             }
     except Exception as e:
@@ -412,7 +413,11 @@ async def get_learning_plan(
     suggestions: list[LessonSuggestion] = []
 
     # 1. Load student profile (interests, grade, learning style)
-    profile = await _get_student_profile(student_id)
+    try:
+        profile = await _get_student_profile(student_id)
+    except Exception as e:
+        logger.warning(f"[LearningPlan] Failed to get student profile: {e}")
+        profile = {}
     interests = profile.get("interests", [])
     grade_level = profile.get("grade_level", "8")
     learning_style = profile.get("learning_style", "EXPEDITION")
@@ -430,7 +435,11 @@ async def get_learning_plan(
         student_state = None
 
     # 3. Get credit summary
-    total_credits, weekly_credits = await _get_credit_summary(student_id)
+    try:
+        total_credits, weekly_credits = await _get_credit_summary(student_id)
+    except Exception as e:
+        logger.warning(f"[LearningPlan] Failed to get credit summary: {e}")
+        total_credits, weekly_credits = 0.0, 0.0
 
     # 4. Get recent lessons to avoid repetition
     recent_lesson_ids: set[str] = set()
@@ -529,7 +538,11 @@ async def get_learning_plan(
                 break
 
     # 11. Fetch available portfolio projects
-    projects = await _get_available_projects(limit=3)
+    try:
+        projects = await _get_available_projects(limit=3)
+    except Exception as e:
+        logger.warning(f"[LearningPlan] Failed to get projects: {e}")
+        projects = []
 
     logger.info(
         f"[LearningPlan] Generated {len(final_suggestions)} suggestions, "
