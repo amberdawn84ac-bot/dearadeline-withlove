@@ -125,7 +125,10 @@ function SealButton({
 function PrimarySourceContent({ block, isHomestead }: { block: LessonBlockResponse; isHomestead: boolean }) {
   const content = isHomestead && block.homestead_content ? block.homestead_content : block.content;
   return (
-    <p className="font-body text-fuschia leading-relaxed whitespace-pre-line text-sm">
+    <p
+      className="text-fuschia leading-[1.8] whitespace-pre-line text-base first-letter:text-3xl first-letter:font-bold first-letter:text-paradise first-letter:float-left first-letter:mr-1 first-letter:leading-none"
+      style={{ fontFamily: "var(--font-kalam), cursive" }}
+    >
       {content}
     </p>
   );
@@ -136,7 +139,10 @@ function ResearchMissionContent({ block }: { block: LessonBlockResponse }) {
   return (
     <div className="space-y-3">
       <ArchiveSilent similarityScore={score} showScore />
-      <p className="font-body text-sm text-fuschia/80 whitespace-pre-line leading-relaxed">
+      <p
+        className="text-base text-fuschia/80 whitespace-pre-line leading-[1.8] font-bold"
+        style={{ fontFamily: "var(--font-permanent-marker), cursive" }}
+      >
         {block.content}
       </p>
     </div>
@@ -146,7 +152,10 @@ function ResearchMissionContent({ block }: { block: LessonBlockResponse }) {
 function NarrativeContent({ block, isHomestead }: { block: LessonBlockResponse; isHomestead: boolean }) {
   const content = isHomestead && block.homestead_content ? block.homestead_content : block.content;
   return (
-    <p className="font-body text-fuschia leading-relaxed text-sm">
+    <p
+      className="text-fuschia leading-[1.9] text-lg whitespace-pre-line"
+      style={{ fontFamily: "var(--font-kalam), cursive" }}
+    >
       {content}
     </p>
   );
@@ -163,6 +172,8 @@ const TRACK_LABELS: Record<string, string> = {
   DISCIPLESHIP:         "Discipleship",
   TRUTH_HISTORY:        "Truth History",
   ENGLISH_LITERATURE:   "English Literature",
+  APPLIED_MATHEMATICS:  "Applied Mathematics",
+  CREATIVE_ECONOMY:     "Creative Economy",
 };
 
 function OASFooter({ standards }: { standards: LessonResponse["oas_standards"] }) {

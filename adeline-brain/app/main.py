@@ -126,9 +126,14 @@ app.add_middleware(ForceHTTPSMiddleware)
 
 from app.config import CORS_ORIGINS as _cors_env
 _CORS_ORIGINS = [o.strip() for o in _cors_env.split(",") if o.strip()]
-# Always include Docker-internal UI hostname
-if "http://adeline-ui:3000" not in _CORS_ORIGINS:
-    _CORS_ORIGINS.append("http://adeline-ui:3000")
+# Always include Docker-internal UI hostname and production domain
+for _required_origin in [
+    "http://adeline-ui:3000",
+    "https://dearadeline.co",
+    "https://www.dearadeline.co",
+]:
+    if _required_origin not in _CORS_ORIGINS:
+        _CORS_ORIGINS.append(_required_origin)
 
 app.add_middleware(
     CORSMiddleware,

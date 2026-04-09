@@ -171,11 +171,13 @@ function PrimarySourceBlock({
     isHomestead && block.homestead_content ? block.homestead_content : block.content;
   return (
     <div
-      className="rounded-xl p-4 space-y-3"
+      className="rounded-xl p-5 space-y-3"
       style={{ background: "#FFFBF4", border: "1.5px solid #9A3F4A30" }}
     >
       <BlockLabel type="PRIMARY_SOURCE" />
-      <p className="text-sm text-[#2F4731] leading-relaxed whitespace-pre-wrap">{content}</p>
+      <div className="text-[#2F4731] leading-[1.8] whitespace-pre-wrap" style={{ fontFamily: "var(--font-kalam), cursive" }}>
+        <p className="text-base first-letter:text-3xl first-letter:font-bold first-letter:text-[#9A3F4A] first-letter:float-left first-letter:mr-1 first-letter:leading-none">{content}</p>
+      </div>
       <EvidenceFooter evidence={block.evidence} />
     </div>
   );
@@ -186,14 +188,19 @@ function PrimarySourceBlock({
 function LabMissionBlock({ block }: { block: LessonBlockResponse }) {
   return (
     <div
-      className="rounded-xl p-4 space-y-3"
+      className="rounded-xl p-5 space-y-3"
       style={{ background: "#F0FDF4", border: "1.5px dashed #2F4731" }}
     >
       <div className="flex items-center gap-2">
         <span className="text-lg">🌱</span>
         <BlockLabel type="LAB_MISSION" />
       </div>
-      <p className="text-sm text-[#2F4731] leading-relaxed whitespace-pre-wrap">{block.content}</p>
+      <p
+        className="text-base text-[#2F4731] leading-[1.8] whitespace-pre-wrap font-medium"
+        style={{ fontFamily: "var(--font-swanky), cursive" }}
+      >
+        {block.content}
+      </p>
       <EvidenceFooter evidence={block.evidence} />
     </div>
   );
@@ -243,11 +250,16 @@ function NarrativeBlock({
     isHomestead && block.homestead_content ? block.homestead_content : block.content;
   return (
     <div
-      className="rounded-xl p-4 space-y-3"
+      className="rounded-xl p-5 space-y-3"
       style={{ background: "#FFFEF7", border: "1.5px solid #BD680920" }}
     >
       <BlockLabel type="NARRATIVE" />
-      <p className="text-sm text-[#2F4731] leading-relaxed whitespace-pre-wrap italic">{content}</p>
+      <p
+        className="text-lg text-[#2F4731] leading-[1.9] whitespace-pre-wrap"
+        style={{ fontFamily: "var(--font-kalam), cursive" }}
+      >
+        {content}
+      </p>
       <EvidenceFooter evidence={block.evidence} />
     </div>
   );
@@ -258,16 +270,21 @@ function NarrativeBlock({
 function ResearchMissionBlock({ block }: { block: LessonBlockResponse }) {
   return (
     <div
-      className="rounded-xl p-4 space-y-3"
+      className="rounded-xl p-5 space-y-3"
       style={{ background: "#FEF2F2", border: "1.5px solid #991B1B40" }}
     >
       <div className="flex items-center gap-2">
         <span className="text-lg">🔍</span>
         <BlockLabel type="RESEARCH_MISSION" />
       </div>
-      <p className="text-sm text-[#991B1B] leading-relaxed whitespace-pre-wrap">{block.content}</p>
-      <p className="text-xs text-[#2F4731]/50 italic">
-        No verified archive source was found. This is a student research opportunity.
+      <p
+        className="text-base text-[#991B1B] leading-[1.8] whitespace-pre-wrap font-bold"
+        style={{ fontFamily: "var(--font-permanent-marker), cursive" }}
+      >
+        {block.content}
+      </p>
+      <p className="text-xs text-[#2F4731]/50 italic" style={{ fontFamily: "var(--font-kalam), cursive" }}>
+        No verified archive source was found. This is your research mission.
       </p>
     </div>
   );
@@ -278,18 +295,24 @@ function ResearchMissionBlock({ block }: { block: LessonBlockResponse }) {
 function QuizBlock({ block }: { block: LessonBlockResponse }) {
   return (
     <div
-      className="rounded-xl p-4 space-y-3"
+      className="rounded-xl p-5 space-y-3"
       style={{ background: "#EEF2FF", border: "1.5px solid #4F46E5" }}
     >
       <div className="flex items-center gap-2">
         <span className="text-lg">❓</span>
         <BlockLabel type="QUIZ" />
       </div>
-      <p className="text-sm text-[#312E81] leading-relaxed whitespace-pre-wrap">{block.content}</p>
+      <p
+        className="text-lg text-[#312E81] leading-[1.7] whitespace-pre-wrap font-bold"
+        style={{ fontFamily: "var(--font-kranky), cursive" }}
+      >
+        {block.content}
+      </p>
       <textarea
-        className="w-full mt-1 px-3 py-2 text-sm text-[#2F4731] bg-white border border-[#4F46E5]/30 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-[#4F46E5]"
+        className="w-full mt-1 px-3 py-2 text-base text-[#2F4731] bg-white border border-[#4F46E5]/30 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-[#4F46E5]"
+        style={{ fontFamily: "var(--font-kalam), cursive" }}
         rows={3}
-        placeholder="Write your answer here…"
+        placeholder="Write your answer here..."
       />
     </div>
   );
@@ -299,9 +322,14 @@ function QuizBlock({ block }: { block: LessonBlockResponse }) {
 
 function TextBlock({ block }: { block: LessonBlockResponse }) {
   return (
-    <div className="rounded-xl p-4 space-y-2" style={{ background: "#F9FAFB" }}>
+    <div className="rounded-xl p-5 space-y-2" style={{ background: "#F9FAFB" }}>
       <BlockLabel type="TEXT" />
-      <p className="text-sm text-[#374151] leading-relaxed whitespace-pre-wrap">{block.content}</p>
+      <p
+        className="text-base text-[#374151] leading-[1.8] whitespace-pre-wrap"
+        style={{ fontFamily: "var(--font-kalam), cursive" }}
+      >
+        {block.content}
+      </p>
     </div>
   );
 }
