@@ -102,12 +102,21 @@ class CreditGap(BaseModel):
     remaining: float
     priority: int  # 1=highest priority, 7=lowest
 
+class GradeLevelStandard(BaseModel):
+    standard_id: str
+    subject: str
+    grade: int
+    description: str
+    mastered: bool
+    priority: int
+
 class GraduationProgress(BaseModel):
     total_required: float
     total_earned: float
     percentage_complete: float
     credits_remaining: float
     on_track: bool  # Based on grade level and expected progress
+    is_high_school: bool  # True for 9-12, False for K-8
 
 class LearningPlanResponse(BaseModel):
     student_id: str
@@ -119,7 +128,8 @@ class LearningPlanResponse(BaseModel):
     total_credits_earned: float = 0.0
     credits_this_week: float = 0.0
     graduation_progress: GraduationProgress
-    credit_gaps: list[CreditGap]  # What's still needed for graduation
+    credit_gaps: list[CreditGap]  # What's still needed for graduation (9-12 only)
+    grade_standards: list[GradeLevelStandard]  # K-8 grade-level standards progress
     generated_at: str
 
 
@@ -527,7 +537,67 @@ def _calculate_graduation_progress(credits_by_bucket: dict[str, float], grade_le
         percentage_complete=round(percentage, 1),
         credits_remaining=round(remaining, 1),
         on_track=on_track,
+        is_high_school=grade_num >= 9,
     )
+
+
+async def _get_grade_level_standards(student_id: str, grade_level: str) -> list[GradeLevelStandard]:
+    """Get grade-level OAS standards for K-8 students."""
+    from app.config import get_db_conn
+    
+    # Parse grade level to numeric
+    if grade_level == "K":
+        grade_num = 0
+    elif grade_level.startswith("K"):
+        grade_num = 0
+    else:
+        import re
+        match = re.match(r'(\d+)', grade_level)
+        grade_num = int(match.group(1)) if match else 0
+    
+    # Only return standards for K-8
+    if grade_num > 8:
+        return []
+    
+    standards = []
+    
+    try:
+        conn = await get_db_conn()
+        # Get mastered standards from Neo4j (simplified - would need actual Neo4j query)
+        # For now, return sample standards based on grade
+        sample_standards = {
+            0: ["K.ELA.1", "K.MATH.1", "K.SCIENCE.1"],  # Kindergarten
+            1: ["OAS.ELA.1.R.I.1", "OAS.MATH.1.OA.1", "OAS.SCI.1.LS.1"],  # 1st grade
+            2: ["OAS.ELA.2.R.L.1", "OAS.MATH.2.NBT.1", "OAS.SCI.2.PS.1"],  # 2nd grade
+            3: ["OAS.ELA.3.R.I.1", "OAS.MATH.3.OA.1", "OAS.SCI.3.ESS.1"],  # 3rd grade
+            4: ["OAS.ELA.4.R.L.1", "OAS.MATH.4.NBT.1", "OAS.SCI.4.LS.1"],  # 4th grade
+            5: ["OAS.ELA.5.R.I.1", "OAS.MATH.5.NBT.1", "OAS.SCI.5.ESS.1"],  # 5th grade
+            6: ["OAS.ELA.6.R.I.1", "OAS.MATH.6.RP.1", "OAS.SCI.6.LS.1"],  # 6th grade
+            7: ["OAS.ELA.7.R.I.1", "OAS.MATH.7.RP.1", "OAS.SCI.7.ESS.1"],  # 7th grade
+            8: ["OAS.ELA.8.R.I.3", "OAS.MATH.8.EE.1", "OAS.SCI.8.ESS.3.1"],  # 8th grade
+        }
+        
+        grade_standards = sample_standards.get(grade_num, [])
+        
+        for i, standard_id in enumerate(grade_standards[:5], 1):  # Top 5 standards
+            # Parse subject from standard ID
+            subject = "ELA" if "ELA" in standard_id else "Math" if "MATH" in standard_id else "Science"
+            
+            standards.append(GradeLevelStandard(
+                standard_id=standard_id,
+                subject=subject,
+                grade=grade_num,
+                description=f"Grade {grade_num} {subject} standard",
+                mastered=False,  # Would check Neo4j for actual mastery
+                priority=i,
+            ))
+        
+        await conn.close()
+        
+    except Exception as e:
+        logger.warning(f"[LearningPlan] Failed to get grade standards: {e}")
+    
+    return standards
 
 
 async def _get_available_projects(track: str = None, limit: int = 3) -> list[ProjectSuggestion]:
@@ -766,7 +836,14 @@ async def get_learning_plan(
             if len(final_suggestions) >= limit:
                 break
 
-    # 11. Fetch available portfolio projects
+    # 11. Fetch grade-level standards for K-8 students
+    grade_standards = []
+    try:
+        grade_standards = await _get_grade_level_standards(student_id, grade_level)
+    except Exception as e:
+        logger.warning(f"[LearningPlan] Failed to get grade standards: {e}")
+
+    # 12. Fetch available portfolio projects
     try:
         projects = await _get_available_projects(limit=3)
     except Exception as e:
@@ -775,7 +852,7 @@ async def get_learning_plan(
 
     logger.info(
         f"[LearningPlan] Generated {len(final_suggestions)} suggestions, "
-        f"{len(projects)} projects for student={student_id}"
+        f"{len(projects)} projects, {len(grade_standards)} standards for student={student_id}"
     )
 
     return LearningPlanResponse(
@@ -788,6 +865,7 @@ async def get_learning_plan(
         total_credits_earned=total_credits,
         credits_this_week=weekly_credits,
         graduation_progress=graduation_progress,
-        credit_gaps=credit_gaps,
+        credit_gaps=credit_gaps if graduation_progress.is_high_school else [],  # Empty for K-8
+        grade_standards=grade_standards,  # Only populated for K-8
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
