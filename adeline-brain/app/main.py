@@ -33,6 +33,8 @@ from app.api.subscriptions import router as subscriptions_router
 from app.api.credits import router as credits_router
 from app.api.bookshelf import router as bookshelf_router
 from app.api.books import router as books_router
+from app.api.registrar_reports import router as registrar_reports_router
+from app.api.admin_tasks import router as admin_tasks_router
 from app.api.reading_session import router as reading_session_router
 from app.api.onboarding import router as onboarding_router
 from app.api.parent import router as parent_router
@@ -156,6 +158,10 @@ app.include_router(onboarding_router)
 app.include_router(parent_router)
 app.include_router(admin_router)
 app.include_router(learning_plan_router)
+app.include_router(books_router, prefix="/brain")
+app.include_router(learning_plan_router, prefix="/brain")
+app.include_router(registrar_reports_router, prefix="/brain")
+app.include_router(admin_tasks_router, prefix="/brain")
 
 
 @app.get("/health")
@@ -170,6 +176,7 @@ async def health():
         "hippocampus_documents": 0,
         "neo4j_concepts": 0,
         "neo4j_tracks": 0,
+        "books": 0,
     }
     
     # Check Hippocampus document count
@@ -180,6 +187,15 @@ async def health():
         await conn.close()
     except Exception as e:
         health_status["hippocampus_error"] = str(e)
+    
+    # Check Book count
+    try:
+        conn = await get_db_conn()
+        result = await conn.fetchval('SELECT COUNT(*) FROM "Book"')
+        health_status["books"] = result
+        await conn.close()
+    except Exception as e:
+        health_status["books_error"] = str(e)
     
     # Check Neo4j concept/track counts
     try:

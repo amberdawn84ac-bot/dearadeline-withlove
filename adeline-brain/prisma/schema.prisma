@@ -147,6 +147,11 @@ model User {
 
   lessons         StudentLesson[]
   readingSessions ReadingSession[]
+  learningRecords           LearningRecord[]
+  standardsLedger          StandardsLedgerEntry[]
+  creditLedger              CreditLedgerEntry[]
+  evidenceLedger            EvidenceLedgerEntry[]
+  readingRecommendationsLog ReadingRecommendationsLog[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -253,6 +258,7 @@ model InviteCode {
 model LearningRecord {
   id           String    @id @default(uuid())
   studentId    String
+  student      User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
   lessonId     String
   blockId      String?
   verb         XAPIVerb
@@ -403,11 +409,31 @@ model ReadingSession {
   @@index([status])
 }
 
+model ReadingRecommendationsLog {
+  id                   String   @id @default(uuid())
+  studentId            String
+  recommendedBookIds   String[] // Array of recommended book UUIDs
+  adaptiveLexileMin    Int      // Minimum reading level based on actual performance
+  adaptiveLexileMax    Int      // Maximum reading level based on actual performance
+  confidenceScore      Float    // Confidence level in adaptive assessment (0.0-1.0)
+  recommendationDate   DateTime @default(now())
+  gradeLevel           String?  // Grade level at time of recommendation
+  interests            String[] // Student interests at time of recommendation
+
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([recommendationDate])
+  @@index([adaptiveLexileMin])
+  @@index([adaptiveLexileMax])
+}
+
 // ── Student Ledgers (Standards / Credit / Evidence) ───────────────────────────
 
 model StandardsLedgerEntry {
   id          String   @id @default(uuid())
   studentId   String
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
   framework   String   // StandardsFramework enum value
   subject     String   // StandardsSubject enum value
   code        String?  // e.g. "OK-ELA-8.R.1"
@@ -424,6 +450,7 @@ model StandardsLedgerEntry {
 model CreditLedgerEntry {
   id          String   @id @default(uuid())
   studentId   String
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
   bucket      String   // CreditBucket enum value
   hoursEarned Float
   source      String   // "lesson" | "project" | "activity"
@@ -437,6 +464,7 @@ model CreditLedgerEntry {
 model EvidenceLedgerEntry {
   id             String    @id @default(uuid())
   studentId      String
+  student        User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
   artifactType   String    // "essay" | "quiz" | "lab" | "project" | "discussion" | "fieldwork" | "presentation"
   title          String
   masteryScore   Float

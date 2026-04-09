@@ -88,8 +88,12 @@ class BookRecommendation(BaseModel):
 
 
 class RecommendationsResponse(BaseModel):
-    """Response wrapper for book recommendations."""
+    """Response wrapper for book recommendations with adaptive level information."""
     recommendations: List[BookRecommendation]
+    adaptive_lexile_min: Optional[int] = None
+    adaptive_lexile_max: Optional[int] = None
+    confidence_score: Optional[float] = None
+    based_on_completed_books: Optional[int] = None
 
 
 # ── Helper Functions ───────────────────────────────────────────────────────
@@ -155,6 +159,132 @@ async def _fetch_student_profile(user_id: str) -> Optional[dict]:
     except Exception as e:
         logger.error(f"[Books] Failed to fetch student profile: {e}")
         raise HTTPException(status_code=500, detail="Database error")
+    finally:
+        await conn.close()
+
+
+async def _calculate_adaptive_reading_level(student_id: str, grade_level: str) -> tuple:
+    """
+    Calculate adaptive reading level based on student's actual reading history.
+    
+    Args:
+        student_id: UUID of the student
+        grade_level: Official grade level from profile
+        
+    Returns:
+        Tuple of (adaptive_lexile_min, adaptive_lexile_max, confidence_level)
+    """
+    conn = await _get_conn()
+    try:
+        # Get completed books with their lexile levels
+        completed_books = await conn.fetch(
+            """
+            SELECT b.lexile_level, rs."pagesRead", rs."totalPages", rs."readingMinutes"
+            FROM "ReadingSession" rs
+            JOIN "Book" b ON rs."bookId" = b.id
+            WHERE rs."studentId" = $1 AND rs.status = 'finished'
+            AND b.lexile_level IS NOT NULL
+            ORDER BY rs."completedAt" DESC
+            LIMIT 10
+            """,
+            student_id,
+        )
+        
+        if not completed_books:
+            # No reading history - use grade level defaults
+            base_min, base_max = _get_lexile_range(grade_level)
+            return base_min, base_max, 0.0
+        
+        # Calculate weighted average based on completion rate and time spent
+        weighted_lexiles = []
+        total_weight = 0
+        
+        for book in completed_books:
+            lexile = book["lexile_level"]
+            pages_read = book["pagesRead"] or 0
+            total_pages = book["totalPages"] or 1
+            reading_minutes = book["readingMinutes"] or 1
+            
+            # Weight by completion rate and reading engagement
+            completion_rate = min(pages_read / total_pages, 1.0)
+            engagement_weight = min(reading_minutes / 60.0, 2.0)  # Cap at 2 hours
+            weight = completion_rate * engagement_weight
+            
+            weighted_lexiles.append(lexile * weight)
+            total_weight += weight
+        
+        if total_weight == 0:
+            base_min, base_max = _get_lexile_range(grade_level)
+            return base_min, base_max, 0.0
+        
+        # Calculate actual reading level
+        actual_lexile = sum(weighted_lexiles) / total_weight
+        
+        # Calculate confidence based on sample size
+        confidence = min(len(completed_books) / 5.0, 1.0)  # Max confidence after 5 books
+        
+        # Create adaptive range (±200 points around actual level, narrower if high confidence)
+        if confidence >= 0.8:
+            range_width = 150  # Narrow range for high confidence
+        elif confidence >= 0.5:
+            range_width = 200  # Medium range
+        else:
+            range_width = 300  # Wide range for low confidence
+        
+        adaptive_min = max(200, actual_lexile - range_width)
+        adaptive_max = min(1500, actual_lexile + range_width)
+        
+        logger.info(
+            f"[Books] Adaptive reading level for {student_id}: "
+            f"actual={actual_lexile:.0f}, range={adaptive_min}-{adaptive_max}, "
+            f"confidence={confidence:.2f} (based on {len(completed_books)} books)"
+        )
+        
+        return adaptive_min, adaptive_max, confidence
+        
+    except Exception as e:
+        logger.error(f"[Books] Failed to calculate adaptive reading level: {e}")
+        # Fallback to grade level
+        base_min, base_max = _get_lexile_range(grade_level)
+        return base_min, base_max, 0.0
+    finally:
+        await conn.close()
+
+
+async def _log_registrar_tracking(student_id: str, recommendations: list, adaptive_range: tuple, confidence: float):
+    """
+    Log recommendations for registrar tracking and accountability.
+    
+    Args:
+        student_id: UUID of the student
+        recommendations: List of recommended book IDs
+        adaptive_range: Tuple of (min_lexile, max_lexile)
+        confidence: Confidence level in adaptive reading assessment
+    """
+    import uuid as _uuid
+    conn = await _get_conn()
+    try:
+        # Log to ReadingRecommendationsLog table for registrar tracking
+        await conn.execute(
+            """
+            INSERT INTO "ReadingRecommendationsLog" (
+                id, "studentId", "recommendedBookIds", "adaptiveLexileMin",
+                "adaptiveLexileMax", "confidenceScore", "recommendationDate"
+            ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            """,
+            str(_uuid.uuid4()),
+            student_id,
+            recommendations,
+            int(adaptive_range[0]),
+            int(adaptive_range[1]),
+            confidence,
+        )
+        
+        logger.info(f"[Books] Logged {len(recommendations)} recommendations for registrar tracking")
+        
+    except Exception as e:
+        # Don't fail the recommendation if logging fails
+        logger.warning(f"[Books] Failed to log registrar tracking: {e}")
     finally:
         await conn.close()
 
@@ -264,22 +394,25 @@ async def get_recommendations(
         embedding = await _embed(query_text)
         logger.debug(f"[Books/Recommendations] Embedding created (dims: {len(embedding)})")
 
-        # Step 4: Get grade-appropriate lexile range
-        lexile_min, lexile_max = _get_lexile_range(grade_level)
-        logger.debug(
-            f"[Books/Recommendations] Lexile range for grade {grade_level}: "
-            f"{lexile_min}-{lexile_max}"
+        # Step 4: Calculate adaptive reading level based on actual reading history
+        adaptive_lexile_min, adaptive_lexile_max, confidence = await _calculate_adaptive_reading_level(
+            x_user_id, grade_level or ""
+        )
+        
+        logger.info(
+            f"[Books/Recommendations] Adaptive lexile range for {x_user_id}: "
+            f"{adaptive_lexile_min}-{adaptive_lexile_max} (confidence: {confidence:.2f})"
         )
 
-        # Step 5: Search books by embedding with lexile filtering
+        # Step 5: Search books by embedding with adaptive lexile filtering
         logger.info(
             f"[Books/Recommendations] Searching books by embedding "
-            f"(limit={limit}, lexile={lexile_min}-{lexile_max})"
+            f"(limit={limit}, adaptive_lexile={adaptive_lexile_min}-{adaptive_lexile_max})"
         )
         books = await bookshelf_search.search_books_by_embedding(
             embedding=embedding,
-            lexile_min=lexile_min,
-            lexile_max=lexile_max,
+            lexile_min=adaptive_lexile_min,
+            lexile_max=adaptive_lexile_max,
             limit=limit,
         )
 
@@ -287,7 +420,7 @@ async def get_recommendations(
             f"[Books/Recommendations] Found {len(books)} recommendations for {x_user_id}"
         )
 
-        # Step 6: Convert to BookRecommendation response
+        # Step 6: Convert to BookRecommendation response with adaptive level info
         recommendations = [
             BookRecommendation(
                 id=book["id"],
@@ -302,10 +435,33 @@ async def get_recommendations(
             for book in books
         ]
 
+        # Step 7: Log for registrar tracking
+        recommended_book_ids = [book.id for book in recommendations]
+        await _log_registrar_tracking(
+            x_user_id, 
+            recommended_book_ids, 
+            (adaptive_lexile_min, adaptive_lexile_max), 
+            confidence
+        )
+
+        # Get count of completed books for this student's adaptive level
+        conn_count = await _get_conn()
+        completed_books_count = await conn_count.fetchval(
+            'SELECT COUNT(*) FROM "ReadingSession" WHERE "studentId" = $1 AND status = \'finished\'',
+            x_user_id
+        )
+        await conn_count.close()
+        
         logger.debug(
             f"[Books/Recommendations] Returning {len(recommendations)} recommendations"
         )
-        return RecommendationsResponse(recommendations=recommendations)
+        return RecommendationsResponse(
+            recommendations=recommendations,
+            adaptive_lexile_min=adaptive_lexile_min,
+            adaptive_lexile_max=adaptive_lexile_max,
+            confidence_score=confidence,
+            based_on_completed_books=completed_books_count
+        )
 
     except HTTPException:
         raise
