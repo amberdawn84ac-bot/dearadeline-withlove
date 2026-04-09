@@ -145,12 +145,9 @@ export default function LoginPage() {
           {mode === 'login' ? (
             <>
               Don&apos;t have an account?{' '}
-              <button
-                onClick={() => { setMode('signup'); setError('') }}
-                className="text-[#BD6809] font-semibold hover:underline"
-              >
+              <Link href="/pricing" className="text-[#BD6809] font-semibold hover:underline">
                 Sign up
-              </button>
+              </Link>
             </>
           ) : (
             <>
