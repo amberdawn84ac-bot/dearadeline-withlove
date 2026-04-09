@@ -102,6 +102,8 @@ async def seed_experiment(
 
 async def seed_all_experiments():
     """Seed all creation science experiments from JSON file."""
+    # Initialize hippocampus connection
+    await hippocampus.connect()
     
     if not SEED_FILE.exists():
         log.error(f"Seed file not found: {SEED_FILE}")

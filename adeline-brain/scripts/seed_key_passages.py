@@ -205,6 +205,9 @@ async def seed_passage(ref: str, title: str, notes: str, track: str) -> bool:
 
 async def seed_all_passages():
     """Seed all key passages across all tracks."""
+    # Initialize hippocampus connection
+    await hippocampus.connect()
+    
     total_seeded = 0
     total_attempted = 0
     

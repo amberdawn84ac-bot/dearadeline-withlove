@@ -87,6 +87,8 @@ async def seed_document_chunk(
 
 async def seed_all_documents():
     """Seed all founding documents from JSON file."""
+    # Initialize hippocampus connection
+    await hippocampus.connect()
     
     if not SEED_FILE.exists():
         log.error(f"Seed file not found: {SEED_FILE}")
