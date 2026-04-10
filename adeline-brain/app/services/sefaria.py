@@ -263,13 +263,21 @@ def normalize_reference(ref: str) -> str:
 
 def extract_text(data) -> str:
     """
-    Extract text from Sefaria response (handles string or array).
-    
-    Sefaria sometimes returns text as a string, sometimes as an array.
-    This helper normalizes the response.
+    Extract text from Sefaria response (handles string, flat list, or nested list).
+
+    Sefaria returns:
+    - A string for single verses
+    - A flat list of strings for verse ranges (["verse1", "verse2"])
+    - A nested list for chapter-level refs ([["v1", "v2"], ["v3"]])
     """
     if isinstance(data, list):
-        return data[0] if data else ""
+        parts = []
+        for item in data:
+            if isinstance(item, list):
+                parts.extend(str(v) for v in item if v)
+            elif item:
+                parts.append(str(item))
+        return " ".join(parts)
     return str(data) if data else ""
 
 
