@@ -367,6 +367,8 @@ async def historian_agent(state: AdelineState) -> AdelineState:
         top_k=3,
     )
 
+    silent_sources: list[str] = []
+
     for result in raw_results:
         evidence = evaluate_evidence(
             source_id=result["id"],
@@ -381,21 +383,8 @@ async def historian_agent(state: AdelineState) -> AdelineState:
         )
 
         if evidence.verdict == EvidenceVerdict.ARCHIVE_SILENT:
-            logger.info(
-                f"[Orchestrator] ARCHIVE_SILENT on '{result['source_title']}' — "
-                "activating Researcher..."
-            )
-            block = await _researcher_fallback(state, request.track.value, result["source_title"])
-            if block:
-                blocks.append(block)
-            else:
-                mission = build_research_mission_block(request.topic, [result["source_title"]])
-                blocks.append({
-                    **mission,
-                    "block_type": BlockType.RESEARCH_MISSION.value,
-                    "evidence":   [evidence.model_dump()],
-                })
-                state["has_research_missions"] = True
+            # Collect silent sources — try researcher once at the end, not per-result
+            silent_sources.append(result["source_title"])
         else:
             raw = result["chunk"]
             content = await _synthesize_content(
@@ -414,13 +403,31 @@ async def historian_agent(state: AdelineState) -> AdelineState:
                 ),
             })
 
+    # If no verified blocks, try researcher once (not per silent result)
     if not blocks:
-        logger.info("[Orchestrator] Empty Hippocampus result — activating Researcher...")
+        logger.info(
+            f"[HistorianAgent] No verified sources for '{request.topic}' — "
+            "activating Researcher..."
+        )
         block = await _researcher_fallback(state, request.track.value)
         if block:
             blocks.append(block)
         else:
-            mission = build_research_mission_block(request.topic, [])
+            # Researcher also failed — Claude provides orientation + single research mission
+            orientation = await _synthesize_content(
+                request=request,
+                block_type=BlockType.NARRATIVE.value,
+                source_chunks=[],
+                raw_content=request.topic,
+            )
+            blocks.append({
+                "block_type":  BlockType.NARRATIVE.value,
+                "content":     orientation,
+                "evidence":    [],
+                "is_silenced": False,
+                "homestead_content": None,
+            })
+            mission = build_research_mission_block(request.topic, silent_sources[:3])
             blocks.append({
                 **mission,
                 "block_type": BlockType.RESEARCH_MISSION.value,
