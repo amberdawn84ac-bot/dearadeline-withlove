@@ -436,31 +436,7 @@ async def historian_agent(state: AdelineState) -> AdelineState:
             state["has_research_missions"] = True
 
     # ── Multimodal synthesis ─────────────────────────────────────────────────
-    if blocks:
-        primary_content = blocks[0].get("content", "")
-        parent_evidence = blocks[0].get("evidence", [])
-
-        mm = await _synthesize_mind_map(request.topic, primary_content, request.grade_level)
-        if mm:
-            blocks.append({
-                "block_type": BlockType.MIND_MAP.value,
-                "content": f"Concept map: {mm.concept}",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "mind_map_data": mm.model_dump(),
-            })
-
-        tl = await _synthesize_timeline(request.topic, primary_content, parent_evidence, request.grade_level)
-        if tl:
-            blocks.append({
-                "block_type": BlockType.TIMELINE.value,
-                "content": f"Timeline: {tl.span}",
-                "evidence": parent_evidence,
-                "is_silenced": False,
-                "homestead_content": None,
-                "timeline_data": tl.model_dump(),
-            })
+    await _run_multimodal_synthesis(state, blocks, allow_timeline=True)
 
     state["blocks"] = blocks
     return state
@@ -609,31 +585,7 @@ RESEARCH_MISSION:
         state["has_research_missions"] = True
 
     # ── Multimodal synthesis ─────────────────────────────────────────────────
-    if blocks:
-        primary_content = blocks[0].get("content", "")
-        parent_evidence = blocks[0].get("evidence", [])
-
-        mm = await _synthesize_mind_map(request.topic, primary_content, request.grade_level)
-        if mm:
-            blocks.append({
-                "block_type": BlockType.MIND_MAP.value,
-                "content": f"Concept map: {mm.concept}",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "mind_map_data": mm.model_dump(),
-            })
-
-        tl = await _synthesize_timeline(request.topic, primary_content, parent_evidence, request.grade_level)
-        if tl:
-            blocks.append({
-                "block_type": BlockType.TIMELINE.value,
-                "content": f"Timeline: {tl.span}",
-                "evidence": parent_evidence,
-                "is_silenced": False,
-                "homestead_content": None,
-                "timeline_data": tl.model_dump(),
-            })
+    await _run_multimodal_synthesis(state, blocks, allow_timeline=True)
 
     state["blocks"] = blocks
     return state
@@ -833,54 +785,11 @@ async def science_agent(state: AdelineState) -> AdelineState:
                 })
 
     # ── Multimodal synthesis ─────────────────────────────────────────────────
-    if blocks:
-        primary_content = blocks[0].get("content", "")
-
-        mm = await _synthesize_mind_map(request.topic, primary_content, request.grade_level)
-        if mm:
-            blocks.append({
-                "block_type": BlockType.MIND_MAP.value,
-                "content": f"Concept map: {mm.concept}",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "mind_map_data": mm.model_dump(),
-            })
-
-        # Seasonal timeline for homesteading only
-        if request.track == Track.HOMESTEADING:
-            tl = await _synthesize_timeline(request.topic, primary_content, [], request.grade_level, is_seasonal=True)
-            if tl:
-                blocks.append({
-                    "block_type": BlockType.TIMELINE.value,
-                    "content": f"Seasonal calendar: {tl.span}",
-                    "evidence": [],
-                    "is_silenced": False,
-                    "homestead_content": None,
-                    "timeline_data": tl.model_dump(),
-                })
-
-        mn = await _synthesize_mnemonic(primary_content, request.grade_level)
-        if mn:
-            blocks.append({
-                "block_type": BlockType.MNEMONIC.value,
-                "content": f"Remember: {mn.acronym} — {mn.concept}",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "mnemonic_data": mn.model_dump(),
-            })
-
-        ns = await _synthesize_narrated_slide(request.topic, primary_content, request.track, request.grade_level)
-        if ns:
-            blocks.append({
-                "block_type": BlockType.NARRATED_SLIDE.value,
-                "content": f"{len(ns.slides)} slides · {ns.total_duration_minutes} min",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "narrated_slide_data": ns.model_dump(),
-            })
+    await _run_multimodal_synthesis(
+        state, blocks,
+        allow_timeline=is_homesteading,
+        is_seasonal_timeline=is_homesteading,
+    )
 
     state["blocks"] = blocks
     return state
@@ -1035,41 +944,7 @@ async def literature_agent(state: AdelineState) -> AdelineState:
             })
 
     # ── Multimodal synthesis ─────────────────────────────────────────────────
-    if blocks:
-        primary_content = blocks[0].get("content", "")
-
-        mm = await _synthesize_mind_map(request.topic, primary_content, request.grade_level)
-        if mm:
-            blocks.append({
-                "block_type": BlockType.MIND_MAP.value,
-                "content": f"Concept map: {mm.concept}",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "mind_map_data": mm.model_dump(),
-            })
-
-        mn = await _synthesize_mnemonic(primary_content, request.grade_level)
-        if mn:
-            blocks.append({
-                "block_type": BlockType.MNEMONIC.value,
-                "content": f"Remember: {mn.acronym} — {mn.concept}",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "mnemonic_data": mn.model_dump(),
-            })
-
-        ns = await _synthesize_narrated_slide(request.topic, primary_content, request.track, request.grade_level)
-        if ns:
-            blocks.append({
-                "block_type": BlockType.NARRATED_SLIDE.value,
-                "content": f"{len(ns.slides)} slides · {ns.total_duration_minutes} min",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "narrated_slide_data": ns.model_dump(),
-            })
+    await _run_multimodal_synthesis(state, blocks)
 
     state["blocks"] = blocks
     return state
@@ -1203,41 +1078,7 @@ async def practical_agent(state: AdelineState) -> AdelineState:
         })
 
     # ── Multimodal synthesis ─────────────────────────────────────────────────
-    if blocks:
-        primary_content = blocks[0].get("content", "")
-
-        mm = await _synthesize_mind_map(request.topic, primary_content, request.grade_level)
-        if mm:
-            blocks.append({
-                "block_type": BlockType.MIND_MAP.value,
-                "content": f"Concept map: {mm.concept}",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "mind_map_data": mm.model_dump(),
-            })
-
-        mn = await _synthesize_mnemonic(primary_content, request.grade_level)
-        if mn:
-            blocks.append({
-                "block_type": BlockType.MNEMONIC.value,
-                "content": f"Remember: {mn.acronym} — {mn.concept}",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "mnemonic_data": mn.model_dump(),
-            })
-
-        ns = await _synthesize_narrated_slide(request.topic, primary_content, request.track, request.grade_level)
-        if ns:
-            blocks.append({
-                "block_type": BlockType.NARRATED_SLIDE.value,
-                "content": f"{len(ns.slides)} slides · {ns.total_duration_minutes} min",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "narrated_slide_data": ns.model_dump(),
-            })
+    await _run_multimodal_synthesis(state, blocks)
 
     state["blocks"] = blocks
     return state
@@ -1284,6 +1125,158 @@ async def _synthesize_practical(request: LessonRequest) -> str:
     except Exception as e:
         logger.error(f"[PracticalAgent] Claude synthesis failed: {e}")
         return f"Practical lesson: {request.topic}"
+
+
+# ── Format selector ───────────────────────────────────────────────────────────
+
+async def _decide_formats(
+    topic: str,
+    content: str,
+    track: "Track",
+    grade_level: str,
+    allow_timeline: bool = False,
+) -> list[str]:
+    """
+    One Claude call decides which multimodal formats genuinely add value
+    for this specific lesson. Returns a subset of the available formats.
+
+    Rules Claude uses:
+    - MIND_MAP: good for multi-concept topics; skip for single ideas or stories
+    - TIMELINE: only if chronology is present AND allow_timeline=True
+    - MNEMONIC: only if 3+ distinct terms need to be memorised
+    - NARRATED_SLIDE: good for most lessons; skip if content is very short (<150 chars)
+    """
+    import json as _json
+
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        # Fallback: return sensible defaults without Claude
+        defaults = ["MIND_MAP", "NARRATED_SLIDE"]
+        if allow_timeline:
+            defaults.insert(1, "TIMELINE")
+        return defaults
+
+    available = ["MIND_MAP", "MNEMONIC", "NARRATED_SLIDE"]
+    if allow_timeline:
+        available.insert(1, "TIMELINE")
+
+    grade_desc = _GRADE_DESC.get(grade_level, f"grade {grade_level}")
+
+    system_prompt = (
+        "You are a curriculum designer deciding which learning formats add genuine value "
+        "to a specific lesson. Be selective — clutter hurts learning. "
+        "Output ONLY valid JSON: {\"formats\": [\"FORMAT1\", ...]}"
+    )
+    user_prompt = (
+        f"Lesson topic: {topic}\n"
+        f"Track: {track.value.replace('_', ' ')}\n"
+        f"Grade: {grade_desc}\n"
+        f"Content preview: {content[:400]}\n\n"
+        f"Available formats: {available}\n\n"
+        "Which formats genuinely add learning value for THIS specific lesson?\n"
+        "Rules:\n"
+        "- MIND_MAP: include if the topic has multiple related concepts with hierarchy. "
+        "Skip for single-concept topics or narrative stories.\n"
+        "- TIMELINE: include only if chronological sequence is central to the topic.\n"
+        "- MNEMONIC: include only if there are 3+ distinct terms/facts the student must memorise.\n"
+        "- NARRATED_SLIDE: include for most lessons. Skip only if content is a single short paragraph.\n"
+        "Return 0-3 formats maximum. Be honest — fewer is better than irrelevant blocks."
+    )
+
+    try:
+        client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        message = await client.messages.create(
+            model=_ANTHROPIC_MODEL,
+            max_tokens=100,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        raw = _json.loads(message.content[0].text)
+        chosen = [f for f in raw.get("formats", []) if f in available]
+        logger.info(f"[FormatSelector] Chose {chosen} for '{topic}' ({track.value})")
+        return chosen
+    except Exception as e:
+        logger.warning(f"[FormatSelector] Failed — using defaults: {e}")
+        return ["MIND_MAP", "NARRATED_SLIDE"]
+
+
+async def _run_multimodal_synthesis(
+    state: "AdelineState",
+    blocks: list[dict],
+    allow_timeline: bool = False,
+    is_seasonal_timeline: bool = False,
+) -> None:
+    """
+    Decide which formats add value, then run only those synthesis functions.
+    Appends new blocks to the blocks list in-place.
+    """
+    if not blocks:
+        return
+
+    request = state["request"]
+    primary_content = blocks[0].get("content", "")
+    parent_evidence = blocks[0].get("evidence", [])
+
+    formats = await _decide_formats(
+        topic=request.topic,
+        content=primary_content,
+        track=request.track,
+        grade_level=request.grade_level,
+        allow_timeline=allow_timeline,
+    )
+
+    if "MIND_MAP" in formats:
+        mm = await _synthesize_mind_map(request.topic, primary_content, request.grade_level)
+        if mm:
+            blocks.append({
+                "block_type": BlockType.MIND_MAP.value,
+                "content": f"Concept map: {mm.concept}",
+                "evidence": [],
+                "is_silenced": False,
+                "homestead_content": None,
+                "mind_map_data": mm.model_dump(),
+            })
+
+    if "TIMELINE" in formats:
+        tl = await _synthesize_timeline(
+            request.topic, primary_content, parent_evidence,
+            request.grade_level, is_seasonal=is_seasonal_timeline,
+        )
+        if tl:
+            label = "Seasonal calendar" if is_seasonal_timeline else "Timeline"
+            blocks.append({
+                "block_type": BlockType.TIMELINE.value,
+                "content": f"{label}: {tl.span}",
+                "evidence": parent_evidence if not is_seasonal_timeline else [],
+                "is_silenced": False,
+                "homestead_content": None,
+                "timeline_data": tl.model_dump(),
+            })
+
+    if "MNEMONIC" in formats:
+        mn = await _synthesize_mnemonic(primary_content, request.grade_level)
+        if mn:
+            blocks.append({
+                "block_type": BlockType.MNEMONIC.value,
+                "content": f"Remember: {mn.acronym} — {mn.concept}",
+                "evidence": [],
+                "is_silenced": False,
+                "homestead_content": None,
+                "mnemonic_data": mn.model_dump(),
+            })
+
+    if "NARRATED_SLIDE" in formats:
+        ns = await _synthesize_narrated_slide(
+            request.topic, primary_content, request.track, request.grade_level
+        )
+        if ns:
+            blocks.append({
+                "block_type": BlockType.NARRATED_SLIDE.value,
+                "content": f"{len(ns.slides)} slides · {ns.total_duration_minutes} min",
+                "evidence": [],
+                "is_silenced": False,
+                "homestead_content": None,
+                "narrated_slide_data": ns.model_dump(),
+            })
 
 
 # ── Multimodal synthesis functions ────────────────────────────────────────────
@@ -1611,41 +1604,7 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
             })
 
     # ── Multimodal synthesis ─────────────────────────────────────────────────
-    if blocks:
-        primary_content = blocks[0].get("content", "")
-
-        mm = await _synthesize_mind_map(request.topic, primary_content, request.grade_level)
-        if mm:
-            blocks.append({
-                "block_type": BlockType.MIND_MAP.value,
-                "content": f"Concept map: {mm.concept}",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "mind_map_data": mm.model_dump(),
-            })
-
-        mn = await _synthesize_mnemonic(primary_content, request.grade_level)
-        if mn:
-            blocks.append({
-                "block_type": BlockType.MNEMONIC.value,
-                "content": f"Remember: {mn.acronym} — {mn.concept}",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "mnemonic_data": mn.model_dump(),
-            })
-
-        ns = await _synthesize_narrated_slide(request.topic, primary_content, request.track, request.grade_level)
-        if ns:
-            blocks.append({
-                "block_type": BlockType.NARRATED_SLIDE.value,
-                "content": f"{len(ns.slides)} slides · {ns.total_duration_minutes} min",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "narrated_slide_data": ns.model_dump(),
-            })
+    await _run_multimodal_synthesis(state, blocks)
 
     state["blocks"] = blocks
     return state
