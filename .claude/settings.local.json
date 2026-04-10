@@ -148,7 +148,18 @@
       "Bash(export DIRECT_DATABASE_URL=\"$POSTGRES_DSN\")",
       "Bash(export OPENAI_API_KEY=\"your-openai-api-key-here\")",
       "Bash(NEO4J_URI=\"neo4j+s://9e4ae87b.databases.neo4j.io\" NEO4J_USER=\"9e4ae87b\" NEO4J_PASSWORD=\"_JxqLCuJrhLE9IazaVj_M-q6bW2DgvFYLPVd0w9_dys\" python scripts/seed_knowledge_graph.py 2>&1)",
-      "Bash(ls)"
+      "Bash(ls)",
+      "Bash(RAILWAY_TOKEN=c9f4ca77-1dd8-48ae-9534-6208fda3ab84 npx @railway/cli@latest status)",
+      "Bash(RAILWAY_TOKEN=c9f4ca77-1dd8-48ae-9534-6208fda3ab84 railway status)",
+      "Bash(RAILWAY_TOKEN=c9f4ca77-1dd8-48ae-9534-6208fda3ab84 railway service list 2>&1)",
+      "Bash(RAILWAY_TOKEN=c9f4ca77-1dd8-48ae-9534-6208fda3ab84 railway service 2>&1)",
+      "Bash(RAILWAY_TOKEN=c9f4ca77-1dd8-48ae-9534-6208fda3ab84 railway status --json 2>&1)",
+      "Bash(RAILWAY_TOKEN=c9f4ca77-1dd8-48ae-9534-6208fda3ab84 railway logs --service dearadeline-withlove)",
+      "Bash(railway domain:*)",
+      "Bash(RAILWAY_TOKEN=c9f4ca77-1dd8-48ae-9534-6208fda3ab84 railway domain --json)",
+      "Bash(RAILWAY_TOKEN=c9f4ca77-1dd8-48ae-9534-6208fda3ab84 railway status --json)",
+      "Bash(xargs wc:*)",
+      "Bash(git:*)"
     ]
   }
 }
