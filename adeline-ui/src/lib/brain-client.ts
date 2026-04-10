@@ -63,6 +63,14 @@ export interface Evidence {
   chunk: string;
 }
 
+export interface MindMapNode { id: string; label: string; children: MindMapNode[]; }
+export interface MindMapData { concept: string; root: MindMapNode; }
+export interface TimelineEvent { date: string; label: string; description: string; source_title: string; }
+export interface TimelineData { span: string; events: TimelineEvent[]; }
+export interface MnemonicData { concept: string; acronym: string; words: string[]; tip: string; }
+export interface NarratedSlide { slide_number: number; title: string; bullets: string[]; narration: string; }
+export interface NarratedSlideData { total_duration_minutes: number; slides: NarratedSlide[]; }
+
 export interface LessonBlockResponse {
   block_id: string;
   block_type: string;
@@ -70,6 +78,10 @@ export interface LessonBlockResponse {
   evidence: Evidence[];
   is_silenced: boolean;
   homestead_content?: string;
+  mind_map_data?:       MindMapData;
+  timeline_data?:       TimelineData;
+  mnemonic_data?:       MnemonicData;
+  narrated_slide_data?: NarratedSlideData;
 }
 
 export interface XAPIStatement {

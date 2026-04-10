@@ -238,6 +238,10 @@ export enum BlockType {
   DATA_TRACKING    = "DATA_TRACKING",    // Applied Math / Science metric logging
   PROBLEM          = "PROBLEM",          // Applied Math contextual problem
   WRITING          = "WRITING",          // English / Creative Economy composition prompt
+  MIND_MAP         = "MIND_MAP",         // Hierarchical concept visualization
+  TIMELINE         = "TIMELINE",         // Chronological event sequence
+  MNEMONIC         = "MNEMONIC",         // Memory aid device
+  NARRATED_SLIDE   = "NARRATED_SLIDE",   // Slide deck with narration script
 }
 
 export enum DifficultyLevel {
