@@ -63,7 +63,6 @@ function SealButton({
         }));
 
       await sealJournal({
-        student_id: studentId,
         lesson_id: lesson.lesson_id,
         track: lesson.track,
         completed_blocks: verifiedCount,

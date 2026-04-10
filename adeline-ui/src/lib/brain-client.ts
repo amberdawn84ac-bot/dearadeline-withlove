@@ -146,7 +146,6 @@ export async function listTracks(): Promise<{ tracks: { id: Track; label: string
 // ── Journal ────────────────────────────────────────────────────────────────────
 
 export interface SealJournalRequest {
-  student_id: string;
   lesson_id: string;
   track: Track;
   completed_blocks: number;
@@ -291,7 +290,6 @@ export async function registerStudent(profile: {
   email?: string;
   grade_level?: string;
   is_homestead?: boolean;
-  student_id?: string;
 }): Promise<StudentProfile> {
   const res = await fetch(`${BRAIN_URL}/students/register`, {
     method: "POST",

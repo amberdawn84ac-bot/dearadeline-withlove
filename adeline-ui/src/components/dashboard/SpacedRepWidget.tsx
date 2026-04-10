@@ -85,7 +85,6 @@ export function SpacedRepWidget() {
       method: "POST",
       headers,
       body: JSON.stringify({
-        student_id: studentId,
         concept_id: current.concept_id,
         quality,
       }),
