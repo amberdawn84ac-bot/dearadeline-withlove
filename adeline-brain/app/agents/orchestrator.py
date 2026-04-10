@@ -40,10 +40,59 @@ from app.protocols.witness import evaluate_evidence, build_research_mission_bloc
 from app.connections.pgvector_client import hippocampus
 from app.connections.neo4j_client import neo4j_client
 from app.tools.researcher import search_witnesses
+from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL
 
 _ANTHROPIC_MODEL = os.getenv("ADELINE_MODEL", "claude-sonnet-4-6")
 
 logger = logging.getLogger(__name__)
+
+
+def _synthesis_client():
+    """
+    Returns an async OpenAI-compatible client for multimodal synthesis.
+    Uses Gemini Flash when GEMINI_API_KEY is set (30x cheaper than Claude
+    for mechanical JSON extraction tasks). Falls back to Claude otherwise.
+    Returns (client, model_name, is_gemini).
+    """
+    if GEMINI_API_KEY:
+        import openai as _oai
+        return (
+            _oai.AsyncOpenAI(api_key=GEMINI_API_KEY, base_url=GEMINI_BASE_URL),
+            GEMINI_MODEL,
+            True,
+        )
+    return (
+        anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY")),
+        _ANTHROPIC_MODEL,
+        False,
+    )
+
+
+async def _synthesis_call(system: str, user: str, max_tokens: int = 1000) -> str:
+    """
+    Single synthesis API call — uses Gemini Flash if available, else Claude.
+    Returns the text content of the response.
+    """
+    client, model, is_gemini = _synthesis_client()
+
+    if is_gemini:
+        response = await client.chat.completions.create(
+            model=model,
+            max_tokens=max_tokens,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user",   "content": user},
+            ],
+        )
+        return response.choices[0].message.content or ""
+    else:
+        response = await client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        return response.content[0].text
 
 # Track routing constants
 # TRUTH_HISTORY is the ONLY track that requires the Witness Protocol —
@@ -1148,8 +1197,7 @@ async def _decide_formats(
     """
     import json as _json
 
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        # Fallback: return sensible defaults without Claude
+    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
         defaults = ["MIND_MAP", "NARRATED_SLIDE"]
         if allow_timeline:
             defaults.insert(1, "TIMELINE")
@@ -1183,14 +1231,8 @@ async def _decide_formats(
     )
 
     try:
-        client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        message = await client.messages.create(
-            model=_ANTHROPIC_MODEL,
-            max_tokens=100,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        text = message.content[0].text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=120)
+        text = text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         raw = _json.loads(text)
         chosen = [f for f in raw.get("formats", []) if f in available]
         logger.info(f"[FormatSelector] Chose {chosen} for '{topic}' ({track.value})")
@@ -1291,7 +1333,7 @@ async def _synthesize_mind_map(
     Extract a concept hierarchy from lesson content.
     Returns None on any failure — never surfaces errors to the student.
     """
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
         return None
     from app.schemas.api_models import MindMapData
     import json
@@ -1310,14 +1352,8 @@ async def _synthesize_mind_map(
         "Extract the concept hierarchy as JSON."
     )
     try:
-        client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        message = await client.messages.create(
-            model=_ANTHROPIC_MODEL,
-            max_tokens=800,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return MindMapData.model_validate(json.loads(message.content[0].text))
+        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=800)
+        return MindMapData.model_validate(json.loads(text.strip()))
     except Exception as e:
         logger.warning(f"[MindMap] synthesis failed: {e}")
         return None
@@ -1367,14 +1403,8 @@ async def _synthesize_timeline(
             "Extract the chronological timeline as JSON."
         )
     try:
-        client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        message = await client.messages.create(
-            model=_ANTHROPIC_MODEL,
-            max_tokens=800,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return TimelineData.model_validate(json.loads(message.content[0].text))
+        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=800)
+        return TimelineData.model_validate(json.loads(text.strip()))
     except Exception as e:
         logger.warning(f"[Timeline] synthesis failed: {e}")
         return None
@@ -1388,7 +1418,7 @@ async def _synthesize_mnemonic(
     Generate a mnemonic device when ≥3 concepts are present in the content.
     Returns None if fewer than 3 concepts detected or on any failure.
     """
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
         return None
     from app.schemas.api_models import MnemonicData
     import json
@@ -1408,14 +1438,8 @@ async def _synthesize_mnemonic(
         "Create a mnemonic device for the key concepts in this content."
     )
     try:
-        client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        message = await client.messages.create(
-            model=_ANTHROPIC_MODEL,
-            max_tokens=400,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        raw = json.loads(message.content[0].text)
+        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=400)
+        raw = json.loads(text.strip())
         if raw.get("skip"):
             return None
         return MnemonicData.model_validate(raw)
@@ -1434,7 +1458,7 @@ async def _synthesize_narrated_slide(
     Convert lesson content into a 3-5 slide narrated presentation.
     Returns None on any failure.
     """
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
         return None
     from app.schemas.api_models import NarratedSlideData
     import json
@@ -1453,14 +1477,8 @@ async def _synthesize_narrated_slide(
         "Convert this into a narrated slide deck."
     )
     try:
-        client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        message = await client.messages.create(
-            model=_ANTHROPIC_MODEL,
-            max_tokens=1200,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return NarratedSlideData.model_validate(json.loads(message.content[0].text))
+        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=1200)
+        return NarratedSlideData.model_validate(json.loads(text.strip()))
     except Exception as e:
         logger.warning(f"[NarratedSlide] synthesis failed: {e}")
         return None

@@ -82,6 +82,14 @@ if IS_PRODUCTION and not OPENAI_API_KEY:
         "FATAL: OPENAI_API_KEY not set. Required for embeddings in production."
     )
 
+# ── Gemini (multimodal synthesis — 30x cheaper than Claude for JSON extraction) ──
+# Uses the OpenAI-compatible endpoint so no new dependencies needed.
+# Falls back to Claude if GEMINI_API_KEY is not set.
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
 # ── Auth (Supabase JWT) ──────────────────────────────────────────────────────
 # Primary: JWKS (ES256) — public key fetched from Supabase's well-known endpoint.
 # Fallback: SUPABASE_JWT_SECRET (HS256) — for legacy tokens or local dev.
