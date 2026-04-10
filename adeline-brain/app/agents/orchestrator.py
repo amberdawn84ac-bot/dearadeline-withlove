@@ -1504,8 +1504,7 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
                 "is_silenced": False,
             })
 
-            state["blocks"] = blocks
-            return state
+            # Fall through to multimodal synthesis below
         else:
             logger.warning(f"[DiscipleshipAgent] Failed to fetch {biblical_ref} from Sefaria, falling back to Hippocampus")
 
