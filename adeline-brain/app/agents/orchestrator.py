@@ -3,13 +3,18 @@ LangGraph Multi-Agent Orchestrator
 Routes lesson requests to the appropriate specialist agent based on Track.
 Enforces the Witness Protocol before any content reaches the student.
 
-4 Specialist Agents:
-  historian_agent     — TRUTH_HISTORY, JUSTICE_CHANGEMAKING
-                        Strictest Witness Protocol; PRIMARY_SOURCE focus
+6 Specialist Agents:
+  historian_agent     — TRUTH_HISTORY
+                        Strictest Witness Protocol (0.82); PRIMARY_SOURCE focus
+  justice_agent       — JUSTICE_CHANGEMAKING
+                        Power-capture framing; primary source evidence
   science_agent       — CREATION_SCIENCE, HOMESTEADING
                         LAB_MISSION blocks for hands-on tracks; homestead lens
-  discipleship_agent  — HEALTH_NATUROPATHY, GOVERNMENT_ECONOMICS,
-                        DISCIPLESHIP, ENGLISH_LITERATURE
+  literature_agent    — ENGLISH_LITERATURE
+                        Book-context aware; literary analysis without Witness gate
+  practical_agent     — APPLIED_MATHEMATICS, CREATIVE_ECONOMY
+                        Applied skills; Claude synthesis without Witness gate
+  discipleship_agent  — HEALTH_NATUROPATHY, GOVERNMENT_ECONOMICS, DISCIPLESHIP
                         Worldview alignment; NARRATIVE + scripture integration
   registrar_agent     — ALL tracks (post-processing)
                         Emits xAPI LearningActivity records + CASE credit entry
@@ -48,9 +53,9 @@ _JUSTICE_TRACKS    = {Track.JUSTICE_CHANGEMAKING}
 _SCIENCE_TRACKS    = {Track.CREATION_SCIENCE, Track.HOMESTEADING}
 _DISCIPLESHIP_TRACKS = {
     Track.HEALTH_NATUROPATHY, Track.GOVERNMENT_ECONOMICS,
-    Track.DISCIPLESHIP, Track.ENGLISH_LITERATURE,
-    Track.APPLIED_MATHEMATICS, Track.CREATIVE_ECONOMY,
+    Track.DISCIPLESHIP,
 }
+_LITERATURE_TRACKS = {Track.ENGLISH_LITERATURE}
 
 
 # ── Claude synthesis ─────────────────────────────────────────────────────────
@@ -737,40 +742,361 @@ async def science_agent(state: AdelineState) -> AdelineState:
 _CHAOS_EMOJI = {1: "🌱", 2: "🔭", 3: "🔥"}
 
 
+# ── Tracks that skip the Witness Protocol ────────────────────────────────────
+# These tracks use Hippocampus as reference material (if available) but don't
+# gate on cosine similarity. Claude synthesizes practical content directly.
+_PRACTICAL_TRACKS = {Track.APPLIED_MATHEMATICS, Track.CREATIVE_ECONOMY}
+
+
+# ── Literature Agent (ENGLISH_LITERATURE) ────────────────────────────────────
+
+async def _get_active_book(student_id: str) -> dict | None:
+    """Fetch the student's currently reading book from ReadingSession + Book."""
+    try:
+        from app.config import get_db_conn
+        conn = await get_db_conn()
+        try:
+            row = await conn.fetchrow(
+                """
+                SELECT b.id, b.title, b.author, b.track, b.lexile_level, b.grade_band,
+                       rs."currentLocation", rs."pagesRead", rs."totalPages"
+                FROM "ReadingSession" rs
+                JOIN "Book" b ON b.id = rs."bookId"
+                WHERE rs."studentId" = $1 AND rs.status = 'reading'
+                ORDER BY rs."updatedAt" DESC
+                LIMIT 1
+                """,
+                student_id,
+            )
+        finally:
+            await conn.close()
+        if row:
+            return dict(row)
+    except Exception as e:
+        logger.warning(f"[LiteratureAgent] Failed to fetch active book: {e}")
+    return None
+
+
+async def literature_agent(state: AdelineState) -> AdelineState:
+    """
+    English Literature specialist — literary analysis, not fact-checking.
+
+    Does NOT use the Witness Protocol. Literature is about interpretation,
+    not historical verification. A novel is not a declassified document.
+
+    Priority:
+      1. If student has an active book in ReadingNook → analyze that book
+      2. If Hippocampus has relevant literature content → use as reference
+      3. Otherwise → Claude generates literary discussion from its knowledge
+
+    Always produces NARRATIVE blocks with literary analysis framing.
+    """
+    request = state["request"]
+    state["agent_name"] = "LiteratureAgent"
+    blocks: list[dict] = []
+
+    # ── Step 1: Check for active book in ReadingNook ─────────────────────────
+    active_book = await _get_active_book(request.student_id)
+
+    if active_book:
+        logger.info(
+            f"[LiteratureAgent] Student reading: '{active_book['title']}' "
+            f"by {active_book['author']}"
+        )
+        # Synthesize literary analysis grounded in the book they're reading
+        content = await _synthesize_literature(
+            request=request,
+            book_title=active_book["title"],
+            book_author=active_book["author"],
+            topic=request.topic,
+        )
+        blocks.append({
+            "block_type":       BlockType.NARRATIVE.value,
+            "content":          _worldview_wrap(content, request.track),
+            "evidence":         [{
+                "source_id":        f"book-{active_book['id']}",
+                "source_title":     f"{active_book['title']} by {active_book['author']}",
+                "source_url":       "",
+                "witness_citation": {
+                    "author": active_book["author"],
+                    "year": None,
+                    "archive_name": "Student's Reading Nook",
+                },
+                "similarity_score": 1.0,
+                "verdict":          "VERIFIED",
+                "chunk":            f"Literary analysis of {active_book['title']}",
+            }],
+            "is_silenced":      False,
+            "homestead_content": None,
+        })
+        state["blocks"] = blocks
+        return state
+
+    # ── Step 2: Hippocampus reference (no Witness gate) ──────────────────────
+    raw_results = await hippocampus.similarity_search(
+        query_embedding=state["query_embedding"],
+        track=request.track.value,
+        top_k=3,
+    )
+
+    reference_chunks = []
+    for result in raw_results:
+        reference_chunks.append(result)
+
+    # ── Step 3: Synthesize literary content ───────────────────────────────────
+    if reference_chunks:
+        content = await _synthesize_content(
+            request=request,
+            block_type=BlockType.NARRATIVE.value,
+            source_chunks=reference_chunks,
+            raw_content=reference_chunks[0]["chunk"],
+        )
+        blocks.append({
+            "block_type":       BlockType.NARRATIVE.value,
+            "content":          _worldview_wrap(content, request.track),
+            "evidence":         [{
+                "source_id":        r["id"],
+                "source_title":     r["source_title"],
+                "source_url":       r.get("source_url", ""),
+                "witness_citation": {
+                    "author":       r.get("citation_author", ""),
+                    "year":         r.get("citation_year"),
+                    "archive_name": r.get("citation_archive_name", ""),
+                },
+                "similarity_score": float(r["similarity_score"]),
+                "verdict":          "VERIFIED",
+                "chunk":            r["chunk"],
+            } for r in reference_chunks],
+            "is_silenced":      False,
+            "homestead_content": None,
+        })
+    else:
+        # No Hippocampus content — Claude generates from its own literary knowledge
+        content = await _synthesize_literature(
+            request=request,
+            book_title=None,
+            book_author=None,
+            topic=request.topic,
+        )
+        blocks.append({
+            "block_type":       BlockType.NARRATIVE.value,
+            "content":          _worldview_wrap(content, request.track),
+            "evidence":         [],
+            "is_silenced":      False,
+            "homestead_content": None,
+        })
+
+    state["blocks"] = blocks
+    return state
+
+
+async def _synthesize_literature(
+    request: LessonRequest,
+    book_title: str | None,
+    book_author: str | None,
+    topic: str,
+) -> str:
+    """
+    Claude generates literary analysis content.
+    If a specific book is provided, the analysis is grounded in that text.
+    """
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        if book_title:
+            return f"Literary analysis of '{topic}' in the context of *{book_title}* by {book_author}."
+        return f"Literary analysis: {topic}"
+
+    grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
+    persona = _TRACK_PERSONA.get(Track.ENGLISH_LITERATURE, "a literary mentor")
+
+    if book_title:
+        user_prompt = (
+            f"The student is currently reading *{book_title}* by {book_author}.\n\n"
+            f"Topic they asked about: {topic}\n\n"
+            f"Write a literary analysis that connects this topic to the book they're reading. "
+            f"Discuss themes, character choices, narrative technique, or author's intent. "
+            f"Make the student think critically about what they're reading."
+        )
+    else:
+        user_prompt = (
+            f"Topic: {topic}\n\n"
+            f"Write a literary analysis or discussion of this topic. "
+            f"Reference specific works, authors, or literary movements where relevant. "
+            f"Make the student think critically about stories, language, and meaning."
+        )
+
+    system_prompt = (
+        f"You are Adeline — {persona}\n\n"
+        f"You are writing for a {grade_desc} student in a Christian homeschool family.\n\n"
+        f"{_ADELINE_VOICE}\n"
+        "CONTENT RULES:\n"
+        "• 2-3 paragraphs maximum\n"
+        "• Discuss the text as literature — themes, craft, truth claims, worldview\n"
+        "• Do NOT try to fact-check fiction. Analyze it.\n"
+        "• End with a question that makes the student think about what the author is really saying\n"
+    )
+
+    try:
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        client = anthropic.AsyncAnthropic(api_key=api_key)
+        message = await client.messages.create(
+            model=_ANTHROPIC_MODEL,
+            max_tokens=800,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        return message.content[0].text
+    except Exception as e:
+        logger.error(f"[LiteratureAgent] Claude synthesis failed: {e}")
+        if book_title:
+            return f"Literary analysis of '{topic}' in the context of *{book_title}* by {book_author}."
+        return f"Literary analysis: {topic}"
+
+
+# ── Practical Agent (APPLIED_MATHEMATICS, CREATIVE_ECONOMY) ──────────────────
+
+async def practical_agent(state: AdelineState) -> AdelineState:
+    """
+    Practical skills specialist — math, making, and business.
+
+    Does NOT use the Witness Protocol. These tracks teach applied skills,
+    not historical truth claims. A compound interest formula doesn't need
+    a cosine similarity score.
+
+    Uses Hippocampus as reference material (if available) without gating
+    on similarity threshold. When Hippocampus is empty, Claude generates
+    practical content from its knowledge.
+    """
+    request = state["request"]
+    state["agent_name"] = "PracticalAgent"
+    blocks: list[dict] = []
+
+    # Pull any Hippocampus content as reference (no Witness gate)
+    raw_results = await hippocampus.similarity_search(
+        query_embedding=state["query_embedding"],
+        track=request.track.value,
+        top_k=3,
+    )
+
+    if raw_results:
+        # Use Hippocampus results as reference material for synthesis
+        content = await _synthesize_content(
+            request=request,
+            block_type=BlockType.NARRATIVE.value,
+            source_chunks=raw_results,
+            raw_content=raw_results[0]["chunk"],
+        )
+        blocks.append({
+            "block_type":       BlockType.NARRATIVE.value,
+            "content":          _worldview_wrap(content, request.track),
+            "evidence":         [{
+                "source_id":        r["id"],
+                "source_title":     r["source_title"],
+                "source_url":       r.get("source_url", ""),
+                "witness_citation": {
+                    "author":       r.get("citation_author", ""),
+                    "year":         r.get("citation_year"),
+                    "archive_name": r.get("citation_archive_name", ""),
+                },
+                "similarity_score": float(r["similarity_score"]),
+                "verdict":          "VERIFIED",
+                "chunk":            r["chunk"],
+            } for r in raw_results],
+            "is_silenced":      False,
+            "homestead_content": (
+                _homestead_adapt(raw_results[0]["chunk"]) if request.is_homestead else None
+            ),
+        })
+    else:
+        # No Hippocampus content — Claude generates practical content
+        content = await _synthesize_practical(request)
+        blocks.append({
+            "block_type":       BlockType.NARRATIVE.value,
+            "content":          _worldview_wrap(content, request.track),
+            "evidence":         [],
+            "is_silenced":      False,
+            "homestead_content": None,
+        })
+
+    state["blocks"] = blocks
+    return state
+
+
+async def _synthesize_practical(request: LessonRequest) -> str:
+    """Claude generates practical/applied content for math and creative economy."""
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        return f"Practical lesson: {request.topic}"
+
+    grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
+    persona = _TRACK_PERSONA.get(request.track, "a practical mentor")
+
+    system_prompt = (
+        f"You are Adeline — {persona}\n\n"
+        f"You are writing for a {grade_desc} student in a Christian homeschool family.\n\n"
+        f"{_ADELINE_VOICE}\n"
+        "CONTENT RULES:\n"
+        "• 2-3 paragraphs maximum\n"
+        "• Use REAL numbers, REAL scenarios, REAL materials\n"
+        "• Every lesson must end with something the student can DO or CALCULATE today\n"
+        "• No abstract theory without a concrete application\n"
+        "• If math: show the formula, then a worked example using their life\n"
+        "• If creative economy: name a specific product, pricing strategy, or skill to practice\n"
+    )
+
+    user_prompt = (
+        f"Topic: {request.topic}\n"
+        f"Track: {request.track.value.replace('_', ' ').title()}\n\n"
+        f"Write a practical lesson in Adeline's voice. Ground it in something real "
+        f"the student can do this week."
+    )
+
+    try:
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        client = anthropic.AsyncAnthropic(api_key=api_key)
+        message = await client.messages.create(
+            model=_ANTHROPIC_MODEL,
+            max_tokens=800,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        return message.content[0].text
+    except Exception as e:
+        logger.error(f"[PracticalAgent] Claude synthesis failed: {e}")
+        return f"Practical lesson: {request.topic}"
+
+
 # ── Discipleship Agent ─────────────────────────────────────────────────────────
-# Covers: HEALTH_NATUROPATHY, GOVERNMENT_ECONOMICS, DISCIPLESHIP, ENGLISH_LITERATURE
+# Covers: HEALTH_NATUROPATHY, GOVERNMENT_ECONOMICS, DISCIPLESHIP
+# (ENGLISH_LITERATURE → literature_agent, APPLIED_MATH/CREATIVE_ECONOMY → practical_agent)
 
 async def discipleship_agent(state: AdelineState) -> AdelineState:
     """
     Worldview, Character, and Cultural Discernment specialist.
-    Covers HEALTH_NATUROPATHY, GOVERNMENT_ECONOMICS, DISCIPLESHIP, ENGLISH_LITERATURE.
+    Covers HEALTH_NATUROPATHY, GOVERNMENT_ECONOMICS, DISCIPLESHIP.
 
     Produces NARRATIVE blocks that weave source material into a worldview-aligned
     framing (scripture context, character formation, cultural discernment).
     VERIFIED sources are presented with interpretive narrative wrap.
     ARCHIVE_SILENT: tries Researcher; falls back to RESEARCH_MISSION.
-    
-    NOW WITH SEFARIA INTEGRATION: Detects biblical references and fetches
-    Everett Fox translation from Sefaria API, then lazy caches to Hippocampus.
+
+    Sefaria integration: Detects biblical references and fetches
+    Everett Fox translation from Sefaria API.
     """
     request = state["request"]
     state["agent_name"] = "DiscipleshipAgent"
     blocks: list[dict] = []
 
-    # NEW: Check for biblical references in topic (Sefaria integration)
+    # Check for biblical references in topic (Sefaria integration)
     from app.services.sefaria import detect_biblical_reference, fetch_biblical_text, format_sefaria_content
-    
+
     biblical_ref = detect_biblical_reference(request.topic)
-    
+
     if biblical_ref:
-        # Fetch from Sefaria API
         logger.info(f"[DiscipleshipAgent] Detected biblical reference: {biblical_ref}")
         sefaria_data = await fetch_biblical_text(biblical_ref)
-        
+
         if sefaria_data:
-            # Create NARRATIVE block with Sefaria content
             content = format_sefaria_content(sefaria_data, request.grade_level)
-            
+
             blocks.append({
                 "block_type": BlockType.NARRATIVE.value,
                 "content": _worldview_wrap(content, request.track),
@@ -783,19 +1109,19 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
                         "year": 1995 if sefaria_data['is_fox'] else None,
                         "archive_name": "Sefaria / Schocken Books" if sefaria_data['is_fox'] else "Sefaria.org",
                     },
-                    "similarity_score": 1.0,  # Direct fetch, not similarity search
+                    "similarity_score": 1.0,
                     "verdict": "VERIFIED",
                     "chunk": sefaria_data['english'],
                 }],
                 "is_silenced": False,
             })
-            
+
             state["blocks"] = blocks
             return state
         else:
             logger.warning(f"[DiscipleshipAgent] Failed to fetch {biblical_ref} from Sefaria, falling back to Hippocampus")
-    
-    # EXISTING LOGIC: Hippocampus similarity search
+
+    # Hippocampus similarity search with Witness Protocol
     raw_results = await hippocampus.similarity_search(
         query_embedding=state["query_embedding"],
         track=request.track.value,
@@ -822,7 +1148,6 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
             )
             block = await _researcher_fallback(state, request.track.value, result["source_title"])
             if block:
-                # Wrap in worldview narrative
                 block["block_type"] = BlockType.NARRATIVE.value
                 block["content"] = _worldview_wrap(block["content"], request.track)
                 blocks.append(block)
@@ -1024,7 +1349,9 @@ def _track_to_credit_type(track: Track) -> str:
 
 # ── Router ────────────────────────────────────────────────────────────────────
 
-def _route(state: AdelineState) -> Literal["historian", "justice", "science", "discipleship"]:
+def _route(state: AdelineState) -> Literal[
+    "historian", "justice", "science", "discipleship", "literature", "practical"
+]:
     track = state["request"].track
     if track in _HISTORIAN_TRACKS:
         return "historian"
@@ -1032,6 +1359,10 @@ def _route(state: AdelineState) -> Literal["historian", "justice", "science", "d
         return "justice"
     if track in _SCIENCE_TRACKS:
         return "science"
+    if track in _LITERATURE_TRACKS:
+        return "literature"
+    if track in _PRACTICAL_TRACKS:
+        return "practical"
     return "discipleship"
 
 
@@ -1049,9 +1380,12 @@ async def run_orchestrator(
     and returns a structured LessonResponse.
 
     Agent routing:
-      TRUTH_HISTORY, JUSTICE_CHANGEMAKING  → HistorianAgent
-      CREATION_SCIENCE, HOMESTEADING       → ScienceAgent
-      All other tracks                     → DiscipleshipAgent
+      TRUTH_HISTORY                          → HistorianAgent (Witness Protocol 0.82)
+      JUSTICE_CHANGEMAKING                   → JusticeAgent (power-capture framing)
+      CREATION_SCIENCE, HOMESTEADING         → ScienceAgent (LAB_MISSION)
+      ENGLISH_LITERATURE                     → LiteratureAgent (book-context, no Witness)
+      APPLIED_MATHEMATICS, CREATIVE_ECONOMY  → PracticalAgent (applied skills, no Witness)
+      HEALTH_NATUROPATHY, GOV_ECON, DISCIP.  → DiscipleshipAgent (worldview + Witness)
 
     RegistrarAgent always runs last as a post-processing step regardless of track.
 
@@ -1089,6 +1423,10 @@ async def run_orchestrator(
         state = await justice_agent(state)
     elif route == "science":
         state = await science_agent(state)
+    elif route == "literature":
+        state = await literature_agent(state)
+    elif route == "practical":
+        state = await practical_agent(state)
     else:
         state = await discipleship_agent(state)
 
