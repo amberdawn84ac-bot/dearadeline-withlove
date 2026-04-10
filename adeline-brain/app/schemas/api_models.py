@@ -82,6 +82,50 @@ class BlockType(str, Enum):
     EXPERIMENT       = "EXPERIMENT"
     RESEARCH_MISSION = "RESEARCH_MISSION"
     QUIZ             = "QUIZ"
+    MIND_MAP       = "MIND_MAP"
+    TIMELINE       = "TIMELINE"
+    MNEMONIC       = "MNEMONIC"
+    NARRATED_SLIDE = "NARRATED_SLIDE"
+
+
+# ── Multimodal Data Models ────────────────────────────────────────────────────
+
+class MindMapNode(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    label: str
+    children: list["MindMapNode"] = []
+
+MindMapNode.model_rebuild()
+
+class MindMapData(BaseModel):
+    concept: str
+    root: MindMapNode
+
+class TimelineEvent(BaseModel):
+    date: str
+    label: str
+    description: str
+    source_title: str = ""
+
+class TimelineData(BaseModel):
+    span: str
+    events: list[TimelineEvent]
+
+class MnemonicData(BaseModel):
+    concept: str
+    acronym: str
+    words: list[str]
+    tip: str
+
+class NarratedSlide(BaseModel):
+    slide_number: int
+    title: str
+    bullets: list[str]
+    narration: str
+
+class NarratedSlideData(BaseModel):
+    total_duration_minutes: float
+    slides: list[NarratedSlide]
 
 
 # ── Chaos Levels (Science Experiment difficulty/safety) ──────────────────────
@@ -167,6 +211,10 @@ class LessonBlockResponse(BaseModel):
     evidence:         list[Evidence] = []
     is_silenced:      bool = False
     homestead_content: Optional[str] = None
+    mind_map_data:        Optional[MindMapData] = None
+    timeline_data:        Optional[TimelineData] = None
+    mnemonic_data:        Optional[MnemonicData] = None
+    narrated_slide_data:  Optional[NarratedSlideData] = None
 
 class LessonResponse(BaseModel):
     lesson_id:            str = Field(default_factory=lambda: str(uuid.uuid4()))
