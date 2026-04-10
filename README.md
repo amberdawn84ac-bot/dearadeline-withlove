@@ -49,12 +49,12 @@ adeline-ui (Next.js 14, port 3000)
 
 | Agent | Tracks | What It Does |
 |---|---|---|
-| **HistorianAgent** | Truth History | Strictest Witness Protocol (0.82 cosine); PRIMARY_SOURCE focus |
+| **HistorianAgent** | Truth History | Witness Protocol (0.82 cosine); PRIMARY_SOURCE focus |
 | **JusticeAgent** | Justice & Change-making | Power-capture framing; primary source evidence (lobbying records, civil rights docs) |
 | **ScienceAgent** | Creation Science, Homesteading | Experiment-first for science; survival-skill lens for homesteading |
-| **LiteratureAgent** | English & Literature | Book-context aware (pulls active ReadingSession); literary analysis without Witness gate |
-| **PracticalAgent** | Applied Math, Creative Economy | Applied skills content via Claude synthesis; no Witness gate (math problems and craft projects don't need archival verification) |
-| **DiscipleshipAgent** | Health, Government, Discipleship | Worldview synthesis; Witness Protocol for factual claims |
+| **LiteratureAgent** | English & Literature | Book-context aware (pulls active ReadingSession); literary analysis |
+| **PracticalAgent** | Applied Math, Creative Economy | Applied skills content — math, building, making, selling |
+| **DiscipleshipAgent** | Health, Government, Discipleship | Worldview synthesis; scripture integration |
 | **RegistrarAgent** | All tracks (post-processing) | xAPI learning records + CASE transcript credit — always runs last |
 
 ## Student Onboarding & Personalization
@@ -76,14 +76,13 @@ Adeline adapts to:
 
 > "A matter must be established by the testimony of two or three witnesses." — Deuteronomy 19:15
 
-Fact-based tracks (Truth History, Justice, Science, Discipleship) pass content through a **0.82 cosine similarity threshold** against the verified Hippocampus corpus. If the threshold is not met:
+The Witness Protocol is the HistorianAgent's verification gate for historical claims. Every history lesson must pass a **0.82 cosine similarity threshold** against the verified Hippocampus corpus before content reaches the student. If the threshold is not met:
 
-- No content is generated
 - `ARCHIVE_SILENT` is returned
 - The Researcher tool searches archive.org, gutenberg.org, and archives.gov for verified sources
-- If still unverified, the student receives a `RESEARCH_MISSION` block
+- If still unverified, the student receives a `RESEARCH_MISSION` block — go find the primary source yourself
 
-Literature and practical tracks (English, Math, Creative Economy) bypass the Witness gate — novels aren't primary source documents, and math problems don't need archival verification.
+Historical claims in adjacent tracks (Justice, Government) may also be verified through this gate. All other tracks generate content through their own protocols without the Witness gate.
 
 ## Sovereign Lab (Science Track)
 
