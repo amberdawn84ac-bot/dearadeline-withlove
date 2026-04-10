@@ -17,7 +17,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Header
+from app.api.middleware import get_current_user_id, verify_student_access, require_internal_key
 from pydantic import BaseModel, Field
 
 from app.algorithms.spaced_repetition import sm2, is_due, overdue_days
@@ -84,10 +85,9 @@ class SealTranscriptResponse(BaseModel):
 
 
 class SM2ReviewSubmit(BaseModel):
-    student_id: str
     concept_id: str
-    quality:    int          # 0–5 per SM-2 spec
-    track:      str = "TRUTH_HISTORY"  # track the concept belongs to
+    quality:    int          # 0-5 per SM-2 spec
+    track:      str = "TRUTH_HISTORY"
 
 class SM2ReviewResponse(BaseModel):
     concept_id:   str
@@ -129,7 +129,10 @@ async def _get_conn():
 # ── POST /learning/record ─────────────────────────────────────────────────────
 
 @router.post("/record", response_model=RecordLearningResponse)
-async def record_learning(payload: RecordLearningRequest):
+async def record_learning(
+    payload: RecordLearningRequest,
+    _key: str = Depends(require_internal_key),
+):
     """
     Persist xAPI LearningActivity statements from the RegistrarAgent.
     Called automatically by /lesson/generate after lesson assembly.
@@ -179,7 +182,10 @@ async def record_learning(payload: RecordLearningRequest):
 # ── POST /learning/transcript ─────────────────────────────────────────────────
 
 @router.post("/transcript", response_model=SealTranscriptResponse)
-async def seal_transcript(entry: TranscriptEntryIn):
+async def seal_transcript(
+    entry: TranscriptEntryIn,
+    _key: str = Depends(require_internal_key),
+):
     """
     Persist a CASE-compatible TranscriptEntry for a completed lesson.
     Upserts on (studentId, lessonId) — resealing a lesson updates the record.
@@ -236,7 +242,11 @@ async def seal_transcript(entry: TranscriptEntryIn):
 # ── GET /learning/transcript/{student_id} ─────────────────────────────────────
 
 @router.get("/transcript/{student_id}")
-async def get_transcript(student_id: str, limit: int = Query(50, le=200)):
+async def get_transcript(
+    student_id: str,
+    limit: int = Query(50, le=200),
+    _user_id: str = Depends(verify_student_access),
+):
     """Return paginated transcript entries for a student, newest first."""
     async with _get_conn() as conn:
         rows = await conn.fetch(
@@ -266,7 +276,11 @@ async def get_transcript(student_id: str, limit: int = Query(50, le=200)):
 # ── GET /learning/reviews/{student_id} ────────────────────────────────────────
 
 @router.get("/reviews/{student_id}", response_model=DueReviewsResponse)
-async def get_due_reviews(student_id: str, limit: int = Query(20, le=50)):
+async def get_due_reviews(
+    student_id: str,
+    limit: int = Query(20, le=50),
+    _user_id: str = Depends(verify_student_access),
+):
     """
     Return SpacedRepetitionCards that are due for review today.
     Ordered by most overdue first.
@@ -308,7 +322,10 @@ async def get_due_reviews(student_id: str, limit: int = Query(20, le=50)):
 # ── POST /learning/reviews ────────────────────────────────────────────────────
 
 @router.post("/reviews", response_model=SM2ReviewResponse)
-async def submit_review(payload: SM2ReviewSubmit):
+async def submit_review(
+    payload: SM2ReviewSubmit,
+    student_id: str = Depends(get_current_user_id),
+):
     """
     Submit an SM-2 quality rating (0–5) for a concept card.
     Updates the card's interval, ease factor, repetitions, and due date.
@@ -326,7 +343,7 @@ async def submit_review(payload: SM2ReviewSubmit):
             FROM "SpacedRepetitionCard"
             WHERE "studentId" = $1 AND "conceptId" = $2
             """,
-            payload.student_id, payload.concept_id,
+            student_id, payload.concept_id,
         )
 
         current_interval    = int(row["interval"]) if row else 1
@@ -360,7 +377,7 @@ async def submit_review(payload: SM2ReviewSubmit):
                 "lastReviewedAt"  = EXCLUDED."lastReviewedAt",
                 "updatedAt"       = now()
             """,
-            str(uuid.uuid4()), payload.student_id, payload.concept_id,
+            str(uuid.uuid4()), student_id, payload.concept_id,
             payload.concept_id,   # conceptName defaults to id until explicitly set
             result.interval, result.ease_factor, result.repetitions,
             payload.quality, result.next_due_at.isoformat(), now.isoformat(),
@@ -368,7 +385,7 @@ async def submit_review(payload: SM2ReviewSubmit):
         )
 
     logger.info(
-        f"[SM2] Review submitted: student={payload.student_id}, "
+        f"[SM2] Review submitted: student={student_id}, "
         f"concept={payload.concept_id}, quality={payload.quality}, "
         f"new_interval={result.interval}d"
     )
