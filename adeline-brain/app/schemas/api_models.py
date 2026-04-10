@@ -5,7 +5,7 @@ Re-generate core_schema.json from TypeScript to validate sync.
 """
 from enum import Enum
 from typing import Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 import uuid
 
 
@@ -102,7 +102,7 @@ class MindMapData(BaseModel):
     root: MindMapNode
 
 class TimelineEvent(BaseModel):
-    date: str
+    date: str = Field(description="Year or date string, e.g. '1865', 'March 3, 1865'. Use consistent format within a timeline.")
     label: str
     description: str
     source_title: str = ""
@@ -117,8 +117,17 @@ class MnemonicData(BaseModel):
     words: list[str]
     tip: str
 
+    @model_validator(mode="after")
+    def words_match_acronym(self) -> "MnemonicData":
+        if len(self.words) != len(self.acronym):
+            raise ValueError(
+                f"MnemonicData: words length ({len(self.words)}) must equal "
+                f"acronym length ({len(self.acronym)})"
+            )
+        return self
+
 class NarratedSlide(BaseModel):
-    slide_number: int
+    slide_number: int = Field(ge=1)
     title: str
     bullets: list[str]
     narration: str
