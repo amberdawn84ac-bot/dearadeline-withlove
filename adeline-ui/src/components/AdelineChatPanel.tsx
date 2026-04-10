@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Sparkles, Send, Loader2, FlaskConical, Search } from "lucide-react";
+import { Sparkles, Send, Loader2, FlaskConical, Search, Network, ListOrdered, Brain, Presentation } from "lucide-react";
 import { scaffold, generateLesson, listProjects, getProject, reportActivity } from "@/lib/brain-client";
 import type {
   Track, ScaffoldResponse, LessonResponse, LessonBlockResponse,
@@ -500,6 +500,27 @@ function BlockBubble({ block }: { block: LessonBlockResponse }) {
       </div>
     );
   }
+
+  if (block.block_type === "MIND_MAP") return (
+    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-green-700 bg-green-50 text-green-800">
+      <Network size={13} /> Mind Map: {block.mind_map_data?.concept}
+    </div>
+  );
+  if (block.block_type === "TIMELINE") return (
+    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-[#1E3A5F] bg-blue-50 text-[#1E3A5F]">
+      <ListOrdered size={13} /> Timeline: {block.timeline_data?.span} · {block.timeline_data?.events.length} events
+    </div>
+  );
+  if (block.block_type === "MNEMONIC") return (
+    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-violet-700 bg-violet-50 text-violet-800">
+      <Brain size={13} /> Remember: {block.mnemonic_data?.acronym}
+    </div>
+  );
+  if (block.block_type === "NARRATED_SLIDE") return (
+    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-blue-700 bg-blue-50 text-blue-800">
+      <Presentation size={13} /> {block.narrated_slide_data?.slides.length} Slides · {block.narrated_slide_data?.total_duration_minutes} min
+    </div>
+  );
 
   // VERIFIED
   return (

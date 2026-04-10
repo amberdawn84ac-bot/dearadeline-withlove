@@ -103,17 +103,32 @@ CREATIVE_ECONOMY     = { theme = "Making, Crafting & Selling",agent = "Disciples
 HistorianAgent = {
     tracks      = ["TRUTH_HISTORY", "JUSTICE_CHANGEMAKING"],
     specialty   = "Primary-source history. Strictest Witness Protocol. Never paraphrases archives.",
-    block_types = ["PRIMARY_SOURCE", "RESEARCH_MISSION"],
+    block_types = ["PRIMARY_SOURCE", "RESEARCH_MISSION", "MIND_MAP", "TIMELINE"],
+}
+JusticeAgent = {
+    tracks      = ["JUSTICE_CHANGEMAKING"],
+    specialty   = "Power-capture analysis: regulatory capture, legislative capture, narrative capture — then flipped to changemaker response. Primary sources only.",
+    block_types = ["PRIMARY_SOURCE", "RESEARCH_MISSION", "MIND_MAP", "TIMELINE"],
 }
 ScienceAgent = {
     tracks      = ["CREATION_SCIENCE", "HOMESTEADING"],
     specialty   = "Creation science and land stewardship. LAB_MISSION blocks for hands-on learning.",
-    block_types = ["PRIMARY_SOURCE", "LAB_MISSION", "RESEARCH_MISSION"],
+    block_types = ["PRIMARY_SOURCE", "LAB_MISSION", "RESEARCH_MISSION", "MIND_MAP", "TIMELINE", "MNEMONIC", "NARRATED_SLIDE"],
 }
 DiscipleshipAgent = {
     tracks      = ["HEALTH_NATUROPATHY", "GOVERNMENT_ECONOMICS", "DISCIPLESHIP", "ENGLISH_LITERATURE", "APPLIED_MATHEMATICS", "CREATIVE_ECONOMY"],
     specialty   = "Worldview alignment, character formation, cultural discernment, real-world math, and creative economy.",
-    block_types = ["NARRATIVE", "PRIMARY_SOURCE", "RESEARCH_MISSION"],
+    block_types = ["NARRATIVE", "PRIMARY_SOURCE", "RESEARCH_MISSION", "MIND_MAP", "MNEMONIC", "NARRATED_SLIDE"],
+}
+LiteratureAgent = {
+    tracks      = ["ENGLISH_LITERATURE"],
+    specialty   = "Close reading, narrative structure, rhetoric, composition, and biblical lens on literature.",
+    block_types = ["NARRATIVE", "PRIMARY_SOURCE", "RESEARCH_MISSION", "MIND_MAP", "MNEMONIC", "NARRATED_SLIDE"],
+}
+PracticalAgent = {
+    tracks      = ["APPLIED_MATHEMATICS", "CREATIVE_ECONOMY", "HOMESTEADING"],
+    specialty   = "Real-world math connected to land, commerce, and building. Creative economy coaching for making and selling.",
+    block_types = ["NARRATIVE", "PRIMARY_SOURCE", "RESEARCH_MISSION", "MIND_MAP", "MNEMONIC", "NARRATED_SLIDE"],
 }
 RegistrarAgent = {
     tracks      = ["ALL"],
@@ -244,6 +259,10 @@ NARRATIVE        = "#BD6809"   # Papaya — worldview-aligned narrative
 RESEARCH_MISSION = "#6B7280"   # Slate — student research opportunities
 QUIZ             = "#4F46E5"   # Indigo — assessment blocks
 TEXT             = "#D1D5DB"   # Gray — plain reading content
+MIND_MAP         = "#166534"   # Green — concept relationship maps
+TIMELINE         = "#1E3A5F"   # Navy — chronological event sequences
+MNEMONIC         = "#6B21A8"   # Violet — memory aids and acronyms
+NARRATED_SLIDE   = "#1D4ED8"   # Blue — slide decks with narration
 
 [ui.palette]
 papaya      = "#BD6809"   # Key terms, vocabulary highlights
