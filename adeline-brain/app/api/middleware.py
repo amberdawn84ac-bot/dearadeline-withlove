@@ -160,3 +160,65 @@ def get_current_user_id(
     token = _extract_bearer_token(authorization)
     payload = _decode_jwt(token)
     return _extract_user_id(payload)
+
+
+async def verify_student_access(
+    student_id: str,
+    authorization: Optional[str] = Header(default=None),
+) -> str:
+    """
+    Verify the caller can access this student's data.
+    Returns the authenticated user_id.
+
+    Allowed if:
+    - user_id == student_id (student accessing own data)
+    - user role is ADMIN
+    - user role is PARENT and student's parentId matches user_id
+    """
+    token = _extract_bearer_token(authorization)
+    payload = _decode_jwt(token)
+    user_id = _extract_user_id(payload)
+    role_str = _extract_role(payload)
+
+    # Student accessing own data
+    if user_id == student_id:
+        return user_id
+
+    # Admin can access any student
+    if role_str == UserRole.ADMIN.value:
+        return user_id
+
+    # Parent can access their children
+    if role_str == UserRole.PARENT.value:
+        from app.config import get_db_conn
+        conn = await get_db_conn()
+        try:
+            row = await conn.fetchrow(
+                'SELECT id FROM "User" WHERE id = $1 AND "parentId" = $2',
+                student_id, user_id,
+            )
+        finally:
+            await conn.close()
+        if row:
+            return user_id
+
+    raise HTTPException(
+        status_code=403,
+        detail="You do not have access to this student's data.",
+    )
+
+
+def require_internal_key(
+    x_internal_key: Optional[str] = Header(default=None, alias="X-Internal-Key"),
+) -> str:
+    """
+    Verify the request carries a valid internal API key.
+    Used for server-to-server calls (lesson pipeline → learning records).
+    """
+    from app.config import INTERNAL_API_KEY
+    if not x_internal_key or x_internal_key != INTERNAL_API_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing internal API key.",
+        )
+    return x_internal_key

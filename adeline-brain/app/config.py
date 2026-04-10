@@ -90,6 +90,9 @@ SUPABASE_PROJECT_REF = os.getenv("SUPABASE_PROJECT_REF", "gyxowttfwqbajoapfebf")
 SUPABASE_JWKS_URL = f"https://{SUPABASE_PROJECT_REF}.supabase.co/auth/v1/.well-known/jwks.json"
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 
+# ── Internal API Key (server-to-server calls from lesson pipeline) ──────────
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "dev-internal-key-not-for-production")
+
 # ── CORS ─────────────────────────────────────────────────────────────────────
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000")
