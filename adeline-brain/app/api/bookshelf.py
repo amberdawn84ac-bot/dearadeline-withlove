@@ -12,11 +12,13 @@ import os
 import uuid
 
 import asyncpg
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from typing import Optional
 
 from app.services.book_fetch import fetch_book_with_waterfall
+from app.api.middleware import require_role
+from app.schemas.api_models import UserRole
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/bookshelf", tags=["bookshelf"])
@@ -204,7 +206,7 @@ async def get_book(book_id: str):
         await conn.close()
 
 
-@router.post("/add", response_model=AddBookResponse)
+@router.post("/add", response_model=AddBookResponse, dependencies=[Depends(require_role(UserRole.ADMIN))])
 async def add_book(request: AddBookRequest, background_tasks: BackgroundTasks):
     """Add a book by title/author — triggers waterfall download in background."""
     book_id = str(uuid.uuid4())

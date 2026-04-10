@@ -23,7 +23,7 @@ from app.schemas.api_models import (
     ProjectStartRequest, ProjectStartResponse,
     Track, UserRole,
 )
-from app.api.middleware import require_role
+from app.api.middleware import require_role, get_current_user_id
 from app.connections.journal_store import journal_store
 
 logger = logging.getLogger(__name__)
@@ -654,7 +654,7 @@ async def get_project(
 async def start_project(
     project_id: str,
     body: ProjectStartRequest,
-    _role: str = Depends(require_role(UserRole.STUDENT, UserRole.ADMIN)),
+    student_id: str = Depends(get_current_user_id),
 ):
     """
     Student starts a project.
@@ -665,7 +665,7 @@ async def start_project(
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found.")
 
     logger.info(
-        f"[/projects/start] student={body.student_id} project={project_id} "
+        f"[/projects/start] student={student_id} project={project_id} "
         f"title={project.title}"
     )
 
@@ -679,7 +679,7 @@ async def start_project(
 async def seal_project(
     project_id: str,
     body: ProjectSealRequest,
-    _role: str = Depends(require_role(UserRole.STUDENT, UserRole.ADMIN)),
+    student_id: str = Depends(get_current_user_id),
 ):
     """
     Student seals a completed project.
@@ -701,14 +701,14 @@ async def seal_project(
 
     try:
         await journal_store.seal(
-            student_id=body.student_id,
+            student_id=student_id,
             lesson_id=lesson_id,
             track=project.track.value,
             completed_blocks=int(project.estimated_hours * 2),  # 30-min blocks
             sources=[],
         )
         logger.info(
-            f"[/projects/seal] student={body.student_id} project={project_id} "
+            f"[/projects/seal] student={student_id} project={project_id} "
             f"credit={credit_hours}hr type={credit_type}"
         )
     except Exception as e:
@@ -717,7 +717,7 @@ async def seal_project(
     try:
         await seal_transcript(TranscriptEntryIn(
             id=str(uuid4()),
-            student_id=body.student_id,
+            student_id=student_id,
             lesson_id=lesson_id,
             course_title=project.title,
             track=project.track.value,

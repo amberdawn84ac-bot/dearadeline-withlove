@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.api.middleware import verify_student_access
 from app.services.credit_engine import (
     ArtifactType,
     CreditBucketAccumulation,
@@ -95,7 +96,7 @@ async def list_available_profiles() -> dict:
 
 
 @router.get("/credits/{student_id}/profile")
-async def get_student_profile(student_id: str) -> dict:
+async def get_student_profile(student_id: str, _user_id: str = Depends(verify_student_access)) -> dict:
     """
     Returns the current credit profile selection for a student.
     In production, this would fetch from the database.
@@ -108,7 +109,7 @@ async def get_student_profile(student_id: str) -> dict:
 
 
 @router.put("/credits/{student_id}/profile")
-async def set_student_profile(student_id: str, profile_key: str) -> dict:
+async def set_student_profile(student_id: str, profile_key: str, _user_id: str = Depends(verify_student_access)) -> dict:
     """
     Sets the student's credit profile.
     In production, this would persist to the database.
@@ -125,7 +126,7 @@ async def set_student_profile(student_id: str, profile_key: str) -> dict:
 
 
 @router.get("/credits/{student_id}")
-async def get_credit_dashboard(student_id: str) -> CreditDashboardResponse:
+async def get_credit_dashboard(student_id: str, _user_id: str = Depends(verify_student_access)) -> CreditDashboardResponse:
     """
     Returns the credit dashboard for a student — accumulated hours,
     pending proposals, and thresholds.
@@ -141,7 +142,7 @@ async def get_credit_dashboard(student_id: str) -> CreditDashboardResponse:
 
 @router.post("/credits/{student_id}/approve/{proposal_id}")
 async def approve_course_proposal(
-    student_id: str, proposal_id: str
+    student_id: str, proposal_id: str, _user_id: str = Depends(verify_student_access)
 ) -> dict:
     """
     Approves a course proposal and adds it to the student's transcript.

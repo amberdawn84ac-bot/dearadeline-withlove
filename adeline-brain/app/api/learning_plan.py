@@ -25,10 +25,11 @@ import random
 from typing import Optional
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Query, Header
+from fastapi import APIRouter, Depends, Query, Header
 from pydantic import BaseModel
 
 from app.schemas.api_models import Track
+from app.api.middleware import verify_student_access
 from app.models.student import load_student_state, MasteryBand
 from app.connections.journal_store import journal_store
 from app.connections.neo4j_client import neo4j_client
@@ -640,6 +641,7 @@ async def get_learning_plan(
     student_id: str,
     limit: int = Query(6, ge=1, le=12),
     include_all_tracks: bool = Query(False),
+    _user_id: str = Depends(verify_student_access),
 ):
     """
     Generate a personalized learning plan with dynamic lesson suggestions.

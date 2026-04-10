@@ -13,8 +13,10 @@ Routes:
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from app.api.middleware import get_current_user_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
@@ -48,14 +50,14 @@ class SubscriptionRecord(BaseModel):
 
 
 @router.post("/upsert", response_model=SubscriptionRecord)
-async def upsert_subscription(body: SubscriptionUpsert):
+async def upsert_subscription(body: SubscriptionUpsert, _auth: str = Depends(get_current_user_id)):
     _SUBS[body.user_id] = body.model_dump()
     logger.info(f"[Subscription] Upserted user={body.user_id} tier={body.tier} status={body.status}")
     return SubscriptionRecord(**_SUBS[body.user_id])
 
 
 @router.get("/{user_id}", response_model=SubscriptionRecord)
-async def get_subscription(user_id: str):
+async def get_subscription(user_id: str, _auth: str = Depends(get_current_user_id)):
     if user_id not in _SUBS:
         # Free tier by default — not an error
         return SubscriptionRecord(user_id=user_id)
@@ -63,7 +65,7 @@ async def get_subscription(user_id: str):
 
 
 @router.post("/cancel")
-async def cancel_subscription(body: dict):
+async def cancel_subscription(body: dict, _auth: str = Depends(get_current_user_id)):
     sub_id = body.get("stripe_subscription_id")
     for uid, sub in _SUBS.items():
         if sub.get("stripe_subscription_id") == sub_id:

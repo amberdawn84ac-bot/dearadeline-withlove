@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.schemas.api_models import Track, UserRole
-from app.api.middleware import require_role
+from app.api.middleware import require_role, get_current_user_id, verify_student_access
 from app.connections.journal_store import journal_store
 from contextlib import asynccontextmanager
 
@@ -316,7 +316,7 @@ class ActivityListResponse(BaseModel):
 @router.post("/report", response_model=ActivityReportResponse)
 async def report_activity(
     body: ActivityReportRequest,
-    _role: str = Depends(require_role(UserRole.STUDENT, UserRole.ADMIN)),
+    student_id: str = Depends(get_current_user_id),
 ):
     """
     Student tells Adeline what they did. Adeline maps it to academic credit
@@ -326,7 +326,7 @@ async def report_activity(
     Adeline trusts it and records it.
     """
     logger.info(
-        f"[/activities/report] student={body.student_id} "
+        f"[/activities/report] student={student_id} "
         f"grade={body.grade_level} time={body.time_minutes}min"
     )
 
@@ -387,7 +387,7 @@ async def report_activity(
     # ── 5. Seal to student_journal (makes it show on dashboard) ───────────────
     try:
         await journal_store.seal(
-            student_id=body.student_id,
+            student_id=student_id,
             lesson_id=activity_id,
             track=primary_track,
             completed_blocks=max(1, body.time_minutes // 30),
@@ -426,7 +426,7 @@ async def report_activity(
                     "sealedAt"            = EXCLUDED."sealedAt"
                 """,
                 transcript_entry_id,
-                body.student_id,
+                student_id,
                 activity_id,
                 course_title,
                 primary_track,
@@ -444,7 +444,7 @@ async def report_activity(
 
     logger.info(
         f"[/activities/report] Sealed '{course_title}' — "
-        f"{credit_hours} {dominant_credit_type} credits for student={body.student_id}"
+        f"{credit_hours} {dominant_credit_type} credits for student={student_id}"
     )
 
     # ── 7. Build Adeline's response note ──────────────────────────────────────
@@ -472,7 +472,7 @@ async def report_activity(
 async def list_activities(
     student_id: str,
     limit: int = Query(50, le=200),
-    _role: str = Depends(require_role(UserRole.STUDENT, UserRole.ADMIN)),
+    _user_id: str = Depends(verify_student_access),
 ):
     """
     List all activity-based transcript entries for a student.

@@ -11,7 +11,7 @@ import openai
 from fastapi import APIRouter, HTTPException, Depends
 
 from app.schemas.api_models import LessonRequest, LessonResponse, TRUTH_THRESHOLD, UserRole
-from app.api.middleware import require_role
+from app.api.middleware import require_role, get_current_user_id
 from app.agents.orchestrator import run_orchestrator
 from app.connections.pgvector_client import hippocampus
 from app.connections.knowledge_graph import get_cross_track_bias
@@ -87,9 +87,8 @@ async def _persist_learning_records(lesson: LessonResponse) -> None:
 @router.post(
     "/generate",
     response_model=LessonResponse,
-    dependencies=[Depends(require_role(UserRole.STUDENT, UserRole.ADMIN))],
 )
-async def generate_lesson(request: LessonRequest):
+async def generate_lesson(request: LessonRequest, student_id: str = Depends(get_current_user_id)):
     """
     Generate a Truth-First lesson for a student.
 
@@ -110,7 +109,7 @@ async def generate_lesson(request: LessonRequest):
         query_embedding = await _embed(request.topic)
 
         # Load track interaction count for stealth assessment calibration
-        student_state     = await load_student_state(request.student_id)
+        student_state     = await load_student_state(student_id)
         track_mastery     = student_state.get(request.track.value)
         interaction_count = track_mastery.lesson_count
 
@@ -119,7 +118,7 @@ async def generate_lesson(request: LessonRequest):
         if interaction_count == 0:
             try:
                 bias_value, cross_track_acknowledgment = await get_cross_track_bias(
-                    student_id=request.student_id,
+                    student_id=student_id,
                     target_track=request.track.value,
                 )
                 if bias_value > 0.0:

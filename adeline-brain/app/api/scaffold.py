@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from app.schemas.api_models import Track, UserRole
-from app.api.middleware import require_role
+from app.api.middleware import require_role, get_current_user_id, verify_student_access
 from app.models.student import load_student_state
 from app.agents.pedagogy import scaffold, ZPDZone
 from app.models.student import MasteryBand
@@ -40,9 +40,8 @@ class ScaffoldResponseBody(BaseModel):
 @router.post(
     "/scaffold",
     response_model=ScaffoldResponseBody,
-    dependencies=[Depends(require_role(UserRole.STUDENT, UserRole.ADMIN))],
 )
-async def scaffold_response(body: ScaffoldRequest):
+async def scaffold_response(body: ScaffoldRequest, student_id: str = Depends(get_current_user_id)):
     """
     Evaluate a student's in-lesson response and return a ZPD-appropriate reply.
 
@@ -52,12 +51,12 @@ async def scaffold_response(body: ScaffoldRequest):
       IN_ZPD     → Socratic Response to keep the student moving
     """
     logger.info(
-        f"[/lesson/scaffold] student={body.student_id} "
+        f"[/lesson/scaffold] student={student_id} "
         f"topic='{body.topic}' track={body.track.value}"
     )
 
     try:
-        student_state = await load_student_state(body.student_id)
+        student_state = await load_student_state(student_id)
         result = await scaffold(
             student_response=body.student_response,
             topic=body.topic,
@@ -79,9 +78,8 @@ async def scaffold_response(body: ScaffoldRequest):
 
 @router.get(
     "/student-state/{student_id}",
-    dependencies=[Depends(require_role(UserRole.STUDENT, UserRole.PARENT, UserRole.ADMIN))],
 )
-async def get_student_state(student_id: str):
+async def get_student_state(student_id: str, _user_id: str = Depends(verify_student_access)):
     """
     Return the student's full mastery profile across all 8 tracks.
     Used by the parent dashboard and the ZPD Engine.
