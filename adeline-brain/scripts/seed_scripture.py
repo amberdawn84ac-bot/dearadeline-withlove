@@ -115,6 +115,10 @@ async def seed_passage(ref: str, track: str) -> bool:
 
 
 async def main():
+    # Initialize Hippocampus connection before seeding
+    from app.connections.pgvector_client import hippocampus
+    await hippocampus.connect()
+
     print(f"\n{'='*60}")
     print(f"  Seeding {len(PASSAGES)} scripture passages to Hippocampus")
     print(f"{'='*60}\n")
