@@ -732,85 +732,65 @@ async def science_agent(state: AdelineState) -> AdelineState:
             top_k=3,
         )
 
+        # No Witness Protocol threshold — science content doesn't need archival verification.
+        # Hippocampus results are reference material; Claude synthesizes the actual lesson.
         for result in raw_results:
-            evidence = evaluate_evidence(
-                source_id=result["id"],
-                source_title=result["source_title"],
-                source_url=result.get("source_url", ""),
-                citation_author=result.get("citation_author", ""),
-                citation_year=result.get("citation_year"),
-                citation_archive_name=result.get("citation_archive_name", ""),
-                similarity_score=float(result["similarity_score"]),
-                chunk=result["chunk"],
-                track=request.track.value,
+            raw = result["chunk"]
+            block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
+            content = await _synthesize_content(
+                request=request,
+                block_type=block_type.value,
+                source_chunks=[result],
+                raw_content=raw,
             )
-
-            if evidence.verdict == EvidenceVerdict.ARCHIVE_SILENT:
-                logger.info(
-                    f"[ScienceAgent] ARCHIVE_SILENT on '{result['source_title']}' — "
-                    "activating Researcher..."
+            if is_homesteading:
+                content = (
+                    f"**Homestead Lab Mission**\n\n{content}\n\n"
+                    "*Observe this directly on your land. Record what you find.*"
                 )
-                block = await _researcher_fallback(state, request.track.value, result["source_title"])
-                if block:
-                    if is_homesteading:
-                        block["block_type"] = BlockType.LAB_MISSION.value
-                        block["content"] = (
-                            f"**Homestead Lab Mission**\n\n"
-                            f"{block['content']}\n\n"
-                            "*Observe this directly on your land. Record what you find.*"
-                        )
-                    blocks.append(block)
-                else:
-                    mission = build_research_mission_block(request.topic, [result["source_title"]])
-                    blocks.append({
-                        **mission,
-                        "block_type": BlockType.RESEARCH_MISSION.value,
-                        "evidence":   [evidence.model_dump()],
-                    })
-                    state["has_research_missions"] = True
-
-            elif evidence.verdict == EvidenceVerdict.VERIFIED:
-                raw = result["chunk"]
-                block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
-                content = await _synthesize_content(
-                    request=request,
-                    block_type=block_type.value,
-                    source_chunks=[result],
-                    raw_content=raw,
-                )
-                if is_homesteading:
-                    content = (
-                        f"**Homestead Lab Mission**\n\n{content}\n\n"
-                        "*Observe this directly on your land. Record what you find.*"
-                    )
-                blocks.append({
-                    "block_type":       block_type.value,
-                    "content":          content,
-                    "evidence":         [evidence.model_dump()],
-                    "is_silenced":      False,
-                    "homestead_content": _homestead_adapt(raw) if request.is_homestead else None,
-                })
+            blocks.append({
+                "block_type":        block_type.value,
+                "content":           content,
+                "evidence":          [{
+                    "source_id":        result["id"],
+                    "source_title":     result["source_title"],
+                    "source_url":       result.get("source_url", ""),
+                    "witness_citation": {
+                        "author":       result.get("citation_author", ""),
+                        "year":         result.get("citation_year"),
+                        "archive_name": result.get("citation_archive_name", ""),
+                    },
+                    "similarity_score": float(result["similarity_score"]),
+                    "verdict":          "VERIFIED",
+                    "chunk":            raw,
+                }],
+                "is_silenced":       False,
+                "homestead_content": _homestead_adapt(raw) if request.is_homestead else None,
+            })
 
         if not blocks:
-            logger.info("[ScienceAgent] Empty Hippocampus result — activating Researcher...")
-            block = await _researcher_fallback(state, request.track.value)
-            if block:
-                if is_homesteading:
-                    block["block_type"] = BlockType.LAB_MISSION.value
-                    block["content"] = (
-                        f"**Homestead Lab Mission**\n\n"
-                        f"{block['content']}\n\n"
-                        "*Observe this directly on your land. Record what you find.*"
-                    )
-                blocks.append(block)
-            else:
-                mission = build_research_mission_block(request.topic, [])
-                blocks.append({
-                    **mission,
-                    "block_type": BlockType.RESEARCH_MISSION.value,
-                    "evidence":   [],
-                })
-                state["has_research_missions"] = True
+            # No Hippocampus content — Claude generates from its own knowledge.
+            # Science content doesn't need archival verification; no RESEARCH_MISSION.
+            logger.info("[ScienceAgent] No Hippocampus content — generating from Claude knowledge.")
+            block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
+            content = await _synthesize_content(
+                request=request,
+                block_type=block_type.value,
+                source_chunks=[],
+                raw_content=request.topic,
+            )
+            if is_homesteading:
+                content = (
+                    f"**Homestead Lab Mission**\n\n{content}\n\n"
+                    "*Observe this directly on your land. Record what you find.*"
+                )
+            blocks.append({
+                "block_type":        block_type.value,
+                "content":           content,
+                "evidence":          [],
+                "is_silenced":       False,
+                "homestead_content": None,
+            })
 
     # ── Multimodal synthesis ─────────────────────────────────────────────────
     if blocks:
@@ -1508,7 +1488,9 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
         else:
             logger.warning(f"[DiscipleshipAgent] Failed to fetch {biblical_ref} from Sefaria, falling back to Hippocampus")
 
-    # Hippocampus similarity search with Witness Protocol
+    # Hippocampus reference — no Witness Protocol threshold.
+    # Discipleship content is worldview synthesis, not archival verification.
+    # Hippocampus results are context; Claude wraps them in Adeline's voice.
     raw_results = await hippocampus.similarity_search(
         query_embedding=state["query_embedding"],
         track=request.track.value,
@@ -1516,70 +1498,50 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
     )
 
     for result in raw_results:
-        evidence = evaluate_evidence(
-            source_id=result["id"],
-            source_title=result["source_title"],
-            source_url=result.get("source_url", ""),
-            citation_author=result.get("citation_author", ""),
-            citation_year=result.get("citation_year"),
-            citation_archive_name=result.get("citation_archive_name", ""),
-            similarity_score=float(result["similarity_score"]),
-            chunk=result["chunk"],
-            track=request.track.value,
+        raw = result["chunk"]
+        content = await _synthesize_content(
+            request=request,
+            block_type=BlockType.NARRATIVE.value,
+            source_chunks=[result],
+            raw_content=raw,
         )
-
-        if evidence.verdict == EvidenceVerdict.ARCHIVE_SILENT:
-            logger.info(
-                f"[DiscipleshipAgent] ARCHIVE_SILENT on '{result['source_title']}' — "
-                "activating Researcher..."
-            )
-            block = await _researcher_fallback(state, request.track.value, result["source_title"])
-            if block:
-                block["block_type"] = BlockType.NARRATIVE.value
-                block["content"] = _worldview_wrap(block["content"], request.track)
-                blocks.append(block)
-            else:
-                mission = build_research_mission_block(request.topic, [result["source_title"]])
-                blocks.append({
-                    **mission,
-                    "block_type": BlockType.RESEARCH_MISSION.value,
-                    "evidence":   [evidence.model_dump()],
-                })
-                state["has_research_missions"] = True
-
-        elif evidence.verdict == EvidenceVerdict.VERIFIED:
-            raw = result["chunk"]
-            content = await _synthesize_content(
-                request=request,
-                block_type=BlockType.NARRATIVE.value,
-                source_chunks=[result],
-                raw_content=raw,
-            )
-            blocks.append({
-                "block_type":       BlockType.NARRATIVE.value,
-                "content":          _worldview_wrap(content, request.track),
-                "evidence":         [evidence.model_dump()],
-                "is_silenced":      False,
-                "homestead_content": (
-                    _homestead_adapt(raw) if request.is_homestead else None
-                ),
-            })
+        blocks.append({
+            "block_type":        BlockType.NARRATIVE.value,
+            "content":           _worldview_wrap(content, request.track),
+            "evidence":          [{
+                "source_id":        result["id"],
+                "source_title":     result["source_title"],
+                "source_url":       result.get("source_url", ""),
+                "witness_citation": {
+                    "author":       result.get("citation_author", ""),
+                    "year":         result.get("citation_year"),
+                    "archive_name": result.get("citation_archive_name", ""),
+                },
+                "similarity_score": float(result["similarity_score"]),
+                "verdict":          "VERIFIED",
+                "chunk":            raw,
+            }],
+            "is_silenced":       False,
+            "homestead_content": _homestead_adapt(raw) if request.is_homestead else None,
+        })
 
     if not blocks:
-        logger.info("[DiscipleshipAgent] Empty Hippocampus result — activating Researcher...")
-        block = await _researcher_fallback(state, request.track.value)
-        if block:
-            block["block_type"] = BlockType.NARRATIVE.value
-            block["content"] = _worldview_wrap(block["content"], request.track)
-            blocks.append(block)
-        else:
-            mission = build_research_mission_block(request.topic, [])
-            blocks.append({
-                **mission,
-                "block_type": BlockType.RESEARCH_MISSION.value,
-                "evidence":   [],
-            })
-            state["has_research_missions"] = True
+        # No Hippocampus content — Claude generates from its own knowledge.
+        # No RESEARCH_MISSION for discipleship: worldview content doesn't require archival sources.
+        logger.info("[DiscipleshipAgent] No Hippocampus content — generating from Claude knowledge.")
+        content = await _synthesize_content(
+            request=request,
+            block_type=BlockType.NARRATIVE.value,
+            source_chunks=[],
+            raw_content=request.topic,
+        )
+        blocks.append({
+            "block_type":        BlockType.NARRATIVE.value,
+            "content":           _worldview_wrap(content, request.track),
+            "evidence":          [],
+            "is_silenced":       False,
+            "homestead_content": None,
+        })
 
     # ── Multimodal synthesis ─────────────────────────────────────────────────
     if blocks:
