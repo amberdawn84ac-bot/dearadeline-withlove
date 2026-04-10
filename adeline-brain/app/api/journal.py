@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from typing import Any
 
 from app.schemas.api_models import Track, UserRole
-from app.api.middleware import require_role
+from app.api.middleware import require_role, get_current_user_id, verify_student_access
 from app.connections.journal_store import journal_store
 from app.connections.neo4j_client import neo4j_client
 
@@ -22,7 +22,6 @@ router = APIRouter(prefix="/journal", tags=["journal"])
 # ── Request / Response models ─────────────────────────────────────────────────
 
 class SealRequest(BaseModel):
-    student_id:       str
     lesson_id:        str
     track:            Track
     completed_blocks: int = Field(default=0, ge=0)
@@ -57,7 +56,7 @@ class RecentResponse(BaseModel):
 @router.post("/seal", response_model=SealResponse)
 async def seal_journal(
     body: SealRequest,
-    _role: str = Depends(require_role(UserRole.STUDENT, UserRole.ADMIN)),
+    student_id: str = Depends(get_current_user_id),
 ):
     """
     Seal a lesson into the student's journal.
@@ -66,13 +65,13 @@ async def seal_journal(
     - Returns updated track_progress so the UI can refresh the dashboard
     """
     logger.info(
-        f"[/journal/seal] student={body.student_id} "
+        f"[/journal/seal] student={student_id} "
         f"lesson={body.lesson_id} track={body.track.value} "
         f"blocks={body.completed_blocks}"
     )
     try:
         track_progress = await journal_store.seal(
-            student_id=body.student_id,
+            student_id=student_id,
             lesson_id=body.lesson_id,
             track=body.track.value,
             completed_blocks=body.completed_blocks,
@@ -85,7 +84,7 @@ async def seal_journal(
     # Fire-and-forget Neo4j Mastery relationships — never block the seal response
     if body.oas_standards:
         asyncio.create_task(
-            _record_mastery_safe(body.student_id, body.track.value, body.oas_standards)
+            _record_mastery_safe(student_id, body.track.value, body.oas_standards)
         )
 
     return SealResponse(
@@ -107,7 +106,7 @@ async def _record_mastery_safe(student_id: str, track: str, oas_standards: list[
 @router.get("/progress/{student_id}", response_model=ProgressResponse)
 async def get_progress(
     student_id: str,
-    _role: str = Depends(require_role(UserRole.STUDENT, UserRole.ADMIN)),
+    _user_id: str = Depends(verify_student_access),
 ):
     """Return all track progress counts for a student."""
     try:
@@ -123,7 +122,7 @@ async def get_progress(
 async def get_recent(
     student_id: str,
     limit: int = 10,
-    _role: str = Depends(require_role(UserRole.STUDENT, UserRole.ADMIN)),
+    _user_id: str = Depends(verify_student_access),
 ):
     """Return the most recently sealed lessons for a student."""
     try:
