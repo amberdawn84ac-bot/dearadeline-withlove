@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-import aiohttp
+import httpx
 import openai
 from anthropic import Anthropic
 from dotenv import load_dotenv
@@ -96,15 +96,15 @@ async def fetch_standard_ebooks() -> List[dict]:
     log.info(f"Fetching from Standard Ebooks API...")
     books = []
     try:
-        async with aiohttp.ClientSession() as session:
+        async with httpx.AsyncClient(timeout=30.0) as session:
             params = {"sort": "newest"}
-            async with session.get(STANDARD_EBOOKS_API, params=params, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                if resp.status != 200:
-                    log.error(f"Standard Ebooks API returned {resp.status}")
-                    return []
-                data = await resp.json()
-                books = data.get("books", [])[:BOOKS_PER_SOURCE]
-                log.info(f"Fetched {len(books)} books from Standard Ebooks")
+            resp = await session.get(STANDARD_EBOOKS_API, params=params)
+            if resp.status_code != 200:
+                log.error(f"Standard Ebooks API returned {resp.status_code}")
+                return []
+            data = resp.json()
+            books = data.get("books", [])[:BOOKS_PER_SOURCE]
+            log.info(f"Fetched {len(books)} books from Standard Ebooks")
     except asyncio.TimeoutError:
         log.error("Standard Ebooks API timeout")
     except Exception as e:
@@ -120,15 +120,15 @@ async def fetch_gutenberg() -> List[dict]:
     log.info(f"Fetching from Project Gutenberg API...")
     books = []
     try:
-        async with aiohttp.ClientSession() as session:
+        async with httpx.AsyncClient(timeout=30.0) as session:
             params = {"sort": "popular"}
-            async with session.get(GUTENBERG_API, params=params, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                if resp.status != 200:
-                    log.error(f"Gutenberg API returned {resp.status}")
-                    return []
-                data = await resp.json()
-                books = data.get("results", [])[:BOOKS_PER_SOURCE]
-                log.info(f"Fetched {len(books)} books from Project Gutenberg")
+            resp = await session.get(GUTENBERG_API, params=params)
+            if resp.status_code != 200:
+                log.error(f"Gutenberg API returned {resp.status_code}")
+                return []
+            data = resp.json()
+            books = data.get("results", [])[:BOOKS_PER_SOURCE]
+            log.info(f"Fetched {len(books)} books from Project Gutenberg")
     except asyncio.TimeoutError:
         log.error("Project Gutenberg API timeout")
     except Exception as e:
