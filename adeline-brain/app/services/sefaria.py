@@ -143,83 +143,43 @@ async def fetch_commentary(ref: str, commentators: Optional[List[str]] = None) -
 async def cache_to_hippocampus(ref: str, text_data: Dict, track: str) -> Optional[str]:
     """
     Lazy seed Sefaria text to Hippocampus for future similarity searches.
-    
-    Args:
-        ref: Biblical reference
-        text_data: Result from fetch_biblical_text()
-        track: Track to associate with (e.g., "DISCIPLESHIP")
-    
-    Returns:
-        document_id if successful, None otherwise
+    Uses hippocampus.upsert_document() so the pgvector type is handled correctly.
     """
     from app.connections.pgvector_client import hippocampus
-    
+    from openai import AsyncOpenAI
+    import os
+
     try:
-        # Build full chunk with Hebrew + English
+        # Build chunk with Hebrew + English
         chunk = f"{text_data['ref']}\n\n"
-        
         if text_data['hebrew']:
             chunk += f"Hebrew: {text_data['hebrew']}\n\n"
-        
         chunk += f"English: {text_data['english']}"
-        
+
         # Generate embedding
-        from openai import AsyncOpenAI
-        import os
-        
         client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         resp = await client.embeddings.create(
             model="text-embedding-3-small",
-            input=chunk
+            input=chunk,
         )
         embedding = resp.data[0].embedding
-        
-        # Upsert to Hippocampus
-        source_id = f"sefaria-{normalize_reference(ref)}"
-        
-        # Use existing upsert method (check if it exists)
-        from app.config import get_db_conn
-        
-        conn = await get_db_conn()
-        
-        # Check if document already exists
-        existing = await conn.fetchrow(
-            'SELECT id FROM "HippocampusDocument" WHERE source_url = $1 AND track = $2',
-            text_data['url'],
-            track
+
+        # Upsert via the hippocampus client (handles pgvector type correctly)
+        doc_id = await hippocampus.upsert_document(
+            source_title=f"{text_data['ref']} ({text_data['version_title']})",
+            track=track,
+            chunk=chunk,
+            embedding=embedding,
+            source_url=text_data['url'],
+            source_type="SEFARIA_TEXT",
+            citation_author="Everett Fox (Translator)" if text_data['is_fox'] else "Sefaria",
+            citation_year=1995 if text_data['is_fox'] else None,
+            citation_archive_name="Sefaria / Schocken Books" if text_data['is_fox'] else "Sefaria.org",
         )
-        
-        if existing:
-            logger.info(f"[Sefaria] Document already cached: {source_id}")
-            await conn.close()
-            return str(existing['id'])
-        
-        # Insert new document
-        result = await conn.fetchrow(
-            '''
-            INSERT INTO "HippocampusDocument" (
-                source_title, source_url, source_type, chunk, embedding,
-                citation_author, citation_year, citation_archive_name, track
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            RETURNING id
-            ''',
-            f"{text_data['ref']} ({text_data['version_title']})",
-            text_data['url'],
-            "SEFARIA_TEXT",
-            chunk,
-            embedding,
-            "Everett Fox (Translator)" if text_data['is_fox'] else "Sefaria",
-            1995 if text_data['is_fox'] else None,
-            "Sefaria / Schocken Books",
-            track
-        )
-        
-        await conn.close()
-        
-        doc_id = str(result['id'])
+
         logger.info(f"[Sefaria] Cached {ref} to Hippocampus: {doc_id}")
         return doc_id
-        
+
     except Exception as e:
         logger.error(f"[Sefaria] Failed to cache {ref} to Hippocampus: {e}")
         return None
