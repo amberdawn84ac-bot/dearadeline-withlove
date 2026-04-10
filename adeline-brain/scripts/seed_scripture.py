@@ -94,23 +94,23 @@ PASSAGES = [
 
 async def seed_passage(ref: str, track: str) -> bool:
     """Fetch and cache a single passage. Returns True on success."""
-    print(f"  Fetching {ref} → {track}...", end=" ", flush=True)
+    print(f"  Fetching {ref} -> {track}...", end=" ", flush=True)
     try:
         data = await fetch_biblical_text(ref)
         if not data:
-            print("⚠ Sefaria returned nothing")
+            print("! Sefaria returned nothing")
             return False
 
-        fox = "✓ Fox" if data["is_fox"] else "  standard"
+        fox = "OK Fox" if data["is_fox"] else "  standard"
         doc_id = await cache_to_hippocampus(ref, data, track)
         if doc_id:
-            print(f"{fox} → cached ({doc_id[:8]}...)")
+            print(f"{fox} -> cached ({doc_id[:8]}...)")
             return True
         else:
-            print(f"{fox} → already cached")
+            print(f"{fox} -> already cached")
             return True
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"FAIL Error: {e}")
         return False
 
 
