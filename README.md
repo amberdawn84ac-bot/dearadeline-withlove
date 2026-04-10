@@ -7,7 +7,7 @@ A monorepo ecosystem grounded in the **10-Track Constitution**. Built for Christ
 | Package | Tech | Role |
 |---------|------|------|
 | `adeline-core` | TypeScript + Zod | Shared types, enums, schemas — source of truth |
-| `adeline-brain` | FastAPI + Python | Intelligence layer, Witness Protocol, 4-agent orchestration |
+| `adeline-brain` | FastAPI + Python | Intelligence layer, Witness Protocol, 6-agent orchestration |
 | `adeline-ui` | Next.js 14 + Tailwind | Experience layer, GenUIRenderer, pricing, dashboard |
 
 ## The 10-Track Constitution
@@ -37,20 +37,25 @@ adeline-ui (Next.js 14, port 3000)
 
 ### Production Security
 
-- **Auth**: Supabase JWT verification (HS256) in production; header-based fallback in development only
+- **Auth**: Supabase JWT verification (ES256 via JWKS or HS256 shared secret) on every endpoint — no unauthenticated routes
+- **Ownership enforcement**: `verify_student_access()` checks JWT `sub` claim against URL student IDs — students see only their own data, parents see their children, admins see all
+- **Internal API keys**: Server-to-server calls (lesson pipeline → learning records) use `X-Internal-Key` header
 - **Rate limiting**: 120 req/min per IP via slowapi
 - **Config**: Centralized `app/config.py` — production refuses to start without explicit credentials
 - **Migrations**: `entrypoint.sh` runs Prisma migrations before uvicorn startup
 - **CORS**: Configurable via `CORS_ORIGINS` environment variable
 
-## 4-Agent Orchestration
+## 6-Agent Orchestration
 
 | Agent | Tracks | What It Does |
 |---|---|---|
-| **HistorianAgent** | Truth History, Justice | Strictest Witness Protocol; PRIMARY_SOURCE focus |
+| **HistorianAgent** | Truth History | Strictest Witness Protocol (0.82 cosine); PRIMARY_SOURCE focus |
+| **JusticeAgent** | Justice & Change-making | Power-capture framing; primary source evidence (lobbying records, civil rights docs) |
 | **ScienceAgent** | Creation Science, Homesteading | Experiment-first for science; survival-skill lens for homesteading |
-| **DiscipleshipAgent** | Health, Government, Discipleship, Literature, Math, Creative Economy | Worldview synthesis; brand voice |
-| **RegistrarAgent** | All tracks | xAPI learning records + CASE transcript credit |
+| **LiteratureAgent** | English & Literature | Book-context aware (pulls active ReadingSession); literary analysis without Witness gate |
+| **PracticalAgent** | Applied Math, Creative Economy | Applied skills content via Claude synthesis; no Witness gate (math problems and craft projects don't need archival verification) |
+| **DiscipleshipAgent** | Health, Government, Discipleship | Worldview synthesis; Witness Protocol for factual claims |
+| **RegistrarAgent** | All tracks (post-processing) | xAPI learning records + CASE transcript credit — always runs last |
 
 ## Student Onboarding & Personalization
 
@@ -71,11 +76,14 @@ Adeline adapts to:
 
 > "A matter must be established by the testimony of two or three witnesses." — Deuteronomy 19:15
 
-All lesson content passes through a **0.82 cosine similarity threshold** against the verified Hippocampus corpus. If the threshold is not met:
+Fact-based tracks (Truth History, Justice, Science, Discipleship) pass content through a **0.82 cosine similarity threshold** against the verified Hippocampus corpus. If the threshold is not met:
 
 - No content is generated
 - `ARCHIVE_SILENT` is returned
-- Student receives a `RESEARCH_MISSION` block
+- The Researcher tool searches archive.org, gutenberg.org, and archives.gov for verified sources
+- If still unverified, the student receives a `RESEARCH_MISSION` block
+
+Literature and practical tracks (English, Math, Creative Economy) bypass the Witness gate — novels aren't primary source documents, and math problems don't need archival verification.
 
 ## Sovereign Lab (Science Track)
 
@@ -111,6 +119,8 @@ Not: "I completed 20 assignments."
 | Project Catalog & Guide | Done | In-memory curated catalog, seal-to-credit flow, portfolio integration |
 | Spaced Repetition Widget | Done | SM-2 review queue with quality ratings on dashboard |
 | Parent Dashboard | Done | Multi-student management, per-kid progress, family activity feed |
+| Auth Hardening | Done | JWT ownership on every endpoint, parent/student/admin access control, internal API keys |
+| Track-Specific Agents | Done | Literature + Practical agents split from Discipleship — correct protocols per track |
 | Learning Path | Planned | Visual path through year-end (K-8) or graduation (9-12) |
 | Content Expansion | Ongoing | Nightly self-seeding + manual corpus expansion across all 10 tracks |
 
@@ -157,6 +167,7 @@ See `adeline-brain/.env.example` for all required keys:
 - `ANTHROPIC_API_KEY` — lesson synthesis (`claude-sonnet-4-6`)
 - `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` — GraphRAG (Neo4j Aura or local bolt)
 - `SUPABASE_JWT_SECRET` — JWT verification (required in production)
+- `INTERNAL_API_KEY` — server-to-server auth for internal endpoints
 - `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` — session cache (or `REDIS_URL` for local)
 - `CORS_ORIGINS` — comma-separated allowed origins (default: `http://localhost:3000`)
 - `TAVILY_API_KEY` — Researcher tool (web archive search)
