@@ -1,20 +1,20 @@
 """
 Students API — /students/*
 
-Lightweight student profile CRUD. No Supabase auth yet — uses X-Student-Id header
-or body field. Full JWT auth is a future upgrade.
+Student profile CRUD with Supabase JWT authentication.
 
-POST /students/register    — Upsert a student profile (name, grade_level, is_homestead)
-GET  /students/{student_id}          — Fetch profile
-GET  /students/{student_id}/state    — Full StudentState (mastery + ZPD data)
+POST /students/register    — Upsert a student profile (uses JWT sub as student ID)
+GET  /students/{student_id}          — Fetch profile (ownership verified)
+GET  /students/{student_id}/state    — Full StudentState (ownership verified)
 """
 import logging
 import os
 import uuid
 
 import asyncpg
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from app.api.middleware import get_current_user_id, verify_student_access
 
 from app.models.student import load_student_state
 
@@ -59,11 +59,6 @@ class RegisterRequest(BaseModel):
     email:        str | None = Field(default=None)
     grade_level:  str = Field(default="K", pattern=r"^(K|[1-9]|1[0-2])$")
     is_homestead: bool = Field(default=False)
-    student_id:   str | None = Field(
-        default=None,
-        description="Optional — supply to update an existing profile. "
-                    "New ID is generated if omitted.",
-    )
 
 
 class StudentProfile(BaseModel):
@@ -86,19 +81,17 @@ class StudentStateResponse(BaseModel):
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/register", response_model=StudentProfile, status_code=200)
-async def register_student(body: RegisterRequest):
+async def register_student(
+    body: RegisterRequest,
+    user_id: str = Depends(get_current_user_id),
+):
     """
     Create or update a student profile.
-
-    - If student_id is provided: update the existing row (upsert).
-    - If student_id is omitted: generate a new UUID and insert.
-
-    Returns the full profile including generated student_id.
+    Uses the authenticated user's ID as the student ID.
     """
     conn = await _get_conn()
     try:
         await conn.execute(_INIT_SQL)
-        sid = body.student_id or str(uuid.uuid4())
         row = await conn.fetchrow(
             """
             INSERT INTO student_profiles (id, name, email, grade_level, is_homestead)
@@ -112,7 +105,7 @@ async def register_student(body: RegisterRequest):
             RETURNING id, name, email, grade_level, is_homestead,
                       created_at::text, updated_at::text
             """,
-            sid, body.name, body.email, body.grade_level, body.is_homestead,
+            user_id, body.name, body.email, body.grade_level, body.is_homestead,
         )
     except asyncpg.UniqueViolationError:
         raise HTTPException(status_code=409, detail="Email already registered")
@@ -134,7 +127,10 @@ async def register_student(body: RegisterRequest):
 
 
 @router.get("/{student_id}", response_model=StudentProfile)
-async def get_profile(student_id: str):
+async def get_profile(
+    student_id: str,
+    _user_id: str = Depends(verify_student_access),
+):
     """Fetch a student's profile by ID."""
     conn = await _get_conn()
     try:
@@ -168,7 +164,10 @@ async def get_profile(student_id: str):
 
 
 @router.get("/{student_id}/state", response_model=StudentStateResponse)
-async def get_student_state(student_id: str):
+async def get_student_state(
+    student_id: str,
+    _user_id: str = Depends(verify_student_access),
+):
     """
     Return the full StudentState (mastery scores, bands, lesson counts per track).
     Used by ZPDRecommendations in the UI.
