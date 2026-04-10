@@ -105,27 +105,28 @@ function DashboardContent() {
   };
 
   return (
-    <div className="flex h-screen -m-6 md:-m-8 overflow-hidden bg-[#FFFEF7]">
-      {/* ── Left column: lesson content ── */}
-      <div className="flex-1 overflow-y-auto min-w-0">
-        {/* Page header */}
-        <header className="bg-white border-b-2 border-[#E7DAC3] px-6 py-5 sticky top-0 z-10">
-          <h1
-            className="text-2xl font-bold text-[#2F4731]"
-            style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}
-          >
-            My Learning Plan
-          </h1>
-          <p className="text-[#2F4731]/60 mt-0.5 text-sm">
-            {activeLesson
-              ? 'Lesson in progress — ask Adeline questions in the panel →'
-              : 'Choose a topic below or ask Adeline in the panel →'}
-          </p>
-        </header>
+    <div className="flex flex-col h-screen -m-6 md:-m-8 overflow-hidden bg-[#FFFEF7]">
 
+      {/* ── Adeline chat — pinned to top, full width ── */}
+      <div className="shrink-0 border-b-2 border-[#E7DAC3]" style={{ height: '340px' }}>
+        <AdelineChatPanel
+          studentId={studentId}
+          gradeLevel={gradeLevel}
+          onLessonGenerated={handleLessonGenerated}
+          initialPrompt={studyPrompt}
+        />
+      </div>
+
+      {/* ── Scrollable content below chat ── */}
+      <div className="flex-1 overflow-y-auto min-w-0">
         {/* Status bar */}
         <div className="px-6 pt-5">
           <StudentStatusBar />
+        </div>
+
+        {/* Spaced rep widget — compact strip */}
+        <div className="px-6 pt-3">
+          <SpacedRepWidget />
         </div>
 
         {/* ── Idle: suggestion cards ── */}
@@ -317,17 +318,6 @@ function DashboardContent() {
         )}
       </div>
 
-      {/* ── Right column: Spaced Rep + Adeline chat panel ── */}
-      <div className="w-[380px] shrink-0 hidden md:flex flex-col border-l-2 border-[#E7DAC3] overflow-y-auto">
-        {/* Spaced Repetition Review */}
-        <div className="flex-shrink-0 px-6 pt-6 pb-4">
-          <SpacedRepWidget />
-        </div>
-
-        {/* Adeline Chat Panel */}
-        <div className="flex-1 min-h-0">
-          <AdelineChatPanel studentId={studentId} gradeLevel={gradeLevel} onLessonGenerated={handleLessonGenerated} initialPrompt={studyPrompt} />
-        </div>
       </div>
     </div>
   );
