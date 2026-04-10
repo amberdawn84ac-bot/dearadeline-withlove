@@ -173,6 +173,48 @@ function BlockLabel({ type }: { type: string }) {
   );
 }
 
+// ── Lesson content renderer — paragraph-aware, Life of Fred style ────────────
+// Splits content on blank lines, renders first paragraph as a large hook,
+// subsequent paragraphs at a comfortable reading size with generous spacing.
+
+function LessonContent({
+  content,
+  fontFamily = "var(--font-kalam), cursive",
+  color = "#2F4731",
+}: {
+  content: string;
+  fontFamily?: string;
+  color?: string;
+}) {
+  const paragraphs = content
+    .split(/\n\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length === 0) return null;
+
+  return (
+    <div className="space-y-5">
+      {paragraphs.map((para, i) => {
+        // Bold/italic markdown — **text** and *text*
+        const formatted = para
+          .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+          .replace(/\*(.+?)\*/g, "<em>$1</em>");
+
+        return (
+          <p
+            key={i}
+            className={i === 0 ? "text-xl leading-[1.85]" : "text-[17px] leading-[1.85]"}
+            style={{ fontFamily, color }}
+            dangerouslySetInnerHTML={{ __html: formatted }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+
 // ── PRIMARY_SOURCE block ──────────────────────────────────────────────────────
 
 function PrimarySourceBlock({
@@ -190,9 +232,7 @@ function PrimarySourceBlock({
       style={{ background: "#FFFBF4", border: "1.5px solid #9A3F4A30" }}
     >
       <BlockLabel type="PRIMARY_SOURCE" />
-      <div className="text-[#2F4731] leading-[1.8] whitespace-pre-wrap" style={{ fontFamily: "var(--font-kalam), cursive" }}>
-        <p className="text-base first-letter:text-3xl first-letter:font-bold first-letter:text-[#9A3F4A] first-letter:float-left first-letter:mr-1 first-letter:leading-none">{content}</p>
-      </div>
+      <LessonContent content={content} color="#2F4731" />
       <EvidenceFooter evidence={block.evidence} />
     </div>
   );
@@ -210,12 +250,7 @@ function LabMissionBlock({ block }: { block: LessonBlockResponse }) {
         <span className="text-lg">🌱</span>
         <BlockLabel type="LAB_MISSION" />
       </div>
-      <p
-        className="text-base text-[#2F4731] leading-[1.8] whitespace-pre-wrap font-medium"
-        style={{ fontFamily: "var(--font-swanky), cursive" }}
-      >
-        {block.content}
-      </p>
+      <LessonContent content={block.content} fontFamily="var(--font-swanky), cursive" color="#2F4731" />
       <EvidenceFooter evidence={block.evidence} />
     </div>
   );
@@ -269,12 +304,7 @@ function NarrativeBlock({
       style={{ background: "#FFFEF7", border: "1.5px solid #BD680920" }}
     >
       <BlockLabel type="NARRATIVE" />
-      <p
-        className="text-lg text-[#2F4731] leading-[1.9] whitespace-pre-wrap"
-        style={{ fontFamily: "var(--font-kalam), cursive" }}
-      >
-        {content}
-      </p>
+      <LessonContent content={content} color="#2F4731" />
       <EvidenceFooter evidence={block.evidence} />
     </div>
   );

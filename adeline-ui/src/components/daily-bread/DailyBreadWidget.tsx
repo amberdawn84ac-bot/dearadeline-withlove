@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BookOpen, Loader2, RotateCcw, ArrowRight, ChevronUp } from 'lucide-react';
+import { BookOpen, Loader2, RotateCcw, ArrowRight } from 'lucide-react';
 
 interface DailyBread {
   verse: string;
@@ -10,20 +10,6 @@ interface DailyBread {
   originalMeaning: string;
   translationNote: string;
   context: string;
-}
-
-interface DeepDiveSection {
-  heading: string;
-  content: string;
-}
-
-interface DeepDiveResponse {
-  reference: string;
-  fox_text?: string;
-  hebrew_text?: string;
-  is_fox: boolean;
-  sefaria_url?: string;
-  sections: DeepDiveSection[];
 }
 
 interface DailyBreadWidgetProps {
@@ -35,14 +21,10 @@ export function DailyBreadWidget({ onStudy, gradeLevel = '8' }: DailyBreadWidget
   const [data, setData] = useState<DailyBread | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
-  const [deepDive, setDeepDive] = useState<DeepDiveResponse | null>(null);
-  const [deepDiveStatus, setDeepDiveStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
 
   const fetchDailyBread = async () => {
     setStatus('loading');
     setError(null);
-    setDeepDive(null);
-    setDeepDiveStatus('idle');
 
     try {
       const response = await fetch('/brain/daily-bread');
@@ -70,42 +52,10 @@ export function DailyBreadWidget({ onStudy, gradeLevel = '8' }: DailyBreadWidget
     fetchDailyBread();
   }, []);
 
-  const handleStudy = async () => {
+  const handleStudy = () => {
     if (!data) return;
-
-    // If deep dive already loaded, toggle it closed
-    if (deepDiveStatus === 'ready') {
-      setDeepDiveStatus('idle');
-      setDeepDive(null);
-      return;
-    }
-
-    setDeepDiveStatus('loading');
-
-    try {
-      const response = await fetch('/brain/daily-bread/deep-dive', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reference: data.reference,
-          original: data.original || null,
-          original_meaning: data.originalMeaning || null,
-          context: data.context || null,
-          grade_level: gradeLevel,
-        }),
-      });
-
-      if (!response.ok) throw new Error('Deep dive request failed');
-
-      const result: DeepDiveResponse = await response.json();
-      setDeepDive(result);
-      setDeepDiveStatus('ready');
-    } catch (err) {
-      setDeepDiveStatus('error');
-      // Fallback: route to chat panel as before
-      const prompt = `I want my Daily Bread deep-dive study on ${data.reference} today. Translate it directly from the original ${data.original || 'language'} text, keeping the original meaning and context.`;
-      onStudy?.(prompt);
-    }
+    const prompt = `Daily Bread deep-dive study on ${data.reference}. The key word is "${data.original}" — ${data.originalMeaning}. Teach me what this passage actually says in the original language, the historical context, and what it means for how I live today.`;
+    onStudy?.(prompt);
   };
 
   // Loading state
@@ -185,53 +135,11 @@ export function DailyBreadWidget({ onStudy, gradeLevel = '8' }: DailyBreadWidget
         {/* CTA Button */}
         <button
           onClick={handleStudy}
-          disabled={deepDiveStatus === 'loading'}
-          className="w-full px-4 py-2 bg-[#2F4731] text-white rounded-lg text-sm font-semibold hover:bg-[#1F3321] transition-colors flex items-center justify-center gap-2 group disabled:opacity-60"
+          className="w-full px-4 py-2 bg-[#2F4731] text-white rounded-lg text-sm font-semibold hover:bg-[#1F3321] transition-colors flex items-center justify-center gap-2 group"
         >
-          {deepDiveStatus === 'loading' ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> Studying the text…</>
-          ) : deepDiveStatus === 'ready' ? (
-            <><ChevronUp className="w-4 h-4" /> Close Deep Dive</>
-          ) : (
-            <>Start Deep Dive Study <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></>
-          )}
+          Start Deep Dive Study
+          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
         </button>
-
-        {/* Deep Dive — inline result */}
-        {deepDiveStatus === 'ready' && deepDive && (
-          <div className="mt-4 space-y-3">
-            {/* Fox translation banner */}
-            {deepDive.fox_text && (
-              <div className="p-3 bg-[#F5E6D3] rounded-lg border border-[#E7DAC3]">
-                <p className="text-[10px] text-[#2F4731]/60 mb-1 font-semibold uppercase tracking-wider">
-                  {deepDive.is_fox ? 'Everett Fox Translation' : 'English Text'}
-                </p>
-                <p className="text-sm text-[#2F4731] italic leading-relaxed">"{deepDive.fox_text}"</p>
-                {deepDive.hebrew_text && (
-                  <p className="text-xs text-[#2F4731]/60 mt-2 font-mono">{deepDive.hebrew_text}</p>
-                )}
-                {deepDive.sefaria_url && (
-                  <a
-                    href={deepDive.sefaria_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[10px] text-[#BD6809] mt-1 inline-block hover:underline"
-                  >
-                    View on Sefaria →
-                  </a>
-                )}
-              </div>
-            )}
-
-            {/* Study sections */}
-            {deepDive.sections.map((section, i) => (
-              <div key={i} className="p-3 bg-white rounded-lg border border-[#E7DAC3]">
-                <p className="text-xs font-bold text-[#2F4731] mb-1.5">{section.heading}</p>
-                <p className="text-xs text-[#2F4731]/80 leading-relaxed">{section.content}</p>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     );
   }
