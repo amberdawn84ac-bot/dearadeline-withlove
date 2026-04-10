@@ -216,6 +216,7 @@ async def _synthesize_content(
         f"Ground every claim in the source. Make it land."
     )
 
+    api_key = os.getenv("ANTHROPIC_API_KEY")
     try:
         client = anthropic.AsyncAnthropic(api_key=api_key)
         message = await client.messages.create(
@@ -533,13 +534,36 @@ RESEARCH_MISSION:
 {_ADELINE_VOICE}
 """
 
-    client = anthropic.AsyncAnthropic()
-    message = await client.messages.create(
-        model=_ANTHROPIC_MODEL,
-        max_tokens=1200,
-        messages=[{"role": "user", "content": investigation_prompt}],
-    )
-    raw_output = message.content[0].text.strip()
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        blocks.append({
+            "block_type":  BlockType.NARRATIVE.value,
+            "content":     f"Justice investigation: {request.topic}",
+            "evidence":    [],
+            "is_silenced": False,
+        })
+        state["blocks"] = blocks
+        return state
+
+    raw_output = ""
+    try:
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        client = anthropic.AsyncAnthropic(api_key=api_key)
+        message = await client.messages.create(
+            model=_ANTHROPIC_MODEL,
+            max_tokens=1200,
+            messages=[{"role": "user", "content": investigation_prompt}],
+        )
+        raw_output = message.content[0].text.strip()
+    except Exception as e:
+        logger.warning(f"[JusticeAgent] Claude call failed ({e}) — using fallback NARRATIVE")
+        blocks.append({
+            "block_type":  BlockType.NARRATIVE.value,
+            "content":     f"Justice investigation: {request.topic}",
+            "evidence":    [],
+            "is_silenced": False,
+        })
+        state["blocks"] = blocks
+        return state
 
     # Parse NARRATIVE and RESEARCH_MISSION sections
     narrative_text = ""
@@ -933,62 +957,62 @@ async def literature_agent(state: AdelineState) -> AdelineState:
             "is_silenced":      False,
             "homestead_content": None,
         })
-        state["blocks"] = blocks
-        return state
+        # Fall through to multimodal synthesis below
 
-    # ── Step 2: Hippocampus reference (no Witness gate) ──────────────────────
-    raw_results = await hippocampus.similarity_search(
-        query_embedding=state["query_embedding"],
-        track=request.track.value,
-        top_k=3,
-    )
-
-    reference_chunks = []
-    for result in raw_results:
-        reference_chunks.append(result)
-
-    # ── Step 3: Synthesize literary content ───────────────────────────────────
-    if reference_chunks:
-        content = await _synthesize_content(
-            request=request,
-            block_type=BlockType.NARRATIVE.value,
-            source_chunks=reference_chunks,
-            raw_content=reference_chunks[0]["chunk"],
-        )
-        blocks.append({
-            "block_type":       BlockType.NARRATIVE.value,
-            "content":          _worldview_wrap(content, request.track),
-            "evidence":         [{
-                "source_id":        r["id"],
-                "source_title":     r["source_title"],
-                "source_url":       r.get("source_url", ""),
-                "witness_citation": {
-                    "author":       r.get("citation_author", ""),
-                    "year":         r.get("citation_year"),
-                    "archive_name": r.get("citation_archive_name", ""),
-                },
-                "similarity_score": float(r["similarity_score"]),
-                "verdict":          "VERIFIED",
-                "chunk":            r["chunk"],
-            } for r in reference_chunks],
-            "is_silenced":      False,
-            "homestead_content": None,
-        })
     else:
-        # No Hippocampus content — Claude generates from its own literary knowledge
-        content = await _synthesize_literature(
-            request=request,
-            book_title=None,
-            book_author=None,
-            topic=request.topic,
+        # ── Step 2: Hippocampus reference (no Witness gate) ──────────────────────
+        raw_results = await hippocampus.similarity_search(
+            query_embedding=state["query_embedding"],
+            track=request.track.value,
+            top_k=3,
         )
-        blocks.append({
-            "block_type":       BlockType.NARRATIVE.value,
-            "content":          _worldview_wrap(content, request.track),
-            "evidence":         [],
-            "is_silenced":      False,
-            "homestead_content": None,
-        })
+
+        reference_chunks = []
+        for result in raw_results:
+            reference_chunks.append(result)
+
+        # ── Step 3: Synthesize literary content ───────────────────────────────────
+        if reference_chunks:
+            content = await _synthesize_content(
+                request=request,
+                block_type=BlockType.NARRATIVE.value,
+                source_chunks=reference_chunks,
+                raw_content=reference_chunks[0]["chunk"],
+            )
+            blocks.append({
+                "block_type":       BlockType.NARRATIVE.value,
+                "content":          _worldview_wrap(content, request.track),
+                "evidence":         [{
+                    "source_id":        r["id"],
+                    "source_title":     r["source_title"],
+                    "source_url":       r.get("source_url", ""),
+                    "witness_citation": {
+                        "author":       r.get("citation_author", ""),
+                        "year":         r.get("citation_year"),
+                        "archive_name": r.get("citation_archive_name", ""),
+                    },
+                    "similarity_score": float(r["similarity_score"]),
+                    "verdict":          "VERIFIED",
+                    "chunk":            r["chunk"],
+                } for r in reference_chunks],
+                "is_silenced":      False,
+                "homestead_content": None,
+            })
+        else:
+            # No Hippocampus content — Claude generates from its own literary knowledge
+            content = await _synthesize_literature(
+                request=request,
+                book_title=None,
+                book_author=None,
+                topic=request.topic,
+            )
+            blocks.append({
+                "block_type":       BlockType.NARRATIVE.value,
+                "content":          _worldview_wrap(content, request.track),
+                "evidence":         [],
+                "is_silenced":      False,
+                "homestead_content": None,
+            })
 
     # ── Multimodal synthesis ─────────────────────────────────────────────────
     if blocks:
