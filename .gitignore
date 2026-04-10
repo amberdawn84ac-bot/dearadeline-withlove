@@ -21,6 +21,9 @@ dist/
 # EPUB book storage (local dev)
 adeline-brain/data/books/
 
+# Worktrees
+.worktrees/
+
 # OS
 .DS_Store
 Thumbs.db
