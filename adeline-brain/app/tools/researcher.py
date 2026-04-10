@@ -84,6 +84,50 @@ SCIENCE_DOMAINS = {
     'EXPLORATORIUM': 'exploratorium.edu',
     'NATURE_EDUCATION': 'nature.com/scitable',
     'SMITHSONIAN': 'si.edu',
+    'OPENSTAX_SCIENCE': 'openstax.org',
+}
+
+# Math and applied skills domains
+MATH_DOMAINS = {
+    'OPENSTAX_MATH': 'openstax.org',
+    'KHAN_MATH': 'khanacademy.org',
+    'PURPLEMATH': 'purplemath.com',
+    'MATH_IS_FUN': 'mathsisfun.com',
+    'DESMOS': 'desmos.com',
+}
+
+# Literature, language, writing domains
+LITERATURE_DOMAINS = {
+    'GUTENBERG': 'gutenberg.org',
+    'STANDARD_EBOOKS': 'standardebooks.org',
+    'OPENSTAX_ELA': 'openstax.org',
+    'POETS_ORG': 'poets.org',
+    'LIBRARY_OF_CONGRESS': 'loc.gov',
+}
+
+# Economics, government, civics domains
+CIVICS_DOMAINS = {
+    'OPENSTAX_ECON': 'openstax.org',
+    'KHAN_ECON': 'khanacademy.org',
+    'FEDERAL_REGISTER': 'federalregister.gov',
+    'CONGRESS': 'congress.gov',
+    'USGOVERNMENT': 'usa.gov',
+}
+
+# Creative economy, entrepreneurship, making
+CREATIVE_DOMAINS = {
+    'KHAN_FINANCE': 'khanacademy.org',
+    'SBA': 'sba.gov',
+    'INSTRUCTABLES': 'instructables.com',
+    'WIKIHOW': 'wikihow.com',
+}
+
+# Discipleship, worldview, scripture
+DISCIPLESHIP_DOMAINS = {
+    'SEFARIA': 'sefaria.org',
+    'BIBLE_GATEWAY': 'biblegateway.com',
+    'OPENBIBLE': 'openbible.info',
+    'BLUELETTER': 'blueletterbible.org',
 }
 
 # Tracks that should use science domains instead of declassified archives
@@ -91,6 +135,20 @@ SCIENCE_TRACKS = {'CREATION_SCIENCE', 'HOMESTEADING', 'HEALTH_NATUROPATHY'}
 
 # Tracks that should use declassified archives (history/justice)
 HISTORY_TRACKS = {'TRUTH_HISTORY', 'JUSTICE_CHANGEMAKING'}
+
+# Domain map per track
+TRACK_DOMAINS = {
+    'TRUTH_HISTORY':        PRIMARY_SOURCE_DOMAINS,
+    'JUSTICE_CHANGEMAKING': PRIMARY_SOURCE_DOMAINS,
+    'CREATION_SCIENCE':     SCIENCE_DOMAINS,
+    'HOMESTEADING':         SCIENCE_DOMAINS,
+    'HEALTH_NATUROPATHY':   SCIENCE_DOMAINS,
+    'APPLIED_MATHEMATICS':  MATH_DOMAINS,
+    'ENGLISH_LITERATURE':   LITERATURE_DOMAINS,
+    'GOVERNMENT_ECONOMICS': CIVICS_DOMAINS,
+    'CREATIVE_ECONOMY':     CREATIVE_DOMAINS,
+    'DISCIPLESHIP':         DISCIPLESHIP_DOMAINS,
+}
 
 
 # ── Cosine similarity helper ───────────────────────────────────────────────────
@@ -180,13 +238,9 @@ async def search_all_archives_parallel(query: str, track: str = None) -> list[di
     
     Returns deduplicated list of documents across all searched domains.
     """
-    # Choose domains based on track
-    if track in HISTORY_TRACKS:
-        domains_map = PRIMARY_SOURCE_DOMAINS
-        logger.info(f"[Researcher] Using primary source repositories for track={track} ({len(domains_map)} sources)")
-    else:
-        domains_map = SCIENCE_DOMAINS
-        logger.info(f"[Researcher] Using science domains for track={track} ({len(domains_map)} sources)")
+    # Choose domains based on track — each track has appropriate sources
+    domains_map = TRACK_DOMAINS.get(track, SCIENCE_DOMAINS)
+    logger.info(f"[Researcher] Using {len(domains_map)} domain(s) for track={track}")
     
     archives = list(domains_map.keys())
     tasks = [search_archive_async(query, archive, domains_map) for archive in archives]

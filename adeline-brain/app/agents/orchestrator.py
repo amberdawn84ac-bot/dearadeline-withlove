@@ -769,28 +769,61 @@ async def science_agent(state: AdelineState) -> AdelineState:
             })
 
         if not blocks:
-            # No Hippocampus content — Claude generates from its own knowledge.
-            # Science content doesn't need archival verification; no RESEARCH_MISSION.
-            logger.info("[ScienceAgent] No Hippocampus content — generating from Claude knowledge.")
-            block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
-            content = await _synthesize_content(
-                request=request,
-                block_type=block_type.value,
-                source_chunks=[],
-                raw_content=request.topic,
-            )
-            if is_homesteading:
-                content = (
-                    f"**Homestead Lab Mission**\n\n{content}\n\n"
-                    "*Observe this directly on your land. Record what you find.*"
+            # Hippocampus empty — try web search first (seeds Hippocampus for next time)
+            logger.info("[ScienceAgent] Hippocampus empty — searching web to seed and generate.")
+            web_results = await search_witnesses(request.topic, request.track.value)
+            if web_results:
+                raw = web_results[0].get("chunk", request.topic)
+                block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
+                content = await _synthesize_content(
+                    request=request,
+                    block_type=block_type.value,
+                    source_chunks=web_results,
+                    raw_content=raw,
                 )
-            blocks.append({
-                "block_type":        block_type.value,
-                "content":           content,
-                "evidence":          [],
-                "is_silenced":       False,
-                "homestead_content": None,
-            })
+                if is_homesteading:
+                    content = (
+                        f"**Homestead Lab Mission**\n\n{content}\n\n"
+                        "*Observe this directly on your land. Record what you find.*"
+                    )
+                blocks.append({
+                    "block_type":        block_type.value,
+                    "content":           content,
+                    "evidence":          [{
+                        "source_id":        r.get("source_id", ""),
+                        "source_title":     r.get("source_title", ""),
+                        "source_url":       r.get("source_url", ""),
+                        "witness_citation": r.get("witness_citation", {}),
+                        "similarity_score": float(r.get("similarity_score", 0)),
+                        "verdict":          "VERIFIED",
+                        "chunk":            r.get("chunk", ""),
+                    } for r in web_results[:2]],
+                    "is_silenced":       False,
+                    "homestead_content": None,
+                })
+                state["researcher_activated"] = True
+            else:
+                # Web search also empty — Claude generates from its own knowledge
+                logger.info("[ScienceAgent] No web results — generating from Claude knowledge.")
+                block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
+                content = await _synthesize_content(
+                    request=request,
+                    block_type=block_type.value,
+                    source_chunks=[],
+                    raw_content=request.topic,
+                )
+                if is_homesteading:
+                    content = (
+                        f"**Homestead Lab Mission**\n\n{content}\n\n"
+                        "*Observe this directly on your land. Record what you find.*"
+                    )
+                blocks.append({
+                    "block_type":        block_type.value,
+                    "content":           content,
+                    "evidence":          [],
+                    "is_silenced":       False,
+                    "homestead_content": None,
+                })
 
     # ── Multimodal synthesis ─────────────────────────────────────────────────
     if blocks:
@@ -1526,22 +1559,49 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
         })
 
     if not blocks:
-        # No Hippocampus content — Claude generates from its own knowledge.
-        # No RESEARCH_MISSION for discipleship: worldview content doesn't require archival sources.
-        logger.info("[DiscipleshipAgent] No Hippocampus content — generating from Claude knowledge.")
-        content = await _synthesize_content(
-            request=request,
-            block_type=BlockType.NARRATIVE.value,
-            source_chunks=[],
-            raw_content=request.topic,
-        )
-        blocks.append({
-            "block_type":        BlockType.NARRATIVE.value,
-            "content":           _worldview_wrap(content, request.track),
-            "evidence":          [],
-            "is_silenced":       False,
-            "homestead_content": None,
-        })
+        # Hippocampus empty — try web search first (seeds Hippocampus for next time)
+        logger.info("[DiscipleshipAgent] Hippocampus empty — searching web to seed and generate.")
+        web_results = await search_witnesses(request.topic, request.track.value)
+        if web_results:
+            raw = web_results[0].get("chunk", request.topic)
+            content = await _synthesize_content(
+                request=request,
+                block_type=BlockType.NARRATIVE.value,
+                source_chunks=web_results,
+                raw_content=raw,
+            )
+            blocks.append({
+                "block_type":        BlockType.NARRATIVE.value,
+                "content":           _worldview_wrap(content, request.track),
+                "evidence":          [{
+                    "source_id":        r.get("source_id", ""),
+                    "source_title":     r.get("source_title", ""),
+                    "source_url":       r.get("source_url", ""),
+                    "witness_citation": r.get("witness_citation", {}),
+                    "similarity_score": float(r.get("similarity_score", 0)),
+                    "verdict":          "VERIFIED",
+                    "chunk":            r.get("chunk", ""),
+                } for r in web_results[:2]],
+                "is_silenced":       False,
+                "homestead_content": None,
+            })
+            state["researcher_activated"] = True
+        else:
+            # Web search also empty — Claude generates from its own knowledge
+            logger.info("[DiscipleshipAgent] No web results — generating from Claude knowledge.")
+            content = await _synthesize_content(
+                request=request,
+                block_type=BlockType.NARRATIVE.value,
+                source_chunks=[],
+                raw_content=request.topic,
+            )
+            blocks.append({
+                "block_type":        BlockType.NARRATIVE.value,
+                "content":           _worldview_wrap(content, request.track),
+                "evidence":          [],
+                "is_silenced":       False,
+                "homestead_content": None,
+            })
 
     # ── Multimodal synthesis ─────────────────────────────────────────────────
     if blocks:

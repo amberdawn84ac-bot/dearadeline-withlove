@@ -121,6 +121,61 @@ async def seed_bookshelf(
         task_id=task_id
     )
 
+@router.post(
+    "/seed-scripture",
+    response_model=TaskResponse,
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+)
+async def seed_scripture(
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(get_current_user_id),
+) -> TaskResponse:
+    """
+    Seed Hippocampus with 55 key scripture passages via Sefaria (Everett Fox preferred).
+    Covers DISCIPLESHIP, TRUTH_HISTORY, JUSTICE_CHANGEMAKING, GOVERNMENT_ECONOMICS,
+    HEALTH_NATUROPATHY, CREATION_SCIENCE, and HOMESTEADING tracks.
+    Run once; Sefaria also lazy-caches on demand during lessons.
+    """
+    import uuid as _uuid
+    task_id = str(_uuid.uuid4())
+    task_status[task_id] = {
+        "status": "running",
+        "progress": "Starting scripture seed...",
+        "result": None,
+        "error": None,
+        "started_by": user_id,
+        "started_at": "",
+    }
+
+    async def _run():
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "scripts.seed_scripture"],
+                cwd=Path(__file__).resolve().parents[2],
+                capture_output=True,
+                text=True,
+                timeout=3600,
+            )
+            if result.returncode == 0:
+                task_status[task_id]["status"] = "completed"
+                task_status[task_id]["progress"] = "Scripture seeding completed"
+                task_status[task_id]["result"] = {"stdout": result.stdout}
+            else:
+                task_status[task_id]["status"] = "failed"
+                task_status[task_id]["error"] = result.stderr
+        except Exception as e:
+            task_status[task_id]["status"] = "failed"
+            task_status[task_id]["error"] = str(e)
+
+    background_tasks.add_task(_run)
+    logger.info(f"[Admin] Scripture seeding task {task_id} started by {user_id}")
+    return TaskResponse(
+        success=True,
+        message="Scripture seeding started. Use the task ID to check progress.",
+        task_id=task_id,
+    )
+
+
 @router.get(
     "/task/{task_id}",
     response_model=TaskStatusResponse,
