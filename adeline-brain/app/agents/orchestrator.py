@@ -1190,7 +1190,8 @@ async def _decide_formats(
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
-        raw = _json.loads(message.content[0].text)
+        text = message.content[0].text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+        raw = _json.loads(text)
         chosen = [f for f in raw.get("formats", []) if f in available]
         logger.info(f"[FormatSelector] Chose {chosen} for '{topic}' ({track.value})")
         return chosen

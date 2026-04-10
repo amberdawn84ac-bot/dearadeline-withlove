@@ -155,9 +155,9 @@ async def record_learning(
                         "scoreRaw", "statementJson", timestamp
                     ) VALUES (
                         $1, $2, $3, $4,
-                        $5::\"XAPIVerb\", $6, $7, $8::\"Track\",
+                        $5, $6, $7, $8,
                         $9, $10, $11,
-                        $12::\"AgentName\", $13,
+                        $12, $13,
                         $14, $15, $16,
                         $17, $18::jsonb, $19::timestamp
                     )
@@ -286,7 +286,8 @@ async def get_due_reviews(
     Ordered by most overdue first.
     """
     try:
-        now  = datetime.now(timezone.utc)
+        from datetime import datetime as _dt
+        now = _dt.utcnow()  # naive UTC — matches DB TIMESTAMP without timezone
 
         async with _get_conn() as conn:
             rows = await conn.fetch(

@@ -410,7 +410,8 @@ async def _get_credit_summary(student_id: str) -> tuple[float, float]:
             student_id,
         )
         # Credits this week
-        week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        from datetime import datetime as _dt
+        week_ago = _dt.utcnow() - timedelta(days=7)  # naive UTC — matches DB TIMESTAMP
         weekly = await conn.fetchval(
             'SELECT COALESCE(SUM("creditHours"), 0) FROM "TranscriptEntry" WHERE "studentId" = $1 AND "completedAt" >= $2',
             student_id, week_ago,
@@ -627,7 +628,7 @@ async def _get_available_projects(track: str = None, limit: int = 3) -> list[Pro
             track=proj.track.value,
             tagline=proj.tagline,
             emoji=TRACK_EMOJI.get(proj.track.value, "🎨"),
-            difficulty=proj.difficulty.value,
+            difficulty=str(proj.difficulty.value) if hasattr(proj.difficulty, 'value') else str(proj.difficulty),
             estimated_hours=proj.estimated_hours,
             portfolio_credit=True,
         ))
