@@ -11,7 +11,10 @@ if [ "$RUN_SEEDS" = "true" ]; then
     
     echo "[entrypoint] Running knowledge graph seed..."
     python scripts/seed_knowledge_graph.py || echo "[entrypoint] Knowledge graph seed failed"
-    
+
+    echo "[entrypoint] Running scripture seed..."
+    python scripts/seed_scripture.py || echo "[entrypoint] Scripture seed failed"
+
     echo "[entrypoint] Seeds complete"
 fi
 
