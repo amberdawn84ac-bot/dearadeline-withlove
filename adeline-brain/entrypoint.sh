@@ -2,12 +2,7 @@
 set -e
 
 echo "[entrypoint] Running Prisma migrations..."
-# Migrations require direct connection (not pooler) — use DIRECT_DATABASE_URL if set
-if [ -n "$DIRECT_DATABASE_URL" ]; then
-    DATABASE_URL="$DIRECT_DATABASE_URL" prisma migrate deploy || echo "[entrypoint] Prisma migrate failed"
-else
-    prisma migrate deploy || echo "[entrypoint] Prisma migrate skipped (no direct DB URL)"
-fi
+DATABASE_URL="${DIRECT_DATABASE_URL:-${POSTGRES_DSN:-$DATABASE_URL}}" prisma migrate deploy || echo "[entrypoint] Prisma migrate failed"
 
 # Run seeds if RUN_SEEDS env var is set
 if [ "$RUN_SEEDS" = "true" ]; then
