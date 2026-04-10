@@ -15,8 +15,11 @@
  * Cross-track OAS standards are shown in a GraphRAG sidebar section.
  */
 
+import { useState } from "react";
 import { clsx } from "clsx";
-import type { LessonBlockResponse, Evidence } from "@/lib/brain-client";
+import type { LessonBlockResponse, Evidence, MindMapData, TimelineData, MnemonicData, NarratedSlideData } from "@/lib/brain-client";
+import { MindMap } from "@/components/gen-ui/patterns/MindMap";
+import { Timeline } from "@/components/gen-ui/patterns/Timeline";
 import { WeightTierBadge } from "@/components/lessons/WeightTierBadge";
 import { DistortionFlag } from "@/components/lessons/DistortionFlag";
 import { KeystoneConcept } from "@/components/lessons/KeystoneConcept";
@@ -32,7 +35,11 @@ type BrainBlockType =
   | "NARRATIVE"
   | "RESEARCH_MISSION"
   | "QUIZ"
-  | "TEXT";
+  | "TEXT"
+  | "MIND_MAP"
+  | "TIMELINE"
+  | "MNEMONIC"
+  | "NARRATED_SLIDE";
 
 // ── OAS Standard entry ────────────────────────────────────────────────────────
 
@@ -132,6 +139,10 @@ const LABEL_STYLES: Record<BrainBlockType, string> = {
   RESEARCH_MISSION: "bg-[#6B7280] text-white",
   QUIZ:             "bg-[#4F46E5] text-white",
   TEXT:             "bg-[#D1D5DB] text-[#374151]",
+  MIND_MAP:         "bg-[#166534] text-white",
+  TIMELINE:         "bg-[#1E3A5F] text-white",
+  MNEMONIC:         "bg-[#6B21A8] text-white",
+  NARRATED_SLIDE:   "bg-[#1D4ED8] text-white",
 };
 
 const LABEL_NAMES: Record<BrainBlockType, string> = {
@@ -142,6 +153,10 @@ const LABEL_NAMES: Record<BrainBlockType, string> = {
   RESEARCH_MISSION: "Research Mission",
   QUIZ:             "Quiz",
   TEXT:             "Reading",
+  MIND_MAP:         "Mind Map",
+  TIMELINE:         "Timeline",
+  MNEMONIC:         "Mnemonic",
+  NARRATED_SLIDE:   "Lesson Slides",
 };
 
 function BlockLabel({ type }: { type: string }) {
@@ -334,6 +349,144 @@ function TextBlock({ block }: { block: LessonBlockResponse }) {
   );
 }
 
+// ── MIND_MAP block ────────────────────────────────────────────────────────────
+
+function MindMapBlock({ block }: { block: LessonBlockResponse }) {
+  if (!block.mind_map_data) return null;
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ border: "1.5px solid #BBF7D0" }}>
+      <MindMap data={block.mind_map_data} />
+    </div>
+  );
+}
+
+// ── TIMELINE block ────────────────────────────────────────────────────────────
+
+function TimelineBlock({ block }: { block: LessonBlockResponse }) {
+  if (!block.timeline_data) return null;
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ border: "1.5px solid #BFDBFE" }}>
+      <Timeline data={block.timeline_data} evidence={block.evidence} />
+    </div>
+  );
+}
+
+// ── MNEMONIC block ────────────────────────────────────────────────────────────
+
+function MnemonicBlock({ block }: { block: LessonBlockResponse }) {
+  const data = block.mnemonic_data;
+  if (!data) return null;
+  return (
+    <div
+      className="rounded-xl p-5 space-y-3"
+      style={{ background: "#FAF5FF", border: "1.5px solid #E9D5FF" }}
+    >
+      <BlockLabel type="MNEMONIC" />
+      <p className="text-xs text-[#6B21A8] font-semibold uppercase tracking-widest">
+        {data.concept}
+      </p>
+      <div className="flex gap-1 flex-wrap">
+        {data.acronym.split("").map((letter, i) => (
+          <div key={i} className="text-center">
+            <div className="text-2xl font-black text-[#6B21A8] leading-none">{letter}</div>
+            <div className="text-[10px] text-[#374151] mt-1 max-w-[48px] leading-tight">
+              {data.words[i] ?? ""}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="text-sm text-[#374151] italic border-t border-[#E9D5FF] pt-2">
+        {data.tip}
+      </p>
+    </div>
+  );
+}
+
+// ── NARRATED_SLIDE block ──────────────────────────────────────────────────────
+
+function NarratedSlideBlock({ block }: { block: LessonBlockResponse }) {
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [showNarration, setShowNarration] = useState(false);
+  const data = block.narrated_slide_data;
+  if (!data || data.slides.length === 0) return null;
+  const slide = data.slides[currentSlide];
+  return (
+    <div
+      className="rounded-xl p-5 space-y-4"
+      style={{ background: "#EFF6FF", border: "1.5px solid #BFDBFE" }}
+    >
+      <div className="flex items-center justify-between">
+        <BlockLabel type="NARRATED_SLIDE" />
+        <span className="text-xs text-[#1D4ED8] opacity-70">
+          {data.total_duration_minutes} min
+        </span>
+      </div>
+      {/* Slide header */}
+      <div>
+        <p className="text-[10px] text-[#1D4ED8] font-bold uppercase tracking-widest mb-1">
+          Slide {slide.slide_number} of {data.slides.length}
+        </p>
+        <h3 className="font-bold text-[#1E3A5F] text-base">{slide.title}</h3>
+      </div>
+      {/* Bullets */}
+      <ul className="space-y-1.5">
+        {slide.bullets.map((bullet, i) => (
+          <li key={i} className="flex items-start gap-2 text-sm text-[#374151]">
+            <span className="text-[#1D4ED8] font-bold mt-0.5">→</span>
+            <span>{bullet}</span>
+          </li>
+        ))}
+      </ul>
+      {/* Narration accordion */}
+      <button
+        onClick={() => setShowNarration((s) => !s)}
+        className="text-xs text-[#1D4ED8] font-semibold underline"
+      >
+        {showNarration ? "Hide narration script ▲" : "Show narration script ▼"}
+      </button>
+      {showNarration && (
+        <p className="text-xs text-[#374151] bg-white rounded-lg p-3 italic border border-[#BFDBFE]">
+          {slide.narration}
+        </p>
+      )}
+      {/* Navigation */}
+      <div className="flex items-center justify-between pt-1">
+        <button
+          onClick={() => { setCurrentSlide((s) => Math.max(0, s - 1)); setShowNarration(false); }}
+          disabled={currentSlide === 0}
+          className="text-xs px-3 py-1.5 rounded-lg font-semibold text-white disabled:opacity-40"
+          style={{ background: "#1D4ED8" }}
+        >
+          ← Prev
+        </button>
+        <div className="flex gap-1">
+          {data.slides.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => { setCurrentSlide(i); setShowNarration(false); }}
+              className="w-2 h-2 rounded-full transition-colors"
+              style={{ background: i === currentSlide ? "#1D4ED8" : "#BFDBFE" }}
+            />
+          ))}
+        </div>
+        <button
+          onClick={() => { setCurrentSlide((s) => Math.min(data.slides.length - 1, s + 1)); setShowNarration(false); }}
+          disabled={currentSlide === data.slides.length - 1}
+          className="text-xs px-3 py-1.5 rounded-lg font-semibold text-white disabled:opacity-40"
+          style={{ background: "#1D4ED8" }}
+        >
+          Next →
+        </button>
+      </div>
+      {/* Audio placeholder */}
+      <div className="flex items-center gap-2 pt-1 opacity-40">
+        <span className="text-[#1D4ED8] text-sm">▶</span>
+        <span className="text-xs text-[#374151]">Audio coming soon</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Cross-track standards section ─────────────────────────────────────────────
 
 function OASStandardsSection({ standards }: { standards: OASStandard[] }) {
@@ -458,6 +611,18 @@ export default function GenUIRenderer({
               break;
             case "QUIZ":
               blockContent = <QuizBlock block={block} />;
+              break;
+            case "MIND_MAP":
+              blockContent = <MindMapBlock block={block} />;
+              break;
+            case "TIMELINE":
+              blockContent = <TimelineBlock block={block} />;
+              break;
+            case "MNEMONIC":
+              blockContent = <MnemonicBlock block={block} />;
+              break;
+            case "NARRATED_SLIDE":
+              blockContent = <NarratedSlideBlock block={block} />;
               break;
             default:
               blockContent = <TextBlock block={block} />;
