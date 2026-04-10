@@ -65,7 +65,7 @@ export interface Evidence {
 
 export interface MindMapNode { id: string; label: string; children: MindMapNode[]; }
 export interface MindMapData { concept: string; root: MindMapNode; }
-export interface TimelineEvent { date: string; label: string; description: string; source_title: string; }
+export interface TimelineEvent { date: string; label: string; description: string; source_title?: string; }
 export interface TimelineData { span: string; events: TimelineEvent[]; }
 export interface MnemonicData { concept: string; acronym: string; words: string[]; tip: string; }
 export interface NarratedSlide { slide_number: number; title: string; bullets: string[]; narration: string; }
