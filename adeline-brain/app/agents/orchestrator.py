@@ -1701,14 +1701,23 @@ async def registrar_agent(state: AdelineState) -> AdelineState:
         })
 
     # ── CASE credit entry: one per lesson ─────────────────────────────────────
-    verified_count  = sum(
+    verified_count   = sum(
         1 for b in blocks
         if b.get("block_type") in (BlockType.PRIMARY_SOURCE.value, BlockType.NARRATIVE.value)
     )
-    lab_count       = sum(1 for b in blocks if b.get("block_type") == BlockType.LAB_MISSION.value)
+    lab_count        = sum(1 for b in blocks if b.get("block_type") == BlockType.LAB_MISSION.value)
     experiment_count = sum(1 for b in blocks if b.get("block_type") == BlockType.EXPERIMENT.value)
-    # Experiments grant 0.25 credit each (higher than 0.1 for text blocks)
-    credit_hours    = round(min(1.0, 0.1 * (verified_count + lab_count) + 0.25 * experiment_count), 2)
+    mindmap_count    = sum(1 for b in blocks if b.get("block_type") == BlockType.MIND_MAP.value)
+    timeline_count   = sum(1 for b in blocks if b.get("block_type") == BlockType.TIMELINE.value)
+    mnemonic_count   = sum(1 for b in blocks if b.get("block_type") == BlockType.MNEMONIC.value)
+    slide_count      = sum(1 for b in blocks if b.get("block_type") == BlockType.NARRATED_SLIDE.value)
+    credit_hours     = round(min(1.0,
+        0.1  * (verified_count + lab_count) +
+        0.25 * experiment_count +
+        0.05 * (mindmap_count + timeline_count) +
+        0.03 * mnemonic_count +
+        0.08 * slide_count
+    ), 2)
 
     credits_awarded: list[dict] = [{
         "id":                  str(uuid.uuid4()),
@@ -1722,6 +1731,8 @@ async def registrar_agent(state: AdelineState) -> AdelineState:
             f"{verified_count} verified source(s)"
             + (f", {lab_count} lab mission(s)" if lab_count else "")
             + (f", {experiment_count} experiment(s)" if experiment_count else "")
+            + (f", {mindmap_count + timeline_count} visual map(s)" if mindmap_count + timeline_count else "")
+            + (f", {slide_count} slide deck(s)" if slide_count else "")
         ),
         "credit_hours":        credit_hours,
         "credit_type":         _track_to_credit_type(request.track),
@@ -1748,6 +1759,10 @@ def _block_type_to_xapi_verb(block_type: str) -> str:
         BlockType.RESEARCH_MISSION.value: "interacted",
         BlockType.QUIZ.value:             "attempted",
         BlockType.TEXT.value:             "experienced",
+        BlockType.MIND_MAP.value:       "composed",
+        BlockType.TIMELINE.value:       "experienced",
+        BlockType.MNEMONIC.value:       "memorized",
+        BlockType.NARRATED_SLIDE.value: "experienced",
     }.get(block_type, "experienced")
 
 
