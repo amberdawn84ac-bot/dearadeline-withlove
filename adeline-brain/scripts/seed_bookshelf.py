@@ -257,14 +257,14 @@ async def insert_or_update_book(
         await conn.execute(
             """
             INSERT INTO "Book" (
-              id, title, author, source_url, track, lexile_level, grade_band,
-              embedding, description, cover_url, source_library, created_at, updated_at
+              id, title, author, "source_url", track, "lexile_level", "grade_band",
+              embedding, description, "coverUrl", "sourceLibrary", "createdAt", "updatedAt"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now())
-            ON CONFLICT (source_url) DO UPDATE SET
+            ON CONFLICT ("source_url") DO UPDATE SET
               title = EXCLUDED.title,
               description = EXCLUDED.description,
               embedding = EXCLUDED.embedding,
-              updated_at = now()
+              "updatedAt" = now()
             RETURNING id;
             """,
             book_id,

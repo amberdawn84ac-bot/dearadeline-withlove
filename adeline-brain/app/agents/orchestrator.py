@@ -231,7 +231,7 @@ async def _synthesize_content(
       3. Ground every claim in the provided source
       4. No busywork, no padding, no academic tone
     """
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
         return raw_content
 
     grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
@@ -242,7 +242,7 @@ async def _synthesize_content(
         f"[SOURCE: {c['source_title']} — {c.get('citation_author', 'Unknown')}, "
         f"{c.get('citation_year', 'n.d.')}]\n{c['chunk']}"
         for c in source_chunks
-    )
+    ) if source_chunks else f"Topic: {raw_content[:500]}"
 
     block_label = block_type.replace("_", " ").lower()
 
@@ -265,18 +265,10 @@ async def _synthesize_content(
         f"Ground every claim in the source. Make it land."
     )
 
-    api_key = os.getenv("ANTHROPIC_API_KEY")
     try:
-        client = anthropic.AsyncAnthropic(api_key=api_key)
-        message = await client.messages.create(
-            model=_ANTHROPIC_MODEL,
-            max_tokens=800,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return message.content[0].text.strip()
+        return (await _synthesis_call(system_prompt, user_prompt, max_tokens=800)).strip()
     except Exception as e:
-        logger.warning(f"[Claude] Synthesis failed ({e}) — using raw chunk")
+        logger.warning(f"[Synthesis] Content synthesis failed ({e}) — using raw chunk")
         return raw_content
 
 
@@ -1235,6 +1227,9 @@ async def _decide_formats(
         text = text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         raw = _json.loads(text)
         chosen = [f for f in raw.get("formats", []) if f in available]
+        # Never return empty — always give at least a narrated slide
+        if not chosen:
+            chosen = ["NARRATED_SLIDE"]
         logger.info(f"[FormatSelector] Chose {chosen} for '{topic}' ({track.value})")
         return chosen
     except Exception as e:
@@ -1372,7 +1367,7 @@ async def _synthesize_timeline(
     For homesteading: generates a seasonal calendar.
     Returns None on any failure.
     """
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
         return None
     from app.schemas.api_models import TimelineData
     import json
@@ -1508,7 +1503,12 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
     # Check for biblical references in topic (Sefaria integration)
     from app.services.sefaria import detect_biblical_reference, fetch_biblical_text, format_sefaria_content
 
-    biblical_ref = detect_biblical_reference(request.topic)
+    # Sefaria lookup ONLY for DISCIPLESHIP — not Health or Government
+    biblical_ref = (
+        detect_biblical_reference(request.topic)
+        if request.track == Track.DISCIPLESHIP
+        else None
+    )
 
     if biblical_ref:
         logger.info(f"[DiscipleshipAgent] Detected biblical reference: {biblical_ref}")

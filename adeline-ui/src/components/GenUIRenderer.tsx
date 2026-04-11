@@ -328,7 +328,7 @@ function ResearchMissionBlock({ block }: { block: LessonBlockResponse }) {
       >
         {block.content}
       </p>
-      <p className="text-xs text-[#2F4731]/50 italic" style={{ fontFamily: "var(--font-kalam), cursive" }}>
+      <p className="text-sm text-[#2F4731]/50 italic" style={{ fontFamily: "var(--font-kalam), cursive" }}>
         No verified archive source was found. This is your research mission.
       </p>
     </div>
@@ -412,20 +412,20 @@ function MnemonicBlock({ block }: { block: LessonBlockResponse }) {
       style={{ background: "#FAF5FF", border: "1.5px solid #E9D5FF" }}
     >
       <BlockLabel type="MNEMONIC" />
-      <p className="text-xs text-[#6B21A8] font-semibold uppercase tracking-widest">
+      <p className="text-sm text-[#6B21A8] font-semibold uppercase tracking-widest">
         {data.concept}
       </p>
       <div className="flex gap-1 flex-wrap">
         {data.acronym.split("").map((letter, i) => (
           <div key={i} className="text-center">
             <div className="text-2xl font-black text-[#6B21A8] leading-none">{letter}</div>
-            <div className="text-[10px] text-[#374151] mt-1 max-w-[48px] leading-tight">
+            <div className="text-xs text-[#374151] mt-1 max-w-[56px] leading-tight">
               {data.words[i] ?? ""}
             </div>
           </div>
         ))}
       </div>
-      <p className="text-sm text-[#374151] italic border-t border-[#E9D5FF] pt-2">
+      <p className="text-base text-[#374151] italic border-t border-[#E9D5FF] pt-2">
         {data.tip}
       </p>
     </div>
@@ -461,7 +461,7 @@ function NarratedSlideBlock({ block }: { block: LessonBlockResponse }) {
       {/* Bullets */}
       <ul className="space-y-1.5">
         {slide.bullets.map((bullet, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm text-[#374151]">
+          <li key={i} className="flex items-start gap-2 text-base text-[#374151]">
             <span className="text-[#1D4ED8] font-bold mt-0.5">→</span>
             <span>{bullet}</span>
           </li>
@@ -470,12 +470,12 @@ function NarratedSlideBlock({ block }: { block: LessonBlockResponse }) {
       {/* Narration accordion */}
       <button
         onClick={() => setShowNarration((s) => !s)}
-        className="text-xs text-[#1D4ED8] font-semibold underline"
+        className="text-sm text-[#1D4ED8] font-semibold underline"
       >
         {showNarration ? "Hide narration script ▲" : "Show narration script ▼"}
       </button>
       {showNarration && (
-        <p className="text-xs text-[#374151] bg-white rounded-lg p-3 italic border border-[#BFDBFE]">
+        <p className="text-sm text-[#374151] bg-white rounded-lg p-3 italic border border-[#BFDBFE]">
           {slide.narration}
         </p>
       )}
@@ -484,7 +484,7 @@ function NarratedSlideBlock({ block }: { block: LessonBlockResponse }) {
         <button
           onClick={() => { setCurrentSlide((s) => Math.max(0, s - 1)); setShowNarration(false); }}
           disabled={currentSlide === 0}
-          className="text-xs px-3 py-1.5 rounded-lg font-semibold text-white disabled:opacity-40"
+          className="text-sm px-3 py-1.5 rounded-lg font-semibold text-white disabled:opacity-40"
           style={{ background: "#1D4ED8" }}
         >
           ← Prev
@@ -502,7 +502,7 @@ function NarratedSlideBlock({ block }: { block: LessonBlockResponse }) {
         <button
           onClick={() => { setCurrentSlide((s) => Math.min(data.slides.length - 1, s + 1)); setShowNarration(false); }}
           disabled={currentSlide === data.slides.length - 1}
-          className="text-xs px-3 py-1.5 rounded-lg font-semibold text-white disabled:opacity-40"
+          className="text-sm px-3 py-1.5 rounded-lg font-semibold text-white disabled:opacity-40"
           style={{ background: "#1D4ED8" }}
         >
           Next →
