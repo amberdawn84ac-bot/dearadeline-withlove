@@ -40,12 +40,42 @@ BAKER_CREEK_QUERIES = [
     # Seed stories
     "seed story heritage variety site:rareseeds.com",
     "heirloom seed history site:rareseeds.com",
-    "Cherokee Trail of Tears bean site:rearseeds.com",
+    "Cherokee Trail of Tears bean site:rareseeds.com",
     "family farm seed preservation site:rareseeds.com",
 ]
 
+# Mountain Rose Herbs — herb profiles, remedies, wildcrafting, growing
+# Perfect for HEALTH_NATUROPATHY + HOMESTEADING crossover
+MOUNTAIN_ROSE_QUERIES = [
+    "herb profile medicinal uses site:mountainroseherbs.com",
+    "growing herbs at home site:mountainroseherbs.com",
+    "herbal remedy preparation site:mountainroseherbs.com",
+    "wildcrafting foraging herbs site:mountainroseherbs.com",
+    "elderberry echinacea immune herbs site:mountainroseherbs.com",
+    "lavender chamomile calming herbs site:mountainroseherbs.com",
+    "tincture infusion herbal preparation site:mountainroseherbs.com",
+    "adaptogen herbs stress site:mountainroseherbs.com",
+    "culinary herbs kitchen garden site:mountainroseherbs.com",
+    "sustainable herb farming site:mountainroseherbs.com",
+]
 
-async def seed_query(query: str, tavily_key: str) -> int:
+# Track assignment for Mountain Rose content — bridges HOMESTEADING + HEALTH_NATUROPATHY
+MOUNTAIN_ROSE_TRACK = "HEALTH_NATUROPATHY"
+
+# GotQuestions.org — Christian worldview Q&A, biblical theology, scripture explanations
+GOT_QUESTIONS_QUERIES = [
+    "what does the Bible say about site:gotquestions.org",
+    "biblical worldview Christian faith site:gotquestions.org",
+    "what is the meaning of site:gotquestions.org",
+    "Old Testament New Testament connection site:gotquestions.org",
+    "prayer scripture study site:gotquestions.org",
+    "Christian stewardship creation care site:gotquestions.org",
+    "biblical justice mercy site:gotquestions.org",
+    "discernment wisdom scripture site:gotquestions.org",
+]
+
+
+async def seed_query(query: str, tavily_key: str, track: str = "HOMESTEADING", domain: str = "rareseeds.com", citation: str = "Baker Creek Heirloom Seeds") -> int:
     """Search Tavily and seed results to Hippocampus. Returns count seeded."""
     import httpx
     from openai import AsyncOpenAI
@@ -59,7 +89,7 @@ async def seed_query(query: str, tavily_key: str) -> int:
                 json={
                     "api_key": tavily_key,
                     "query": query,
-                    "include_domains": ["rareseeds.com"],
+                    "include_domains": [domain],
                     "max_results": 3,
                     "search_depth": "advanced",
                 },
@@ -97,15 +127,15 @@ async def seed_query(query: str, tavily_key: str) -> int:
             embedding = resp.data[0].embedding
 
             doc_id = await hippocampus.upsert_document(
-                source_title=f"{title} (Baker Creek Seeds)",
-                track="HOMESTEADING",
+                source_title=f"{title} ({citation})",
+                track=track,
                 chunk=content,
                 embedding=embedding,
                 source_url=url,
                 source_type="EDUCATIONAL",
-                citation_author="Baker Creek Heirloom Seeds",
+                citation_author=citation,
                 citation_year=None,
-                citation_archive_name="rareseeds.com",
+                citation_archive_name=domain,
             )
             log.info(f"  Cached: {title[:60]} ({doc_id[:8]}...)")
             seeded += 1
@@ -129,17 +159,31 @@ async def main():
     await hippocampus.connect()
 
     log.info("=" * 60)
-    log.info("  Seeding Baker Creek growing guides to Hippocampus")
+    log.info("  Seeding Baker Creek + Mountain Rose Herbs to Hippocampus")
     log.info("=" * 60)
 
     total = 0
+
+    log.info("-- Baker Creek Seeds (HOMESTEADING) --")
     for query in BAKER_CREEK_QUERIES:
-        count = await seed_query(query, tavily_key)
+        count = await seed_query(query, tavily_key, track="HOMESTEADING", domain="rareseeds.com", citation="Baker Creek Heirloom Seeds")
         total += count
-        await asyncio.sleep(1.0)  # polite rate limiting
+        await asyncio.sleep(1.0)
+
+    log.info("-- Mountain Rose Herbs (HEALTH_NATUROPATHY) --")
+    for query in MOUNTAIN_ROSE_QUERIES:
+        count = await seed_query(query, tavily_key, track=MOUNTAIN_ROSE_TRACK, domain="mountainroseherbs.com", citation="Mountain Rose Herbs")
+        total += count
+        await asyncio.sleep(1.0)
+
+    log.info("-- GotQuestions.org (DISCIPLESHIP) --")
+    for query in GOT_QUESTIONS_QUERIES:
+        count = await seed_query(query, tavily_key, track="DISCIPLESHIP", domain="gotquestions.org", citation="GotQuestions.org")
+        total += count
+        await asyncio.sleep(1.0)
 
     log.info("=" * 60)
-    log.info(f"  Done: {total} Baker Creek documents seeded")
+    log.info(f"  Done: {total} documents seeded")
     log.info("=" * 60)
 
 

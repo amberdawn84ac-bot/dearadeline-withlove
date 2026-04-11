@@ -91,6 +91,7 @@ SCIENCE_DOMAINS = {
 HOMESTEADING_DOMAINS = {
     'BAKER_CREEK_GROWING': 'rareseeds.com/blog/category/growing-guides',
     'BAKER_CREEK_STORIES': 'rareseeds.com/blog/category/seed-stories',
+    'MOUNTAIN_ROSE_HERBS': 'mountainroseherbs.com/blog',  # Herb profiles, remedies, growing
     'EXTENSION_NCHFP': 'nchfp.uga.edu',        # National Center for Home Food Preservation
     'EXTENSION_USDA': 'nrcs.usda.gov',          # USDA soil/land conservation
     'MOTHER_EARTH_NEWS': 'motherearthnews.com',
@@ -138,6 +139,7 @@ DISCIPLESHIP_DOMAINS = {
     'BIBLE_GATEWAY': 'biblegateway.com',
     'OPENBIBLE': 'openbible.info',
     'BLUELETTER': 'blueletterbible.org',
+    'GOT_QUESTIONS': 'gotquestions.org',  # Scripture Q&A, theology, Christian worldview
 }
 
 # Tracks that should use science domains instead of declassified archives
@@ -152,7 +154,7 @@ TRACK_DOMAINS = {
     'JUSTICE_CHANGEMAKING': PRIMARY_SOURCE_DOMAINS,
     'CREATION_SCIENCE':     SCIENCE_DOMAINS,
     'HOMESTEADING':         HOMESTEADING_DOMAINS,
-    'HEALTH_NATUROPATHY':   SCIENCE_DOMAINS,
+    'HEALTH_NATUROPATHY':   {**SCIENCE_DOMAINS, 'MOUNTAIN_ROSE_HERBS': 'mountainroseherbs.com/blog'},
     'APPLIED_MATHEMATICS':  MATH_DOMAINS,
     'ENGLISH_LITERATURE':   LITERATURE_DOMAINS,
     'GOVERNMENT_ECONOMICS': CIVICS_DOMAINS,
