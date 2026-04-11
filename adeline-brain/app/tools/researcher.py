@@ -85,6 +85,11 @@ SCIENCE_DOMAINS = {
     'NATURE_EDUCATION': 'nature.com/scitable',
     'SMITHSONIAN': 'si.edu',
     'OPENSTAX_SCIENCE': 'openstax.org',
+    'WE_ARE_TEACHERS': 'weareteachers.com',       # Easy + advanced experiments
+    'EDUCATION_COM': 'education.com/science-fair', # Science fair project guides
+    'STEVE_SPANGLER': 'stevespanglerscience.com',  # Hands-on experiment kits + guides
+    'SCIENCE_FAIR_ADVENTURE': 'sciencefairadventure.com',
+    'PBS_LEARNING': 'pbslearningmedia.org',        # Free video + experiment resources
 }
 
 # Homesteading-specific domains — seeds, growing, land, food preservation

@@ -24,6 +24,9 @@ if [ "$RUN_SEEDS" = "true" ]; then
     echo "[entrypoint] Running Loewen seed..."
     python scripts/seed_loewen.py || echo "[entrypoint] Loewen seed failed (non-fatal)"
 
+    echo "[entrypoint] Running science experiments seed..."
+    python scripts/seed_science_experiments.py || echo "[entrypoint] Science experiments seed failed (non-fatal)"
+
     echo "[entrypoint] Seeds complete"
 fi
 
