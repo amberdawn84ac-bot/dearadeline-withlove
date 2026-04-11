@@ -18,6 +18,9 @@ if [ "$RUN_SEEDS" = "true" ]; then
     echo "[entrypoint] Running bookshelf seed..."
     python scripts/seed_bookshelf.py || echo "[entrypoint] Bookshelf seed failed (non-fatal)"
 
+    echo "[entrypoint] Running Baker Creek seed..."
+    python scripts/seed_baker_creek.py || echo "[entrypoint] Baker Creek seed failed (non-fatal)"
+
     echo "[entrypoint] Seeds complete"
 fi
 

@@ -87,6 +87,16 @@ SCIENCE_DOMAINS = {
     'OPENSTAX_SCIENCE': 'openstax.org',
 }
 
+# Homesteading-specific domains — seeds, growing, land, food preservation
+HOMESTEADING_DOMAINS = {
+    'BAKER_CREEK_GROWING': 'rareseeds.com/blog/category/growing-guides',
+    'BAKER_CREEK_STORIES': 'rareseeds.com/blog/category/seed-stories',
+    'EXTENSION_NCHFP': 'nchfp.uga.edu',        # National Center for Home Food Preservation
+    'EXTENSION_USDA': 'nrcs.usda.gov',          # USDA soil/land conservation
+    'MOTHER_EARTH_NEWS': 'motherearthnews.com',
+    'ALMANAC': 'almanac.com',                    # Old Farmer's Almanac planting guides
+}
+
 # Math and applied skills domains
 MATH_DOMAINS = {
     'OPENSTAX_MATH': 'openstax.org',
@@ -141,7 +151,7 @@ TRACK_DOMAINS = {
     'TRUTH_HISTORY':        PRIMARY_SOURCE_DOMAINS,
     'JUSTICE_CHANGEMAKING': PRIMARY_SOURCE_DOMAINS,
     'CREATION_SCIENCE':     SCIENCE_DOMAINS,
-    'HOMESTEADING':         SCIENCE_DOMAINS,
+    'HOMESTEADING':         HOMESTEADING_DOMAINS,
     'HEALTH_NATUROPATHY':   SCIENCE_DOMAINS,
     'APPLIED_MATHEMATICS':  MATH_DOMAINS,
     'ENGLISH_LITERATURE':   LITERATURE_DOMAINS,
