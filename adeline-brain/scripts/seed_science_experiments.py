@@ -50,6 +50,35 @@ EXPERIMENT_QUERIES = [
     # PBS Learning Media
     ("science experiment activity guide site:pbslearningmedia.org", "CREATION_SCIENCE", "pbslearningmedia.org"),
     ("nature science investigation outdoor site:pbslearningmedia.org", "HOMESTEADING", "pbslearningmedia.org"),
+
+    # Wonderopolis — narrative "Wonder of the Day" science
+    ("how does photosynthesis work site:wonderopolis.org", "CREATION_SCIENCE", "wonderopolis.org"),
+    ("why do leaves change color site:wonderopolis.org", "CREATION_SCIENCE", "wonderopolis.org"),
+    ("how do animals migrate site:wonderopolis.org", "CREATION_SCIENCE", "wonderopolis.org"),
+    ("what is soil made of site:wonderopolis.org", "HOMESTEADING", "wonderopolis.org"),
+    ("how do plants grow seeds site:wonderopolis.org", "HOMESTEADING", "wonderopolis.org"),
+    ("what causes weather site:wonderopolis.org", "CREATION_SCIENCE", "wonderopolis.org"),
+
+    # NASA Space Place — space + earth science
+    ("how does the sun work site:spaceplace.nasa.gov", "CREATION_SCIENCE", "spaceplace.nasa.gov"),
+    ("what are seasons earth tilt site:spaceplace.nasa.gov", "CREATION_SCIENCE", "spaceplace.nasa.gov"),
+    ("water cycle clouds rain site:spaceplace.nasa.gov", "CREATION_SCIENCE", "spaceplace.nasa.gov"),
+
+    # National Geographic Kids — animals + ecosystems
+    ("animal adaptation habitat site:kids.nationalgeographic.com", "CREATION_SCIENCE", "kids.nationalgeographic.com"),
+    ("food web ecosystem predator prey site:kids.nationalgeographic.com", "CREATION_SCIENCE", "kids.nationalgeographic.com"),
+    ("plant animal life cycle site:kids.nationalgeographic.com", "CREATION_SCIENCE", "kids.nationalgeographic.com"),
+    ("farm animals ecosystem site:kids.nationalgeographic.com", "HOMESTEADING", "kids.nationalgeographic.com"),
+
+    # Easy Science for Kids — narrative topic explanations
+    ("human body systems explained site:easyscienceforkids.com", "CREATION_SCIENCE", "easyscienceforkids.com"),
+    ("plants photosynthesis explained site:easyscienceforkids.com", "CREATION_SCIENCE", "easyscienceforkids.com"),
+    ("matter atoms molecules explained site:easyscienceforkids.com", "CREATION_SCIENCE", "easyscienceforkids.com"),
+
+    # DK Find Out — encyclopedic depth
+    ("biology living things classification site:dkfindout.com", "CREATION_SCIENCE", "dkfindout.com"),
+    ("earth rocks minerals soil site:dkfindout.com", "CREATION_SCIENCE", "dkfindout.com"),
+    ("farming crops how plants grow site:dkfindout.com", "HOMESTEADING", "dkfindout.com"),
 ]
 
 

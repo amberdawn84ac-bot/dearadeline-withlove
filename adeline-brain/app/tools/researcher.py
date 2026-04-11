@@ -85,11 +85,16 @@ SCIENCE_DOMAINS = {
     'NATURE_EDUCATION': 'nature.com/scitable',
     'SMITHSONIAN': 'si.edu',
     'OPENSTAX_SCIENCE': 'openstax.org',
-    'WE_ARE_TEACHERS': 'weareteachers.com',       # Easy + advanced experiments
-    'EDUCATION_COM': 'education.com/science-fair', # Science fair project guides
-    'STEVE_SPANGLER': 'stevespanglerscience.com',  # Hands-on experiment kits + guides
-    'SCIENCE_FAIR_ADVENTURE': 'sciencefairadventure.com',
-    'PBS_LEARNING': 'pbslearningmedia.org',        # Free video + experiment resources
+    'WE_ARE_TEACHERS': 'weareteachers.com',
+    'STEVE_SPANGLER': 'stevespanglerscience.com',
+    'PBS_LEARNING': 'pbslearningmedia.org',
+    # Magic School Bus-style narrative science
+    'WONDEROPOLIS': 'wonderopolis.org',            # "Wonder of the Day" — narrative science Q&A
+    'NASA_SPACE_PLACE': 'spaceplace.nasa.gov',     # NASA's kid-friendly space + earth science
+    'NAT_GEO_KIDS': 'kids.nationalgeographic.com', # Animals, ecosystems, earth science
+    'SCIENCE_KIDS': 'sciencekids.co.nz',           # Fun facts + experiments by topic
+    'DK_FIND_OUT': 'dkfindout.com',               # DK's encyclopedic kid science
+    'EASY_SCIENCE': 'easyscienceforkids.com',      # Topic-by-topic narrative explanations
 }
 
 # Homesteading-specific domains — seeds, growing, land, food preservation
