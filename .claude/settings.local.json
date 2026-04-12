@@ -159,7 +159,22 @@
       "Bash(RAILWAY_TOKEN=c9f4ca77-1dd8-48ae-9534-6208fda3ab84 railway domain --json)",
       "Bash(RAILWAY_TOKEN=c9f4ca77-1dd8-48ae-9534-6208fda3ab84 railway status --json)",
       "Bash(xargs wc:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(railway --version)",
+      "Bash(vercel --version)",
+      "Bash(supabase --version)",
+      "Bash(railway status:*)",
+      "Bash(railway projects:*)",
+      "Bash(vercel project:*)",
+      "Bash(railway project:*)",
+      "Bash(vercel teams:*)",
+      "Bash(railway whoami:*)",
+      "Bash(railway variables:*)",
+      "Bash(railway service:*)",
+      "Read(//c/Users/Aarons/.supabase/**)",
+      "Read(//c/Users/Aarons/.config/supabase/**)",
+      "Read(//c/Users/Aarons/**)",
+      "Skill(commit-commands:commit-push-pr)"
     ]
   }
 }
