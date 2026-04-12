@@ -3,23 +3,38 @@ Lesson Generation API — /lessons/*
 The primary delivery endpoint. Orchestrates retrieval, Witness Protocol
 verification, and Neo4j graph-linking into a structured LessonResponse.
 """
+import hashlib
+import json
 import logging
 import os
 import asyncio
 
 import openai
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.schemas.api_models import LessonRequest, LessonResponse, TRUTH_THRESHOLD, UserRole
 from app.api.middleware import require_role, get_current_user_id
 from app.agents.orchestrator import run_orchestrator
 from app.connections.pgvector_client import hippocampus
 from app.connections.knowledge_graph import get_cross_track_bias
+from app.connections.redis_client import redis_client
 from app.algorithms.zpd_engine import apply_cross_track_bias, AdaptiveBKTParams
 from app.models.student import load_student_state
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lesson", tags=["lessons"])
+
+# Per-user lesson rate limit: 20 lessons/hour
+limiter = Limiter(key_func=get_remote_address)
+LESSON_CACHE_TTL = 86_400  # 24 hours
+
+
+def _lesson_cache_key(student_id: str, request: LessonRequest) -> str:
+    """Stable cache key: student + topic (normalized) + track + grade."""
+    raw = f"{student_id}:{request.topic.strip().lower()}:{request.track.value}:{request.grade_level}"
+    return "lesson:" + hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 EMBED_MODEL = "text-embedding-3-small"
 
@@ -88,24 +103,40 @@ async def _persist_learning_records(lesson: LessonResponse) -> None:
     "/generate",
     response_model=LessonResponse,
 )
-async def generate_lesson(request: LessonRequest, student_id: str = Depends(get_current_user_id)):
+@limiter.limit("20/hour")
+async def generate_lesson(
+    http_request: Request,
+    request: LessonRequest,
+    student_id: str = Depends(get_current_user_id),
+):
     """
     Generate a Truth-First lesson for a student.
 
     Flow:
-      1. Embed the topic query via OpenAI
-      2. Retrieve top-k chunks from Hippocampus (pgvector)
-      3. Evaluate each chunk via the Witness Protocol (0.85 threshold)
-      4. Graph-link to OAS Standards via Neo4j
-      5. RegistrarAgent emits xAPI statements + CASE credits
-      6. Fire-and-forget persistence to DB (non-blocking)
-      7. Return structured LessonResponse with verdicts, citations, and records
+      1. Check Redis cache (topic + track + grade, 24h TTL)
+      2. Embed the topic query via OpenAI
+      3. Retrieve top-k chunks from Hippocampus (pgvector)
+      4. Evaluate each chunk via the Witness Protocol (0.85 threshold)
+      5. Graph-link to OAS Standards via Neo4j
+      6. RegistrarAgent emits xAPI statements + CASE credits
+      7. Fire-and-forget persistence to DB (non-blocking)
+      8. Cache result + return structured LessonResponse
     """
     logger.info(
         f"[/lessons/generate] topic='{request.topic}' track={request.track.value} "
         f"grade={request.grade_level} homestead={request.is_homestead}"
     )
     try:
+        # ── Cache check ───────────────────────────────────────────────────────
+        cache_key = _lesson_cache_key(student_id, request)
+        try:
+            cached = await redis_client.get(cache_key)
+            if cached:
+                logger.info(f"[/lessons/generate] Cache HIT — {cache_key}")
+                return LessonResponse.model_validate_json(cached)
+        except Exception as e:
+            logger.warning(f"[/lessons/generate] Cache read failed (non-fatal): {e}")
+
         query_embedding = await _embed(request.topic)
 
         # Load track interaction count for stealth assessment calibration
@@ -137,6 +168,13 @@ async def generate_lesson(request: LessonRequest, student_id: str = Depends(get_
             interaction_count=interaction_count,
             cross_track_acknowledgment=cross_track_acknowledgment,
         )
+        # ── Cache write (non-blocking) ────────────────────────────────────────
+        try:
+            await redis_client.set(cache_key, lesson.model_dump_json(), ex=LESSON_CACHE_TTL)
+            logger.info(f"[/lessons/generate] Cached lesson — {cache_key}")
+        except Exception as e:
+            logger.warning(f"[/lessons/generate] Cache write failed (non-fatal): {e}")
+
         # Persist learning records fire-and-forget (don't block lesson response)
         asyncio.create_task(_persist_learning_records(lesson))
         return lesson

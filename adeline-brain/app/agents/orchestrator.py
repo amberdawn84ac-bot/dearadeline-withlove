@@ -86,11 +86,19 @@ async def _synthesis_call(system: str, user: str, max_tokens: int = 1000) -> str
         )
         return response.choices[0].message.content or ""
     else:
+        # Use Anthropic prompt caching on the system prompt (static prefix cached 5 min)
         response = await client.messages.create(
             model=model,
             max_tokens=max_tokens,
-            system=system,
+            system=[
+                {
+                    "type": "text",
+                    "text": system,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=[{"role": "user", "content": user}],
+            extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
         )
         return response.content[0].text
 
