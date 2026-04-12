@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { ArrowLeft, AlertCircle } from "lucide-react";
 import { generateLesson } from "@/lib/brain-client";
 import type { LessonResponse, Track } from "@/lib/brain-client";
@@ -69,6 +69,16 @@ export default function JourneyPage() {
   const [error, setError] = useState<string | null>(null);
   const [highlightedText, setHighlightedText] = useState<string | null>(null);
   const lessonContainerRef = useRef<HTMLDivElement>(null);
+
+  // Listen for highlight-ask events dispatched by GenUIRenderer's TextSelectionMenu
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { text } = (e as CustomEvent).detail ?? {};
+      if (text) setHighlightedText(text);
+    };
+    window.addEventListener("adeline:highlight-ask", handler);
+    return () => window.removeEventListener("adeline:highlight-ask", handler);
+  }, []);
 
   const handleLessonRequest = useCallback(async (topic: string, track: Track = "TRUTH_HISTORY") => {
     setIsLoading(true);
