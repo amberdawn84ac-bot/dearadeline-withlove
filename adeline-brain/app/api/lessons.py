@@ -28,7 +28,7 @@ router = APIRouter(prefix="/lesson", tags=["lessons"])
 
 # Per-user lesson rate limit: 20 lessons/hour
 limiter = Limiter(key_func=get_remote_address)
-LESSON_CACHE_TTL = 86_400  # 24 hours
+LESSON_CACHE_TTL = 60 * 60 * 24 * 30  # 30 days — curriculum content is stable
 
 
 def _lesson_cache_key(request: LessonRequest) -> str:
