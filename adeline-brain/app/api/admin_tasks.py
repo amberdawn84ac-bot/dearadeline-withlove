@@ -176,6 +176,65 @@ async def seed_scripture(
     )
 
 
+@router.post(
+    "/seed-nature-lost-vault",
+    response_model=TaskResponse,
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+)
+async def seed_nature_lost_vault(
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(get_current_user_id),
+) -> TaskResponse:
+    """
+    Seed Hippocampus with NatureLostVault.com content.
+    
+    Covers:
+    - HEALTH_NATUROPATHY: Medicinal plants (lemon balm, boneset, chaga, perilla)
+    - HOMESTEADING: Survival foods, edible weeds, eggshell fertilizer
+    - CREATION_SCIENCE: Traditional building techniques (Roman concrete, rammed earth)
+    
+    Source: https://naturelostvault.com
+    """
+    import uuid as _uuid
+    task_id = str(_uuid.uuid4())
+    task_status[task_id] = {
+        "status": "running",
+        "progress": "Starting Nature Lost Vault seed...",
+        "result": None,
+        "error": None,
+        "started_by": user_id,
+        "started_at": "",
+    }
+
+    async def _run():
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "scripts.seed_nature_lost_vault"],
+                cwd=Path(__file__).resolve().parents[2],
+                capture_output=True,
+                text=True,
+                timeout=3600,
+            )
+            if result.returncode == 0:
+                task_status[task_id]["status"] = "completed"
+                task_status[task_id]["progress"] = "Nature Lost Vault seeding completed"
+                task_status[task_id]["result"] = {"stdout": result.stdout}
+            else:
+                task_status[task_id]["status"] = "failed"
+                task_status[task_id]["error"] = result.stderr
+        except Exception as e:
+            task_status[task_id]["status"] = "failed"
+            task_status[task_id]["error"] = str(e)
+
+    background_tasks.add_task(_run)
+    logger.info(f"[Admin] Nature Lost Vault seeding task {task_id} started by {user_id}")
+    return TaskResponse(
+        success=True,
+        message="Nature Lost Vault seeding started. Use the task ID to check progress.",
+        task_id=task_id,
+    )
+
+
 @router.get(
     "/task/{task_id}",
     response_model=TaskStatusResponse,
@@ -269,20 +328,26 @@ async def run_bookshelf_setup(task_id: str, user_id: str):
         task_status[task_id]["error"] = str(e)
         logger.error(f"[Admin] Setup task {task_id} failed with exception: {e}")
 
-async def run_seed_script(task_id: str, user_id: str, is_setup: bool = False):
+async def run_seed_script(task_id: str, user_id: str, is_setup: bool = False, script_name: str = "seed_bookshelf"):
     """
-    Run the seed script in the background and update task status.
+    Run a seed script in the background and update task status.
+    
+    Args:
+        task_id: The task ID for status tracking
+        user_id: The user who initiated the task
+        is_setup: Whether this is part of a setup task
+        script_name: Name of the script to run (without .py extension)
     """
     try:
         # Get the path to the seed script
-        script_path = Path(__file__).resolve().parents[2] / "scripts" / "seed_bookshelf.py"
+        script_path = Path(__file__).resolve().parents[2] / "scripts" / f"{script_name}.py"
         
         # Update progress
         task_status[task_id]["progress"] = f"Running seed script: {script_path}"
         
         # Run the seed script
         result = subprocess.run(
-            [sys.executable, "-m", "scripts.seed_bookshelf"],
+            [sys.executable, "-m", f"scripts.{script_name}"],
             cwd=Path(__file__).resolve().parents[2],
             capture_output=True,
             text=True,
