@@ -21,7 +21,6 @@ from typing import List, Optional
 
 import httpx
 import openai
-from anthropic import Anthropic
 from dotenv import load_dotenv
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
@@ -47,8 +46,10 @@ POSTGRES_DSN = (
     or f"postgresql://adeline:{_pg_password}@localhost:5432/hippocampus"
 ).replace("postgresql://", "postgresql+asyncpg://").replace("@postgres:", "@localhost:")
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY", "")
+GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
+GEMINI_MODEL    = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite")
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 EMBED_MODEL = "text-embedding-3-small"
 EMBED_DIM = 1536
 
@@ -157,36 +158,33 @@ async def fetch_gutenberg() -> List[dict]:
 
 async def assign_track(title: str, description: str, max_retries: int = 2) -> str:
     """
-    Call Claude to classify book into one of 10 curriculum tracks.
-    Returns track name or defaults to ENGLISH_LITERATURE on failure.
+    Use Gemini Flash to classify a book into one of 10 curriculum tracks.
+    Falls back to ENGLISH_LITERATURE on failure.
     """
     tracks_list = ", ".join(TRACKS)
-    prompt = f"""Analyze this book and assign it to ONE curriculum track from:
-{tracks_list}
+    prompt = f"""Assign this book to ONE curriculum track from: {tracks_list}
 
 Title: {title}
 Description: {description[:500]}
 
-Return ONLY the track name (no explanation). If unsure, default to ENGLISH_LITERATURE."""
+Return ONLY the track name. If unsure, return ENGLISH_LITERATURE."""
 
     for attempt in range(max_retries):
         try:
-            client = Anthropic(api_key=ANTHROPIC_API_KEY)
-            response = client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=50,
+            client = openai.AsyncOpenAI(api_key=GEMINI_API_KEY, base_url=GEMINI_BASE_URL)
+            response = await client.chat.completions.create(
+                model=GEMINI_MODEL,
+                max_tokens=20,
                 messages=[{"role": "user", "content": prompt}],
             )
-            track = response.content[0].text.strip().upper()
-            # Validate track is in our list
+            track = response.choices[0].message.content.strip().upper()
             if track in TRACKS:
                 return track
-            # If invalid, try again or default
             if attempt < max_retries - 1:
                 continue
         except Exception as e:
             if attempt < max_retries - 1:
-                log.warning(f"Claude track assignment retry {attempt + 1}: {e}")
+                log.warning(f"Gemini track assignment retry {attempt + 1}: {e}")
                 await asyncio.sleep(1)
                 continue
             log.error(f"Claude track assignment failed: {e}")
