@@ -428,8 +428,8 @@ async def main():
         log.error("OPENAI_API_KEY is not set. Add it to .env and retry.")
         sys.exit(1)
 
-    if not ANTHROPIC_API_KEY or ANTHROPIC_API_KEY.startswith("sk-placeholder"):
-        log.error("ANTHROPIC_API_KEY is not set. Add it to .env and retry.")
+    if not GEMINI_API_KEY:
+        log.error("GEMINI_API_KEY (or GOOGLE_API_KEY) is not set. Add it to .env and retry.")
         sys.exit(1)
 
     log.info("══════════════════════════════════════════════════════════════")
