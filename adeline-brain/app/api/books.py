@@ -630,7 +630,7 @@ async def get_gap_weighted_recommendations(
 
     # 3. Get adaptive lexile range (fall back to static range on error)
     try:
-        lexile_min, lexile_max = await _calculate_adaptive_reading_level(
+        lexile_min, lexile_max, _ = await _calculate_adaptive_reading_level(
             student_id, grade_level
         )
     except Exception as e:

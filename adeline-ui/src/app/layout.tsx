@@ -55,8 +55,8 @@ export const metadata: Metadata = {
   title: "Dear Adeline Academy — Education as Unique as Your Child",
   description: "An AI-powered homeschool learning companion that adapts to your student's interests, tracks skills toward graduation, and transforms curiosity into achievement.",
   icons: {
-    icon: '/favicon-32.png',
-    apple: '/apple-touch-icon.png',
+    icon: '/adeline-nav.png',
+    apple: '/adeline-nav.png',
   },
   openGraph: {
     title: 'Dear Adeline Academy',
