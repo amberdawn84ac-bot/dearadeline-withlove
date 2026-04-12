@@ -14,8 +14,9 @@ from pydantic import BaseModel
 from app.schemas.api_models import Track, UserRole
 from app.api.middleware import require_role, get_current_user_id, verify_student_access
 from app.models.student import load_student_state
-from app.agents.pedagogy import scaffold, ZPDZone
+from app.agents.pedagogy import scaffold, explain_snippet, ZPDZone
 from app.models.student import MasteryBand
+from app.services.memory import memory_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lesson", tags=["scaffold"])
@@ -63,6 +64,21 @@ async def scaffold_response(body: ScaffoldRequest, student_id: str = Depends(get
             track=body.track.value,
             student_state=student_state,
         )
+        
+        # Save the interaction to conversation memory
+        try:
+            await memory_service.save_interaction(
+                student_id=student_id,
+                user_message=body.student_response,
+                assistant_response=result.adeline_response,
+                zpd_zone=result.zpd_zone.value,
+                mastery_band=result.mastery_band.value,
+                track=body.track.value,
+            )
+        except Exception as mem_err:
+            # Non-fatal: log but don't fail the request
+            logger.warning(f"[/lesson/scaffold] Memory save failed (non-fatal): {mem_err}")
+            
     except Exception as e:
         logger.exception("[/lesson/scaffold] Unexpected error")
         raise HTTPException(status_code=500, detail=str(e))
@@ -101,3 +117,80 @@ async def get_student_state(student_id: str, _user_id: str = Depends(verify_stud
             for track, tm in state.tracks.items()
         },
     }
+
+
+# ── Ask Context (Highlight & Ask) ────────────────────────────────────────────
+
+
+class AskContextRequest(BaseModel):
+    """Request body for the Highlight & Ask feature."""
+    student_id:       str
+    snippet:          str           # The highlighted text
+    lesson_topic:     str           # Topic of the current lesson
+    track:            Track         # Learning track
+    student_question: str | None = None  # Optional specific question
+
+
+class AskContextResponse(BaseModel):
+    """Response for the Highlight & Ask feature."""
+    explanation:        str
+    follow_up_question: str
+    zpd_zone:           ZPDZone
+    mastery_band:       MasteryBand
+
+
+@router.post(
+    "/ask-context",
+    response_model=AskContextResponse,
+)
+async def ask_context(body: AskContextRequest, _user_id: str = Depends(get_current_user_id)):
+    """
+    Explain a highlighted text snippet from a lesson.
+    
+    This is the backend for the "Highlight & Ask" feature. When a student
+    highlights text in a lesson and clicks "Ask Adeline", this endpoint
+    generates a quick, ZPD-adapted micro-explanation.
+    
+    The explanation is tailored to:
+    - The student's current mastery level in the track
+    - The context of the lesson topic
+    - Any specific question the student asked
+    
+    Returns a brief explanation (2-3 sentences) plus a follow-up question
+    to check understanding or invite deeper thinking.
+    """
+    logger.info(
+        f"[/lesson/ask-context] student={body.student_id} "
+        f"topic='{body.lesson_topic}' snippet_len={len(body.snippet)}"
+    )
+
+    # Validate snippet length
+    if len(body.snippet.strip()) < 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Highlighted text is too short. Please select at least 10 characters."
+        )
+    
+    if len(body.snippet) > 1000:
+        # Truncate very long selections
+        body.snippet = body.snippet[:1000] + "…"
+
+    try:
+        student_state = await load_student_state(body.student_id)
+        result = await explain_snippet(
+            snippet=body.snippet,
+            lesson_topic=body.lesson_topic,
+            track=body.track.value,
+            student_state=student_state,
+            student_question=body.student_question,
+        )
+    except Exception as e:
+        logger.exception("[/lesson/ask-context] Unexpected error")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return AskContextResponse(
+        explanation=result.explanation,
+        follow_up_question=result.follow_up_question,
+        zpd_zone=result.zpd_zone,
+        mastery_band=result.mastery_band,
+    )

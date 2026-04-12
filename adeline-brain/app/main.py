@@ -41,6 +41,7 @@ from app.api.parent import router as parent_router
 from app.api.admin import router as admin_router
 from app.api.learning_plan import router as learning_plan_router
 from app.connections.journal_store import journal_store
+from app.connections.conversation_store import conversation_store
 from app.jobs.seed_scheduler import startup_seed_scheduler, shutdown_seed_scheduler
 
 logging.basicConfig(level=logging.INFO)
@@ -73,6 +74,11 @@ async def lifespan(app: FastAPI):
         await journal_store.connect()
     except Exception as e:
         logger.warning(f"[adeline-brain] Journal store unavailable: {e}")
+
+    try:
+        await conversation_store.connect()
+    except Exception as e:
+        logger.warning(f"[adeline-brain] Conversation store unavailable: {e}")
 
     await startup_seed_scheduler()
     yield

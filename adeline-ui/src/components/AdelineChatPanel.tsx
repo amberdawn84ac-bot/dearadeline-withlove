@@ -38,6 +38,10 @@ interface AdelineChatPanelProps {
   onLessonGenerated?: (lesson: LessonResponse) => void;
   onLessonRequest?: (topic: string) => void;
   initialPrompt?: string | null;
+  /** Text highlighted by the user for "Ask Adeline" feature */
+  highlightedContext?: string | null;
+  /** Callback to clear the highlighted context after it's been used */
+  onHighlightedContextUsed?: () => void;
 }
 
 const DEFAULT_TRACK: Track = "TRUTH_HISTORY";
@@ -138,16 +142,36 @@ export function AdelineChatPanel({
   onLessonGenerated,
   onLessonRequest,
   initialPrompt,
+  highlightedContext,
+  onHighlightedContextUsed,
 }: AdelineChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MSG]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [initialPromptSent, setInitialPromptSent] = useState(false);
+  const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Handle incoming highlighted context from TextSelectionMenu
+  useEffect(() => {
+    if (highlightedContext && highlightedContext !== pendingHighlight) {
+      setPendingHighlight(highlightedContext);
+      // Pre-fill input with a question about the highlighted text
+      const truncated = highlightedContext.length > 100 
+        ? highlightedContext.substring(0, 100) + "…" 
+        : highlightedContext;
+      setInput(`Can you explain this to me: "${truncated}"`);
+      // Focus the input
+      inputRef.current?.focus();
+      // Notify parent that we've received the context
+      onHighlightedContextUsed?.();
+    }
+  }, [highlightedContext, pendingHighlight, onHighlightedContextUsed]);
 
   const addMessage = useCallback((msg: Omit<Message, "id">) => {
     setMessages((prev) => [
@@ -401,13 +425,16 @@ export function AdelineChatPanel({
       >
         <div className="flex items-end gap-2">
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
-              activeLessonContext
-                ? "Respond to the lesson…"
-                : "Ask Adeline or enter a topic…"
+              pendingHighlight
+                ? "Ask about the highlighted text…"
+                : activeLessonContext
+                  ? "Respond to the lesson…"
+                  : "Ask Adeline or enter a topic…"
             }
             rows={2}
             className="flex-1 resize-none rounded-xl px-3 py-2 text-sm text-[#2F4731] border border-[#E7DAC3] bg-white focus:outline-none focus:border-[#2F4731] transition-colors"

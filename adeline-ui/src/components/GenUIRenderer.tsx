@@ -17,6 +17,7 @@
 
 import { useState } from "react";
 import { clsx } from "clsx";
+import { motion } from "framer-motion";
 import type { LessonBlockResponse, Evidence, MindMapData, TimelineData, MnemonicData, NarratedSlideData } from "@/lib/brain-client";
 import { MindMap } from "@/components/gen-ui/patterns/MindMap";
 import { Timeline } from "@/components/gen-ui/patterns/Timeline";
@@ -25,6 +26,38 @@ import { DistortionFlag } from "@/components/lessons/DistortionFlag";
 import { KeystoneConcept } from "@/components/lessons/KeystoneConcept";
 import { DistractionBox } from "@/components/lessons/DistractionBox";
 import { SourceBadge } from "./SourceBadge";
+import Link from "next/link";
+
+// ── Animation variants for staggered block entrance ────────────────────────────
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.15,
+      delayChildren: 0.1,
+    },
+  },
+};
+
+const blockVariants = {
+  hidden: { 
+    opacity: 0, 
+    y: 20,
+    scale: 0.98,
+  },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    scale: 1,
+    transition: {
+      type: "spring" as const,
+      stiffness: 260,
+      damping: 25,
+    },
+  },
+};
 
 // ── Block type constants ───────────────────────────────────────────────────────
 
@@ -39,7 +72,8 @@ type BrainBlockType =
   | "MIND_MAP"
   | "TIMELINE"
   | "MNEMONIC"
-  | "NARRATED_SLIDE";
+  | "NARRATED_SLIDE"
+  | "BOOK_SUGGESTION";
 
 // ── OAS Standard entry ────────────────────────────────────────────────────────
 
@@ -143,6 +177,7 @@ const LABEL_STYLES: Record<BrainBlockType, string> = {
   TIMELINE:         "bg-[#1E3A5F] text-white",
   MNEMONIC:         "bg-[#6B21A8] text-white",
   NARRATED_SLIDE:   "bg-[#1D4ED8] text-white",
+  BOOK_SUGGESTION:  "bg-[#78350F] text-white",
 };
 
 const LABEL_NAMES: Record<BrainBlockType, string> = {
@@ -157,6 +192,7 @@ const LABEL_NAMES: Record<BrainBlockType, string> = {
   TIMELINE:         "Timeline",
   MNEMONIC:         "Mnemonic",
   NARRATED_SLIDE:   "Lesson Slides",
+  BOOK_SUGGESTION:  "Suggested Reading",
 };
 
 function BlockLabel({ type }: { type: string }) {
@@ -517,6 +553,65 @@ function NarratedSlideBlock({ block }: { block: LessonBlockResponse }) {
   );
 }
 
+// ── BOOK_SUGGESTION block ──────────────────────────────────────────────────────
+
+function BookSuggestionBlock({ block }: { block: LessonBlockResponse }) {
+  const bookId = (block as any).book_id || "";
+  const bookTitle = (block as any).book_title || "Suggested Book";
+  const bookAuthor = (block as any).book_author || "";
+  const epubUrl = (block as any).epub_url || "";
+  const coverUrl = (block as any).cover_url || "";
+  const lexileLevel = (block as any).lexile_level;
+
+  return (
+    <div
+      className="rounded-xl p-5 space-y-3"
+      style={{ background: "#FFFBEB", border: "1.5px solid #78350F40" }}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-lg">📚</span>
+        <BlockLabel type="BOOK_SUGGESTION" />
+      </div>
+      <div className="flex gap-4">
+        {coverUrl && (
+          <img
+            src={coverUrl}
+            alt={bookTitle}
+            className="w-20 h-28 object-cover rounded-lg shadow-sm bg-[#E7DAC3]"
+          />
+        )}
+        <div className="flex-1 space-y-2">
+          <h3 className="font-bold text-[#78350F] text-lg leading-tight">{bookTitle}</h3>
+          {bookAuthor && (
+            <p className="text-sm text-[#2F4731]/70">by {bookAuthor}</p>
+          )}
+          {lexileLevel && (
+            <span className="inline-block px-2 py-0.5 text-xs font-bold bg-[#E7DAC3] text-[#2F4731] rounded-full">
+              {lexileLevel}L
+            </span>
+          )}
+          {block.content && (
+            <p
+              className="text-sm text-[#374151] leading-relaxed"
+              style={{ fontFamily: "var(--font-kalam), cursive" }}
+            >
+              {block.content}
+            </p>
+          )}
+        </div>
+      </div>
+      {bookId && epubUrl && (
+        <Link
+          href={`/dashboard/reading-nook?bookId=${bookId}&url=${encodeURIComponent(epubUrl)}`}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-[#78350F] text-white rounded-lg hover:bg-[#2F4731] transition-colors font-semibold text-sm"
+        >
+          📖 Open in Reading Nook
+        </Link>
+      )}
+    </div>
+  );
+}
+
 // ── Cross-track standards section ─────────────────────────────────────────────
 
 function OASStandardsSection({ standards }: { standards: OASStandard[] }) {
@@ -608,11 +703,16 @@ export default function GenUIRenderer({
   agentName,
   creditHours,
 }: GenUIRendererProps) {
+  const visibleBlocks = blocks.filter((b) => !b.is_silenced);
+
   return (
-    <div className="space-y-4">
-      {blocks
-        .filter((b) => !b.is_silenced)
-        .map((block) => {
+    <motion.div 
+      className="space-y-4"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
+      {visibleBlocks.map((block, index) => {
           const type = block.block_type as BrainBlockType;
 
           let blockContent;
@@ -654,16 +754,28 @@ export default function GenUIRenderer({
             case "NARRATED_SLIDE":
               blockContent = <NarratedSlideBlock block={block} />;
               break;
+            case "BOOK_SUGGESTION":
+              blockContent = <BookSuggestionBlock block={block} />;
+              break;
             default:
               blockContent = <TextBlock block={block} />;
           }
 
           return (
-            <div key={block.block_id}>
+            <motion.div 
+              key={block.block_id}
+              variants={blockVariants}
+              layout
+            >
               {blockContent}
               {/* Reality Layer */}
               {(block as any).reality_layer && (
-                <div className="space-y-2 mt-2">
+                <motion.div 
+                  className="space-y-2 mt-2"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                >
                   <WeightTierBadge tier={(block as any).reality_layer.weight_tier} />
                   {(block as any).reality_layer.keystone_concept && (
                     <KeystoneConcept
@@ -690,15 +802,26 @@ export default function GenUIRenderer({
                       whenToReturn={box.when_to_return}
                     />
                   ))}
-                </div>
+                </motion.div>
               )}
-            </div>
+            </motion.div>
           );
         })}
 
-      {oasStandards.length > 0 && <OASStandardsSection standards={oasStandards} />}
+      {oasStandards.length > 0 && (
+        <motion.div variants={blockVariants}>
+          <OASStandardsSection standards={oasStandards} />
+        </motion.div>
+      )}
 
-      <AgentCreditFooter agentName={agentName} creditHours={creditHours} />
-    </div>
+      <motion.div 
+        variants={blockVariants}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: visibleBlocks.length * 0.15 + 0.3 }}
+      >
+        <AgentCreditFooter agentName={agentName} creditHours={creditHours} />
+      </motion.div>
+    </motion.div>
   );
 }

@@ -82,10 +82,11 @@ class BlockType(str, Enum):
     EXPERIMENT       = "EXPERIMENT"
     RESEARCH_MISSION = "RESEARCH_MISSION"
     QUIZ             = "QUIZ"
-    MIND_MAP       = "MIND_MAP"
-    TIMELINE       = "TIMELINE"
-    MNEMONIC       = "MNEMONIC"
-    NARRATED_SLIDE = "NARRATED_SLIDE"
+    MIND_MAP         = "MIND_MAP"
+    TIMELINE         = "TIMELINE"
+    MNEMONIC         = "MNEMONIC"
+    NARRATED_SLIDE   = "NARRATED_SLIDE"
+    BOOK_SUGGESTION  = "BOOK_SUGGESTION"
 
 
 # ── Multimodal Data Models ────────────────────────────────────────────────────
@@ -224,6 +225,12 @@ class LessonBlockResponse(BaseModel):
     timeline_data:        Optional[TimelineData] = None
     mnemonic_data:        Optional[MnemonicData] = None
     narrated_slide_data:  Optional[NarratedSlideData] = None
+    book_id:              Optional[str] = None
+    book_title:           Optional[str] = None
+    book_author:          Optional[str] = None
+    epub_url:             Optional[str] = None
+    cover_url:            Optional[str] = None
+    lexile_level:         Optional[int] = None
 
 class LessonResponse(BaseModel):
     lesson_id:            str = Field(default_factory=lambda: str(uuid.uuid4()))

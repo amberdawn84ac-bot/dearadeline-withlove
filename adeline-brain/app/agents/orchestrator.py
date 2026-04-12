@@ -41,6 +41,9 @@ from app.connections.pgvector_client import hippocampus
 from app.connections.neo4j_client import neo4j_client
 from app.tools.researcher import search_witnesses
 from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL
+from app.algorithms.pedagogical_directives import generate_pedagogical_directives, get_quick_directives
+from app.agents.pedagogy import ZPDZone
+from app.models.student import MasteryBand
 
 _ANTHROPIC_MODEL = os.getenv("ADELINE_MODEL", "claude-sonnet-4-6")
 
@@ -227,6 +230,10 @@ async def _synthesize_content(
     block_type: str,
     source_chunks: list[dict],
     raw_content: str,
+    *,
+    student_message: str | None = None,
+    mastery_score: float = 0.5,
+    mastery_band: MasteryBand = MasteryBand.DEVELOPING,
 ) -> str:
     """
     Call Claude to synthesize lesson content from verified sources using Adeline's voice.
@@ -238,6 +245,16 @@ async def _synthesize_content(
       2. Match Adeline's voice — direct, plain, truth-first, justice-aware
       3. Ground every claim in the provided source
       4. No busywork, no padding, no academic tone
+      5. Adapt scaffolding and vocabulary based on student's ZPD state (if provided)
+    
+    Args:
+        request: The lesson request
+        block_type: Type of block being synthesized
+        source_chunks: Verified source chunks to ground content in
+        raw_content: Fallback content if synthesis fails
+        student_message: Optional student message for ZPD detection
+        mastery_score: Student's current mastery score (0.0-1.0)
+        mastery_band: Student's current mastery band
     """
     if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
         return raw_content
@@ -254,6 +271,7 @@ async def _synthesize_content(
 
     block_label = block_type.replace("_", " ").lower()
 
+    # Build base system prompt
     system_prompt = (
         f"You are Adeline — {persona}\n\n"
         f"You are writing for a {grade_desc} student in a Christian homeschool family.\n\n"
@@ -263,6 +281,19 @@ async def _synthesize_content(
         "• 2–3 paragraphs maximum\n"
         "• End with one direct question or challenge — not 'What did you learn?' but something that demands thought or action\n"
     )
+    
+    # Inject pedagogical directives if student context is available
+    if student_message:
+        pedagogical_block = generate_pedagogical_directives(
+            student_message=student_message,
+            mastery_score=mastery_score,
+            mastery_band=mastery_band,
+        )
+        system_prompt += pedagogical_block
+    else:
+        # Use quick directives based on mastery band alone
+        quick_directive = get_quick_directives(ZPDZone.IN_ZPD, mastery_band)
+        system_prompt += f"\n{quick_directive}\n"
 
     user_prompt = (
         f"Topic: {request.topic}\n"
@@ -295,6 +326,10 @@ class AdelineState(TypedDict):
     credits_awarded:      list[dict]
     interaction_count:    int
     cross_track_acknowledgment: str | None
+    # Pedagogical state (optional — populated from student profile)
+    mastery_score:        float
+    mastery_band:         str  # MasteryBand value
+    student_message:      str | None  # Last student message for ZPD detection
 
 
 # ── Neo4j graph-link (multi-hop) ──────────────────────────────────────────────

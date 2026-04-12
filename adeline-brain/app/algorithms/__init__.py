@@ -20,6 +20,10 @@ from .cognitive_load import (
     Baseline, CognitiveLoadResult, compute_baseline,
     calculate_cognitive_load, should_simplify_content, get_pacing_recommendation,
 )
+from .pedagogical_directives import (
+    PedagogicalState, analyze_pedagogical_state,
+    generate_pedagogical_directives, get_quick_directives,
+)
 
 __all__ = [
     "BKTParams", "AdaptiveBKTParams", "bkt_update", "adaptive_bkt_update",
@@ -32,4 +36,6 @@ __all__ = [
     "get_track_vocabulary", "build_lesson_prompt_context", "GradeBand",
     "Baseline", "CognitiveLoadResult", "compute_baseline",
     "calculate_cognitive_load", "should_simplify_content", "get_pacing_recommendation",
+    "PedagogicalState", "analyze_pedagogical_state",
+    "generate_pedagogical_directives", "get_quick_directives",
 ]

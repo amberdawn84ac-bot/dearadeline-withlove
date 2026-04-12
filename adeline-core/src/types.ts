@@ -242,6 +242,10 @@ export enum BlockType {
   TIMELINE         = "TIMELINE",         // Chronological event sequence
   MNEMONIC         = "MNEMONIC",         // Memory aid device
   NARRATED_SLIDE   = "NARRATED_SLIDE",   // Slide deck with narration script
+  BOOK_SUGGESTION  = "BOOK_SUGGESTION",  // Reading Nook book recommendation
+  // ── Interactive UI Blocks (LearnLM-style) ────────────────────────
+  INTERACTIVE_SIM  = "INTERACTIVE_SIM",  // Interactive simulation or visualization
+  HIGHLIGHT_ASK    = "HIGHLIGHT_ASK",    // Contextual explanation from highlighted text
 }
 
 export enum DifficultyLevel {

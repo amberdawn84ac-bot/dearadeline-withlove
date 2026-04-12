@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { Loader2, ArrowLeft, AlertCircle } from "lucide-react";
+import { useState, useCallback, useRef } from "react";
+import { ArrowLeft, AlertCircle } from "lucide-react";
 import { generateLesson } from "@/lib/brain-client";
 import type { LessonResponse, Track } from "@/lib/brain-client";
 import LessonRenderer from "@/components/lessons/LessonRenderer";
 import { AdelineChatPanel } from "@/components/AdelineChatPanel";
 import { StudentStatusBar } from "@/components/StudentStatusBar";
 import { useStudent } from "@/lib/useStudent";
+import { AgentThinkingState } from "@/components/gen-ui/AgentThinkingState";
+import { TextSelectionMenu } from "@/components/gen-ui/TextSelectionMenu";
 
 // ── Lesson suggestion cards ───────────────────────────────────────────────────
 
@@ -65,6 +67,8 @@ export default function JourneyPage() {
   const [activeLesson, setActiveLesson] = useState<LessonResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [highlightedText, setHighlightedText] = useState<string | null>(null);
+  const lessonContainerRef = useRef<HTMLDivElement>(null);
 
   const handleLessonRequest = useCallback(async (topic: string, track: Track = "TRUTH_HISTORY") => {
     setIsLoading(true);
@@ -169,19 +173,12 @@ export default function JourneyPage() {
           </main>
         )}
 
-        {/* Loading state */}
-        {isLoading && (
-          <div className="flex items-center justify-center py-20 gap-3">
-            <Loader2 className="w-6 h-6 animate-spin text-[#BD6809]" />
-            <p className="text-[#2F4731]/60 italic">
-              Adeline is searching the archive…
-            </p>
-          </div>
-        )}
+        {/* Loading state — Transparent AI thinking visualization */}
+        <AgentThinkingState isActive={isLoading} />
 
         {/* ── Active lesson ── */}
         {activeLesson && !isLoading && (
-          <div className="px-6 pb-8 pt-5">
+          <div ref={lessonContainerRef} className="px-6 pb-8 pt-5">
             <button
               onClick={handleBackToSuggestions}
               className="flex items-center gap-2 text-[#BD6809] hover:text-[#2F4731] mb-6 transition-colors"
@@ -193,6 +190,13 @@ export default function JourneyPage() {
             <LessonRenderer
               lesson={activeLesson}
               studentId={STUDENT_ID}
+            />
+
+            {/* Ambient "Highlight & Ask" feature */}
+            <TextSelectionMenu
+              containerRef={lessonContainerRef}
+              onAskAboutSelection={(text) => setHighlightedText(text)}
+              enabled={!!activeLesson}
             />
           </div>
         )}
@@ -214,6 +218,8 @@ export default function JourneyPage() {
           }
           onLessonRequest={(topic) => handleLessonRequest(topic)}
           onLessonGenerated={setActiveLesson}
+          highlightedContext={highlightedText}
+          onHighlightedContextUsed={() => setHighlightedText(null)}
         />
       </div>
     </div>

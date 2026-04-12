@@ -82,6 +82,12 @@ export interface LessonBlockResponse {
   timeline_data?:       TimelineData;
   mnemonic_data?:       MnemonicData;
   narrated_slide_data?: NarratedSlideData;
+  book_id?:             string;
+  book_title?:          string;
+  book_author?:         string;
+  epub_url?:            string;
+  cover_url?:           string;
+  lexile_level?:        number;
 }
 
 export interface XAPIStatement {
@@ -238,6 +244,43 @@ export async function scaffold(
   });
   if (!res.ok) throw new Error(`scaffold failed: ${res.status} ${res.statusText}`);
   return res.json() as Promise<ScaffoldResponse>;
+}
+
+// ── Ask Context (Highlight & Ask) ──────────────────────────────────────────────
+
+export interface AskContextRequest {
+  student_id: string;
+  snippet: string;
+  lesson_topic: string;
+  track: Track;
+  student_question?: string | null;
+}
+
+export interface AskContextResponse {
+  explanation: string;
+  follow_up_question: string;
+  zpd_zone: ZPDZone;
+  mastery_band: MasteryBand;
+}
+
+/**
+ * Ask Adeline to explain a highlighted text snippet from a lesson.
+ * Used by the "Highlight & Ask" feature for quick, ZPD-adapted micro-explanations.
+ */
+export async function askContext(
+  request: AskContextRequest,
+): Promise<AskContextResponse> {
+  const res = await fetch(`${BRAIN_URL}/lesson/ask-context`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(request),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`askContext failed: ${res.status} ${res.statusText}`);
+  return res.json() as Promise<AskContextResponse>;
 }
 
 export interface StudentState {

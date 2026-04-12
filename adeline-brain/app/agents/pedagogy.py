@@ -266,3 +266,148 @@ async def scaffold(
         mastery_band=track_mastery.mastery_band,
         mastery_score=track_mastery.mastery_score,
     )
+
+
+# ── Snippet Explanation (Highlight & Ask) ────────────────────────────────────
+
+
+@dataclass
+class SnippetExplanation:
+    """Response from explain_snippet — a quick, ZPD-adapted explanation."""
+    explanation: str
+    zpd_zone: ZPDZone
+    mastery_band: MasteryBand
+    follow_up_question: str
+
+
+def _build_snippet_system_prompt(
+    snippet: str,
+    lesson_topic: str,
+    track: str,
+    mastery_band: MasteryBand,
+    mastery_score: float,
+    student_question: Optional[str] = None,
+) -> str:
+    """
+    Build a system prompt for explaining a highlighted text snippet.
+    Optimized for quick, contextual micro-explanations.
+    """
+    complexity_note = {
+        MasteryBand.NOVICE:     "Use very simple language. Define every term. Use analogies to everyday life.",
+        MasteryBand.DEVELOPING: "Use clear language. Define technical terms on first use.",
+        MasteryBand.PROFICIENT: "Use subject-appropriate vocabulary. Connect to broader concepts.",
+        MasteryBand.ADVANCED:   "Use full academic register. Reference historiography or scientific debate.",
+    }[mastery_band]
+
+    question_context = ""
+    if student_question:
+        question_context = f"\nThe student specifically asked: \"{student_question}\"\n"
+
+    return f"""You are Adeline — a Truth-First K-12 AI Mentor.
+You are helping a student understand a specific passage they highlighted while reading a lesson.
+
+LESSON TOPIC: {lesson_topic}
+TRACK: {track.replace("_", " ").title()}
+STUDENT MASTERY: {mastery_band.value} (score: {mastery_score:.2f}/1.0)
+
+THE HIGHLIGHTED TEXT:
+\"\"\"{snippet}\"\"\"
+{question_context}
+YOUR TASK:
+1. Explain this specific passage in 2-3 sentences, adapted to the student's level.
+2. {complexity_note}
+3. Connect it to the broader lesson topic if helpful.
+4. End with ONE follow-up question that checks understanding or invites deeper thinking.
+
+TONE: Warm, direct, encouraging. Like a trusted older sibling explaining something.
+LENGTH: Keep it brief — this is a micro-explanation, not a lecture. 3-5 sentences total.
+
+FORMAT YOUR RESPONSE AS:
+[Your explanation here]
+
+**Think about it:** [Your follow-up question here]
+"""
+
+
+async def explain_snippet(
+    snippet: str,
+    lesson_topic: str,
+    track: str,
+    student_state: StudentState,
+    student_question: Optional[str] = None,
+) -> SnippetExplanation:
+    """
+    Generate a quick, ZPD-adapted explanation for a highlighted text snippet.
+    
+    This is the backend for the "Highlight & Ask" feature — when a student
+    selects text in a lesson and clicks "Ask Adeline", this function generates
+    a contextual micro-explanation adapted to their mastery level.
+    
+    Args:
+        snippet: The highlighted text from the lesson
+        lesson_topic: The topic of the current lesson
+        track: The learning track (e.g., "TRUTH_HISTORY")
+        student_state: The student's current mastery state
+        student_question: Optional specific question from the student
+    
+    Returns:
+        SnippetExplanation with the explanation, follow-up question, and ZPD metadata
+    """
+    track_mastery = student_state.get(track)
+    
+    # Detect ZPD zone from the question if provided, otherwise assume IN_ZPD
+    zone = ZPDZone.IN_ZPD
+    if student_question:
+        zone = detect_zpd_zone(student_question)
+    
+    logger.info(
+        f"[Pedagogy] explain_snippet | topic='{lesson_topic}' | "
+        f"snippet_len={len(snippet)} | zone={zone.value}"
+    )
+
+    system_prompt = _build_snippet_system_prompt(
+        snippet=snippet,
+        lesson_topic=lesson_topic,
+        track=track,
+        mastery_band=track_mastery.mastery_band,
+        mastery_score=track_mastery.mastery_score,
+        student_question=student_question,
+    )
+
+    try:
+        client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        completion = await client.chat.completions.create(
+            model=CHAT_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Please explain this highlighted text: \"{snippet[:500]}\""},
+            ],
+            temperature=0.7,
+            max_tokens=400,
+        )
+        full_response = completion.choices[0].message.content.strip()
+        
+        # Parse out the follow-up question if present
+        if "**Think about it:**" in full_response:
+            parts = full_response.split("**Think about it:**")
+            explanation = parts[0].strip()
+            follow_up = parts[1].strip() if len(parts) > 1 else ""
+        else:
+            explanation = full_response
+            follow_up = f"What do you think is the most important idea in this passage?"
+            
+    except Exception as e:
+        logger.error(f"[Pedagogy] explain_snippet OpenAI call failed: {e}")
+        # Graceful fallback
+        explanation = (
+            f"This passage is talking about an important part of {lesson_topic}. "
+            f"Let's break it down together — what part of it is most confusing to you?"
+        )
+        follow_up = "Can you tell me which word or idea you'd like me to explain first?"
+
+    return SnippetExplanation(
+        explanation=explanation,
+        zpd_zone=zone,
+        mastery_band=track_mastery.mastery_band,
+        follow_up_question=follow_up,
+    )
