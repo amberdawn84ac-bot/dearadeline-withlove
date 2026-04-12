@@ -27,3 +27,5 @@ adeline-brain/data/books/
 # OS
 .DS_Store
 Thumbs.db
+
+.vercel

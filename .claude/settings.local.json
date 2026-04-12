@@ -159,7 +159,24 @@
       "Bash(RAILWAY_TOKEN=c9f4ca77-1dd8-48ae-9534-6208fda3ab84 railway domain --json)",
       "Bash(RAILWAY_TOKEN=c9f4ca77-1dd8-48ae-9534-6208fda3ab84 railway status --json)",
       "Bash(xargs wc:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(railway --version)",
+      "Bash(vercel --version)",
+      "Bash(supabase --version)",
+      "Bash(railway status:*)",
+      "Bash(railway projects:*)",
+      "Bash(vercel project:*)",
+      "Bash(railway project:*)",
+      "Bash(vercel teams:*)",
+      "Bash(railway whoami:*)",
+      "Bash(railway variables:*)",
+      "Bash(railway service:*)",
+      "Read(//c/Users/Aarons/.supabase/**)",
+      "Read(//c/Users/Aarons/.config/supabase/**)",
+      "Read(//c/Users/Aarons/**)",
+      "Skill(commit-commands:commit-push-pr)",
+      "Bash(VERCEL_TOKEN=\"vca_6OwoQryEeDlbb5lgH49buWLbRUK8s260NLlVVatIPcyrAa8IRl005MKj\" TEAM_ID=\"team_kwUgbmYRjzKky03k8JDnRu1p\" PROJECT_ID=\"prj_OmQPFA2y8XBzqmdUhgHMwLNbPhIJ\" BASE=\"https://api.vercel.com/v10/projects/$PROJECT_ID/env?teamId=$TEAM_ID&upsert=true\" AUTH=\"Authorization: Bearer $VERCEL_TOKEN\" CT=\"Content-Type: application/json\" __NEW_LINE_9c889f57be925f22__ curl -s -X POST \"$BASE\" -H \"$AUTH\" -H \"$CT\" -d '{\"\"\"\"key\"\"\"\":\"\"\"\"NEXT_PUBLIC_SUPABASE_URL\"\"\"\",\"\"\"\"value\"\"\"\":\"\"\"\"https://gyxowttfwqbajoapfebf.supabase.co\"\"\"\",\"\"\"\"type\"\"\"\":\"\"\"\"encrypted\"\"\"\",\"\"\"\"target\"\"\"\":[\"\"\"\"preview\"\"\"\",\"\"\"\"development\"\"\"\"]}')",
+      "Bash(vercel --prod --scope dear-adeline-co --yes)"
     ]
   }
 }
