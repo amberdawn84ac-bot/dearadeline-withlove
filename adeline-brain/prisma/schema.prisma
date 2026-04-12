@@ -243,6 +243,26 @@ model StudentLesson {
   @@id([studentId, lessonId])
 }
 
+// ── Canonical Lessons ───────────────────────────────────────────────────────
+// One master lesson per (topic, track). Generated at full depth once,
+// adapted cheaply per student at serve time.
+
+model CanonicalLesson {
+  id                  String   @id @default(uuid())
+  topicSlug           String   @unique   // sha256(topic+track)
+  topic               String
+  track               Track
+  title               String
+  blocksJson          Json                // list[LessonBlockResponse] at full depth
+  oasStandards        Json     @default("[]")
+  researcherActivated Boolean  @default(false)
+  agentName           String   @default("")
+  generatedAt         DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([track])
+}
+
 model InviteCode {
   id             String   @id @default(uuid())
   code           String   @unique

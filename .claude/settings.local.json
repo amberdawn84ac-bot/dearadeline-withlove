@@ -176,7 +176,15 @@
       "Read(//c/Users/Aarons/**)",
       "Skill(commit-commands:commit-push-pr)",
       "Bash(VERCEL_TOKEN=\"vca_6OwoQryEeDlbb5lgH49buWLbRUK8s260NLlVVatIPcyrAa8IRl005MKj\" TEAM_ID=\"team_kwUgbmYRjzKky03k8JDnRu1p\" PROJECT_ID=\"prj_OmQPFA2y8XBzqmdUhgHMwLNbPhIJ\" BASE=\"https://api.vercel.com/v10/projects/$PROJECT_ID/env?teamId=$TEAM_ID&upsert=true\" AUTH=\"Authorization: Bearer $VERCEL_TOKEN\" CT=\"Content-Type: application/json\" __NEW_LINE_9c889f57be925f22__ curl -s -X POST \"$BASE\" -H \"$AUTH\" -H \"$CT\" -d '{\"\"\"\"key\"\"\"\":\"\"\"\"NEXT_PUBLIC_SUPABASE_URL\"\"\"\",\"\"\"\"value\"\"\"\":\"\"\"\"https://gyxowttfwqbajoapfebf.supabase.co\"\"\"\",\"\"\"\"type\"\"\"\":\"\"\"\"encrypted\"\"\"\",\"\"\"\"target\"\"\"\":[\"\"\"\"preview\"\"\"\",\"\"\"\"development\"\"\"\"]}')",
-      "Bash(vercel --prod --scope dear-adeline-co --yes)"
+      "Bash(vercel --prod --scope dear-adeline-co --yes)",
+      "Bash(vercel inspect:*)",
+      "Bash(VERCEL_TOKEN=\"vca_6OwoQryEeDlbb5lgH49buWLbRUK8s260NLlVVatIPcyrAa8IRl005MKj\" TEAM_ID=\"team_kwUgbmYRjzKky03k8JDnRu1p\" PROJECT_ID=\"prj_OmQPFA2y8XBzqmdUhgHMwLNbPhIJ\" curl -s \"https://api.vercel.com/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&limit=1\" -H \"Authorization: Bearer $VERCEL_TOKEN\")",
+      "Bash(VERCEL_TOKEN=\"vca_6OwoQryEeDlbb5lgH49buWLbRUK8s260NLlVVatIPcyrAa8IRl005MKj\")",
+      "Bash(TEAM_ID=\"team_kwUgbmYRjzKky03k8JDnRu1p\")",
+      "Bash(PROJECT_ID=\"prj_OmQPFA2y8XBzqmdUhgHMwLNbPhIJ\")",
+      "Bash(vercel ls:*)",
+      "Bash(vercel login:*)",
+      "Bash(vercel redeploy:*)"
     ]
   }
 }

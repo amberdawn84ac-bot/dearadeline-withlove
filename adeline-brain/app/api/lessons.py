@@ -3,7 +3,6 @@ Lesson Generation API — /lessons/*
 The primary delivery endpoint. Orchestrates retrieval, Witness Protocol
 verification, and Neo4j graph-linking into a structured LessonResponse.
 """
-import hashlib
 import json
 import logging
 import os
@@ -19,22 +18,16 @@ from app.api.middleware import require_role, get_current_user_id
 from app.agents.orchestrator import run_orchestrator
 from app.connections.pgvector_client import hippocampus
 from app.connections.knowledge_graph import get_cross_track_bias
-from app.connections.redis_client import redis_client
 from app.algorithms.zpd_engine import apply_cross_track_bias, AdaptiveBKTParams
 from app.models.student import load_student_state
+from app.connections.canonical_store import canonical_store, canonical_slug
+from app.agents.adapter import adapt_canonical_for_student, AdaptationRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lesson", tags=["lessons"])
 
 # Per-user lesson rate limit: 20 lessons/hour
 limiter = Limiter(key_func=get_remote_address)
-LESSON_CACHE_TTL = 60 * 60 * 24 * 30  # 30 days — curriculum content is stable
-
-
-def _lesson_cache_key(request: LessonRequest) -> str:
-    """Stable cache key: topic (normalized) + track + grade — shared across all students."""
-    raw = f"{request.topic.strip().lower()}:{request.track.value}:{request.grade_level}"
-    return "lesson:" + hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 EMBED_MODEL = "text-embedding-3-small"
 
@@ -113,30 +106,68 @@ async def generate_lesson(
     Generate a Truth-First lesson for a student.
 
     Flow:
-      1. Check Redis cache (topic + track + grade, 24h TTL)
-      2. Embed the topic query via OpenAI
-      3. Retrieve top-k chunks from Hippocampus (pgvector)
-      4. Evaluate each chunk via the Witness Protocol (0.85 threshold)
-      5. Graph-link to OAS Standards via Neo4j
-      6. RegistrarAgent emits xAPI statements + CASE credits
-      7. Fire-and-forget persistence to DB (non-blocking)
-      8. Cache result + return structured LessonResponse
+      1. Check canonical store (topic + track) — if exists, adapt cheaply for student
+      2. If no canonical: embed topic, run full orchestrator (research + generation)
+      3. Save new canonical for future students
+      4. Retrieve top-k chunks from Hippocampus (pgvector)
+      5. Evaluate each chunk via the Witness Protocol (0.85 threshold)
+      6. Graph-link to OAS Standards via Neo4j
+      7. RegistrarAgent emits xAPI statements + CASE credits
+      8. Fire-and-forget persistence to DB (non-blocking)
+      9. Return structured LessonResponse
     """
     logger.info(
         f"[/lessons/generate] topic='{request.topic}' track={request.track.value} "
         f"grade={request.grade_level} homestead={request.is_homestead}"
     )
     try:
-        # ── Cache check ───────────────────────────────────────────────────────
-        cache_key = _lesson_cache_key(request)
-        try:
-            cached = await redis_client.get(cache_key)
-            if cached:
-                logger.info(f"[/lessons/generate] Cache HIT — {cache_key}")
-                return LessonResponse.model_validate_json(cached)
-        except Exception as e:
-            logger.warning(f"[/lessons/generate] Cache read failed (non-fatal): {e}")
+        slug = canonical_slug(request.topic, request.track.value)
 
+        # ── Phase 1: Check canonical store ───────────────────────────────────
+        canonical = None
+        try:
+            canonical = await canonical_store.get(slug)
+        except Exception as e:
+            logger.warning(f"[/lessons/generate] Canonical store read failed (non-fatal): {e}")
+
+        if canonical:
+            logger.info(f"[/lessons/generate] Canonical HIT — adapting for student grade={request.grade_level}")
+            student_state = await load_student_state(student_id)
+            track_mastery = student_state.get(request.track.value)
+            interaction_count = track_mastery.lesson_count if track_mastery else 10
+
+            # Fetch student interests for persona adaptation
+            interests: list[str] = []
+            try:
+                from app.config import get_db_conn
+                conn = await get_db_conn()
+                row = await conn.fetchrow('SELECT interests FROM "User" WHERE id = $1', student_id)
+                await conn.close()
+                interests = row["interests"] or [] if row else []
+            except Exception:
+                pass
+
+            adapt_req = AdaptationRequest(
+                grade_level=request.grade_level,
+                track=request.track.value,
+                interests=interests,
+                interaction_count=interaction_count,
+            )
+            adapted_blocks = await adapt_canonical_for_student(canonical, adapt_req)
+            from app.schemas.api_models import LessonBlockResponse
+            blocks = [LessonBlockResponse(**b) for b in adapted_blocks]
+            return LessonResponse(
+                title=canonical["title"],
+                track=request.track,
+                blocks=blocks,
+                has_research_missions=any(b.get("block_type") == "RESEARCH_MISSION" for b in adapted_blocks),
+                oas_standards=canonical.get("oas_standards", []),
+                researcher_activated=canonical.get("researcher_activated", False),
+                agent_name=canonical.get("agent_name", ""),
+            )
+
+        # ── Phase 2: Full generation (no canonical exists yet) ───────────────
+        logger.info(f"[/lessons/generate] No canonical — running full orchestrator")
         query_embedding = await _embed(request.topic)
 
         # Load track interaction count for stealth assessment calibration
@@ -168,12 +199,24 @@ async def generate_lesson(
             interaction_count=interaction_count,
             cross_track_acknowledgment=cross_track_acknowledgment,
         )
-        # ── Cache write (non-blocking) ────────────────────────────────────────
+
+        # ── Phase 3: Save as canonical for future students ───────────────────
         try:
-            await redis_client.set(cache_key, lesson.model_dump_json(), ex=LESSON_CACHE_TTL)
-            logger.info(f"[/lessons/generate] Cached lesson — {cache_key}")
+            canonical_record = {
+                "id": lesson.lesson_id,
+                "topic_slug": slug,
+                "topic": request.topic,
+                "track": request.track.value,
+                "title": lesson.title,
+                "blocks": [b.model_dump() for b in lesson.blocks],
+                "oas_standards": lesson.oas_standards,
+                "researcher_activated": lesson.researcher_activated,
+                "agent_name": lesson.agent_name,
+            }
+            await canonical_store.save(slug, canonical_record)
+            logger.info(f"[/lessons/generate] Saved new canonical — {slug}")
         except Exception as e:
-            logger.warning(f"[/lessons/generate] Cache write failed (non-fatal): {e}")
+            logger.warning(f"[/lessons/generate] Canonical save failed (non-fatal): {e}")
 
         # Persist learning records fire-and-forget (don't block lesson response)
         asyncio.create_task(_persist_learning_records(lesson))

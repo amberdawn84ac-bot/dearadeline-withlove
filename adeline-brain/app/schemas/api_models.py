@@ -238,6 +238,19 @@ class LessonResponse(BaseModel):
     credits_awarded:      list[dict] = Field(default_factory=list)  # CASE credit entries
 
 
+class CanonicalLessonRecord(BaseModel):
+    """Persistent master lesson for a topic+track. Adapted per student at serve time."""
+    id:                  str = Field(default_factory=lambda: str(uuid.uuid4()))
+    topic_slug:          str                        # sha256(topic.lower()+":"+track)
+    topic:               str
+    track:               Track
+    title:               str
+    blocks:              list[LessonBlockResponse]  # full-depth, adult/HS level
+    oas_standards:       list[dict] = Field(default_factory=list)
+    researcher_activated: bool = False
+    agent_name:          str = ""
+
+
 # ── Experiment (Sovereign Lab — CREATION_SCIENCE experiments) ────────────────
 
 class ExperimentStep(BaseModel):
