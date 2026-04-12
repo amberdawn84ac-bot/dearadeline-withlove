@@ -31,9 +31,9 @@ limiter = Limiter(key_func=get_remote_address)
 LESSON_CACHE_TTL = 86_400  # 24 hours
 
 
-def _lesson_cache_key(student_id: str, request: LessonRequest) -> str:
-    """Stable cache key: student + topic (normalized) + track + grade."""
-    raw = f"{student_id}:{request.topic.strip().lower()}:{request.track.value}:{request.grade_level}"
+def _lesson_cache_key(request: LessonRequest) -> str:
+    """Stable cache key: topic (normalized) + track + grade — shared across all students."""
+    raw = f"{request.topic.strip().lower()}:{request.track.value}:{request.grade_level}"
     return "lesson:" + hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 EMBED_MODEL = "text-embedding-3-small"
@@ -128,7 +128,7 @@ async def generate_lesson(
     )
     try:
         # ── Cache check ───────────────────────────────────────────────────────
-        cache_key = _lesson_cache_key(student_id, request)
+        cache_key = _lesson_cache_key(request)
         try:
             cached = await redis_client.get(cache_key)
             if cached:
