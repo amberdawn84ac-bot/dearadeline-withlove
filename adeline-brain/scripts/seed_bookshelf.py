@@ -53,8 +53,8 @@ EMBED_MODEL = "text-embedding-3-small"
 EMBED_DIM = 1536
 
 # API configuration
-STANDARD_EBOOKS_API = "https://standardebooks.org/api/v1/books"
-GUTENBERG_API = "https://gutendex.com/books"
+STANDARD_EBOOKS_FEED = "https://standardebooks.org/feeds/atom/new-releases"
+GUTENBERG_API = "https://gutendex.com/books/"
 BOOKS_PER_SOURCE = 50
 
 # 10-track curriculum tracks
@@ -90,25 +90,44 @@ LEXILE_TO_GRADE = [
 
 async def fetch_standard_ebooks() -> List[dict]:
     """
-    Fetch 50 newest books from Standard Ebooks API.
+    Fetch newest books from Standard Ebooks Atom feed.
     Returns list of book dicts with: title, author, url, cover_url, description
     """
-    log.info(f"Fetching from Standard Ebooks API...")
+    import xml.etree.ElementTree as ET
+    log.info("Fetching from Standard Ebooks Atom feed...")
     books = []
     try:
-        async with httpx.AsyncClient(timeout=30.0) as session:
-            params = {"sort": "newest"}
-            resp = await session.get(STANDARD_EBOOKS_API, params=params)
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as session:
+            resp = await session.get(STANDARD_EBOOKS_FEED)
             if resp.status_code != 200:
-                log.error(f"Standard Ebooks API returned {resp.status_code}")
+                log.error(f"Standard Ebooks feed returned {resp.status_code}")
                 return []
-            data = resp.json()
-            books = data.get("books", [])[:BOOKS_PER_SOURCE]
+            ns = {
+                "atom": "http://www.w3.org/2005/Atom",
+                "media": "http://search.yahoo.com/mrss/",
+            }
+            root = ET.fromstring(resp.text)
+            for entry in root.findall("atom:entry", ns)[:BOOKS_PER_SOURCE]:
+                title = entry.findtext("atom:title", default="", namespaces=ns)
+                author_el = entry.find("atom:author/atom:name", ns)
+                author = author_el.text if author_el is not None else "Unknown"
+                link_el = entry.find("atom:link[@rel='alternate']", ns) or entry.find("atom:link", ns)
+                url = link_el.get("href", "") if link_el is not None else ""
+                cover_el = entry.find("media:thumbnail", ns)
+                cover_url = cover_el.get("url", "") if cover_el is not None else ""
+                summary = entry.findtext("atom:summary", default="", namespaces=ns)
+                books.append({
+                    "title": title,
+                    "author": author,
+                    "url": url,
+                    "cover_url": cover_url,
+                    "description": summary,
+                })
             log.info(f"Fetched {len(books)} books from Standard Ebooks")
     except asyncio.TimeoutError:
-        log.error("Standard Ebooks API timeout")
+        log.error("Standard Ebooks feed timeout")
     except Exception as e:
-        log.error(f"Standard Ebooks API error: {e}")
+        log.error(f"Standard Ebooks feed error: {e}")
     return books
 
 
@@ -120,8 +139,8 @@ async def fetch_gutenberg() -> List[dict]:
     log.info(f"Fetching from Project Gutenberg API...")
     books = []
     try:
-        async with httpx.AsyncClient(timeout=30.0) as session:
-            params = {"sort": "popular"}
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as session:
+            params = {"sort": "popular", "languages": "en"}
             resp = await session.get(GUTENBERG_API, params=params)
             if resp.status_code != 200:
                 log.error(f"Gutenberg API returned {resp.status_code}")
