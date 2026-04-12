@@ -112,8 +112,17 @@ class DueReviewsResponse(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def _now_dt() -> datetime:
+    return datetime.now(timezone.utc)
+
+def _parse_ts(ts: str | None) -> datetime:
+    """Parse an ISO timestamp string to datetime, or return now."""
+    if not ts:
+        return _now_dt()
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return _now_dt()
 
 @asynccontextmanager
 async def _get_conn():
@@ -142,7 +151,7 @@ async def record_learning(
 
     async with _get_conn() as conn:
         for stmt in payload.statements:
-            ts = stmt.timestamp or _now_iso()
+            ts = _parse_ts(stmt.timestamp)
             try:
                 await conn.execute(
                     """
@@ -155,11 +164,11 @@ async def record_learning(
                         "scoreRaw", "statementJson", timestamp
                     ) VALUES (
                         $1, $2, $3, $4,
-                        $5, $6, $7, $8,
+                        $5, $6, $7, $8::"Track",
                         $9, $10, $11,
                         $12, $13,
                         $14, $15, $16,
-                        $17, $18::jsonb, $19::timestamp
+                        $17, $18::jsonb, $19
                     )
                     ON CONFLICT (id) DO NOTHING
                     """,
@@ -190,8 +199,8 @@ async def seal_transcript(
     Persist a CASE-compatible TranscriptEntry for a completed lesson.
     Upserts on (studentId, lessonId) — resealing a lesson updates the record.
     """
-    completed_at = entry.completed_at or _now_iso()
-    sealed_at    = _now_iso()
+    completed_at = _parse_ts(entry.completed_at)
+    sealed_at    = _now_dt()
 
     async with _get_conn() as conn:
         await conn.execute(
@@ -209,7 +218,7 @@ async def seal_transcript(
                 $8, $9::\"CreditType\",
                 $10::\"GradeLetter\", $11,
                 $12, $13::\"AgentName\", $14,
-                $15::timestamp, $16::timestamp, $17
+                $15, $16, $17
             )
             ON CONFLICT ("studentId", "lessonId") DO UPDATE SET
                 "courseTitle"         = EXCLUDED."courseTitle",
