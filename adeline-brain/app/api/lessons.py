@@ -98,8 +98,8 @@ async def _persist_learning_records(lesson: LessonResponse) -> None:
 )
 @limiter.limit("20/hour")
 async def generate_lesson(
-    http_request: Request,
-    request: LessonRequest,
+    request: Request,
+    lesson_request: LessonRequest,
     student_id: str = Depends(get_current_user_id),
 ):
     """
@@ -116,12 +116,13 @@ async def generate_lesson(
       8. Fire-and-forget persistence to DB (non-blocking)
       9. Return structured LessonResponse
     """
+    lr = lesson_request  # alias for brevity
     logger.info(
-        f"[/lessons/generate] topic='{request.topic}' track={request.track.value} "
-        f"grade={request.grade_level} homestead={request.is_homestead}"
+        f"[/lessons/generate] topic='{lr.topic}' track={lr.track.value} "
+        f"grade={lr.grade_level} homestead={lr.is_homestead}"
     )
     try:
-        slug = canonical_slug(request.topic, request.track.value)
+        slug = canonical_slug(lr.topic, lr.track.value)
 
         # ── Phase 1: Check canonical store ───────────────────────────────────
         canonical = None
@@ -131,12 +132,11 @@ async def generate_lesson(
             logger.warning(f"[/lessons/generate] Canonical store read failed (non-fatal): {e}")
 
         if canonical:
-            logger.info(f"[/lessons/generate] Canonical HIT — adapting for student grade={request.grade_level}")
+            logger.info(f"[/lessons/generate] Canonical HIT — adapting for student grade={lr.grade_level}")
             student_state = await load_student_state(student_id)
-            track_mastery = student_state.get(request.track.value)
+            track_mastery = student_state.get(lr.track.value)
             interaction_count = track_mastery.lesson_count if track_mastery else 10
 
-            # Fetch student interests for persona adaptation
             interests: list[str] = []
             recent_quiz_scores: list[float] = []
             try:
@@ -144,7 +144,6 @@ async def generate_lesson(
                 conn = await get_db_conn()
                 row = await conn.fetchrow('SELECT interests FROM "User" WHERE id = $1', student_id)
                 interests = row["interests"] or [] if row else []
-                # Fetch recent SM-2 easiness scores as quiz engagement signal
                 cards = await conn.fetch(
                     'SELECT easiness FROM "SpacedRepetitionCard" '
                     'WHERE "studentId" = $1 ORDER BY "updatedAt" DESC LIMIT 5',
@@ -166,8 +165,8 @@ async def generate_lesson(
                 modality = "text"
 
             adapt_req = AdaptationRequest(
-                grade_level=request.grade_level,
-                track=request.track.value,
+                grade_level=lr.grade_level,
+                track=lr.track.value,
                 interests=interests,
                 interaction_count=interaction_count,
                 recent_quiz_scores=recent_quiz_scores,
@@ -178,7 +177,7 @@ async def generate_lesson(
             blocks = [LessonBlockResponse(**b) for b in adapted_blocks]
             return LessonResponse(
                 title=canonical["title"],
-                track=request.track,
+                track=lr.track,
                 blocks=blocks,
                 has_research_missions=any(b.get("block_type") == "RESEARCH_MISSION" for b in adapted_blocks),
                 oas_standards=canonical.get("oas_standards", []),
@@ -188,25 +187,23 @@ async def generate_lesson(
 
         # ── Phase 2: Full generation (no canonical exists yet) ───────────────
         logger.info(f"[/lessons/generate] No canonical — running full orchestrator")
-        query_embedding = await _embed(request.topic)
+        query_embedding = await _embed(lr.topic)
 
-        # Load track interaction count for stealth assessment calibration
         student_state     = await load_student_state(student_id)
-        track_mastery     = student_state.get(request.track.value)
+        track_mastery     = student_state.get(lr.track.value)
         interaction_count = track_mastery.lesson_count
 
-        # Cross-track mastery bias — only computed on first entry to a track
         cross_track_acknowledgment: str | None = None
         if interaction_count == 0:
             try:
                 bias_value, cross_track_acknowledgment = await get_cross_track_bias(
                     student_id=student_id,
-                    target_track=request.track.value,
+                    target_track=lr.track.value,
                 )
                 if bias_value > 0.0:
                     biased = apply_cross_track_bias(AdaptiveBKTParams(), bias_value)
                     logger.info(
-                        f"[Lessons] Cross-track bias {request.track.value}: "
+                        f"[Lessons] Cross-track bias {lr.track.value}: "
                         f"pL 0.1 → {biased.pL:.3f} (bias={bias_value:.3f})"
                     )
             except Exception as e:
@@ -214,7 +211,7 @@ async def generate_lesson(
                 cross_track_acknowledgment = None
 
         lesson = await run_orchestrator(
-            request,
+            lr,
             query_embedding,
             interaction_count=interaction_count,
             cross_track_acknowledgment=cross_track_acknowledgment,
@@ -225,8 +222,8 @@ async def generate_lesson(
             canonical_record = {
                 "id": lesson.lesson_id,
                 "topic_slug": slug,
-                "topic": request.topic,
-                "track": request.track.value,
+                "topic": lr.topic,
+                "track": lr.track.value,
                 "title": lesson.title,
                 "blocks": [b.model_dump() for b in lesson.blocks],
                 "oas_standards": lesson.oas_standards,
