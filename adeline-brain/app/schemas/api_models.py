@@ -216,7 +216,7 @@ class LessonRequest(BaseModel):
 
 class LessonBlockResponse(BaseModel):
     block_id:         str = Field(default_factory=lambda: str(uuid.uuid4()))
-    block_type:       BlockType
+    block_type:       str   # BlockType or GenUIBlockType — adapter may produce any of 15 types
     content:          str
     evidence:         list[Evidence] = []
     is_silenced:      bool = False
@@ -225,6 +225,10 @@ class LessonBlockResponse(BaseModel):
     timeline_data:        Optional[TimelineData] = None
     mnemonic_data:        Optional[MnemonicData] = None
     narrated_slide_data:  Optional[NarratedSlideData] = None
+    # Interface-generative fields — populated by adapter when transforming block type
+    quiz_data:            Optional[dict] = None   # QuizData: {question, options, explanation, difficulty}
+    flashcard_data:       Optional[dict] = None   # FlashcardData: {front, back, category}
+    experiment_data:      Optional[dict] = None   # ExperimentData: {title, materials, steps, ...}
     book_id:              Optional[str] = None
     book_title:           Optional[str] = None
     book_author:          Optional[str] = None

@@ -138,20 +138,40 @@ async def generate_lesson(
 
             # Fetch student interests for persona adaptation
             interests: list[str] = []
+            recent_quiz_scores: list[float] = []
             try:
                 from app.config import get_db_conn
                 conn = await get_db_conn()
                 row = await conn.fetchrow('SELECT interests FROM "User" WHERE id = $1', student_id)
-                await conn.close()
                 interests = row["interests"] or [] if row else []
+                # Fetch recent SM-2 easiness scores as quiz engagement signal
+                cards = await conn.fetch(
+                    'SELECT easiness FROM "SpacedRepetitionCard" '
+                    'WHERE "studentId" = $1 ORDER BY "updatedAt" DESC LIMIT 5',
+                    student_id,
+                )
+                recent_quiz_scores = [float(r["easiness"]) for r in cards]
+                await conn.close()
             except Exception:
                 pass
+
+            _visual_interests = {"art", "drawing", "visual", "film", "video", "photography", "design"}
+            _kinesthetic_interests = {"farming", "building", "cooking", "crafting", "garden", "homestead"}
+            interests_lower = {i.lower() for i in interests}
+            if interests_lower & _visual_interests:
+                modality = "visual"
+            elif interests_lower & _kinesthetic_interests:
+                modality = "kinesthetic"
+            else:
+                modality = "text"
 
             adapt_req = AdaptationRequest(
                 grade_level=request.grade_level,
                 track=request.track.value,
                 interests=interests,
                 interaction_count=interaction_count,
+                recent_quiz_scores=recent_quiz_scores,
+                preferred_modality=modality,
             )
             adapted_blocks = await adapt_canonical_for_student(canonical, adapt_req)
             from app.schemas.api_models import LessonBlockResponse

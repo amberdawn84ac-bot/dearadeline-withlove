@@ -18,9 +18,12 @@
 import { useState } from "react";
 import { clsx } from "clsx";
 import { motion } from "framer-motion";
-import type { LessonBlockResponse, Evidence, MindMapData, TimelineData, MnemonicData, NarratedSlideData } from "@/lib/brain-client";
+import type { LessonBlockResponse, Evidence, MindMapData, TimelineData, MnemonicData, NarratedSlideData, QuizData, FlashcardData } from "@/lib/brain-client";
 import { MindMap } from "@/components/gen-ui/patterns/MindMap";
 import { Timeline } from "@/components/gen-ui/patterns/Timeline";
+import { QuizCard } from "@/components/gen-ui/patterns/QuizCard";
+import { Flashcard } from "@/components/gen-ui/patterns/Flashcard";
+import { TextSelectionMenu } from "@/components/gen-ui/TextSelectionMenu";
 import { WeightTierBadge } from "@/components/lessons/WeightTierBadge";
 import { DistortionFlag } from "@/components/lessons/DistortionFlag";
 import { KeystoneConcept } from "@/components/lessons/KeystoneConcept";
@@ -68,12 +71,15 @@ type BrainBlockType =
   | "NARRATIVE"
   | "RESEARCH_MISSION"
   | "QUIZ"
+  | "FLASHCARD"
   | "TEXT"
   | "MIND_MAP"
   | "TIMELINE"
   | "MNEMONIC"
   | "NARRATED_SLIDE"
-  | "BOOK_SUGGESTION";
+  | "BOOK_SUGGESTION"
+  | "INTERACTIVE_SIM"
+  | "HIGHLIGHT_ASK";
 
 // ── OAS Standard entry ────────────────────────────────────────────────────────
 
@@ -172,12 +178,15 @@ const LABEL_STYLES: Record<BrainBlockType, string> = {
   NARRATIVE:        "bg-[#BD6809] text-white",
   RESEARCH_MISSION: "bg-[#6B7280] text-white",
   QUIZ:             "bg-[#4F46E5] text-white",
+  FLASHCARD:        "bg-[#0E7490] text-white",
   TEXT:             "bg-[#D1D5DB] text-[#374151]",
   MIND_MAP:         "bg-[#166534] text-white",
   TIMELINE:         "bg-[#1E3A5F] text-white",
   MNEMONIC:         "bg-[#6B21A8] text-white",
   NARRATED_SLIDE:   "bg-[#1D4ED8] text-white",
   BOOK_SUGGESTION:  "bg-[#78350F] text-white",
+  INTERACTIVE_SIM:  "bg-[#065F46] text-white",
+  HIGHLIGHT_ASK:    "bg-[#374151] text-white",
 };
 
 const LABEL_NAMES: Record<BrainBlockType, string> = {
@@ -187,12 +196,15 @@ const LABEL_NAMES: Record<BrainBlockType, string> = {
   NARRATIVE:        "Narrative",
   RESEARCH_MISSION: "Research Mission",
   QUIZ:             "Quiz",
+  FLASHCARD:        "Flashcard",
   TEXT:             "Reading",
   MIND_MAP:         "Mind Map",
   TIMELINE:         "Timeline",
   MNEMONIC:         "Mnemonic",
   NARRATED_SLIDE:   "Lesson Slides",
   BOOK_SUGGESTION:  "Suggested Reading",
+  INTERACTIVE_SIM:  "Interactive",
+  HIGHLIGHT_ASK:    "Highlight & Ask",
 };
 
 function BlockLabel({ type }: { type: string }) {
@@ -374,6 +386,27 @@ function ResearchMissionBlock({ block }: { block: LessonBlockResponse }) {
 // ── QUIZ block ────────────────────────────────────────────────────────────────
 
 function QuizBlock({ block }: { block: LessonBlockResponse }) {
+  // If adapter generated structured quiz_data, use the interactive QuizCard
+  if (block.quiz_data) {
+    const qd = block.quiz_data;
+    const options = qd.options.map((o) => o.text);
+    const correctIndex = qd.options.findIndex((o) => o.is_correct);
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-lg">❓</span>
+          <BlockLabel type="QUIZ" />
+        </div>
+        <QuizCard
+          question={qd.question}
+          options={options}
+          correctIndex={correctIndex >= 0 ? correctIndex : 0}
+          explanation={qd.explanation}
+        />
+      </div>
+    );
+  }
+  // Fallback: open-ended text response
   return (
     <div
       className="rounded-xl p-5 space-y-3"
@@ -395,6 +428,61 @@ function QuizBlock({ block }: { block: LessonBlockResponse }) {
         rows={3}
         placeholder="Write your answer here..."
       />
+    </div>
+  );
+}
+
+// ── FLASHCARD block ───────────────────────────────────────────────────────────
+
+function FlashcardBlock({ block }: { block: LessonBlockResponse }) {
+  if (block.flashcard_data) {
+    const fd = block.flashcard_data;
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-lg">🃏</span>
+          <BlockLabel type="FLASHCARD" />
+        </div>
+        <Flashcard
+          term={fd.front}
+          definition={fd.back}
+          category={fd.category}
+        />
+      </div>
+    );
+  }
+  // Fallback if no structured data
+  return (
+    <div
+      className="rounded-xl p-5 space-y-3"
+      style={{ background: "#ECFEFF", border: "1.5px solid #0E7490" }}
+    >
+      <BlockLabel type="FLASHCARD" />
+      <LessonContent content={block.content} color="#0C4A6E" />
+    </div>
+  );
+}
+
+// ── INTERACTIVE_SIM block (placeholder) ──────────────────────────────────────
+
+function InteractiveSimBlock({ block }: { block: LessonBlockResponse }) {
+  const sim = (block as any).interactive_sim_data;
+  return (
+    <div
+      className="rounded-xl p-5 space-y-3"
+      style={{ background: "#ECFDF5", border: "2px dashed #065F46" }}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-lg">⚙️</span>
+        <BlockLabel type="INTERACTIVE_SIM" />
+        <span className="ml-auto text-xs font-bold text-[#065F46] uppercase tracking-wider">
+          Coming Soon
+        </span>
+      </div>
+      <p className="font-bold text-[#065F46]">{sim?.title ?? block.content}</p>
+      {sim?.instructions && (
+        <p className="text-sm text-[#2F4731]/70 italic">{sim.instructions}</p>
+      )}
     </div>
   );
 }
@@ -693,9 +781,9 @@ function AgentCreditFooter({
   );
 }
 
-// ── GenUIRenderer ─────────────────────────────────────────────────────────────
+// ── GenUIRenderer (internal — use GenUIRendererWithHighlightAsk as default export) ──
 
-export default function GenUIRenderer({
+function GenUIRenderer({
   lessonId: _lessonId,
   blocks,
   isHomestead,
@@ -741,6 +829,12 @@ export default function GenUIRenderer({
               break;
             case "QUIZ":
               blockContent = <QuizBlock block={block} />;
+              break;
+            case "FLASHCARD":
+              blockContent = <FlashcardBlock block={block} />;
+              break;
+            case "INTERACTIVE_SIM":
+              blockContent = <InteractiveSimBlock block={block} />;
               break;
             case "MIND_MAP":
               blockContent = <MindMapBlock block={block} />;
@@ -814,7 +908,7 @@ export default function GenUIRenderer({
         </motion.div>
       )}
 
-      <motion.div 
+      <motion.div
         variants={blockVariants}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -823,5 +917,31 @@ export default function GenUIRenderer({
         <AgentCreditFooter agentName={agentName} creditHours={creditHours} />
       </motion.div>
     </motion.div>
+  );
+}
+
+// ── GenUIRenderer with Highlight & Ask ────────────────────────────────────────
+// Composes the renderer with TextSelectionMenu — students can highlight any
+// text and ask Adeline about it. The menu floats above the selection.
+
+export default function GenUIRendererWithHighlightAsk(props: GenUIRendererProps) {
+  const handleAskAboutSelection = async (selectedText: string) => {
+    // Fire-and-forget: the AdelineChatPanel picks this up via a custom event
+    window.dispatchEvent(
+      new CustomEvent("adeline:highlight-ask", {
+        detail: { text: selectedText, lessonId: props.lessonId },
+      })
+    );
+  };
+
+  return (
+    <>
+      <TextSelectionMenu
+        onAskAboutSelection={handleAskAboutSelection}
+        minChars={15}
+        maxChars={400}
+      />
+      <GenUIRenderer {...props} />
+    </>
   );
 }

@@ -71,6 +71,25 @@ export interface MnemonicData { concept: string; acronym: string; words: string[
 export interface NarratedSlide { slide_number: number; title: string; bullets: string[]; narration: string; }
 export interface NarratedSlideData { total_duration_minutes: number; slides: NarratedSlide[]; }
 
+// Interface-generative block data — populated by adapter when transforming block type
+export interface QuizOption { text: string; is_correct: boolean; }
+export interface QuizData {
+  question: string;
+  options: QuizOption[];
+  explanation: string;
+  difficulty: "easy" | "medium" | "hard";
+}
+export interface FlashcardData { front: string; back: string; category?: string; }
+export interface ExperimentData {
+  title: string;
+  tagline?: string;
+  materials: string[];
+  steps: string[];
+  scientific_concepts: string[];
+  creation_connection?: string;
+  safety_notes?: string;
+}
+
 export interface LessonBlockResponse {
   block_id: string;
   block_type: string;
@@ -82,6 +101,10 @@ export interface LessonBlockResponse {
   timeline_data?:       TimelineData;
   mnemonic_data?:       MnemonicData;
   narrated_slide_data?: NarratedSlideData;
+  // Interface-generative fields — set by adapter when transforming block type
+  quiz_data?:           QuizData;
+  flashcard_data?:      FlashcardData;
+  experiment_data?:     ExperimentData;
   book_id?:             string;
   book_title?:          string;
   book_author?:         string;
