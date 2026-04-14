@@ -291,6 +291,17 @@ def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: st
             "with student progress state for applying principles."
         )
 
+    # ── Re-render Triggers for GENUI_ASSEMBLY ───────────────────────────────
+    genui_re_render_instructions = (
+        "\n**Re-render Triggers for GENUI_ASSEMBLY:** "
+        "When injecting GENUI_ASSEMBLY blocks, include reRenderTriggers based on student behavior:\n"
+        "- onStruggle: After 2+ wrong answers in a row OR when pL drops below 0.55\n"
+        "- onMasteryDrop: When decay-adjusted mastery decreases noticeably\n"
+        "- onHintThreshold: After student uses 3+ hints in one component\n"
+        "- onComplete: When student finishes the component successfully\n"
+        "Example: reRenderTriggers: ['onStruggle', 'onComplete']"
+    )
+
     # ── Discipleship nudge ────────────────────────────────────────────────────
     discipleship_clause = ""
     if _has_discipleship_theme(topic_hint or req.track, req.track):
@@ -333,6 +344,7 @@ def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: st
         f"{discipleship_clause}"
         f"{proficiency_clause}"
         f"{genui_directive}"
+        f"{genui_re_render_instructions}"
         f"{genui_hint}"
         f"\n\nORIGINAL CONTENT:\n{content}"
     )
@@ -442,6 +454,14 @@ async def generate_genui_assembly_data(content: str, req: AdaptationRequest) -> 
     else:
         component_type = "InteractiveQuiz"
 
+    # Determine re-render triggers based on component type
+    if component_type in ("ScaffoldedProblem", "InteractiveQuiz"):
+        re_render_triggers = ["onStruggle", "onComplete"]
+    elif component_type == "HardThingChallenge":
+        re_render_triggers = ["onComplete"]
+    else:
+        re_render_triggers = ["onComplete"]
+
     system = (
         f"You generate structured data for a {component_type} component from lesson content. "
         "Return ONLY valid JSON with keys: "
@@ -449,18 +469,22 @@ async def generate_genui_assembly_data(content: str, req: AdaptationRequest) -> 
         "props (dict with component-specific fields), "
         "initial_state (dict with keys like currentStep, hintsUsed, progress), "
         "callbacks (array of strings like onAnswer, onComplete, onHint), "
-        "re_render_triggers (array of strings like masteryUpdate, struggleDetected). "
+        "re_render_triggers (array of strings like onStruggle, onComplete, onMasteryDrop, onHintThreshold). "
         "No markdown, just JSON."
     )
     user = (
         f"Generate {component_type} data for a {grade_desc} student from this content:\n\n{content[:1000]}\n\n"
         f"Context: priority_score={req.priority_score:.2f}, bkt_pL={req.bkt_pL:.2f}, "
-        f"decay_adjusted_mastery={req.decay_adjusted_mastery:.2f}"
+        f"decay_adjusted_mastery={req.decay_adjusted_mastery:.2f}\n"
+        f"Include these re_render_triggers: {', '.join(re_render_triggers)}"
     )
     raw = await _llm_call(system, user, max_tokens=800)
     try:
         data = json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
         if "component_type" in data and "props" in data:
+            # Ensure re_render_triggers are included
+            if "re_render_triggers" not in data:
+                data["re_render_triggers"] = re_render_triggers
             return data
     except (json.JSONDecodeError, AttributeError):
         pass

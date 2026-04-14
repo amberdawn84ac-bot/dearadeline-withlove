@@ -15,7 +15,7 @@
  * Cross-track OAS standards are shown in a GraphRAG sidebar section.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { clsx } from "clsx";
 import { motion } from "framer-motion";
 import type { LessonBlockResponse, Evidence, MindMapData, TimelineData, MnemonicData, NarratedSlideData, QuizData, FlashcardData } from "@/lib/brain-client";
@@ -25,6 +25,8 @@ import { QuizCard } from "@/components/gen-ui/patterns/QuizCard";
 import { Flashcard } from "@/components/gen-ui/patterns/Flashcard";
 import { ScaffoldedProblem } from "@/components/gen-ui/patterns/ScaffoldedProblem";
 import { HardThingChallenge } from "@/components/gen-ui/patterns/HardThingChallenge";
+import { DragDropTimeline } from "@/components/gen-ui/patterns/DragDropTimeline";
+import { LiveChart } from "@/components/gen-ui/patterns/LiveChart";
 import { TextSelectionMenu } from "@/components/gen-ui/TextSelectionMenu";
 import { WeightTierBadge } from "@/components/lessons/WeightTierBadge";
 import { DistortionFlag } from "@/components/lessons/DistortionFlag";
@@ -40,8 +42,8 @@ import Link from "next/link";
 const componentRegistry: Record<string, React.ComponentType<any>> = {
   InteractiveQuiz: QuizCard,  // Reuse existing QuizCard for now
   ScaffoldedProblem: ScaffoldedProblem,  // Implemented stateful component
-  DragDropTimeline: Timeline,  // Reuse existing Timeline for now
-  LiveChart: () => <div className="p-4 text-sm text-[#374151]">LiveChart component coming soon</div>,
+  DragDropTimeline: DragDropTimeline,  // Implemented drag-and-drop timeline
+  LiveChart: LiveChart,  // Implemented mastery progress chart
   ProjectBuilder: () => <div className="p-4 text-sm text-[#374151]">ProjectBuilder component coming soon</div>,
   SocraticDebate: () => <div className="p-4 text-sm text-[#374151]">SocraticDebate component coming soon</div>,
   HardThingChallenge: HardThingChallenge,  // Implemented discipleship component
@@ -66,6 +68,7 @@ function DynamicComponent({
   onStateChange,
 }: DynamicComponentProps) {
   const [localState, setLocalState] = useState(initialState);
+  const [localProps, setLocalProps] = useState(props);
 
   const Component = componentRegistry[componentType];
 
@@ -86,9 +89,16 @@ function DynamicComponent({
     onStateChange?.(newState);
   };
 
+  // Handle re-render triggers from backend callback
+  useEffect(() => {
+    if (props !== localProps) {
+      setLocalProps(props);
+    }
+  }, [props]);
+
   return (
     <Component
-      {...props}
+      {...localProps}
       state={localState}
       onStateChange={handleStateChange}
       callbacks={callbacks}

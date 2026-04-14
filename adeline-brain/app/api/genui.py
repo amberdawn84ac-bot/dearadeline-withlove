@@ -31,6 +31,9 @@ class GenuiCallbackResponse(BaseModel):
     success: bool
     updated_mastery: Optional[float] = None
     message: str
+    should_re_render: bool = False  # New: trigger component re-render
+    new_state: Optional[dict] = None  # New: updated component state
+    new_props: Optional[dict] = None  # New: updated component props
 
 
 @router.post("/callback", response_model=GenuiCallbackResponse)
@@ -63,6 +66,10 @@ async def genui_callback(
     updated_mastery = None
 
     # Handle specific events
+    should_re_render = False
+    new_state = None
+    new_props = None
+
     if request.event == "onAnswer":
         is_correct = request.state.get("isCorrect", False)
         # TODO: Fetch current BKT params for this concept from database
@@ -80,15 +87,30 @@ async def genui_callback(
         # Log hint usage
         hints_used = request.state.get("hintsUsed", 0)
         logger.info(f"[GENUI] Hint used: total={hints_used}")
-        # TODO: May affect mastery decay
+        # Trigger re-render if hint threshold reached
+        if hints_used >= 3:
+            should_re_render = True
+            new_state = request.state
+            logger.info(f"[GENUI] Hint threshold reached - triggering re-render")
 
     elif request.event == "onStruggle":
         # Detect struggle and trigger scaffolding
-        logger.info(f"[GENUI] Struggle detected: {request.state}")
-        # TODO: Trigger adaptive scaffolding
+        wrong_attempts = request.state.get("wrongAttempts", 0)
+        logger.info(f"[GENUI] Struggle detected: wrong_attempts={wrong_attempts}")
+        # Trigger re-render with scaffolding after 2+ wrong attempts
+        if wrong_attempts >= 2:
+            should_re_render = True
+            new_state = {
+                **request.state,
+                "scaffolding_level": request.state.get("scaffolding_level", 0) + 1
+            }
+            logger.info(f"[GENUI] Struggle threshold reached - triggering scaffolding re-render")
 
     return GenuiCallbackResponse(
         success=True,
         updated_mastery=updated_mastery,
-        message=f"Processed {request.event} event for {request.component_type}"
+        message=f"Processed {request.event} event for {request.component_type}",
+        should_re_render=should_re_render,
+        new_state=new_state,
+        new_props=new_props
     )
