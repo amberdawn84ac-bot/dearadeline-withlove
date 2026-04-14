@@ -31,6 +31,7 @@ Your job is to distill — not just rewrite — the lesson for this specific stu
 - Keep every fact, date, name, and quote. NEVER invent or remove verified content.
 - Filter depth: if bkt_pL < 0.30, simplify and skip advanced nuance sections.
 - Rewrite vocabulary and sentence complexity for the grade level.
+- When the prompt contains a PRIORITY HIGH directive, follow its four numbered steps precisely — section expansion, compression, and check-in question are mandatory, not optional.
 - Inject a GENUI hint comment at the end of the block ONLY when specified in the prompt instructions.
 - Do NOT add busywork, "great job!", or filler.
 - Return ONLY the rewritten content block — no preamble, no explanation.
@@ -218,9 +219,12 @@ def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: st
     # ── Priority score instruction ────────────────────────────────────────────
     if req.priority_score > 0.7:
         priority_clause = (
-            f"\nPRIORITY: This is a high-leverage concept (priority={req.priority_score:.2f}). "
-            "Spend extra time on the core mechanism — don't rush past it. "
-            "Make sure the student understands the 'why' before moving on."
+            f"\nPRIORITY HIGH (priority={req.priority_score:.2f}): This concept is the linchpin — "
+            "getting it wrong blocks future learning. Follow these steps exactly:\n"
+            "1. Lead with the core mechanism in the first sentence. No preamble.\n"
+            f"2. Expand the main explanation by 30-40% compared to a standard rewrite (decay-adjusted mastery={req.decay_adjusted_mastery:.2f} confirms headroom to go deeper).\n"
+            "3. Cut or compress any section peripheral to the core mechanism (analogies, historical background, tangents) — keep them only if they directly illuminate the mechanism.\n"
+            "4. End with one concrete 'test your understanding' check-in question (plain prose, NOT a quiz block)."
         )
     elif req.priority_score < 0.35:
         priority_clause = (

@@ -69,9 +69,16 @@ SEED_TOPICS: list[tuple[str, str, bool]] = [
 
 async def seed_one(topic: str, track: str, cross_track: bool) -> str:
     """Generate and save a single canonical. Returns 'seeded', 'skipped', or 'failed'."""
+    import traceback as _tb
     from app.connections.canonical_store import canonical_store, canonical_slug
     from app.agents.orchestrator import run_orchestrator
+    from app.connections.pgvector_client import hippocampus as _hc
     from app.schemas.api_models import LessonRequest, Track
+
+    # Ensure hippocampus is connected (idempotent guard)
+    if _hc._session_factory is None:
+        await _hc.connect()
+        logger.info("[Seed] Hippocampus reconnected inside seed_one")
 
     slug = canonical_slug(topic, track)
 
@@ -132,7 +139,7 @@ async def seed_one(topic: str, track: str, cross_track: bool) -> str:
         return "seeded"
 
     except Exception as e:
-        logger.error(f"[Seed] FAILED — {topic!r} / {track}: {e}")
+        logger.error(f"[Seed] FAILED — {topic!r} / {track}: {e}\n{_tb.format_exc()}")
         return "failed"
 
 
@@ -145,6 +152,13 @@ async def main() -> None:
         await journal_store.connect()
     except Exception as e:
         logger.warning(f"[Seed] journal_store connect failed (non-fatal): {e}")
+
+    from app.connections.pgvector_client import hippocampus
+    try:
+        await hippocampus.connect()
+        logger.info("[Seed] Hippocampus connected")
+    except Exception as e:
+        logger.warning(f"[Seed] hippocampus connect failed (non-fatal): {e}")
 
     results: dict[str, int] = {"seeded": 0, "skipped": 0, "failed": 0}
 
