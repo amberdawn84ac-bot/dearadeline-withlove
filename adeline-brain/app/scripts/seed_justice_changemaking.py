@@ -242,7 +242,6 @@ async def seed_category(
                                 source_type = "DOCUMENT"
                             
                             await hippocampus.upsert_document(
-                                source_id=f"justice-{category}-{hash(chunk['text']) % 1000000}",
                                 source_title=chunk["metadata"].get("source_title", result["title"]),
                                 source_url=chunk["metadata"].get("source_url", result["url"]),
                                 chunk=chunk["text"],

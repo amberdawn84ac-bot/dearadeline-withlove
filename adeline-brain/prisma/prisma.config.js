@@ -1,7 +1,7 @@
 module.exports = {
   datasources: {
     db: {
-      url: 'postgresql://postgres:9fbMRQRnpAy8MrTL@db.gyxowttfwqbajoapfebf.supabase.co:5432/postgres',
+      url: process.env.DIRECT_DATABASE_URL || process.env.DATABASE_URL,
     },
   },
 }

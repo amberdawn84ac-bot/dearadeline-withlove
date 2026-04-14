@@ -8,6 +8,7 @@ import logging
 import os
 import asyncio
 import time
+from typing import Optional
 
 import openai
 from fastapi import APIRouter, HTTPException, Depends, Request
