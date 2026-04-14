@@ -55,6 +55,9 @@ logger = logging.getLogger(__name__)
 # This limits to ~10 API calls, with gradual refill for sustained load
 tavily_limiter = TokenBucket(max_tokens=10, refill_rate=0.5)
 
+# Semaphore to cap concurrent Tavily HTTP calls (prevents burst rate-limiting)
+_tavily_semaphore = asyncio.Semaphore(5)
+
 EMBED_MODEL       = "text-embedding-3-small"
 TAVILY_URL        = "https://api.tavily.com/search"
 TAVILY_TIMEOUT    = 15.0
@@ -264,23 +267,46 @@ async def search_archive_async(query: str, archive_name: str, domains_map: dict 
     return []
 
 
+async def search_with_fallback(query: str, track: str = None) -> tuple[list[dict], bool]:
+    """
+    Search archives with fallback detection.
+
+    Returns (results, fallback_flag) where fallback_flag is True if all archives
+    returned empty results (Tavily unavailable or no matches). Callers can use this
+    flag to trigger RESEARCH_MISSION assignment immediately.
+    """
+    results = await search_all_archives_parallel(query, track)
+    fallback = len(results) == 0
+    if fallback:
+        logger.warning(
+            f"[Researcher] search_with_fallback returned empty for "
+            f"query='{query}' track={track} — Tavily unavailable or no matches"
+        )
+    return results, fallback
+
+
 async def search_all_archives_parallel(query: str, track: str = None) -> list[dict]:
     """
     Search archives in parallel based on track type.
-    
-    - TRUTH_HISTORY, JUSTICE_CHANGEMAKING: Search primary source repositories (government archives, 
+
+    - TRUTH_HISTORY, JUSTICE_CHANGEMAKING: Search primary source repositories (government archives,
       Library of Congress, Internet Archive, university digital collections, etc.)
     - CREATION_SCIENCE, HOMESTEADING, HEALTH_NATUROPATHY: Search science education domains
     - Other tracks: Search science domains (more general content)
-    
+
     Returns deduplicated list of documents across all searched domains.
     """
     # Choose domains based on track — each track has appropriate sources
     domains_map = TRACK_DOMAINS.get(track, SCIENCE_DOMAINS)
     logger.info(f"[Researcher] Using {len(domains_map)} domain(s) for track={track}")
-    
+
     archives = list(domains_map.keys())
-    tasks = [search_archive_async(query, archive, domains_map) for archive in archives]
+
+    async def _search_with_semaphore(archive: str) -> list[dict]:
+        async with _tavily_semaphore:
+            return await search_archive_async(query, archive, domains_map)
+
+    tasks = [_search_with_semaphore(archive) for archive in archives]
     all_results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Deduplicate by URL
@@ -393,9 +419,15 @@ async def search_witnesses(
         if not tavily_configured:
             logger.error(f"[Researcher] Cannot search web — TAVILY_API_KEY not configured. Returning empty.")
             return []
-        
-        archive_results = await search_all_archives_parallel(query, track=track)
+
+        archive_results, fallback = await search_with_fallback(query, track=track)
         logger.info(f"[Researcher] Deep web search returned {len(archive_results)} raw results")
+
+        if fallback:
+            logger.warning(
+                f"[Tavily] All archives returned empty — assigning RESEARCH_MISSION for "
+                f"topic='{query}' track={track}"
+            )
 
         if not archive_results:
             logger.info(f"[Researcher] No results from deep web search either. Student gets RESEARCH_MISSION.")

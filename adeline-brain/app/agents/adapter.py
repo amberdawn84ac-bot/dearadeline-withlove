@@ -63,6 +63,8 @@ class AdaptationRequest:
     priority_score:         float = 0.5   # compute_priority() result 0-1
     decay_adjusted_mastery: float = 0.0   # mastery after apply_decay()
     cross_track_bias:       float = 0.0   # from apply_cross_track_bias()
+    # ── Per-concept proficiency map (Step 2 — delivery layer) ──────────────────
+    proficiency_map:       dict[str, float] = field(default_factory=dict)  # {concept_id/slug: 0.0-1.0}
 
 
 # ── Transformation selection (pure logic, no LLM) ────────────────────────────
@@ -276,6 +278,25 @@ def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: st
             "One sentence maximum. Omit entirely if no genuine connection exists."
         )
 
+    # ── Proficiency context ────────────────────────────────────────────────────
+    proficiency_clause = ""
+    if req.proficiency_map:
+        high_mastery = [k for k, v in req.proficiency_map.items() if v > 0.8]
+        low_mastery = [k for k, v in req.proficiency_map.items() if v < 0.3]
+        if high_mastery or low_mastery:
+            parts = []
+            if high_mastery:
+                parts.append(f"Concepts scoring > 0.8 (known): {', '.join(high_mastery[:5])} — use as analogies only.")
+            if low_mastery:
+                parts.append(f"Concepts scoring < 0.3 (new): {', '.join(low_mastery[:5])} — provide heavy scaffolding.")
+            proficiency_clause = (
+                f"\nStudent proficiency context:\n"
+                f"- Concepts with score > 0.8: treat as known; use for analogies only.\n"
+                f"- Concepts with score < 0.3: treat as new; provide heavy scaffolding.\n"
+                f"- Mid-range (0.3–0.8): student is in ZPD — Socratic prompting.\n"
+                f"{'; '.join(parts)}"
+            )
+
     return (
         f"Rewrite the following lesson content for a {grade_desc} student "
         f"in the {track_name} curriculum. "
@@ -288,6 +309,7 @@ def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: st
         f"{cross_track_clause}"
         f"{decay_clause}"
         f"{discipleship_clause}"
+        f"{proficiency_clause}"
         f"{genui_hint}"
         f"\n\nORIGINAL CONTENT:\n{content}"
     )

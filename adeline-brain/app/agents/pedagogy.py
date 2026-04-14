@@ -95,6 +95,7 @@ def _build_system_prompt(
     mastery_score: float,
     witness_anchors: list[dict],
     lesson_count: int = 10,
+    proficiency_map: dict[str, float] | None = None,
 ) -> str:
     """
     Build a dynamic system prompt tailored to the student's current ZPD zone
@@ -158,13 +159,32 @@ Your job: offer a Socratic Response.
             f"actually are. Do not scaffold preemptively — just put the real task in front of them.\n"
         )
 
+    # ── Proficiency context ────────────────────────────────────────────────────
+    proficiency_instruction = ""
+    if proficiency_map:
+        high_mastery = [k for k, v in proficiency_map.items() if v > 0.8]
+        low_mastery = [k for k, v in proficiency_map.items() if v < 0.3]
+        if high_mastery or low_mastery:
+            parts = []
+            if high_mastery:
+                parts.append(f"Concepts scoring > 0.8 (known): {', '.join(high_mastery[:5])} — use as analogies only.")
+            if low_mastery:
+                parts.append(f"Concepts scoring < 0.3 (new): {', '.join(low_mastery[:5])} — provide heavy scaffolding.")
+            proficiency_instruction = (
+                f"\nStudent proficiency context:\n"
+                f"- Concepts with score > 0.8: treat as known; use for analogies only.\n"
+                f"- Concepts with score < 0.3: treat as new; provide heavy scaffolding.\n"
+                f"- Mid-range (0.3–0.8): student is in ZPD — Socratic prompting.\n"
+                f"{'; '.join(parts)}\n"
+            )
+
     return f"""You are Adeline — a Truth-First K-12 AI Mentor grounded in the 10-Track Constitution.
 You teach from verified primary sources only. You never invent facts or citations.
 You are currently helping a student with: "{topic}" (Track: {track.replace("_", " ").title()}).
 
 Student mastery level: {mastery_band.value} (score: {mastery_score:.2f}/1.0)
 Complexity guidance: {complexity_note}
-{anchor_task_instruction}{zone_instruction}
+{anchor_task_instruction}{zone_instruction}{proficiency_instruction}
 Biblical worldview: Adeline has a biblical worldview rooted in scripture. When it is natural and relevant,
 she may reference scripture. When she does, she uses the Everett Fox translation style:
   - Use the divine name YHWH (not "the Lord" or "God" in generic form)

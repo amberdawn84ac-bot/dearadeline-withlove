@@ -140,6 +140,118 @@ Rate limiting: 120 req/min per IP via slowapi middleware.
 
 ---
 
+## Production Secrets
+
+The following environment variables must be set in production. See `.env.example` for reference.
+
+| Variable | Description | Service |
+|----------|-------------|---------|
+| `SUPABASE_JWT_SECRET` | Supabase JWT signing secret for auth verification | adeline-brain |
+| `OPENAI_API_KEY` | OpenAI API key for embeddings and LLM calls | adeline-brain |
+| `ANTHROPIC_API_KEY` | Anthropic API key for Claude LLM calls | adeline-brain |
+| `TAVILY_API_KEY` | Tavily API key for deep web search | adeline-brain |
+| `NEO4J_URI` | Neo4j connection URI (e.g., `bolt://localhost:7687`) | adeline-brain |
+| `NEO4J_USER` | Neo4j username | adeline-brain |
+| `NEO4J_PASSWORD` | Neo4j password | adeline-brain |
+| `NEO4J_DATABASE` | Neo4j database name (optional) | adeline-brain |
+| `NEO4J_MAX_POOL_SIZE` | Neo4j connection pool max size (default: 50) | adeline-brain |
+| `NEO4J_ACQUIRE_TIMEOUT` | Neo4j connection acquisition timeout in seconds (default: 30) | adeline-brain |
+| `NEO4J_QUERY_TIMEOUT` | Neo4j query timeout in seconds (default: 10) | adeline-brain |
+| `REDIS_URL` | Redis connection URL for canonical store cache | adeline-brain |
+| `ADMIN_REVIEW_WEBHOOK_URL` | Webhook URL for HITL canonical review notifications (optional) | adeline-brain |
+| `ADELINE_ENV` | Environment: `production` or `development` | adeline-brain |
+
+**Security notes:**
+- Never commit secrets to git. Use Railway environment variables or a secrets manager.
+- Rotate API keys regularly.
+- Use least-privilege IAM roles for database access.
+
+---
+
+## Cloud Scaling
+
+### Neo4j Knowledge Graph
+
+Neo4j is configured for concurrent student loads via connection pooling and query timeouts:
+
+- **Connection pool size**: Configured via `NEO4J_MAX_POOL_SIZE` (default: 50). Adjust based on expected concurrent students. For 100 concurrent students, start with 50-100 connections.
+- **Connection acquisition timeout**: `NEO4J_ACQUIRE_TIMEOUT` (default: 30 seconds). Prevents indefinite blocking when pool is exhausted.
+- **Query timeout**: `NEO4J_QUERY_TIMEOUT` (default: 10 seconds). Prevents runaway queries from blocking the pool.
+- **Indexing**: Critical indexes are in place for ZPD queries:
+  - `SpacedRepetitionCard_studentId_track_idx` on `(studentId, track)` for proficiency lookups
+
+**Scaling guidance:**
+- Monitor connection pool exhaustion in logs. If seeing "Connection acquisition timeout" errors, increase `NEO4J_MAX_POOL_SIZE`.
+- For high traffic (> 500 concurrent students), consider a dedicated Neo4j instance with vertical scaling (more CPU/RAM) or horizontal scaling (Neo4j cluster).
+
+### Railway Deployment
+
+Railway auto-scales based on traffic. Key considerations:
+
+- **adeline-brain**: CPU/memory limits in Railway. Monitor for OOM errors during heavy LLM calls.
+- **Postgres**: Railway managed Postgres with pgvector extension. Connection pooling is handled by Railway.
+- **Redis**: Use Railway's Redis service for canonical store cache. Set `REDIS_URL` accordingly.
+
+**Environment variables:** Set all secrets in Railway project settings, not in `.env` files.
+
+### Redis Cache
+
+Redis is used for canonical lesson caching (fast retrieval, reduced DB load):
+
+- **TTL**: Canonicals are cached with a default TTL. Adjust based on content freshness requirements.
+- **Connection**: Single connection pool is sufficient for most loads. Redis is highly performant.
+
+### Rate Limiting
+
+The system uses token bucket rate limiting for external APIs:
+
+- **Tavily API**: 10 tokens max, 0.5 tokens/second refill (~10 API calls with gradual recovery). Concurrent calls capped at 5 via `asyncio.Semaphore`.
+- **Lesson generation**: 20 lessons/hour per IP via slowapi middleware.
+
+**Scaling guidance:**
+- Monitor Tavily rate limit errors. If hitting 429s frequently, increase token bucket size or reduce concurrent semaphore.
+- For production with high student volume, consider a queue system (e.g., Celery + Redis) for lesson generation to smooth burst loads.
+
+---
+
+## Database Migrations
+
+Database schema changes are managed through a single migration file: `prisma/migrations/apply_all.sql`.
+
+### Migration Workflow
+
+1. **Create new migration**: Add schema changes to a new dated migration file in `prisma/migrations/YYYYMMDD_description/migration.sql`.
+2. **Append to apply_all.sql**: Copy the new migration's SQL statements into `prisma/migrations/apply_all.sql` with a comment header indicating the date and purpose.
+3. **Apply migrations**: Run `apply_all.sql` against the production database. This file is the single source of truth for the complete schema.
+
+### Example: 2026-04-14 CanonicalLesson HITL Approval Columns
+
+```sql
+-- ── 2026-04-14: CanonicalLesson HITL approval columns ────────────────────────
+ALTER TABLE "CanonicalLesson"
+  ADD COLUMN IF NOT EXISTS "pendingApproval" BOOLEAN DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS "needsReviewReason" TEXT;
+
+CREATE INDEX IF NOT EXISTS "CanonicalLesson_pending_idx"
+  ON "CanonicalLesson" ("pendingApproval")
+  WHERE "pendingApproval" = TRUE;
+```
+
+### Important Notes
+
+- **Always use `IF NOT EXISTS`** for columns and indexes to make migrations idempotent and safe to re-run.
+- **Add indexes** for columns used in WHERE clauses (e.g., `studentId`, `track` for ZPD queries).
+- **Document the purpose** with comment headers in `apply_all.sql` for future maintainability.
+- **Test locally** before applying to production: `psql $DATABASE_URL -f prisma/migrations/apply_all.sql`.
+
+### Current Schema Highlights
+
+- **CanonicalLesson**: Stores canonical lesson templates with HITL approval columns (`pendingApproval`, `needsReviewReason`, `lastApprovedAt`, `approvedBy`).
+- **SpacedRepetitionCard**: Tracks student proficiency per concept with compound index on `(studentId, track)` for ZPD queries.
+- **hippocampus_documents**: pgvector table for semantic search (1536-dim embeddings).
+
+---
+
 ## UI Pages
 
 | URL | Description |

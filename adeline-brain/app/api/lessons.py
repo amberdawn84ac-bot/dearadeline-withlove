@@ -23,11 +23,61 @@ from app.connections.knowledge_graph import get_cross_track_bias
 from app.algorithms.zpd_engine import apply_cross_track_bias, AdaptiveBKTParams, apply_decay, compute_priority
 from app.models.student import load_student_state
 from app.connections.canonical_store import canonical_store, canonical_slug
+from app.tools.graph_query import tool_get_zpd_candidates
 from app.agents.adapter import adapt_canonical_for_student, AdaptationRequest, _HIGH_STAKES_TRACKS
 from app.api.metrics import record_lesson_served
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lesson", tags=["lessons"])
+
+
+async def _get_best_canonical_for_zpd(student_id: str, track: str) -> Optional[dict]:
+    """
+    Find the best matching canonical lesson for a student based on ZPD candidates.
+
+    1. Fetch ZPD candidates (concepts the student is ready to learn next).
+    2. Fetch available canonicals for the track.
+    3. Match ZPD concept titles to canonical topics (case-insensitive fuzzy match).
+    4. Return the canonical for the highest-priority ZPD concept that has a match.
+
+    Returns None if no match is found.
+    """
+    try:
+        # Step 1: Fetch ZPD candidates
+        zpd_candidates = await tool_get_zpd_candidates(student_id, track, limit=5)
+        if not zpd_candidates:
+            logger.info(f"[/lessons/zpd] No ZPD candidates found for student={student_id[:8]} track={track}")
+            return None
+
+        # Step 2: Fetch available canonicals for the track
+        canonicals = await canonical_store.get_by_track(track, limit=50)
+        if not canonicals:
+            logger.info(f"[/lessons/zpd] No canonicals available for track={track}")
+            return None
+
+        # Step 3: Match ZPD concepts to canonicals (case-insensitive fuzzy match)
+        for candidate in zpd_candidates:
+            concept_title = candidate.title.lower()
+            for canonical in canonicals:
+                canonical_topic = canonical["topic"].lower()
+                canonical_title = canonical["title"].lower()
+                # Fuzzy match: concept title appears in canonical topic or title
+                if concept_title in canonical_topic or concept_title in canonical_title:
+                    logger.info(
+                        f"[/lessons/zpd] Matched ZPD concept '{candidate.title}' to "
+                        f"canonical topic '{canonical['topic']}' for student={student_id[:8]}"
+                    )
+                    # Fetch the full canonical record
+                    slug = canonical["topic_slug"]
+                    full_canonical = await canonical_store.get(slug)
+                    return full_canonical
+
+        logger.info(f"[/lessons/zpd] No canonical match found for ZPD candidates in track={track}")
+        return None
+
+    except Exception as e:
+        logger.warning(f"[/lessons/zpd] ZPD auto-selection failed: {e}")
+        return None
 
 # Per-user lesson rate limit: 20 lessons/hour
 limiter = Limiter(key_func=get_remote_address)
@@ -125,14 +175,22 @@ async def generate_lesson(
         f"grade={lr.grade_level} homestead={lr.is_homestead}"
     )
     try:
-        slug = canonical_slug(lr.topic, lr.track.value)
-
-        # ── Phase 1: Check canonical store ───────────────────────────────────
+        # ── Phase 1: ZPD auto-selection (when no topic provided) ───────────────
         canonical = None
-        try:
-            canonical = await canonical_store.get(slug)
-        except Exception as e:
-            logger.warning(f"[/lessons/generate] Canonical store read failed (non-fatal): {e}")
+        if not lr.topic or lr.topic.strip() == "":
+            logger.info(f"[/lessons/generate] No topic provided — attempting ZPD auto-selection")
+            canonical = await _get_best_canonical_for_zpd(student_id, lr.track.value)
+            if canonical:
+                logger.info(f"[/lessons/generate] ZPD auto-selected canonical: {canonical.get('topic', 'unknown')}")
+            else:
+                logger.info(f"[/lessons/generate] ZPD auto-selection found no match — will use orchestrator")
+        else:
+            # ── Phase 2: Check canonical store (by topic + track) ───────────────
+            slug = canonical_slug(lr.topic, lr.track.value)
+            try:
+                canonical = await canonical_store.get(slug)
+            except Exception as e:
+                logger.warning(f"[/lessons/generate] Canonical store read failed (non-fatal): {e}")
 
         if canonical:
             logger.info(f"[/lessons/generate] Canonical HIT — adapting for student grade={lr.grade_level}")
@@ -144,6 +202,7 @@ async def generate_lesson(
             interests: list[str] = []
             recent_quiz_scores: list[float] = []
             last_practiced_dt = None
+            proficiency_map: dict[str, float] = {}
             try:
                 from app.config import get_db_conn
                 from datetime import datetime, timezone
@@ -156,6 +215,13 @@ async def generate_lesson(
                     student_id,
                 )
                 recent_quiz_scores = [float(r["easeFactor"]) for r in cards]
+                # Fetch proficiency data for the track: {conceptId: masteryLevel}
+                prof_cards = await conn.fetch(
+                    'SELECT "conceptId", "masteryLevel" FROM "SpacedRepetitionCard" '
+                    'WHERE "studentId" = $1 AND "track" = $2',
+                    student_id, lr.track.value,
+                )
+                proficiency_map = {r["conceptId"]: float(r["masteryLevel"]) for r in prof_cards}
                 journal_row = await conn.fetchrow(
                     'SELECT sealed_at FROM student_journal '
                     'WHERE student_id = $1 AND track = $2 '
@@ -213,6 +279,7 @@ async def generate_lesson(
                 priority_score=priority,
                 decay_adjusted_mastery=decay_adj,
                 cross_track_bias=ct_bias_value,
+                proficiency_map=proficiency_map,
             )
             adapted_blocks = await adapt_canonical_for_student(canonical, adapt_req)
             _adapt_ms = (time.monotonic() - _adapt_start) * 1000

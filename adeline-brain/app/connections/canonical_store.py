@@ -213,6 +213,36 @@ class CanonicalStore:
         finally:
             await conn.close()
 
+    async def get_by_track(self, track: str, limit: int = 50) -> list[dict]:
+        """
+        Return all canonicals for a given track (excluding pending approval).
+
+        Used for ZPD auto-selection when no explicit topic is provided.
+        Returns list of dicts with topicSlug, topic, title.
+        """
+        from app.config import get_db_conn
+        conn = await get_db_conn()
+        try:
+            rows = await conn.fetch(
+                'SELECT "topicSlug", topic, title '
+                'FROM "CanonicalLesson" '
+                'WHERE track = $1::"Track" '
+                'AND ("pendingApproval" IS FALSE OR "pendingApproval" IS NULL) '
+                'ORDER BY "updatedAt" DESC '
+                'LIMIT $2',
+                track, limit,
+            )
+            return [
+                {
+                    "topic_slug": r["topicSlug"],
+                    "topic": r["topic"],
+                    "title": r["title"],
+                }
+                for r in rows
+            ]
+        finally:
+            await conn.close()
+
 
 async def _notify_review_needed(record: dict) -> None:
     """Fire-and-forget HITL notification when a canonical needs admin review."""

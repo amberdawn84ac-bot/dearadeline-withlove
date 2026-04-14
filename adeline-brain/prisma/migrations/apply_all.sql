@@ -429,3 +429,13 @@ CREATE INDEX IF NOT EXISTS "CanonicalLesson_pending_idx"
 ALTER TABLE "CanonicalLesson"
   ADD COLUMN IF NOT EXISTS "lastApprovedAt" TIMESTAMP(3),
   ADD COLUMN IF NOT EXISTS "approvedBy"     TEXT;
+
+-- ── 2026-04-14: CanonicalLesson HITL approval columns (already above) ─────────
+-- Both ALTER TABLE blocks from 20260414_canonical_approval and
+-- 20260414_canonical_auditability are consolidated above.
+-- apply_all.sql is fully up to date as of 2026-04-14.
+
+-- ── SpacedRepetitionCard: compound index for ZPD proficiency queries ──────────
+
+CREATE INDEX IF NOT EXISTS "SpacedRepetitionCard_studentId_track_idx"
+  ON "SpacedRepetitionCard"("studentId", "track");

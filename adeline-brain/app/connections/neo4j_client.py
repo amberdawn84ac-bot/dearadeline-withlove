@@ -27,7 +27,10 @@ class Neo4jClient:
 
     async def connect(self):
         self._driver = AsyncGraphDatabase.driver(
-            NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD)
+            NEO4J_URI,
+            auth=(NEO4J_USER, NEO4J_PASSWORD),
+            max_connection_pool_size=int(os.getenv("NEO4J_MAX_POOL_SIZE", "50")),
+            connection_acquisition_timeout=float(os.getenv("NEO4J_ACQUIRE_TIMEOUT", "30")),
         )
         await self._driver.verify_connectivity()
         logger.info(f"[Neo4j] Connected to {NEO4J_URI}")
@@ -40,8 +43,9 @@ class Neo4jClient:
     async def run(self, cypher: str, params: Optional[dict] = None) -> list[dict]:
         """Execute a Cypher query and return results as a list of dicts."""
         session_kwargs = {"database": NEO4J_DATABASE} if NEO4J_DATABASE else {}
+        timeout = float(os.getenv("NEO4J_QUERY_TIMEOUT", "10"))
         async with self._driver.session(**session_kwargs) as session:
-            result = await session.run(cypher, params or {})
+            result = await session.run(cypher, params or {}, timeout=timeout)
             return [record.data() async for record in result]
 
     async def merge_standard(self, standard_id: str, properties: dict, track: str):
