@@ -383,3 +383,98 @@ async def run_seed_script(task_id: str, user_id: str, is_setup: bool = False, sc
         task_status[task_id]["status"] = "failed"
         task_status[task_id]["error"] = str(e)
         logger.error(f"[Admin] Seed task {task_id} failed with exception: {e}")
+
+
+# ── Canonical management endpoints ───────────────────────────────────────────
+
+@router.post(
+    "/seed-canonicals",
+    response_model=TaskResponse,
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+)
+async def seed_canonicals(
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(get_current_user_id),
+) -> TaskResponse:
+    """
+    Pre-generate 25 foundational canonical lessons (21 per-track + 4 cross-track
+    bridging topics). Skips slugs that already exist in the canonical store.
+    Run once after deployment; safe to re-run.
+    """
+    import uuid as _uuid
+    task_id = str(_uuid.uuid4())
+    task_status[task_id] = {
+        "status": "running",
+        "progress": "Starting canonical pre-seed...",
+        "result": None,
+        "error": None,
+        "started_by": user_id,
+        "started_at": "",
+    }
+
+    async def _run():
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "scripts.seed_canonicals"],
+                cwd=Path(__file__).resolve().parents[2],
+                capture_output=True,
+                text=True,
+                timeout=7200,  # 2 hour timeout — 25 full orchestrator runs
+            )
+            if result.returncode == 0:
+                task_status[task_id]["status"] = "completed"
+                task_status[task_id]["progress"] = "Canonical pre-seed completed"
+                task_status[task_id]["result"] = {"stdout": result.stdout}
+            else:
+                task_status[task_id]["status"] = "failed"
+                task_status[task_id]["error"] = result.stderr
+        except Exception as e:
+            task_status[task_id]["status"] = "failed"
+            task_status[task_id]["error"] = str(e)
+
+    background_tasks.add_task(_run)
+    logger.info(f"[Admin] Canonical seeding task {task_id} started by {user_id}")
+    return TaskResponse(
+        success=True,
+        message="Canonical pre-seed started. Use the task ID to check progress.",
+        task_id=task_id,
+    )
+
+
+@router.get(
+    "/canonicals/pending",
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+)
+async def list_pending_canonicals(
+    user_id: str = Depends(get_current_user_id),
+) -> list:
+    """
+    List all canonical lessons awaiting admin approval.
+    High-stakes tracks and researcher-activated lessons are held here.
+    """
+    from app.connections.canonical_store import canonical_store
+    return await canonical_store.list_pending()
+
+
+@router.post(
+    "/canonicals/{slug}/approve",
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+)
+async def approve_canonical(
+    slug: str,
+    user_id: str = Depends(get_current_user_id),
+) -> dict:
+    """
+    Approve a pending canonical lesson, making it live for all students.
+    Clears pendingApproval flag in DB and publishes to Redis cache.
+    """
+    from app.connections.canonical_store import canonical_store
+    approved = await canonical_store.approve(slug)
+    if not approved:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=404,
+            detail=f"No pending canonical found for slug '{slug}'",
+        )
+    logger.info(f"[Admin] Canonical approved — {slug} by {user_id}")
+    return {"approved": True, "slug": slug}

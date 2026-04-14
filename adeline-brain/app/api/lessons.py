@@ -19,10 +19,10 @@ from app.api.middleware import require_role, get_current_user_id
 from app.agents.orchestrator import run_orchestrator
 from app.connections.pgvector_client import hippocampus
 from app.connections.knowledge_graph import get_cross_track_bias
-from app.algorithms.zpd_engine import apply_cross_track_bias, AdaptiveBKTParams
+from app.algorithms.zpd_engine import apply_cross_track_bias, AdaptiveBKTParams, apply_decay, compute_priority
 from app.models.student import load_student_state
 from app.connections.canonical_store import canonical_store, canonical_slug
-from app.agents.adapter import adapt_canonical_for_student, AdaptationRequest
+from app.agents.adapter import adapt_canonical_for_student, AdaptationRequest, _HIGH_STAKES_TRACKS
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lesson", tags=["lessons"])
@@ -134,14 +134,17 @@ async def generate_lesson(
 
         if canonical:
             logger.info(f"[/lessons/generate] Canonical HIT — adapting for student grade={lr.grade_level}")
+            logger.info(f"[Metrics] canonical_hit track={lr.track.value} grade={lr.grade_level} student={student_id[:8]}")
             student_state = await load_student_state(student_id)
             track_mastery = student_state.get(lr.track.value)
             interaction_count = track_mastery.lesson_count if track_mastery else 10
 
             interests: list[str] = []
             recent_quiz_scores: list[float] = []
+            last_practiced_dt = None
             try:
                 from app.config import get_db_conn
+                from datetime import datetime, timezone
                 conn = await get_db_conn()
                 row = await conn.fetchrow('SELECT interests FROM "User" WHERE id = $1', student_id)
                 interests = row["interests"] or [] if row else []
@@ -151,6 +154,16 @@ async def generate_lesson(
                     student_id,
                 )
                 recent_quiz_scores = [float(r["easeFactor"]) for r in cards]
+                journal_row = await conn.fetchrow(
+                    'SELECT sealed_at FROM student_journal '
+                    'WHERE student_id = $1 AND track = $2 '
+                    'ORDER BY sealed_at DESC LIMIT 1',
+                    student_id, lr.track.value,
+                )
+                if journal_row and journal_row["sealed_at"]:
+                    last_practiced_dt = journal_row["sealed_at"]
+                    if last_practiced_dt.tzinfo is None:
+                        last_practiced_dt = last_practiced_dt.replace(tzinfo=timezone.utc)
                 await conn.close()
             except Exception:
                 pass
@@ -165,6 +178,27 @@ async def generate_lesson(
             else:
                 modality = "text"
 
+            # ── Compute full ZPD state ────────────────────────────────────────
+            bkt_pL = track_mastery.mastery_score  # proxy until per-concept BKT is stored
+            decay_adj = (
+                apply_decay(bkt_pL, last_practiced_dt)
+                if last_practiced_dt else bkt_pL
+            )
+            priority = compute_priority(
+                prereq=min(1.0, bkt_pL + 0.2),
+                mastery=decay_adj,
+                deps=1,
+                max_deps=1,
+            )
+            ct_bias_value = 0.0
+            try:
+                ct_bias_value, _ = await get_cross_track_bias(
+                    student_id=student_id,
+                    target_track=lr.track.value,
+                )
+            except Exception:
+                pass
+
             adapt_req = AdaptationRequest(
                 grade_level=lr.grade_level,
                 track=lr.track.value,
@@ -172,6 +206,11 @@ async def generate_lesson(
                 interaction_count=interaction_count,
                 recent_quiz_scores=recent_quiz_scores,
                 preferred_modality=modality,
+                bkt_pL=bkt_pL,
+                bkt_pT=0.15,
+                priority_score=priority,
+                decay_adjusted_mastery=decay_adj,
+                cross_track_bias=ct_bias_value,
             )
             adapted_blocks = await adapt_canonical_for_student(canonical, adapt_req)
             from app.schemas.api_models import LessonBlockResponse
@@ -222,6 +261,16 @@ async def generate_lesson(
 
         # ── Phase 3: Save as canonical for future students ───────────────────
         try:
+            needs_review = (
+                lesson.researcher_activated
+                or lr.track.value in _HIGH_STAKES_TRACKS
+            )
+            review_reason: str | None = None
+            if needs_review:
+                review_reason = (
+                    "researcher_activated" if lesson.researcher_activated
+                    else "high_stakes_track"
+                )
             canonical_record = {
                 "id": lesson.lesson_id,
                 "topic_slug": slug,
@@ -232,9 +281,14 @@ async def generate_lesson(
                 "oas_standards": lesson.oas_standards,
                 "researcher_activated": lesson.researcher_activated,
                 "agent_name": lesson.agent_name,
+                "pending_approval": needs_review,
+                "needs_review_reason": review_reason,
             }
-            await canonical_store.save(slug, canonical_record)
-            logger.info(f"[/lessons/generate] Saved new canonical — {slug}")
+            await canonical_store.save(slug, canonical_record, pending=needs_review)
+            logger.info(
+                f"[/lessons/generate] Saved canonical — {slug} "
+                f"(pending={needs_review}, reason={review_reason})"
+            )
         except Exception as e:
             logger.warning(f"[/lessons/generate] Canonical save failed (non-fatal): {e}")
 

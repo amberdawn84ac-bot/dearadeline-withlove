@@ -415,3 +415,12 @@ CREATE TABLE IF NOT EXISTS "CanonicalLesson" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "CanonicalLesson_topicSlug_key" ON "CanonicalLesson"("topicSlug");
 CREATE INDEX IF NOT EXISTS "CanonicalLesson_track_idx" ON "CanonicalLesson"("track");
+
+-- 2026-04-14: Add human-in-the-loop review columns
+ALTER TABLE "CanonicalLesson"
+  ADD COLUMN IF NOT EXISTS "pendingApproval"   BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS "needsReviewReason" TEXT;
+
+CREATE INDEX IF NOT EXISTS "CanonicalLesson_pending_idx"
+  ON "CanonicalLesson" ("pendingApproval")
+  WHERE "pendingApproval" = TRUE;

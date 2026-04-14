@@ -50,6 +50,9 @@ class _UpstashRedis:
         else:
             await self._call("SET", key, value)
 
+    async def delete(self, key: str) -> None:
+        await self._call("DEL", key)
+
     async def ping(self) -> bool:
         result = await self._call("PING")
         return str(result).upper() == "PONG"
