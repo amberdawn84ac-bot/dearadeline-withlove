@@ -273,7 +273,8 @@ async def test_empty_case_returns_empty_list():
 async def test_justice_track_cointelpro_deep_web_search():
     """
     JUSTICE_CHANGEMAKING track: deep web search finds FBI COINTELPRO documents,
-    embeds them, and returns via witness protocol at >= 0.82 threshold.
+    embeds them, and persists to Hippocampus. Witness Protocol is bypassed for Justice
+    (threshold = 0.0), so all acquired documents are upserted regardless of cosine score.
     """
     with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.4] * 1536), \
          patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo, \
@@ -308,7 +309,7 @@ async def test_justice_track_cointelpro_deep_web_search():
             track="JUSTICE_CHANGEMAKING",
         )
 
-        # Both documents embedded and persisted
+        # Both documents embedded and persisted (threshold = 0.0 for Justice — all pass)
         assert mock_upsert.call_count == 2
 
         # Verify upsert calls used correct archive names
@@ -323,6 +324,5 @@ async def test_justice_track_cointelpro_deep_web_search():
         assert call_2_kwargs['citation_archive_name'] == 'CIA_FOIA'
         assert call_2_kwargs['track'] == 'JUSTICE_CHANGEMAKING'
 
-        # Results may be empty (depends on computed cosine similarity),
-        # but upsert should have been called to persist
+        # Deep web was triggered (Hippocampus was empty)
         assert mock_deep.called

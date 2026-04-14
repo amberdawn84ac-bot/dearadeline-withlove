@@ -2,47 +2,37 @@
 The Witness Protocol
 "A matter must be established by the testimony of two or three witnesses." — Deuteronomy 19:15
 
-Enforces similarity thresholds for truth claims by track.
-If evidence does not meet the threshold, ARCHIVE_SILENT is returned
-and no content is generated — a Research Mission is assigned instead.
+Enforces similarity thresholds for truth claims.
+Witness Protocol applies ONLY to TRUTH_HISTORY — the one track where every block
+must be backed by a verified primary source.
 
-Thresholds are configurable via environment variables:
-  WITNESS_STRICT_THRESHOLD      — for TRUTH_HISTORY, JUSTICE_CHANGEMAKING (default: 0.78)
-  WITNESS_DEFAULT_THRESHOLD     — for science, homesteading, math, etc. (default: 0.75)
-  WITNESS_PERMISSIVE_THRESHOLD  — for DISCIPLESHIP, ENGLISH_LITERATURE (default: 0.65)
+All other tracks bypass Witness entirely (threshold = 0.0), so they never produce
+ARCHIVE_SILENT verdicts or forced Research Missions.
+
+Threshold is configurable via environment variable:
+  WITNESS_HISTORY_THRESHOLD — for TRUTH_HISTORY only (default: 0.82)
 """
 import os
 from typing import Optional
-from app.schemas.api_models import Evidence, EvidenceVerdict, WitnessCitation, TRUTH_THRESHOLD as WITNESS_THRESHOLD
+from app.schemas.api_models import Evidence, EvidenceVerdict, WitnessCitation
 import logging
 
 logger = logging.getLogger(__name__)
 
-_STRICT_THRESHOLD     = float(os.getenv("WITNESS_STRICT_THRESHOLD", "0.78"))
-_DEFAULT_THRESHOLD    = float(os.getenv("WITNESS_DEFAULT_THRESHOLD", "0.75"))
-_PERMISSIVE_THRESHOLD = float(os.getenv("WITNESS_PERMISSIVE_THRESHOLD", "0.65"))
+_HISTORY_THRESHOLD = float(os.getenv("WITNESS_HISTORY_THRESHOLD", "0.82"))
 
 
 def get_witness_threshold(track: str) -> float:
     """
-    Return similarity threshold based on track requirements.
-    
-    - TRUTH_HISTORY, JUSTICE_CHANGEMAKING: 0.78 (strict - primary sources only)
-    - DISCIPLESHIP, ENGLISH_LITERATURE: 0.65 (permissive - scripture/worldview)
-    - All others: 0.75 (medium - general content)
+    Witness Protocol is STRICTLY for TRUTH_HISTORY only.
+    - TRUTH_HISTORY: High bar (0.82) for primary-source grounding.
+    - Everything else: Disabled (0.0) — never blocks, never triggers ARCHIVE_SILENT.
 
-    All thresholds are overridable via env vars WITNESS_STRICT_THRESHOLD,
-    WITNESS_DEFAULT_THRESHOLD, WITNESS_PERMISSIVE_THRESHOLD.
+    Threshold is overridable via env var WITNESS_HISTORY_THRESHOLD.
     """
-    STRICT_TRACKS = {"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING"}
-    PERMISSIVE_TRACKS = {"DISCIPLESHIP", "ENGLISH_LITERATURE"}
-    
-    if track in STRICT_TRACKS:
-        return _STRICT_THRESHOLD
-    elif track in PERMISSIVE_TRACKS:
-        return _PERMISSIVE_THRESHOLD
-    else:
-        return _DEFAULT_THRESHOLD
+    if track == "TRUTH_HISTORY":
+        return _HISTORY_THRESHOLD
+    return 0.0
 
 
 def evaluate_evidence(
@@ -50,7 +40,7 @@ def evaluate_evidence(
     source_title: str,
     similarity_score: float,
     chunk: str,
-    track: str = "TRUTH_HISTORY",  # Default to strictest threshold
+    track: str = "TRUTH_HISTORY",
     source_url: str = "",
     citation_author: str = "",
     citation_year: Optional[int] = None,
@@ -58,20 +48,27 @@ def evaluate_evidence(
 ) -> Evidence:
     """
     Evaluate a retrieved chunk against the Witness Protocol threshold.
-    Uses track-aware thresholds for different content types.
+    Only runs the cosine check for TRUTH_HISTORY — all other tracks are
+    immediately VERIFIED without threshold enforcement.
     Returns an Evidence object with verdict, citation, and full metadata.
     """
-    threshold = get_witness_threshold(track)
-    
-    if similarity_score >= threshold:
+    if track != "TRUTH_HISTORY":
+        logger.info(f"[WITNESS] Track={track} | Witness bypassed (non-history) — '{source_title}' auto-VERIFIED")
         verdict = EvidenceVerdict.VERIFIED
-        logger.info(f"[WITNESS] VERIFIED — '{source_title}' score={similarity_score:.3f} (threshold={threshold} for {track})")
     else:
-        verdict = EvidenceVerdict.ARCHIVE_SILENT
-        logger.warning(
-            f"[WITNESS] ARCHIVE_SILENT — '{source_title}' score={similarity_score:.3f} "
-            f"(below threshold {threshold} for {track})"
-        )
+        threshold = get_witness_threshold(track)
+        if similarity_score >= threshold:
+            verdict = EvidenceVerdict.VERIFIED
+            logger.info(
+                f"[WITNESS] VERIFIED — '{source_title}' "
+                f"Track={track} | Threshold={threshold} | Score={similarity_score:.3f}"
+            )
+        else:
+            verdict = EvidenceVerdict.ARCHIVE_SILENT
+            logger.warning(
+                f"[WITNESS] ARCHIVE_SILENT — '{source_title}' "
+                f"Track={track} | Threshold={threshold} | Score={similarity_score:.3f}"
+            )
 
     return Evidence(
         source_id=source_id,

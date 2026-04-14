@@ -136,7 +136,7 @@ async def _synthesis_call(system: str, user: str, max_tokens: int = 1000) -> str
 
 # Track routing constants
 # TRUTH_HISTORY is the ONLY track that requires the Witness Protocol —
-# every block must be backed by a verified primary source (cosine ≥ WITNESS_STRICT_THRESHOLD).
+# every block must be backed by a verified primary source (cosine ≥ 0.82 via WITNESS_HISTORY_THRESHOLD).
 _HISTORIAN_TRACKS  = {Track.TRUTH_HISTORY}
 _JUSTICE_TRACKS    = {Track.JUSTICE_CHANGEMAKING}
 _SCIENCE_TRACKS    = {Track.CREATION_SCIENCE, Track.HOMESTEADING}
@@ -497,19 +497,22 @@ async def _researcher_fallback(
     return None
 
 
-# ── Historian Agent (TRUTH_HISTORY, JUSTICE_CHANGEMAKING) ─────────────────────
+# ── Historian Agent (TRUTH_HISTORY) ───────────────────────────────────
 
 async def historian_agent(state: AdelineState) -> AdelineState:
     """
-    Truth-Based History specialist.
-    Covers TRUTH_HISTORY and JUSTICE_CHANGEMAKING tracks.
-    PRIMARY_SOURCE blocks when VERIFIED.
+    Truth-Based History specialist. TRUTH_HISTORY only.
+    PRIMARY_SOURCE blocks when VERIFIED (cosine >= 0.82).
     On ARCHIVE_SILENT: tries SearchWitnesses before falling back to RESEARCH_MISSION.
-    Most strict application of the Witness Protocol.
+    Strictest application of the Witness Protocol.
     """
     request = state["request"]
     state["agent_name"] = "HistorianAgent"
     blocks: list[dict] = []
+
+    # Hard guard: Witness Protocol is TRUTH_HISTORY only.
+    # evaluate_evidence already handles this, but this ensures no accidental bleed-through.
+    _use_witness = request.track.value == "TRUTH_HISTORY"
 
     raw_results = await hippocampus.similarity_search(
         query_embedding=state["query_embedding"],
@@ -1938,12 +1941,12 @@ async def run_orchestrator(
     and returns a structured LessonResponse.
 
     Agent routing:
-      TRUTH_HISTORY                          → HistorianAgent (Witness Protocol, strict threshold)
-      JUSTICE_CHANGEMAKING                   → JusticeAgent (power-capture framing)
-      CREATION_SCIENCE, HOMESTEADING         → ScienceAgent (LAB_MISSION)
+      TRUTH_HISTORY                          → HistorianAgent (Witness Protocol, strict threshold 0.82)
+      JUSTICE_CHANGEMAKING                   → JusticeAgent (investigative model, no Witness)
+      CREATION_SCIENCE, HOMESTEADING         → ScienceAgent (LAB_MISSION, no Witness)
       ENGLISH_LITERATURE                     → LiteratureAgent (book-context, no Witness)
       APPLIED_MATHEMATICS, CREATIVE_ECONOMY  → PracticalAgent (applied skills, no Witness)
-      HEALTH_NATUROPATHY, GOV_ECON, DISCIP.  → DiscipleshipAgent (worldview + Witness)
+      HEALTH_NATUROPATHY, GOV_ECON, DISCIP.  → DiscipleshipAgent (worldview, no Witness)
 
     RegistrarAgent always runs last as a post-processing step regardless of track.
 
