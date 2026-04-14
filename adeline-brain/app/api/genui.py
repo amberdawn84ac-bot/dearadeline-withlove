@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.algorithms.zpd_engine import bkt_update, BKTParams
-from app.api.middleware import get_current_user
+from app.api.middleware import get_current_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class GenuiCallbackResponse(BaseModel):
 @router.post("/callback", response_model=GenuiCallbackResponse)
 async def genui_callback(
     request: GenuiCallbackRequest,
-    current_user = Depends(get_current_user),
+    current_user = Depends(get_current_user_id),
 ):
     """
     Handle GENUI component callbacks and update BKT/ZPD in real time.
