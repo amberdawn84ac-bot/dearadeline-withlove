@@ -230,23 +230,38 @@ async def search_archive_async(query: str, archive_name: str, domains_map: dict 
         "search_depth": "basic",
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=TAVILY_TIMEOUT) as client:
-            resp = await client.post(TAVILY_URL, json=payload)
-            resp.raise_for_status()
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=TAVILY_TIMEOUT) as client:
+                resp = await client.post(TAVILY_URL, json=payload)
+                if resp.status_code == 429:
+                    wait = 2 ** attempt
+                    logger.warning(
+                        f"[Tavily] Rate limited on {archive_name} (attempt {attempt + 1}) — "
+                        f"backing off {wait}s"
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                resp.raise_for_status()
 
-            results = []
-            for result in resp.json().get('results', []):
-                results.append({
-                    'title': result.get('title', ''),
-                    'url': result.get('url', ''),
-                    'archive': archive_name,
-                    'snippet': result.get('content', ''),
-                })
-            return results
-    except Exception as e:
-        logger.warning(f"[Researcher] Failed to search {archive_name}: {e}")
-        return []
+                results = []
+                for result in resp.json().get('results', []):
+                    results.append({
+                        'title': result.get('title', ''),
+                        'url': result.get('url', ''),
+                        'archive': archive_name,
+                        'snippet': result.get('content', ''),
+                    })
+                return results
+        except httpx.TimeoutException:
+            logger.warning(f"[Researcher] Timeout searching {archive_name} (attempt {attempt + 1})")
+            if attempt < 2:
+                await asyncio.sleep(2 ** attempt)
+                continue
+        except Exception as e:
+            logger.warning(f"[Researcher] Failed to search {archive_name}: {e}")
+            break
+    return []
 
 
 async def search_all_archives_parallel(query: str, track: str = None) -> list[dict]:

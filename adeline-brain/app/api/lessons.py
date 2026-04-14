@@ -14,6 +14,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.schemas.api_models import LessonRequest, LessonResponse, TRUTH_THRESHOLD, UserRole
+from app.protocols.witness import get_witness_threshold
 from app.api.middleware import require_role, get_current_user_id
 from app.agents.orchestrator import run_orchestrator
 from app.connections.pgvector_client import hippocampus
@@ -110,7 +111,7 @@ async def generate_lesson(
       2. If no canonical: embed topic, run full orchestrator (research + generation)
       3. Save new canonical for future students
       4. Retrieve top-k chunks from Hippocampus (pgvector)
-      5. Evaluate each chunk via the Witness Protocol (0.85 threshold)
+      5. Evaluate each chunk via the Witness Protocol (track-aware thresholds)
       6. Graph-link to OAS Standards via Neo4j
       7. RegistrarAgent emits xAPI statements + CASE credits
       8. Fire-and-forget persistence to DB (non-blocking)
@@ -145,11 +146,11 @@ async def generate_lesson(
                 row = await conn.fetchrow('SELECT interests FROM "User" WHERE id = $1', student_id)
                 interests = row["interests"] or [] if row else []
                 cards = await conn.fetch(
-                    'SELECT easiness FROM "SpacedRepetitionCard" '
+                    'SELECT "easeFactor" FROM "SpacedRepetitionCard" '
                     'WHERE "studentId" = $1 ORDER BY "updatedAt" DESC LIMIT 5',
                     student_id,
                 )
-                recent_quiz_scores = [float(r["easiness"]) for r in cards]
+                recent_quiz_scores = [float(r["easeFactor"]) for r in cards]
                 await conn.close()
             except Exception:
                 pass
@@ -215,6 +216,8 @@ async def generate_lesson(
             query_embedding,
             interaction_count=interaction_count,
             cross_track_acknowledgment=cross_track_acknowledgment,
+            mastery_score=track_mastery.mastery_score,
+            mastery_band=track_mastery.mastery_band.value,
         )
 
         # ── Phase 3: Save as canonical for future students ───────────────────
@@ -262,7 +265,13 @@ async def lesson_health():
     return {
         "status": "ok" if openai_status == "ok" else "degraded",
         "hippocampus_documents": doc_count,
-        "witness_threshold": TRUTH_THRESHOLD,
+        "witness_thresholds": {
+            "TRUTH_HISTORY": get_witness_threshold("TRUTH_HISTORY"),
+            "JUSTICE_CHANGEMAKING": get_witness_threshold("JUSTICE_CHANGEMAKING"),
+            "CREATION_SCIENCE": get_witness_threshold("CREATION_SCIENCE"),
+            "DISCIPLESHIP": get_witness_threshold("DISCIPLESHIP"),
+            "ENGLISH_LITERATURE": get_witness_threshold("ENGLISH_LITERATURE"),
+        },
         "openai_embeddings": openai_status,
         "openai_error": openai_error,
     }

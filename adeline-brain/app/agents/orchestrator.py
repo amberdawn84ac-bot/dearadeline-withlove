@@ -74,20 +74,49 @@ def _synthesis_client():
 async def _synthesis_call(system: str, user: str, max_tokens: int = 1000) -> str:
     """
     Single synthesis API call — uses Gemini Flash if available, else Claude.
+    On Gemini failure, automatically retries once then falls back to Claude.
     Returns the text content of the response.
     """
+    import asyncio as _asyncio
     client, model, is_gemini = _synthesis_client()
 
     if is_gemini:
-        response = await client.chat.completions.create(
-            model=model,
+        for attempt in range(2):
+            try:
+                response = await client.chat.completions.create(
+                    model=model,
+                    max_tokens=max_tokens,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user",   "content": user},
+                    ],
+                )
+                return response.choices[0].message.content or ""
+            except Exception as gemini_err:
+                if attempt == 0:
+                    logger.warning(
+                        f"[Synthesis] Gemini attempt {attempt + 1} failed ({gemini_err}) — retrying..."
+                    )
+                    await _asyncio.sleep(1)
+                    continue
+                logger.warning(
+                    f"[Synthesis] Gemini failed after 2 attempts ({gemini_err}) — "
+                    "falling back to Claude"
+                )
+                break
+        # Gemini exhausted — fall back to Claude
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+        if not anthropic_key:
+            raise RuntimeError("Gemini unavailable and ANTHROPIC_API_KEY not set")
+        fallback_client = anthropic.AsyncAnthropic(api_key=anthropic_key)
+        response = await fallback_client.messages.create(
+            model=_ANTHROPIC_MODEL,
             max_tokens=max_tokens,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user",   "content": user},
-            ],
+            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": user}],
+            extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
         )
-        return response.choices[0].message.content or ""
+        return response.content[0].text
     else:
         # Use Anthropic prompt caching on the system prompt (static prefix cached 5 min)
         response = await client.messages.create(
@@ -107,7 +136,7 @@ async def _synthesis_call(system: str, user: str, max_tokens: int = 1000) -> str
 
 # Track routing constants
 # TRUTH_HISTORY is the ONLY track that requires the Witness Protocol —
-# every block must be backed by a verified primary source (cosine ≥ 0.82).
+# every block must be backed by a verified primary source (cosine ≥ WITNESS_STRICT_THRESHOLD).
 _HISTORIAN_TRACKS  = {Track.TRUTH_HISTORY}
 _JUSTICE_TRACKS    = {Track.JUSTICE_CHANGEMAKING}
 _SCIENCE_TRACKS    = {Track.CREATION_SCIENCE, Track.HOMESTEADING}
@@ -307,8 +336,45 @@ async def _synthesize_content(
     try:
         return (await _synthesis_call(system_prompt, user_prompt, max_tokens=800)).strip()
     except Exception as e:
-        logger.warning(f"[Synthesis] Content synthesis failed ({e}) — using raw chunk")
-        return raw_content
+        logger.warning(
+            f"[Synthesis] Content synthesis failed ({type(e).__name__}: {e}) "
+            f"— topic='{request.topic}' track={request.track.value} block={block_type}"
+        )
+        if raw_content and raw_content.strip():
+            return raw_content
+        return (
+            f"**{request.topic}** — source material is available but synthesis is temporarily unavailable. "
+            f"Your research mission: find a primary source on this topic and bring it back to Adeline."
+        )
+
+
+def _band_from_state(state: "AdelineState") -> MasteryBand:
+    """Convert the state mastery_band string to a MasteryBand enum, defaulting to DEVELOPING."""
+    try:
+        return MasteryBand(state.get("mastery_band", "DEVELOPING"))
+    except (ValueError, KeyError):
+        return MasteryBand.DEVELOPING
+
+
+async def _state_synthesize(
+    state: "AdelineState",
+    block_type: str,
+    source_chunks: list[dict],
+    raw_content: str,
+) -> str:
+    """
+    Convenience wrapper: calls _synthesize_content with ZPD context extracted from AdelineState.
+    Keeps agent code clean — pass state instead of repeating mastery kwargs.
+    """
+    return await _synthesize_content(
+        request=state["request"],
+        block_type=block_type,
+        source_chunks=source_chunks,
+        raw_content=raw_content,
+        student_message=state.get("student_message"),
+        mastery_score=state.get("mastery_score", 0.0),
+        mastery_band=_band_from_state(state),
+    )
 
 
 # ── Agent State ───────────────────────────────────────────────────────────────
@@ -471,8 +537,8 @@ async def historian_agent(state: AdelineState) -> AdelineState:
             silent_sources.append(result["source_title"])
         else:
             raw = result["chunk"]
-            content = await _synthesize_content(
-                request=request,
+            content = await _state_synthesize(
+                state,
                 block_type=BlockType.PRIMARY_SOURCE.value,
                 source_chunks=[result],
                 raw_content=raw,
@@ -498,8 +564,8 @@ async def historian_agent(state: AdelineState) -> AdelineState:
             blocks.append(block)
         else:
             # Researcher also failed — Claude provides orientation + single research mission
-            orientation = await _synthesize_content(
-                request=request,
+            orientation = await _state_synthesize(
+                state,
                 block_type=BlockType.NARRATIVE.value,
                 source_chunks=[],
                 raw_content=request.topic,
@@ -780,8 +846,8 @@ async def science_agent(state: AdelineState) -> AdelineState:
         for result in raw_results:
             raw = result["chunk"]
             block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
-            content = await _synthesize_content(
-                request=request,
+            content = await _state_synthesize(
+                state,
                 block_type=block_type.value,
                 source_chunks=[result],
                 raw_content=raw,
@@ -818,8 +884,8 @@ async def science_agent(state: AdelineState) -> AdelineState:
             if web_results:
                 raw = web_results[0].get("chunk", request.topic)
                 block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
-                content = await _synthesize_content(
-                    request=request,
+                content = await _state_synthesize(
+                    state,
                     block_type=block_type.value,
                     source_chunks=web_results,
                     raw_content=raw,
@@ -849,8 +915,8 @@ async def science_agent(state: AdelineState) -> AdelineState:
                 # Web search also empty — Claude generates from its own knowledge
                 logger.info("[ScienceAgent] No web results — generating from Claude knowledge.")
                 block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
-                content = await _synthesize_content(
-                    request=request,
+                content = await _state_synthesize(
+                    state,
                     block_type=block_type.value,
                     source_chunks=[],
                     raw_content=request.topic,
@@ -986,8 +1052,8 @@ async def literature_agent(state: AdelineState) -> AdelineState:
 
         # ── Step 3: Synthesize literary content ───────────────────────────────────
         if reference_chunks:
-            content = await _synthesize_content(
-                request=request,
+            content = await _state_synthesize(
+                state,
                 block_type=BlockType.NARRATIVE.value,
                 source_chunks=reference_chunks,
                 raw_content=reference_chunks[0]["chunk"],
@@ -1123,8 +1189,8 @@ async def practical_agent(state: AdelineState) -> AdelineState:
 
     if raw_results:
         # Use Hippocampus results as reference material for synthesis
-        content = await _synthesize_content(
-            request=request,
+        content = await _state_synthesize(
+            state,
             block_type=BlockType.NARRATIVE.value,
             source_chunks=raw_results,
             raw_content=raw_results[0]["chunk"],
@@ -1594,8 +1660,8 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
 
     for result in raw_results:
         raw = result["chunk"]
-        content = await _synthesize_content(
-            request=request,
+        content = await _state_synthesize(
+            state,
             block_type=BlockType.NARRATIVE.value,
             source_chunks=[result],
             raw_content=raw,
@@ -1626,8 +1692,8 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
         web_results = await search_witnesses(request.topic, request.track.value)
         if web_results:
             raw = web_results[0].get("chunk", request.topic)
-            content = await _synthesize_content(
-                request=request,
+            content = await _state_synthesize(
+                state,
                 block_type=BlockType.NARRATIVE.value,
                 source_chunks=web_results,
                 raw_content=raw,
@@ -1651,8 +1717,8 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
         else:
             # Web search also empty — Claude generates from its own knowledge
             logger.info("[DiscipleshipAgent] No web results — generating from Claude knowledge.")
-            content = await _synthesize_content(
-                request=request,
+            content = await _state_synthesize(
+                state,
                 block_type=BlockType.NARRATIVE.value,
                 source_chunks=[],
                 raw_content=request.topic,
@@ -1862,6 +1928,9 @@ async def run_orchestrator(
     query_embedding: list[float],
     interaction_count: int = 10,
     cross_track_acknowledgment: str | None = None,
+    mastery_score: float = 0.0,
+    mastery_band: str = "NOVICE",
+    student_message: str | None = None,
 ) -> LessonResponse:
     """
     Routes the request to the correct specialist agent, graph-links to
@@ -1869,7 +1938,7 @@ async def run_orchestrator(
     and returns a structured LessonResponse.
 
     Agent routing:
-      TRUTH_HISTORY                          → HistorianAgent (Witness Protocol 0.82)
+      TRUTH_HISTORY                          → HistorianAgent (Witness Protocol, strict threshold)
       JUSTICE_CHANGEMAKING                   → JusticeAgent (power-capture framing)
       CREATION_SCIENCE, HOMESTEADING         → ScienceAgent (LAB_MISSION)
       ENGLISH_LITERATURE                     → LiteratureAgent (book-context, no Witness)
@@ -1881,6 +1950,11 @@ async def run_orchestrator(
     When Hippocampus lacks verified sources (ARCHIVE_SILENT), the Researcher
     tool automatically searches archive.org, gutenberg.org, and archives.gov
     before falling back to a student-facing RESEARCH_MISSION.
+
+    Args:
+        mastery_score: Student's current mastery in this track (0.0–1.0) for ZPD scaffolding.
+        mastery_band: Student's mastery band (NOVICE/DEVELOPING/PROFICIENT/ADVANCED).
+        student_message: Last student message for ZPD pedagogical directive generation.
     """
     lesson_id = str(uuid.uuid4())
 
@@ -1897,6 +1971,9 @@ async def run_orchestrator(
         "credits_awarded":      [],
         "interaction_count":    interaction_count,
         "cross_track_acknowledgment": cross_track_acknowledgment,
+        "mastery_score":        mastery_score,
+        "mastery_band":         mastery_band,
+        "student_message":      student_message,
     }
 
     route = _route(state)

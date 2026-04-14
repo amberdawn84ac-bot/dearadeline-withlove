@@ -2,34 +2,47 @@
 The Witness Protocol
 "A matter must be established by the testimony of two or three witnesses." — Deuteronomy 19:15
 
-Enforces the 0.82 similarity threshold for all historical truth claims.
+Enforces similarity thresholds for truth claims by track.
 If evidence does not meet the threshold, ARCHIVE_SILENT is returned
 and no content is generated — a Research Mission is assigned instead.
+
+Thresholds are configurable via environment variables:
+  WITNESS_STRICT_THRESHOLD      — for TRUTH_HISTORY, JUSTICE_CHANGEMAKING (default: 0.78)
+  WITNESS_DEFAULT_THRESHOLD     — for science, homesteading, math, etc. (default: 0.75)
+  WITNESS_PERMISSIVE_THRESHOLD  — for DISCIPLESHIP, ENGLISH_LITERATURE (default: 0.65)
 """
+import os
 from typing import Optional
 from app.schemas.api_models import Evidence, EvidenceVerdict, WitnessCitation, TRUTH_THRESHOLD as WITNESS_THRESHOLD
 import logging
 
 logger = logging.getLogger(__name__)
 
+_STRICT_THRESHOLD     = float(os.getenv("WITNESS_STRICT_THRESHOLD", "0.78"))
+_DEFAULT_THRESHOLD    = float(os.getenv("WITNESS_DEFAULT_THRESHOLD", "0.75"))
+_PERMISSIVE_THRESHOLD = float(os.getenv("WITNESS_PERMISSIVE_THRESHOLD", "0.65"))
+
 
 def get_witness_threshold(track: str) -> float:
     """
     Return similarity threshold based on track requirements.
     
-    - TRUTH_HISTORY, JUSTICE_CHANGEMAKING: 0.82 (strict - primary sources only)
+    - TRUTH_HISTORY, JUSTICE_CHANGEMAKING: 0.78 (strict - primary sources only)
     - DISCIPLESHIP, ENGLISH_LITERATURE: 0.65 (permissive - scripture/worldview)
     - All others: 0.75 (medium - general content)
+
+    All thresholds are overridable via env vars WITNESS_STRICT_THRESHOLD,
+    WITNESS_DEFAULT_THRESHOLD, WITNESS_PERMISSIVE_THRESHOLD.
     """
     STRICT_TRACKS = {"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING"}
     PERMISSIVE_TRACKS = {"DISCIPLESHIP", "ENGLISH_LITERATURE"}
     
     if track in STRICT_TRACKS:
-        return 0.82  # Historical truth claims require verified primary sources
+        return _STRICT_THRESHOLD
     elif track in PERMISSIVE_TRACKS:
-        return 0.65  # Scripture/worldview content is more permissive
+        return _PERMISSIVE_THRESHOLD
     else:
-        return 0.75  # Default for science, homesteading, math, etc.
+        return _DEFAULT_THRESHOLD
 
 
 def evaluate_evidence(
