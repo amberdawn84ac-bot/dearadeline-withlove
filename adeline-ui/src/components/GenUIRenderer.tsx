@@ -23,6 +23,8 @@ import { MindMap } from "@/components/gen-ui/patterns/MindMap";
 import { Timeline } from "@/components/gen-ui/patterns/Timeline";
 import { QuizCard } from "@/components/gen-ui/patterns/QuizCard";
 import { Flashcard } from "@/components/gen-ui/patterns/Flashcard";
+import { ScaffoldedProblem } from "@/components/gen-ui/patterns/ScaffoldedProblem";
+import { HardThingChallenge } from "@/components/gen-ui/patterns/HardThingChallenge";
 import { TextSelectionMenu } from "@/components/gen-ui/TextSelectionMenu";
 import { WeightTierBadge } from "@/components/lessons/WeightTierBadge";
 import { DistortionFlag } from "@/components/lessons/DistortionFlag";
@@ -30,6 +32,69 @@ import { KeystoneConcept } from "@/components/lessons/KeystoneConcept";
 import { DistractionBox } from "@/components/lessons/DistractionBox";
 import { SourceBadge } from "./SourceBadge";
 import Link from "next/link";
+
+// ── Component Registry (safe, whitelisted only) ────────────────────────────────
+// Only components in this registry can be rendered by GENUI_ASSEMBLY blocks.
+// This prevents arbitrary code execution from LLM outputs.
+
+const componentRegistry: Record<string, React.ComponentType<any>> = {
+  InteractiveQuiz: QuizCard,  // Reuse existing QuizCard for now
+  ScaffoldedProblem: ScaffoldedProblem,  // Implemented stateful component
+  DragDropTimeline: Timeline,  // Reuse existing Timeline for now
+  LiveChart: () => <div className="p-4 text-sm text-[#374151]">LiveChart component coming soon</div>,
+  ProjectBuilder: () => <div className="p-4 text-sm text-[#374151]">ProjectBuilder component coming soon</div>,
+  SocraticDebate: () => <div className="p-4 text-sm text-[#374151]">SocraticDebate component coming soon</div>,
+  HardThingChallenge: HardThingChallenge,  // Implemented discipleship component
+};
+
+// ── DynamicComponent Wrapper ─────────────────────────────────────────────────────
+// Hydrates whitelisted components with local state and re-renders on changes.
+
+interface DynamicComponentProps {
+  componentType: string;
+  props: Record<string, any>;
+  initialState?: Record<string, any>;
+  callbacks?: string[];
+  onStateChange?: (newState: Record<string, any>) => void;
+}
+
+function DynamicComponent({
+  componentType,
+  props,
+  initialState = {},
+  callbacks = [],
+  onStateChange,
+}: DynamicComponentProps) {
+  const [localState, setLocalState] = useState(initialState);
+
+  const Component = componentRegistry[componentType];
+
+  if (!Component) {
+    return (
+      <div
+        className="rounded-xl p-4 space-y-2"
+        style={{ background: "#FEF2F2", border: "1.5px solid #991B1B40" }}
+      >
+        <BlockLabel type="GENUI_ASSEMBLY" />
+        <p className="text-sm text-[#991B1B]">Unknown component: {componentType}</p>
+      </div>
+    );
+  }
+
+  const handleStateChange = (newState: Record<string, any>) => {
+    setLocalState(newState);
+    onStateChange?.(newState);
+  };
+
+  return (
+    <Component
+      {...props}
+      state={localState}
+      onStateChange={handleStateChange}
+      callbacks={callbacks}
+    />
+  );
+}
 
 // ── Animation variants for staggered block entrance ────────────────────────────
 
@@ -79,7 +144,8 @@ type BrainBlockType =
   | "NARRATED_SLIDE"
   | "BOOK_SUGGESTION"
   | "INTERACTIVE_SIM"
-  | "HIGHLIGHT_ASK";
+  | "HIGHLIGHT_ASK"
+  | "GENUI_ASSEMBLY";
 
 // ── OAS Standard entry ────────────────────────────────────────────────────────
 
@@ -187,6 +253,7 @@ const LABEL_STYLES: Record<BrainBlockType, string> = {
   BOOK_SUGGESTION:  "bg-[#78350F] text-white",
   INTERACTIVE_SIM:  "bg-[#065F46] text-white",
   HIGHLIGHT_ASK:    "bg-[#374151] text-white",
+  GENUI_ASSEMBLY:   "bg-[#7C3AED] text-white",
 };
 
 const LABEL_NAMES: Record<BrainBlockType, string> = {
@@ -205,6 +272,7 @@ const LABEL_NAMES: Record<BrainBlockType, string> = {
   BOOK_SUGGESTION:  "Suggested Reading",
   INTERACTIVE_SIM:  "Interactive",
   HIGHLIGHT_ASK:    "Highlight & Ask",
+  GENUI_ASSEMBLY:   "Dynamic Component",
 };
 
 function BlockLabel({ type }: { type: string }) {
@@ -835,6 +903,40 @@ function GenUIRenderer({
               break;
             case "INTERACTIVE_SIM":
               blockContent = <InteractiveSimBlock block={block} />;
+              break;
+            case "GENUI_ASSEMBLY":
+              const assemblyData = (block as any).genui_assembly_data;
+              blockContent = (
+                <DynamicComponent
+                  componentType={assemblyData?.component_type || "InteractiveQuiz"}
+                  props={assemblyData?.props || {}}
+                  initialState={assemblyData?.initial_state || {}}
+                  callbacks={assemblyData?.callbacks || []}
+                  onStateChange={async (newState) => {
+                    // Send to backend to update BKT/ZPD
+                    try {
+                      const response = await fetch("/api/genui/callback", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          student_id: "",  // TODO: Get from auth context
+                          lesson_id: _lessonId,
+                          component_type: assemblyData?.component_type,
+                          event: "onStateChange",
+                          state: newState,
+                          block_id: block.block_id,
+                        }),
+                      });
+                      if (response.ok) {
+                        const data = await response.json();
+                        console.log("[GENUI] BKT updated:", data.updated_mastery);
+                      }
+                    } catch (error) {
+                      console.error("[GENUI] Callback failed:", error);
+                    }
+                  }}
+                />
+              );
               break;
             case "MIND_MAP":
               blockContent = <MindMapBlock block={block} />;

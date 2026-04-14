@@ -86,6 +86,7 @@ def select_transformation(block: dict, req: AdaptationRequest) -> str:
       "to_quiz"          — convert to QUIZ + generate quiz_data
       "to_timeline"      — convert to TIMELINE + generate timeline_data
       "to_narrated_slide" — convert to NARRATED_SLIDE + generate narrated_slide_data
+      "to_genui_assembly" — convert to GENUI_ASSEMBLY + generate genui_assembly_data
     """
     block_type = block.get("block_type", "TEXT")
     content = block.get("content", "")
@@ -123,9 +124,9 @@ def select_transformation(block: dict, req: AdaptationRequest) -> str:
     if date_count >= 3 and block_type in ("NARRATIVE", "TEXT"):
         return "to_timeline"
 
-    # High priority score + older student → quiz to leverage readiness
-    if req.priority_score > 0.7 and grade >= 7 and block_type in ("NARRATIVE", "TEXT"):
-        return "to_quiz"
+    # High priority score + older student → GENUI_ASSEMBLY for interactive stateful components
+    if req.priority_score > 0.7 and grade >= 6 and block_type in ("NARRATIVE", "TEXT"):
+        return "to_genui_assembly"
 
     # Strong quiz history (avg SM-2 easiness > 3.5) + older student → quiz
     if (req.recent_quiz_scores and grade >= 7 and
@@ -269,6 +270,27 @@ def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: st
     elif req.priority_score > 0.7 and req.preferred_modality == "visual":
         genui_hint = "\n[GENUI hint: a mind-map or narrated slide would suit this high-readiness visual learner.]"
 
+    # ── Dynamic UI Instructions for GENUI_ASSEMBLY ────────────────────────────
+    genui_directive = ""
+    if req.decay_adjusted_mastery < 0.6 or req.bkt_pL < 0.55:
+        genui_directive = (
+            "\n**Dynamic UI Instructions:** "
+            "Mastery gap detected. Consider injecting a GENUI_ASSEMBLY block (ScaffoldedProblem or InteractiveQuiz) "
+            "immediately after this content with local state that re-renders on wrong answers."
+        )
+    elif req.priority_score >= 0.8:
+        genui_directive = (
+            "\n**Dynamic UI Instructions:** "
+            "High priority concept. Consider injecting a GENUI_ASSEMBLY block (ProjectBuilder or DragDropTimeline) "
+            "after the main section with interactive state."
+        )
+    elif req.track in ("DISCIPLESHIP", "HEALTH_NATUROPATHY", "GOVERNMENT_ECONOMICS"):
+        genui_directive = (
+            "\n**Dynamic UI Instructions:** "
+            "Discipleship topic. Consider injecting a HardThingChallenge GENUI_ASSEMBLY block "
+            "with student progress state for applying principles."
+        )
+
     # ── Discipleship nudge ────────────────────────────────────────────────────
     discipleship_clause = ""
     if _has_discipleship_theme(topic_hint or req.track, req.track):
@@ -310,6 +332,7 @@ def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: st
         f"{decay_clause}"
         f"{discipleship_clause}"
         f"{proficiency_clause}"
+        f"{genui_directive}"
         f"{genui_hint}"
         f"\n\nORIGINAL CONTENT:\n{content}"
     )
@@ -405,6 +428,45 @@ async def generate_narrated_slide_data(content: str, req: AdaptationRequest) -> 
     return None
 
 
+async def generate_genui_assembly_data(content: str, req: AdaptationRequest) -> Optional[dict]:
+    """Generate {component_type, props, initial_state, callbacks, re_render_triggers} for GENUI_ASSEMBLY."""
+    grade_desc = _GRADE_DESC.get(req.grade_level, f"grade {req.grade_level}")
+
+    # Determine component type based on context
+    if req.priority_score > 0.8:
+        component_type = "ProjectBuilder" if req.grade_level >= "7" else "ScaffoldedProblem"
+    elif req.decay_adjusted_mastery < 0.6 or req.bkt_pL < 0.55:
+        component_type = "ScaffoldedProblem"
+    elif req.track in ("DISCIPLESHIP", "HEALTH_NATUROPATHY", "GOVERNMENT_ECONOMICS"):
+        component_type = "HardThingChallenge"
+    else:
+        component_type = "InteractiveQuiz"
+
+    system = (
+        f"You generate structured data for a {component_type} component from lesson content. "
+        "Return ONLY valid JSON with keys: "
+        "component_type (string, must be exactly the component type you're given), "
+        "props (dict with component-specific fields), "
+        "initial_state (dict with keys like currentStep, hintsUsed, progress), "
+        "callbacks (array of strings like onAnswer, onComplete, onHint), "
+        "re_render_triggers (array of strings like masteryUpdate, struggleDetected). "
+        "No markdown, just JSON."
+    )
+    user = (
+        f"Generate {component_type} data for a {grade_desc} student from this content:\n\n{content[:1000]}\n\n"
+        f"Context: priority_score={req.priority_score:.2f}, bkt_pL={req.bkt_pL:.2f}, "
+        f"decay_adjusted_mastery={req.decay_adjusted_mastery:.2f}"
+    )
+    raw = await _llm_call(system, user, max_tokens=800)
+    try:
+        data = json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
+        if "component_type" in data and "props" in data:
+            return data
+    except (json.JSONDecodeError, AttributeError):
+        pass
+    return None
+
+
 # ── Main adaptation entry point ──────────────────────────────────────────────
 
 async def _transform_block(block: dict, req: AdaptationRequest, topic_hint: str = "") -> dict:
@@ -448,6 +510,15 @@ async def _transform_block(block: dict, req: AdaptationRequest, topic_hint: str 
         if data:
             adapted["block_type"] = "NARRATED_SLIDE"
             adapted["narrated_slide_data"] = data
+            adapted["content"] = content
+        else:
+            adapted["content"] = await adapt_block_content(content, req, topic_hint)
+
+    elif decision == "to_genui_assembly":
+        data = await generate_genui_assembly_data(content, req)
+        if data:
+            adapted["block_type"] = "GENUI_ASSEMBLY"
+            adapted["genui_assembly_data"] = data
             adapted["content"] = content
         else:
             adapted["content"] = await adapt_block_content(content, req, topic_hint)

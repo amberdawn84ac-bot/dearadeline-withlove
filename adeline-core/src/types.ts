@@ -246,6 +246,7 @@ export enum BlockType {
   // ── Interactive UI Blocks (LearnLM-style) ────────────────────────
   INTERACTIVE_SIM  = "INTERACTIVE_SIM",  // Interactive simulation or visualization
   HIGHLIGHT_ASK    = "HIGHLIGHT_ASK",    // Contextual explanation from highlighted text
+  GENUI_ASSEMBLY   = "GENUI_ASSEMBLY",   // Dynamic stateful component assembly with callbacks
 }
 
 export enum DifficultyLevel {
@@ -255,10 +256,39 @@ export enum DifficultyLevel {
   MASTERING  = "MASTERING",   // 9–12
 }
 
+export const GenUIComponentType = z.enum([
+  "InteractiveQuiz",
+  "ScaffoldedProblem",
+  "DragDropTimeline",
+  "LiveChart",
+  "ProjectBuilder",
+  "SocraticDebate",
+  "HardThingChallenge",
+]);
+
 const HomesteadVariantSchema = z.object({
   enabled:             z.boolean(),
   alternateContent:    z.string().describe("Land/homestead-adapted version of block content"),
   practicalApplication: z.string().optional(),
+});
+
+export const GenUIAssemblyBlockSchema = z.object({
+  blockType: z.literal(BlockType.GENUI_ASSEMBLY),
+  componentType: GenUIComponentType,
+  props: z.record(z.any()).describe("Component-specific props"),
+  initialState: z.record(z.any()).optional().describe("Local state (e.g., currentStep, hintsUsed)"),
+  callbacks: z.array(z.string()).optional().describe("Callback names (e.g., onAnswer, onComplete)"),
+  reRenderTriggers: z.array(z.string()).optional().describe("Events that trigger re-render"),
+  // Standard block fields
+  id: z.string().uuid(),
+  lessonId: z.string().uuid(),
+  track: z.nativeEnum(Track),
+  difficulty: z.nativeEnum(DifficultyLevel),
+  order: z.number().int().min(0),
+  title: z.string().min(1),
+  content: z.string(),
+  isSilenced: z.boolean().default(false),
+  createdAt: z.string().datetime(),
 });
 
 export const LessonBlockSchema = z.object({

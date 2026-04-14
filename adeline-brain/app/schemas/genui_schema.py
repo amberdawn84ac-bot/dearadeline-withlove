@@ -44,6 +44,18 @@ class GenUIBlockType(str, Enum):
     TEXT             = "TEXT"
     INTERACTIVE_SIM  = "INTERACTIVE_SIM"
     HIGHLIGHT_ASK    = "HIGHLIGHT_ASK"
+    GENUI_ASSEMBLY   = "GENUI_ASSEMBLY"
+
+
+class GenUIComponentType(str, Enum):
+    """Whitelisted dynamic component types for GENUI_ASSEMBLY blocks."""
+    INTERACTIVE_QUIZ = "InteractiveQuiz"
+    SCAFFOLDED_PROBLEM = "ScaffoldedProblem"
+    DRAG_DROP_TIMELINE = "DragDropTimeline"
+    LIVE_CHART = "LiveChart"
+    PROJECT_BUILDER = "ProjectBuilder"
+    SOCRATIC_DEBATE = "SocraticDebate"
+    HARD_THING_CHALLENGE = "HardThingChallenge"
 
 
 # ── Individual Block Data Schemas ────────────────────────────────────────────
@@ -144,6 +156,15 @@ class InteractiveSimData(BaseModel):
     parameters: dict = Field(default_factory=dict, description="Simulation parameters")
 
 
+class GenUIAssemblyData(BaseModel):
+    """Data for a GENUI_ASSEMBLY block — dynamic stateful component with callbacks."""
+    component_type: GenUIComponentType = Field(..., description="Type of dynamic component")
+    props: dict = Field(default_factory=dict, description="Component-specific props")
+    initial_state: Optional[dict] = Field(None, description="Local component state (e.g., currentStep, hintsUsed)")
+    callbacks: Optional[list[str]] = Field(None, description="Callback names (e.g., onAnswer, onComplete)")
+    re_render_triggers: Optional[list[str]] = Field(None, description="Events that trigger re-render")
+
+
 # ── Generic UI Block ─────────────────────────────────────────────────────────
 
 class UIBlock(BaseModel):
@@ -162,6 +183,7 @@ class UIBlock(BaseModel):
     experiment_data: Optional[ExperimentData] = Field(None, description="Data for EXPERIMENT blocks")
     book_suggestion_data: Optional[BookSuggestionData] = Field(None, description="Data for BOOK_SUGGESTION blocks")
     interactive_sim_data: Optional[InteractiveSimData] = Field(None, description="Data for INTERACTIVE_SIM blocks")
+    genui_assembly_data: Optional[GenUIAssemblyData] = Field(None, description="Data for GENUI_ASSEMBLY blocks")
     
     # Evidence and metadata
     is_silenced: bool = Field(False, description="Whether this block should be hidden")
