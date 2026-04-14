@@ -137,23 +137,24 @@ class CanonicalStore:
         await self._redis_delete(slug)
         logger.info(f"[CanonicalStore] Cache invalidated — {slug}")
 
-    async def approve(self, slug: str) -> bool:
+    async def approve(self, slug: str, approved_by: str = "") -> bool:
         """Mark a pending canonical as approved: clear flag in DB, then publish to Redis."""
         from app.config import get_db_conn
         conn = await get_db_conn()
         try:
             result = await conn.execute(
                 'UPDATE "CanonicalLesson" '
-                'SET "pendingApproval" = FALSE, "needsReviewReason" = NULL, "updatedAt" = NOW() '
+                'SET "pendingApproval" = FALSE, "needsReviewReason" = NULL, '
+                '"lastApprovedAt" = NOW(), "approvedBy" = $2, "updatedAt" = NOW() '
                 'WHERE "topicSlug" = $1 AND "pendingApproval" = TRUE',
-                slug,
+                slug, approved_by or None,
             )
             if result == "UPDATE 0":
                 return False
             record = await self._db_get_any(slug)
             if record:
                 await self._redis_set(slug, json.dumps(record))
-            logger.info(f"[CanonicalStore] Approved canonical — {slug}")
+            logger.info(f"[CanonicalStore] Approved canonical — {slug} by {approved_by or 'unknown'}")
             return True
         finally:
             await conn.close()

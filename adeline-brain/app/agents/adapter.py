@@ -192,6 +192,7 @@ def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: st
     interests_str = ", ".join(req.interests) if req.interests else "general learning"
     track_name = req.track.replace("_", " ").title()
 
+    # ── Depth / complexity tier ───────────────────────────────────────────────
     if req.interaction_count <= 3:
         complexity = (
             "This is their first time in this subject — use introductory language, shorter sentences, "
@@ -214,12 +215,55 @@ def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: st
             "Use subject vocabulary but explain it naturally."
         )
 
+    # ── Priority score instruction ────────────────────────────────────────────
+    if req.priority_score > 0.7:
+        priority_clause = (
+            f"\nPRIORITY: This is a high-leverage concept (priority={req.priority_score:.2f}). "
+            "Spend extra time on the core mechanism — don't rush past it. "
+            "Make sure the student understands the 'why' before moving on."
+        )
+    elif req.priority_score < 0.35:
+        priority_clause = (
+            f"\nPRIORITY: This is lower priority right now (priority={req.priority_score:.2f}). "
+            "Give a brief, clear overview only. Save deeper treatment for when their mastery builds."
+        )
+    else:
+        priority_clause = ""
+
+    # ── Cross-track bias instruction ──────────────────────────────────────────
+    _TRACK_LABELS = {
+        "TRUTH_HISTORY": "History", "CREATION_SCIENCE": "Creation Science",
+        "DISCIPLESHIP": "Discipleship", "JUSTICE_CHANGEMAKING": "Justice & Changemaking",
+        "GOVERNMENT_ECONOMICS": "Government & Economics", "HOMESTEADING": "Homesteading",
+        "HEALTH_NATUROPATHY": "Health & Naturopathy", "ENGLISH_LITERATURE": "Literature",
+        "APPLIED_MATHEMATICS": "Applied Mathematics", "CREATIVE_ECONOMY": "Creative Economy",
+    }
+    cross_track_clause = ""
+    if req.cross_track_bias > 0.1:
+        related = _TRACK_LABELS.get(req.track, req.track)
+        cross_track_clause = (
+            f"\nCROSS-TRACK: This student has strong adjacent-track knowledge "
+            f"(bias={req.cross_track_bias:.2f}). Explicitly connect this concept to what they already "
+            f"know from related subjects like {related} — bridge the familiar to the new."
+        )
+
+    # ── Forgetting / decay instruction ────────────────────────────────────────
+    decay_clause = ""
+    if req.decay_adjusted_mastery < req.bkt_pL * 0.6 and req.bkt_pL > 0.2:
+        decay_clause = (
+            f"\nFORGETTING: Significant decay detected (raw mastery={req.bkt_pL:.2f}, "
+            f"decay-adjusted={req.decay_adjusted_mastery:.2f}). "
+            "Revisit foundational definitions before advancing — treat this as a refresher, not a first lesson."
+        )
+
+    # ── GENUI hint ────────────────────────────────────────────────────────────
     genui_hint = ""
     if req.bkt_pL < 0.5:
         genui_hint = "\n[GENUI hint: a quiz block after this content would reinforce foundation.]"
     elif req.priority_score > 0.7 and req.preferred_modality == "visual":
         genui_hint = "\n[GENUI hint: a mind-map or narrated slide would suit this high-readiness visual learner.]"
 
+    # ── Discipleship nudge ────────────────────────────────────────────────────
     discipleship_clause = ""
     if _has_discipleship_theme(topic_hint or req.track, req.track):
         discipleship_clause = (
@@ -236,6 +280,9 @@ def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: st
         f"Priority score: {req.priority_score:.3f}, Decay-adjusted mastery: {req.decay_adjusted_mastery:.3f}, "
         f"Cross-track bias: {req.cross_track_bias:.3f}.\n"
         f"{complexity}"
+        f"{priority_clause}"
+        f"{cross_track_clause}"
+        f"{decay_clause}"
         f"{discipleship_clause}"
         f"{genui_hint}"
         f"\n\nORIGINAL CONTENT:\n{content}"

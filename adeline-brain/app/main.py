@@ -35,6 +35,8 @@ from app.api.bookshelf import router as bookshelf_router
 from app.api.books import router as books_router
 from app.api.registrar_reports import router as registrar_reports_router
 from app.api.admin_tasks import router as admin_tasks_router
+from app.api.admin_review import router as admin_review_router
+from app.api.metrics import router as metrics_router
 from app.api.reading_session import router as reading_session_router
 from app.api.onboarding import router as onboarding_router
 from app.api.parent import router as parent_router
@@ -173,6 +175,8 @@ app.include_router(books_router, prefix="/brain")
 app.include_router(learning_plan_router, prefix="/brain")
 app.include_router(registrar_reports_router, prefix="/brain")
 app.include_router(admin_tasks_router, prefix="/brain")
+app.include_router(admin_review_router, prefix="/brain")
+app.include_router(metrics_router)
 
 
 @app.get("/health")

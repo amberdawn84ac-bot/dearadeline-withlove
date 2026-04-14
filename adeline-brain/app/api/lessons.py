@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import asyncio
+import time
 
 import openai
 from fastapi import APIRouter, HTTPException, Depends, Request
@@ -23,6 +24,7 @@ from app.algorithms.zpd_engine import apply_cross_track_bias, AdaptiveBKTParams,
 from app.models.student import load_student_state
 from app.connections.canonical_store import canonical_store, canonical_slug
 from app.agents.adapter import adapt_canonical_for_student, AdaptationRequest, _HIGH_STAKES_TRACKS
+from app.api.metrics import record_lesson_served
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lesson", tags=["lessons"])
@@ -134,7 +136,7 @@ async def generate_lesson(
 
         if canonical:
             logger.info(f"[/lessons/generate] Canonical HIT — adapting for student grade={lr.grade_level}")
-            logger.info(f"[Metrics] canonical_hit track={lr.track.value} grade={lr.grade_level} student={student_id[:8]}")
+            _adapt_start = time.monotonic()
             student_state = await load_student_state(student_id)
             track_mastery = student_state.get(lr.track.value)
             interaction_count = track_mastery.lesson_count if track_mastery else 10
@@ -213,6 +215,14 @@ async def generate_lesson(
                 cross_track_bias=ct_bias_value,
             )
             adapted_blocks = await adapt_canonical_for_student(canonical, adapt_req)
+            _adapt_ms = (time.monotonic() - _adapt_start) * 1000
+            record_lesson_served(
+                source="canonical",
+                track=lr.track.value,
+                grade=lr.grade_level,
+                adaptation_ms=_adapt_ms,
+                student_id_prefix=student_id[:8],
+            )
             from app.schemas.api_models import LessonBlockResponse
             blocks = [LessonBlockResponse(**b) for b in adapted_blocks]
             return LessonResponse(
@@ -293,6 +303,12 @@ async def generate_lesson(
             logger.warning(f"[/lessons/generate] Canonical save failed (non-fatal): {e}")
 
         # Persist learning records fire-and-forget (don't block lesson response)
+        record_lesson_served(
+            source="orchestrator",
+            track=lr.track.value,
+            grade=lr.grade_level,
+            student_id_prefix=student_id[:8],
+        )
         asyncio.create_task(_persist_learning_records(lesson))
         return lesson
     except openai.APIConnectionError as e:

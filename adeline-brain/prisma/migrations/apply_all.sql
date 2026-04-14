@@ -424,3 +424,8 @@ ALTER TABLE "CanonicalLesson"
 CREATE INDEX IF NOT EXISTS "CanonicalLesson_pending_idx"
   ON "CanonicalLesson" ("pendingApproval")
   WHERE "pendingApproval" = TRUE;
+
+-- 2026-04-14: Add auditability columns
+ALTER TABLE "CanonicalLesson"
+  ADD COLUMN IF NOT EXISTS "lastApprovedAt" TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "approvedBy"     TEXT;

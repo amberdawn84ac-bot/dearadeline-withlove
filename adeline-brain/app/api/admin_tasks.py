@@ -469,7 +469,7 @@ async def approve_canonical(
     Clears pendingApproval flag in DB and publishes to Redis cache.
     """
     from app.connections.canonical_store import canonical_store
-    approved = await canonical_store.approve(slug)
+    approved = await canonical_store.approve(slug, approved_by=user_id)
     if not approved:
         from fastapi import HTTPException
         raise HTTPException(
@@ -477,4 +477,4 @@ async def approve_canonical(
             detail=f"No pending canonical found for slug '{slug}'",
         )
     logger.info(f"[Admin] Canonical approved — {slug} by {user_id}")
-    return {"approved": True, "slug": slug}
+    return {"approved": True, "slug": slug, "approved_by": user_id}
