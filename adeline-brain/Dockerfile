@@ -7,7 +7,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 COPY requirements.txt .
-RUN pip install --no-cache-dir --target=/deps -r requirements.txt
+RUN python -m venv /venv \
+    && /venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM python:3.12-slim AS runtime
@@ -20,8 +21,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy installed packages from builder
-COPY --from=builder /deps /usr/local/lib/python3.12/site-packages
+# Copy entire venv from builder — executables (including prisma CLI) stay on PATH
+COPY --from=builder /venv /venv
+ENV PATH="/venv/bin:$PATH"
 
 COPY app/ ./app/
 COPY scripts/ ./scripts/
