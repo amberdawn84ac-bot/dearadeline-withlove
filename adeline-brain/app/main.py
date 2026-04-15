@@ -2,10 +2,14 @@
 adeline-brain — FastAPI Entry Point
 The Intelligence Layer of Dear Adeline 2.0
 """
+import json
 import logging
 import os
 
 import openai
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,6 +22,7 @@ from app.schemas.api_models import TRUTH_THRESHOLD
 from app.connections.neo4j_client import neo4j_client
 from app.connections.pgvector_client import hippocampus
 from app.connections.bookshelf_search import bookshelf_search
+from app.connections.redis_client import ping as redis_ping
 from app.api.lessons import router as lessons_router
 from app.api.opportunities import router as opportunities_router
 from app.api.journal import router as journal_router
@@ -63,10 +68,6 @@ def _configure_logging():
 
 _configure_logging()
 logger = logging.getLogger(__name__)
-
-import sentry_sdk
-from sentry_sdk.integrations.fastapi import FastApiIntegration
-from sentry_sdk.integrations.starlette import StarletteIntegration
 
 _SENTRY_DSN = os.getenv("SENTRY_DSN", "")
 if _SENTRY_DSN:
@@ -260,7 +261,6 @@ async def health():
 
     # Check Redis connectivity
     try:
-        from app.connections.redis_client import ping as redis_ping
         redis_ok = await redis_ping()
         health_status["redis"] = "ok" if redis_ok else "unreachable"
     except Exception as e:
