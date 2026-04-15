@@ -47,8 +47,37 @@ from app.connections.journal_store import journal_store
 from app.connections.conversation_store import conversation_store
 from app.jobs.seed_scheduler import startup_seed_scheduler, shutdown_seed_scheduler
 
-logging.basicConfig(level=logging.INFO)
+from pythonjsonlogger import jsonlogger
+
+def _configure_logging():
+    handler = logging.StreamHandler()
+    formatter = jsonlogger.JsonFormatter(
+        fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
+        rename_fields={"asctime": "timestamp", "levelname": "level", "name": "logger"},
+    )
+    handler.setFormatter(formatter)
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+_configure_logging()
 logger = logging.getLogger(__name__)
+
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
+
+_SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+if _SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        integrations=[StarletteIntegration(), FastApiIntegration()],
+        traces_sample_rate=0.1,
+        environment=os.getenv("RAILWAY_ENVIRONMENT", "development"),
+        send_default_pii=False,
+    )
+    logger.info("[adeline-brain] Sentry initialized")
 
 
 @asynccontextmanager
@@ -222,13 +251,21 @@ async def health():
                 concept_result = await session.run("MATCH (c:Concept) RETURN count(c) as count")
                 concept_record = await concept_result.single()
                 health_status["neo4j_concepts"] = concept_record["count"] if concept_record else 0
-                
+
                 track_result = await session.run("MATCH (t:Track) RETURN count(t) as count")
                 track_record = await track_result.single()
                 health_status["neo4j_tracks"] = track_record["count"] if track_record else 0
     except Exception as e:
         health_status["neo4j_error"] = str(e)
-    
+
+    # Check Redis connectivity
+    try:
+        from app.connections.redis_client import ping as redis_ping
+        redis_ok = await redis_ping()
+        health_status["redis"] = "ok" if redis_ok else "unreachable"
+    except Exception as e:
+        health_status["redis"] = f"error: {e}"
+
     return health_status
 
 
