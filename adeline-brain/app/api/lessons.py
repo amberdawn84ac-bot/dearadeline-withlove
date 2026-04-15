@@ -8,6 +8,7 @@ import logging
 import os
 import asyncio
 import time
+from typing import Optional
 
 import openai
 from fastapi import APIRouter, HTTPException, Depends, Request
@@ -19,15 +20,11 @@ from arq.jobs import Job as ARQJob, JobStatus
 from app.schemas.api_models import LessonRequest, LessonResponse, TRUTH_THRESHOLD, UserRole
 from app.protocols.witness import get_witness_threshold
 from app.api.middleware import require_role, get_current_user_id
-from app.agents.orchestrator import run_orchestrator
 from app.connections.pgvector_client import hippocampus
 from app.connections.knowledge_graph import get_cross_track_bias
-from app.algorithms.zpd_engine import apply_cross_track_bias, AdaptiveBKTParams, apply_decay, compute_priority
 from app.models.student import load_student_state
 from app.connections.canonical_store import canonical_store, canonical_slug
 from app.tools.graph_query import tool_get_zpd_candidates
-from app.agents.adapter import adapt_canonical_for_student, AdaptationRequest, _HIGH_STAKES_TRACKS
-from app.api.metrics import record_lesson_served
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lesson", tags=["lessons"])
@@ -208,37 +205,30 @@ async def get_lesson_status(
       { status: "done", result: {...} }  — lesson ready
       { status: "failed", error: "..." } — generation failed
     """
-    pool = await _get_arq_redis_pool()
-    job = _get_arq_job(job_id, pool)
-
+    pool = None
     try:
+        pool = await _get_arq_redis_pool()
+        job = _get_arq_job(job_id, pool)
         status = await job.status()
 
         if status == JobStatus.complete:
             result = await job.result(timeout=0)
-            await pool.aclose()
             return {"status": "done", "result": result}
-
         elif status in (JobStatus.deferred, JobStatus.queued):
-            await pool.aclose()
             return {"status": "queued"}
-
         elif status == JobStatus.in_progress:
-            await pool.aclose()
             return {"status": "running"}
-
         elif status == JobStatus.not_found:
-            await pool.aclose()
             return {"status": "not_found"}
-
         else:
-            await pool.aclose()
-            return {"status": "failed", "error": "Unknown job status"}
+            return {"status": "unknown", "detail": str(status)}
 
     except Exception as e:
-        await pool.aclose()
         logger.error(f"[/lesson/status] Error checking job {job_id}: {e}")
         return {"status": "failed", "error": str(e)}
+    finally:
+        if pool is not None:
+            await pool.aclose()
 
 
 @router.get("/health")

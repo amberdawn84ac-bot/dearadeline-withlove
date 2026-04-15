@@ -9,7 +9,6 @@ Initializes the same DB connections the orchestrator requires.
 import logging
 import os
 from arq.connections import RedisSettings
-from arq import cron
 
 from app.jobs.lesson_jobs import generate_lesson_job
 
