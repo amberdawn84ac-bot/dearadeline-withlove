@@ -25,6 +25,7 @@ class GenuiCallbackRequest(BaseModel):
     event: str  # "onAnswer", "onComplete", "onHint", etc.
     state: dict  # Component state (e.g., isCorrect, currentStep, hintsUsed)
     block_id: Optional[str] = None
+    track: Optional[str] = None  # Track for BKT lookup on onAnswer events
 
 
 class GenuiCallbackResponse(BaseModel):
@@ -76,9 +77,10 @@ async def genui_callback(
         # Fetch real BKT params from student state; fall back to defaults
         try:
             student_state = await load_student_state(request.student_id)
-            track_mastery = student_state.get(request.state.get("track", "TRUTH_HISTORY"))
+            track_mastery = student_state.get(request.track or "TRUTH_HISTORY")
             pL = track_mastery.mastery_score if track_mastery else 0.5
-        except Exception:
+        except Exception as e:
+            logger.warning(f"[GENUI] load_student_state failed for {request.student_id}: {e}")
             pL = 0.5
         params = BKTParams(pL=pL, pT=0.15, pS=0.05, pG=0.25)
         updated_mastery = bkt_update(params, is_correct)

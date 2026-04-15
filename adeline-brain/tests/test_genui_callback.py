@@ -39,6 +39,7 @@ async def test_onAnswer_returns_updated_mastery(auth_headers):
                 "component_type": "InteractiveQuiz",
                 "event": "onAnswer",
                 "state": {"isCorrect": True},
+                "track": "TRUTH_HISTORY",
             }, headers=auth_headers)
     assert resp.status_code == 200
     body = resp.json()
