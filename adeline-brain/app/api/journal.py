@@ -81,6 +81,10 @@ async def seal_journal(
         logger.exception("[/journal/seal] DB error")
         raise HTTPException(status_code=500, detail=str(e))
 
+    # Invalidate student state cache so next lesson sees fresh mastery scores
+    from app.models.student import invalidate_student_state_cache
+    await invalidate_student_state_cache(student_id)
+
     # Fire-and-forget Neo4j Mastery relationships — never block the seal response
     if body.oas_standards:
         asyncio.create_task(
