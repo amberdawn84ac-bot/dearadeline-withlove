@@ -28,6 +28,7 @@ PyJWT[crypto]==2.8.0
 
 # Background jobs and scheduling
 APScheduler==3.10.4
+arq==0.26.1
 
 # Utilities
 python-dotenv==1.0.1
