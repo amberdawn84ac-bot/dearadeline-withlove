@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.algorithms.zpd_engine import bkt_update, BKTParams
-from app.api.middleware import get_current_user
+from app.api.middleware import get_current_user_id
+from app.models.student import load_student_state
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ class GenuiCallbackResponse(BaseModel):
 @router.post("/callback", response_model=GenuiCallbackResponse)
 async def genui_callback(
     request: GenuiCallbackRequest,
-    current_user = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user_id),
 ):
     """
     Handle GENUI component callbacks and update BKT/ZPD in real time.
@@ -72,11 +73,16 @@ async def genui_callback(
 
     if request.event == "onAnswer":
         is_correct = request.state.get("isCorrect", False)
-        # TODO: Fetch current BKT params for this concept from database
-        # For now, use default params
-        params = BKTParams(pL=0.5, pT=0.15, pS=0.05, pG=0.25)
+        # Fetch real BKT params from student state; fall back to defaults
+        try:
+            student_state = await load_student_state(request.student_id)
+            track_mastery = student_state.get(request.state.get("track", "TRUTH_HISTORY"))
+            pL = track_mastery.mastery_score if track_mastery else 0.5
+        except Exception:
+            pL = 0.5
+        params = BKTParams(pL=pL, pT=0.15, pS=0.05, pG=0.25)
         updated_mastery = bkt_update(params, is_correct)
-        logger.info(f"[GENUI] BKT update: correct={is_correct}, new_mastery={updated_mastery:.3f}")
+        logger.info(f"[GENUI] BKT update: correct={is_correct}, pL={pL:.3f}, new_mastery={updated_mastery:.3f}")
 
     elif request.event == "onComplete":
         # Mark completion, award credit
