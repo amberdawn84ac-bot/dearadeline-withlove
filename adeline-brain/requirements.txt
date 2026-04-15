@@ -44,3 +44,4 @@ reportlab==4.1.0
 # Observability
 sentry-sdk[fastapi]==2.5.1
 python-json-logger==2.0.7
+gunicorn==21.2.0

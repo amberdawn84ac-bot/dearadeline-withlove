@@ -30,5 +30,13 @@ if [ "$RUN_SEEDS" = "true" ]; then
     echo "[entrypoint] Seeds complete"
 fi
 
-echo "[entrypoint] Starting uvicorn on port ${PORT:-8000}..."
-exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" "$@"
+echo "[entrypoint] Starting gunicorn on port ${PORT:-8000} with 4 workers..."
+exec gunicorn app.main:app \
+  --worker-class uvicorn.workers.UvicornWorker \
+  --workers 4 \
+  --bind "0.0.0.0:${PORT:-8000}" \
+  --timeout 120 \
+  --keep-alive 5 \
+  --access-logfile - \
+  --error-logfile - \
+  "$@"
