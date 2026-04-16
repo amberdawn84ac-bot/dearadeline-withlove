@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { generateLesson } from "@/lib/brain-client";
+import { generateLesson, pollLessonResult } from "@/lib/brain-client";
 import type { LessonResponse, LessonRequest } from "@/lib/brain-client";
 
 interface UseLessonState {
@@ -25,7 +25,8 @@ export function useLesson(): UseLessonReturn {
   const generate = useCallback(async (request: LessonRequest) => {
     setState({ lesson: null, loading: true, error: null });
     try {
-      const lesson = await generateLesson(request);
+      const job = await generateLesson(request);
+      const lesson = await pollLessonResult(job.job_id, { intervalMs: 2000, timeoutMs: 90000 });
       setState({ lesson, loading: false, error: null });
     } catch (err) {
       setState({

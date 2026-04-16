@@ -8,7 +8,7 @@ import { AdelineChatPanel } from '@/components/AdelineChatPanel';
 import { SpacedRepWidget } from '@/components/dashboard/SpacedRepWidget';
 import { useStudent } from '@/lib/useStudent';
 import LessonRenderer from '@/components/lessons/LessonRenderer';
-import { generateLesson, getLearningPlan } from '@/lib/brain-client';
+import { generateLesson, pollLessonResult, getLearningPlan } from '@/lib/brain-client';
 import type { LessonResponse, Track, LessonSuggestion, ProjectSuggestion, LearningPlanResponse, BookRecommendation } from '@/lib/brain-client';
 import { RecommendedBooks } from '@/components/dashboard/RecommendedBooks';
 
@@ -86,13 +86,14 @@ function DashboardContent() {
     setActiveLesson(null);
     
     try {
-      const lesson = await generateLesson({
+      const job = await generateLesson({
         student_id: studentId,
         track: suggestion.track as Track,
         topic: suggestion.title,
         is_homestead: false,
         grade_level: gradeLevel,
       });
+      const lesson = await pollLessonResult(job.job_id, { intervalMs: 2000, timeoutMs: 90000 });
       handleLessonGenerated(lesson);
     } catch (error) {
       console.error('[Dashboard] Lesson generation failed:', error);
