@@ -252,6 +252,11 @@ pnpm dev
 # adeline-core (type generation)
 cd adeline-core
 pnpm build
+
+# Pre-commit secret scanner (blocks raw API keys from being committed)
+# Install once after cloning:
+bash scripts/install-hooks.sh
+# The hook is in .git/hooks/pre-commit (not tracked by git)
 ```
 
 ---
