@@ -93,6 +93,10 @@ async def _embed(text: str) -> list[float]:
 async def _get_arq_redis_pool():
     """Create a short-lived ARQ Redis pool for enqueue/status operations."""
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    if redis_url.startswith("https://") or redis_url.startswith("http://"):
+        raise ValueError(
+            f"REDIS_URL must be a redis:// TCP DSN for ARQ, got: {redis_url}"
+        )
     return await arq_create_pool(RedisSettings.from_dsn(redis_url))
 
 

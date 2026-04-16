@@ -77,7 +77,7 @@ async def genui_callback(
         # Fetch real BKT params from student state; fall back to defaults
         try:
             student_state = await load_student_state(request.student_id)
-            track_mastery = student_state.get(request.track or "TRUTH_HISTORY")
+            track_mastery = student_state.tracks.get(request.track or "TRUTH_HISTORY")
             pL = track_mastery.mastery_score if track_mastery else 0.5
         except Exception as e:
             logger.warning(f"[GENUI] load_student_state failed for {request.student_id}: {e}")
