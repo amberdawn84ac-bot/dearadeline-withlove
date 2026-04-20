@@ -17,6 +17,7 @@ from app.models.student import load_student_state
 from app.agents.pedagogy import scaffold, explain_snippet, ZPDZone
 from app.models.student import MasteryBand
 from app.services.memory import memory_service
+from app.algorithms.bkt_tracker import update_bkt, zpd_zone_to_correctness
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lesson", tags=["scaffold"])
@@ -28,6 +29,7 @@ class ScaffoldRequest(BaseModel):
     track:            Track
     grade_level:      str
     student_response: str
+    concept_id:       str | None = None  # Optional: provided by UI from ZPD suggestion card
 
 
 class ScaffoldResponseBody(BaseModel):
@@ -76,8 +78,30 @@ async def scaffold_response(body: ScaffoldRequest, student_id: str = Depends(get
                 track=body.track.value,
             )
         except Exception as mem_err:
-            # Non-fatal: log but don't fail the request
             logger.warning(f"[/lesson/scaffold] Memory save failed (non-fatal): {mem_err}")
+
+        # Fire BKT update — feed ZPD zone back into per-concept mastery model (non-blocking)
+        # concept_id is optional: provided when UI passes it from a ZPD suggestion card.
+        # When absent, we look up the top ZPD candidate for the track as a best-effort proxy.
+        import asyncio as _asyncio
+
+        async def _fire_bkt():
+            try:
+                concept_id = body.concept_id
+                if not concept_id:
+                    from app.tools.graph_query import tool_get_zpd_candidates
+                    candidates = await tool_get_zpd_candidates(student_id, body.track.value, limit=1)
+                    if candidates:
+                        concept_id = candidates[0].concept_id
+
+                if concept_id:
+                    correct = zpd_zone_to_correctness(result.zpd_zone.value)
+                    if correct is not None:
+                        await update_bkt(student_id, concept_id, body.track.value, correct)
+            except Exception as bkt_err:
+                logger.debug(f"[/lesson/scaffold] BKT update failed (non-fatal): {bkt_err}")
+
+        _asyncio.create_task(_fire_bkt())
             
     except Exception as e:
         logger.exception("[/lesson/scaffold] Unexpected error")
