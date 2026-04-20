@@ -32,49 +32,51 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lesson", tags=["lessons"])
 
 
-async def _get_best_canonical_for_zpd(student_id: str, track: str) -> Optional[dict]:
+async def _get_best_canonical_for_zpd(student_id: str, track: str) -> Optional[tuple[dict, str]]:
     """
-    Find the best matching canonical lesson for a student based on ZPD candidates.
+    Find the best canonical lesson for a student using BKT-scored ZPD candidates.
 
-    1. Fetch ZPD candidates (concepts the student is ready to learn next).
-    2. Fetch available canonicals for the track.
-    3. Match ZPD concept titles to canonical topics (case-insensitive fuzzy match).
-    4. Return the canonical for the highest-priority ZPD concept that has a match.
+    Returns (canonical_dict, zpd_concept_title) or None.
 
-    Returns None if no match is found.
+    Replaces the old fragile substring match with a priority-ranked approach:
+    1. Fetch BKT-scored ZPD candidates (sorted by compute_priority score)
+    2. For the top candidate, inject its title as the lesson topic
+    3. Check canonical store for an exact slug match
+    4. If no canonical exists, return (None, top_concept_title) so caller
+       can use the ZPD concept as the lesson topic for full generation
     """
     try:
-        # Step 1: Fetch ZPD candidates
         zpd_candidates = await tool_get_zpd_candidates(student_id, track, limit=5)
         if not zpd_candidates:
-            logger.info(f"[/lessons/zpd] No ZPD candidates found for student={student_id[:8]} track={track}")
+            logger.info(f"[/lessons/zpd] No ZPD candidates for student={student_id[:8]} track={track}")
             return None
 
-        # Step 2: Fetch available canonicals for the track
-        canonicals = await canonical_store.get_by_track(track, limit=50)
-        if not canonicals:
-            logger.info(f"[/lessons/zpd] No canonicals available for track={track}")
-            return None
-
-        # Step 3: Match ZPD concepts to canonicals (case-insensitive fuzzy match)
+        # Candidates are already sorted by BKT priority score (highest first)
         for candidate in zpd_candidates:
-            concept_title = candidate.title.lower()
-            for canonical in canonicals:
-                canonical_topic = canonical["topic"].lower()
-                canonical_title = canonical["title"].lower()
-                # Fuzzy match: concept title appears in canonical topic or title
-                if concept_title in canonical_topic or concept_title in canonical_title:
+            logger.info(
+                f"[/lessons/zpd] Trying ZPD candidate '{candidate.title}' "
+                f"priority={candidate.priority:.3f} mastery={candidate.current_mastery:.3f}"
+            )
+            # Try exact slug match in canonical store
+            try:
+                from app.connections.canonical_store import canonical_slug
+                slug = canonical_slug(candidate.title, track)
+                canonical = await canonical_store.get(slug)
+                if canonical:
                     logger.info(
-                        f"[/lessons/zpd] Matched ZPD concept '{candidate.title}' to "
-                        f"canonical topic '{canonical['topic']}' for student={student_id[:8]}"
+                        f"[/lessons/zpd] Canonical HIT for ZPD concept '{candidate.title}'"
                     )
-                    # Fetch the full canonical record
-                    slug = canonical["topic_slug"]
-                    full_canonical = await canonical_store.get(slug)
-                    return full_canonical
+                    return canonical, candidate.title
+            except Exception:
+                pass
 
-        logger.info(f"[/lessons/zpd] No canonical match found for ZPD candidates in track={track}")
-        return None
+        # No canonical found — return top candidate's title so caller can generate fresh
+        top = zpd_candidates[0]
+        logger.info(
+            f"[/lessons/zpd] No canonical match — returning ZPD topic '{top.title}' "
+            f"for fresh generation (priority={top.priority:.3f})"
+        )
+        return None, top.title
 
     except Exception as e:
         logger.warning(f"[/lessons/zpd] ZPD auto-selection failed: {e}")
@@ -176,17 +178,33 @@ async def generate_lesson(
         f"grade={lr.grade_level} homestead={lr.is_homestead}"
     )
     try:
-        # ── Phase 1: ZPD auto-selection (when no topic provided) ───────────────
+        # ── Phase 1: ZPD-driven topic selection ───────────────────────────────
+        # When no topic is provided: use top BKT-scored ZPD candidate as topic.
+        # When a topic IS provided: still fetch ZPD candidates so the orchestrator
+        # gets ZPD context injected into its prompt (via cross_track_acknowledgment
+        # or mastery_score/band). This makes every lesson ZPD-aware.
         canonical = None
+        zpd_injected_topic: Optional[str] = None
+
         if not lr.topic or lr.topic.strip() == "":
-            logger.info(f"[/lessons/generate] No topic provided — attempting ZPD auto-selection")
-            canonical = await _get_best_canonical_for_zpd(student_id, lr.track.value)
+            logger.info("[/lessons/generate] No topic — running ZPD auto-selection")
+            zpd_result = await _get_best_canonical_for_zpd(student_id, lr.track.value)
+            if zpd_result:
+                if isinstance(zpd_result, tuple):
+                    canonical, zpd_injected_topic = zpd_result
+                else:
+                    canonical = zpd_result  # legacy: just a canonical dict
+
             if canonical:
-                logger.info(f"[/lessons/generate] ZPD auto-selected canonical: {canonical.get('topic', 'unknown')}")
+                logger.info(f"[/lessons/generate] ZPD canonical HIT: {canonical.get('topic')}")
+            elif zpd_injected_topic:
+                # No canonical but BKT gave us the best topic to generate fresh
+                lr = lr.model_copy(update={"topic": zpd_injected_topic})
+                logger.info(f"[/lessons/generate] ZPD injected topic: '{zpd_injected_topic}'")
             else:
-                logger.info(f"[/lessons/generate] ZPD auto-selection found no match — will use orchestrator")
+                logger.info("[/lessons/generate] ZPD returned nothing — orchestrator will use defaults")
         else:
-            # ── Phase 2: Check canonical store (by topic + track) ───────────────
+            # Topic provided: check canonical store, then continue with ZPD context in background
             slug = canonical_slug(lr.topic, lr.track.value)
             try:
                 canonical = await canonical_store.get(slug)
@@ -305,6 +323,8 @@ async def generate_lesson(
 
         # ── Phase 2: Full generation (no canonical exists yet) ───────────────
         logger.info(f"[/lessons/generate] No canonical — running full orchestrator")
+        # Ensure slug is always defined for the canonical-save step below
+        slug = canonical_slug(lr.topic, lr.track.value)
         query_embedding = await _embed(lr.topic)
 
         student_state     = await load_student_state(student_id)

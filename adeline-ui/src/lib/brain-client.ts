@@ -68,6 +68,36 @@ export interface MindMapData { concept: string; root: MindMapNode; }
 export interface TimelineEvent { date: string; label: string; description: string; source_title?: string; }
 export interface TimelineData { span: string; events: TimelineEvent[]; }
 export interface MnemonicData { concept: string; acronym: string; words: string[]; tip: string; }
+
+// ── GENUI_ASSEMBLY component data types ───────────────────────────────────────
+export interface FocusResetData {
+  mode?: "breathe" | "ground" | "move";
+  message?: string;
+  move_prompt?: string;
+  move_seconds?: number;
+}
+export interface ScaffoldTask {
+  id: string; text: string; priority: "now" | "today" | "this_week";
+  category?: string; estimated_minutes?: number;
+}
+export interface TaskScaffoldData { title?: string; context?: string; tasks: ScaffoldTask[]; }
+export interface GlowGrowQuestion {
+  question: string;
+  options: { text: string; is_correct: boolean }[];
+  explanation: string; glow: string; grow: string;
+}
+export interface GlowGrowData { title?: string; topic?: string; questions: GlowGrowQuestion[]; }
+export interface ConceptMastery {
+  concept_id: string; concept_name: string; mastery: number;
+  status: "not_started" | "in_progress" | "mastered";
+}
+export interface InsightReportData {
+  topic: string; track: string; reason: string;
+  zpd_priority: number; prereq_readiness: number;
+  concepts: ConceptMastery[]; next_steps: string[];
+}
+export interface MnemonicWord { letter: string; word: string; connection?: string; }
+export interface MnemonicCardData { concept: string; acronym: string; words: MnemonicWord[]; tip?: string; }
 export interface NarratedSlide { slide_number: number; title: string; bullets: string[]; narration: string; }
 export interface NarratedSlideData { total_duration_minutes: number; slides: NarratedSlide[]; }
 

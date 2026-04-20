@@ -227,6 +227,62 @@ async def record_concept_mastery(
 
 # ── ZPD graph queries ─────────────────────────────────────────────────────────
 
+async def get_concept_graph_for_track(track: str) -> list[dict]:
+    """
+    Return all Concept nodes for a track with their prerequisite structure.
+    Used by bkt_tracker.build_mastery_snapshots() + compute_zpd_from_snapshots().
+
+    Each row has:
+      id, name, description, track, standard_code, grade_band,
+      prerequisite_ids (list[str]), dependent_count (int)
+    """
+    rows = await neo4j_client.run(
+        """
+        MATCH (c:Concept)-[:BELONGS_TO]->(t:Track {name: $track})
+        OPTIONAL MATCH (c)-[:PREREQUISITE_OF]->(prereq:Concept)
+        OPTIONAL MATCH (dep:Concept)-[:PREREQUISITE_OF]->(c)
+        RETURN
+            c.id          AS id,
+            c.title       AS name,
+            c.description AS description,
+            c.track       AS track,
+            c.standard_code AS standard_code,
+            c.grade_band  AS grade_band,
+            collect(DISTINCT prereq.id) AS prerequisite_ids,
+            count(DISTINCT dep)         AS dependent_count
+        """,
+        {"track": track},
+    )
+    return rows
+
+
+async def get_zpd_candidates_with_bkt(
+    track: str,
+    mastery_snapshots: dict,
+    limit: int = 5,
+) -> list:
+    """
+    BKT-aware ZPD candidate selection using compute_zpd_from_snapshots().
+
+    Unlike get_zpd_candidates() which gates on binary Neo4j MASTERED edges,
+    this uses per-concept BKT pL values (from SpacedRepetitionCard) so the
+    ZPD updates continuously as students learn — not just at journal-seal time.
+
+    Returns ZPDConcept[] sorted by compute_priority(prereq_readiness, mastery, deps).
+    Falls back to empty list if Neo4j is unavailable.
+    """
+    from app.algorithms.zpd_engine import compute_zpd_from_snapshots
+
+    try:
+        concept_rows = await get_concept_graph_for_track(track)
+        if not concept_rows:
+            return []
+        return compute_zpd_from_snapshots(mastery_snapshots, concept_rows)[:limit]
+    except Exception as e:
+        logger.warning(f"[KnowledgeGraph] get_zpd_candidates_with_bkt failed for {track}: {e}")
+        return []
+
+
 async def get_zpd_candidates(student_id: str, track: str, limit: int = 5) -> list[dict]:
     """
     Find Concept nodes the student is ready to learn next (Zone of Proximal Development).

@@ -323,14 +323,25 @@ STARTER_TOPICS = {
 
 
 def _zpd_to_suggestion(candidate: ZPDCandidate, priority_boost: float = 0.0) -> LessonSuggestion:
-    """Convert a ZPD candidate to a lesson suggestion."""
+    """
+    Convert a ZPD candidate to a lesson suggestion.
+
+    Uses the candidate's compute_priority() score (prereq_readiness × mastery_gap × leverage)
+    when available (BKT-aware path). Falls back to 0.7 for graph-only candidates.
+    Priority is clamped to [0, 1].
+    """
+    # BKT-aware path: candidate.priority is from compute_priority() in zpd_engine.py
+    # Graph-only fallback: candidate.priority defaults to 0.5
+    base_priority = candidate.priority if candidate.priority > 0 else 0.7
+    final_priority = min(1.0, base_priority + priority_boost)
+
     return LessonSuggestion(
         id=f"zpd-{candidate.concept_id}",
         title=candidate.title,
         track=candidate.track,
         description=candidate.description or TRACK_DESCRIPTIONS.get(candidate.track, ""),
         emoji=TRACK_EMOJI.get(candidate.track, "📚"),
-        priority=0.9 + priority_boost,  # ZPD candidates are high priority
+        priority=final_priority,
         source="zpd",
         concept_id=candidate.concept_id,
         standard_code=candidate.standard_code,
