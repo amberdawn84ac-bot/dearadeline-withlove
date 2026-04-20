@@ -34,6 +34,8 @@ import { TaskScaffold } from "@/components/gen-ui/patterns/TaskScaffold";
 import { GlowGrow } from "@/components/gen-ui/patterns/GlowGrow";
 import { InsightReport } from "@/components/gen-ui/patterns/InsightReport";
 import { MnemonicCard } from "@/components/gen-ui/patterns/MnemonicCard";
+import { NarratedSlides } from "@/components/gen-ui/patterns/NarratedSlides";
+import { EmbeddedInterrupt } from "@/components/gen-ui/patterns/EmbeddedInterrupt";
 import { TextSelectionMenu } from "@/components/gen-ui/TextSelectionMenu";
 import { WeightTierBadge } from "@/components/lessons/WeightTierBadge";
 import { DistortionFlag } from "@/components/lessons/DistortionFlag";
@@ -65,6 +67,9 @@ const componentRegistry: Record<string, React.ComponentType<any>> = {
   // Neuroadaptive
   FocusReset:        FocusReset,
   TaskScaffold:      TaskScaffold,
+  // Presentation
+  NarratedSlides:    NarratedSlides,
+  EmbeddedInterrupt: EmbeddedInterrupt,
 };
 
 // ── DynamicComponent Wrapper ─────────────────────────────────────────────────────
@@ -656,86 +661,9 @@ function MnemonicBlock({ block }: { block: LessonBlockResponse }) {
 // ── NARRATED_SLIDE block ──────────────────────────────────────────────────────
 
 function NarratedSlideBlock({ block }: { block: LessonBlockResponse }) {
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [showNarration, setShowNarration] = useState(false);
   const data = block.narrated_slide_data;
   if (!data || data.slides.length === 0) return null;
-  const slide = data.slides[currentSlide];
-  return (
-    <div
-      className="rounded-xl p-5 space-y-4"
-      style={{ background: "#EFF6FF", border: "1.5px solid #BFDBFE" }}
-    >
-      <div className="flex items-center justify-between">
-        <BlockLabel type="NARRATED_SLIDE" />
-        <span className="text-xs text-[#1D4ED8] opacity-70">
-          {data.total_duration_minutes} min
-        </span>
-      </div>
-      {/* Slide header */}
-      <div>
-        <p className="text-[10px] text-[#1D4ED8] font-bold uppercase tracking-widest mb-1">
-          Slide {slide.slide_number} of {data.slides.length}
-        </p>
-        <h3 className="font-bold text-[#1E3A5F] text-base">{slide.title}</h3>
-      </div>
-      {/* Bullets */}
-      <ul className="space-y-1.5">
-        {slide.bullets.map((bullet, i) => (
-          <li key={i} className="flex items-start gap-2 text-base text-[#374151]">
-            <span className="text-[#1D4ED8] font-bold mt-0.5">→</span>
-            <span>{bullet}</span>
-          </li>
-        ))}
-      </ul>
-      {/* Narration accordion */}
-      <button
-        onClick={() => setShowNarration((s) => !s)}
-        className="text-sm text-[#1D4ED8] font-semibold underline"
-      >
-        {showNarration ? "Hide narration script ▲" : "Show narration script ▼"}
-      </button>
-      {showNarration && (
-        <p className="text-sm text-[#374151] bg-white rounded-lg p-3 italic border border-[#BFDBFE]">
-          {slide.narration}
-        </p>
-      )}
-      {/* Navigation */}
-      <div className="flex items-center justify-between pt-1">
-        <button
-          onClick={() => { setCurrentSlide((s) => Math.max(0, s - 1)); setShowNarration(false); }}
-          disabled={currentSlide === 0}
-          className="text-sm px-3 py-1.5 rounded-lg font-semibold text-white disabled:opacity-40"
-          style={{ background: "#1D4ED8" }}
-        >
-          ← Prev
-        </button>
-        <div className="flex gap-1">
-          {data.slides.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => { setCurrentSlide(i); setShowNarration(false); }}
-              className="w-2 h-2 rounded-full transition-colors"
-              style={{ background: i === currentSlide ? "#1D4ED8" : "#BFDBFE" }}
-            />
-          ))}
-        </div>
-        <button
-          onClick={() => { setCurrentSlide((s) => Math.min(data.slides.length - 1, s + 1)); setShowNarration(false); }}
-          disabled={currentSlide === data.slides.length - 1}
-          className="text-sm px-3 py-1.5 rounded-lg font-semibold text-white disabled:opacity-40"
-          style={{ background: "#1D4ED8" }}
-        >
-          Next →
-        </button>
-      </div>
-      {/* Audio placeholder */}
-      <div className="flex items-center gap-2 pt-1 opacity-40">
-        <span className="text-[#1D4ED8] text-sm">▶</span>
-        <span className="text-xs text-[#374151]">Audio coming soon</span>
-      </div>
-    </div>
-  );
+  return <NarratedSlides data={data} />;
 }
 
 // ── BOOK_SUGGESTION block ──────────────────────────────────────────────────────

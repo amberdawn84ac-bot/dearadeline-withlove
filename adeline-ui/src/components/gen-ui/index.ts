@@ -46,4 +46,10 @@ export type { InsightReportProps, ConceptMastery } from "./patterns/InsightRepor
 export { MnemonicCard } from "./patterns/MnemonicCard";
 export type { MnemonicCardProps, MnemonicWord } from "./patterns/MnemonicCard";
 
+export { NarratedSlides } from "./patterns/NarratedSlides";
+export type { NarratedSlidesProps } from "./patterns/NarratedSlides";
+
+export { EmbeddedInterrupt } from "./patterns/EmbeddedInterrupt";
+export type { EmbeddedInterruptProps, EmbeddedInterruptOption } from "./patterns/EmbeddedInterrupt";
+
 export { TextSelectionMenu } from "./TextSelectionMenu";
