@@ -27,6 +27,8 @@ import { ScaffoldedProblem } from "@/components/gen-ui/patterns/ScaffoldedProble
 import { HardThingChallenge } from "@/components/gen-ui/patterns/HardThingChallenge";
 import { DragDropTimeline } from "@/components/gen-ui/patterns/DragDropTimeline";
 import { LiveChart } from "@/components/gen-ui/patterns/LiveChart";
+import { SocraticDebate } from "@/components/gen-ui/patterns/SocraticDebate";
+import { ProjectBuilder } from "@/components/gen-ui/patterns/ProjectBuilder";
 import { TextSelectionMenu } from "@/components/gen-ui/TextSelectionMenu";
 import { WeightTierBadge } from "@/components/lessons/WeightTierBadge";
 import { DistortionFlag } from "@/components/lessons/DistortionFlag";
@@ -44,8 +46,8 @@ const componentRegistry: Record<string, React.ComponentType<any>> = {
   ScaffoldedProblem: ScaffoldedProblem,  // Implemented stateful component
   DragDropTimeline: DragDropTimeline,  // Implemented drag-and-drop timeline
   LiveChart: LiveChart,  // Implemented mastery progress chart
-  ProjectBuilder: () => <div className="p-4 text-sm text-[#374151]">ProjectBuilder component coming soon</div>,
-  SocraticDebate: () => <div className="p-4 text-sm text-[#374151]">SocraticDebate component coming soon</div>,
+  ProjectBuilder: ProjectBuilder,
+  SocraticDebate: SocraticDebate,
   HardThingChallenge: HardThingChallenge,  // Implemented discipleship component
 };
 

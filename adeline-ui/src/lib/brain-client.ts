@@ -873,3 +873,58 @@ export async function getLearningPlan(
   if (!res.ok) throw new Error(`Failed to fetch learning plan: ${res.status}`);
   return res.json();
 }
+
+// ── Real-time / Cognitive Twin ────────────────────────────────────────────────
+
+export interface CognitiveTwinSnapshot {
+  student_id: string;
+  zpd_zone: "FRUSTRATED" | "IN_ZPD" | "BORED";
+  working_memory_load: number;
+  engagement_level: number;
+  frustration_score: number;
+  session_block_count: number;
+  consecutive_struggles: number;
+  consecutive_successes: number;
+  current_track: string | null;
+  interaction_velocity: number;
+  intervention: "CONTINUE" | "SCAFFOLD" | "ELEVATE" | "BREAK";
+  active_monitors?: number;
+}
+
+/** Fetch a one-shot Cognitive Twin snapshot (no WebSocket needed). */
+export async function getCognitiveTwinSnapshot(
+  studentId: string,
+): Promise<CognitiveTwinSnapshot> {
+  const res = await fetch(
+    `${BRAIN_URL}/monitor/${encodeURIComponent(studentId)}/snapshot`,
+    { headers: getAuthHeaders(), cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`Failed to fetch twin snapshot: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Build the WebSocket URL for a student monitor channel.
+ * Use with useStudentMonitor hook or directly as new WebSocket(url).
+ */
+export function getMonitorWebSocketUrl(studentId: string): string {
+  const base =
+    typeof window !== "undefined"
+      ? window.location.origin.replace(/^http/, "ws")
+      : "ws://localhost:3000";
+  return `${base}/brain/ws/monitor/${encodeURIComponent(studentId)}`;
+}
+
+/**
+ * Build the WebSocket URL for an active lesson session channel.
+ */
+export function getSessionWebSocketUrl(sessionId: string, studentId?: string): string {
+  const base =
+    typeof window !== "undefined"
+      ? window.location.origin.replace(/^http/, "ws")
+      : "ws://localhost:3000";
+  const params = studentId
+    ? `?student_id=${encodeURIComponent(studentId)}`
+    : "";
+  return `${base}/brain/ws/session/${encodeURIComponent(sessionId)}${params}`;
+}
