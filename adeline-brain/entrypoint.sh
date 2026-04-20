@@ -2,7 +2,7 @@
 set -e
 
 echo "[entrypoint] Running Prisma migrations..."
-DATABASE_URL="${DIRECT_DATABASE_URL:-${POSTGRES_DSN:-$DATABASE_URL}}" prisma migrate deploy || echo "[entrypoint] Prisma migrate failed"
+DIRECT_DATABASE_URL="${DIRECT_DATABASE_URL:-${POSTGRES_DSN:-$DATABASE_URL}}" DATABASE_URL="${DIRECT_DATABASE_URL:-${POSTGRES_DSN:-$DATABASE_URL}}" prisma migrate deploy --schema /app/prisma/schema.prisma || echo "[entrypoint] Prisma migrate failed"
 
 # Run seeds if RUN_SEEDS env var is set
 if [ "$RUN_SEEDS" = "true" ]; then
