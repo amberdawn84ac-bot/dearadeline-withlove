@@ -267,3 +267,63 @@ def get_quick_directives(zpd_zone: ZPDZone, mastery_band: MasteryBand) -> str:
     }[mastery_band]
     
     return f"[Pedagogy: {scaffolding} | Vocab: {vocab}]"
+
+
+# ── Track → Mode Mapping ─────────────────────────────────────────────────────
+
+TRACK_TO_MODE: dict[str, str] = {
+    "TRUTH_HISTORY":        "INVESTIGATOR",
+    "JUSTICE_CHANGEMAKING": "INVESTIGATOR",
+    "CREATION_SCIENCE":     "LAB",
+    "HOMESTEADING":         "LAB",
+    "HEALTH_NATUROPATHY":   "DIALOGUE",
+    "GOVERNMENT_ECONOMICS": "INVESTIGATOR",
+    "DISCIPLESHIP":         "DIALOGUE",
+    "ENGLISH_LITERATURE":   "DIALOGUE",
+    "APPLIED_MATHEMATICS":  "LAB",
+    "CREATIVE_ECONOMY":     "WORKSHOP",
+}
+
+_MODE_DIRECTIVES: dict[str, str] = {
+    "INVESTIGATOR": (
+        "INVESTIGATOR MODE:\n"
+        "- Lead with a question or a discrepancy — never an explanation.\n"
+        "- When you have a relevant primary source, surface it with a <BLOCK> tag mid-sentence.\n"
+        "- Never summarize what the archive says. Show the raw material and ask what the student notices.\n"
+        "- 'Follow the money' and 'Who wrote this, and why?' are always valid questions.\n"
+    ),
+    "LAB": (
+        "LAB MODE:\n"
+        "- Frame everything as a prediction before revealing anything.\n"
+        "- Ask: 'What would you expect to happen?' before showing results.\n"
+        "- Surface LabGuide or ExperimentCard blocks when the student is ready to try something.\n"
+        "- Connect every concept back to something testable on the homestead.\n"
+    ),
+    "DIALOGUE": (
+        "DIALOGUE MODE:\n"
+        "- Reason together, out loud. Ask 'what do you think?' before telling them what you think.\n"
+        "- Pull in scripture when genuinely relevant — Fox translation, never decorative.\n"
+        "- Read carefully. Name what you see honestly. Speak into it with precision and courage.\n"
+        "- Surface SocraticDebate blocks when the student is ready to defend a position.\n"
+    ),
+    "WORKSHOP": (
+        "WORKSHOP MODE:\n"
+        "- Connect everything to making, pricing, and selling real things.\n"
+        "- 'What would you make with this?' and 'What would you charge?' are always valid.\n"
+        "- Surface ProjectBuilder blocks when the student has enough context to build something.\n"
+        "- Math lives in the workshop: materials, margins, market pricing.\n"
+    ),
+}
+
+
+def get_mode_directives(tracks: list[str]) -> str:
+    """
+    Return blended mode directives for the given active tracks.
+    Multiple tracks may map to the same mode — deduplication is handled automatically.
+    Adeline moves between voices as the conversation calls for it.
+    """
+    modes = {TRACK_TO_MODE[t] for t in tracks if t in TRACK_TO_MODE}
+    if not modes:
+        return ""
+    parts = [_MODE_DIRECTIVES[mode] for mode in sorted(modes)]
+    return "\n\n".join(parts)
