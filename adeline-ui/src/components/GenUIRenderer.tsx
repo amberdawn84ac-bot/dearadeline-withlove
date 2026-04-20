@@ -29,6 +29,11 @@ import { DragDropTimeline } from "@/components/gen-ui/patterns/DragDropTimeline"
 import { LiveChart } from "@/components/gen-ui/patterns/LiveChart";
 import { SocraticDebate } from "@/components/gen-ui/patterns/SocraticDebate";
 import { ProjectBuilder } from "@/components/gen-ui/patterns/ProjectBuilder";
+import { FocusReset } from "@/components/gen-ui/patterns/FocusReset";
+import { TaskScaffold } from "@/components/gen-ui/patterns/TaskScaffold";
+import { GlowGrow } from "@/components/gen-ui/patterns/GlowGrow";
+import { InsightReport } from "@/components/gen-ui/patterns/InsightReport";
+import { MnemonicCard } from "@/components/gen-ui/patterns/MnemonicCard";
 import { TextSelectionMenu } from "@/components/gen-ui/TextSelectionMenu";
 import { WeightTierBadge } from "@/components/lessons/WeightTierBadge";
 import { DistortionFlag } from "@/components/lessons/DistortionFlag";
@@ -42,13 +47,24 @@ import Link from "next/link";
 // This prevents arbitrary code execution from LLM outputs.
 
 const componentRegistry: Record<string, React.ComponentType<any>> = {
-  InteractiveQuiz: QuizCard,  // Reuse existing QuizCard for now
-  ScaffoldedProblem: ScaffoldedProblem,  // Implemented stateful component
-  DragDropTimeline: DragDropTimeline,  // Implemented drag-and-drop timeline
-  LiveChart: LiveChart,  // Implemented mastery progress chart
-  ProjectBuilder: ProjectBuilder,
-  SocraticDebate: SocraticDebate,
-  HardThingChallenge: HardThingChallenge,  // Implemented discipleship component
+  // Assessment
+  InteractiveQuiz:   QuizCard,
+  GlowGrow:          GlowGrow,
+  // Socratic / project
+  ScaffoldedProblem: ScaffoldedProblem,
+  SocraticDebate:    SocraticDebate,
+  HardThingChallenge: HardThingChallenge,
+  ProjectBuilder:    ProjectBuilder,
+  // Timeline / sequencing
+  DragDropTimeline:  DragDropTimeline,
+  // Mastery / insight
+  LiveChart:         LiveChart,
+  InsightReport:     InsightReport,
+  // Memory / vocabulary
+  MnemonicCard:      MnemonicCard,
+  // Neuroadaptive
+  FocusReset:        FocusReset,
+  TaskScaffold:      TaskScaffold,
 };
 
 // ── DynamicComponent Wrapper ─────────────────────────────────────────────────────

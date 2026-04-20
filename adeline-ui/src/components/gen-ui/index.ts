@@ -31,4 +31,19 @@ export type { ProjectBuilderProps, ProjectStep } from "./patterns/ProjectBuilder
 
 export { AgentThinkingState } from "./patterns/AgentThinkingState";
 
+export { FocusReset } from "./patterns/FocusReset";
+export type { FocusResetProps } from "./patterns/FocusReset";
+
+export { TaskScaffold } from "./patterns/TaskScaffold";
+export type { TaskScaffoldProps, ScaffoldTask } from "./patterns/TaskScaffold";
+
+export { GlowGrow } from "./patterns/GlowGrow";
+export type { GlowGrowProps, GlowGrowQuestion } from "./patterns/GlowGrow";
+
+export { InsightReport } from "./patterns/InsightReport";
+export type { InsightReportProps, ConceptMastery } from "./patterns/InsightReport";
+
+export { MnemonicCard } from "./patterns/MnemonicCard";
+export type { MnemonicCardProps, MnemonicWord } from "./patterns/MnemonicCard";
+
 export { TextSelectionMenu } from "./TextSelectionMenu";
