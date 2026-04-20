@@ -180,6 +180,7 @@ interface GenUIRendererProps {
   oasStandards?: OASStandard[];
   agentName?: string;
   creditHours?: number;
+  studentId?: string;
 }
 
 // ── Witness verdict badge ─────────────────────────────────────────────────────
@@ -870,6 +871,7 @@ function GenUIRenderer({
   oasStandards = [],
   agentName,
   creditHours,
+  studentId,
 }: GenUIRendererProps) {
   const visibleBlocks = blocks.filter((b) => !b.is_silenced);
 
@@ -931,7 +933,7 @@ function GenUIRenderer({
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                          student_id: "",  // TODO: Get from auth context
+                          student_id: studentId ?? "",
                           lesson_id: _lessonId,
                           component_type: assemblyData?.component_type,
                           event: "onStateChange",
