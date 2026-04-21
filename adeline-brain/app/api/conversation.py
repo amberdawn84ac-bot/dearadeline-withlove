@@ -1,0 +1,216 @@
+"""
+Conversation Stream API — POST /conversation/stream
+
+SSE endpoint. Streams Adeline's response token-by-token with inline block injection.
+Replaces the generate + scaffold pair as the primary student delivery path.
+
+Events emitted:
+  event: text   data: {"delta": "..."}
+  event: block  data: {"block_type": "...", "content": "...", ...}
+  event: zpd    data: {"zone": "IN_ZPD", "mastery_score": 0.42, "mastery_band": "DEVELOPING"}
+  event: done   data: {}
+  event: error  data: {"message": "..."}
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+from typing import Optional, AsyncIterator
+
+import anthropic
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+
+from app.api.middleware import get_current_user_id
+from app.algorithms.pedagogical_directives import get_mode_directives, get_quick_directives
+from app.agents.pedagogy import detect_zpd_zone
+from app.models.student import load_student_state, MasteryBand
+from app.utils.stream_parser import parse_stream
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/conversation", tags=["conversation"])
+
+_MODEL = os.getenv("ADELINE_MODEL", "claude-sonnet-4-6")
+
+_ADELINE_BASE = """You are Adeline — a Truth-First K-12 AI Mentor grounded in the 10-Track Constitution.
+
+CORE RULES:
+- Teach from verified primary sources only. Never invent facts or citations.
+- No asterisk actions, no endearments (sweetie, dear, child), no performance.
+- Warm, direct, a little bookish. Like a trusted older sibling who reads a lot.
+- End every response with a question or an invitation — never a lecture.
+- Keep responses focused: 3–6 sentences unless teaching complex material.
+
+BLOCK INJECTION:
+When you want to show the student a primary source, lab guide, quiz, timeline, mind map,
+experiment, project builder, or socratic debate — output it as a JSON block tag:
+
+<BLOCK>
+{"block_type": "PRIMARY_SOURCE", "title": "...", "content": "...", "source_url": "..."}
+</BLOCK>
+
+Valid block_type values: PRIMARY_SOURCE, LAB_MISSION, NARRATIVE, RESEARCH_MISSION,
+QUIZ, MIND_MAP, TIMELINE, MNEMONIC, NARRATED_SLIDE, LAB_GUIDE, EXPERIMENT,
+SOCRATIC_DEBATE, PROJECT_BUILDER, SCAFFOLDED_PROBLEM, HARD_THING_CHALLENGE.
+
+You may inject a block mid-sentence. Text before and after the block will render
+separately. After the block, continue your response naturally.
+"""
+
+
+class ConversationRequest(BaseModel):
+    student_id: str
+    message: str
+    track: Optional[str] = None
+    grade_level: str
+    conversation_history: list[dict] = []
+
+
+def _build_conversation_prompt(
+    topic: str,
+    tracks: list[str],
+    grade_level: str,
+    zpd_directives: str,
+) -> str:
+    """Build the full system prompt for a conversation turn."""
+    mode_section = get_mode_directives(tracks)
+    tracks_str = ", ".join(t.replace("_", " ").title() for t in tracks) if tracks else "General"
+
+    return (
+        f"{_ADELINE_BASE}\n\n"
+        f"TODAY'S CONVERSATION TOPIC: {topic}\n"
+        f"ACTIVE TRACKS: {tracks_str}\n"
+        f"STUDENT GRADE: {grade_level}\n\n"
+        f"TEACHING VOICES AVAILABLE:\n{mode_section}\n\n"
+        "Follow the conversation. Use whichever voice the moment calls for.\n\n"
+        f"{zpd_directives}"
+    )
+
+
+def _infer_tracks(message: str, explicit_track: Optional[str]) -> list[str]:
+    """
+    Return active tracks for this conversation turn.
+    Uses the explicit track if provided; otherwise returns a safe default.
+    """
+    if explicit_track:
+        return [explicit_track]
+    return ["TRUTH_HISTORY"]
+
+
+async def _stream_claude(
+    system_prompt: str,
+    messages: list[dict],
+) -> AsyncIterator[str]:
+    """Yield raw text chunks from Claude's streaming API."""
+    client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    async with client.messages.stream(
+        model=_MODEL,
+        system=system_prompt,
+        messages=messages,
+        max_tokens=2000,
+    ) as stream:
+        async for text_chunk in stream.text_stream:
+            yield text_chunk
+
+
+async def _conversation_sse(
+    student_id: str,
+    message: str,
+    track: Optional[str],
+    grade_level: str,
+    history: list[dict],
+) -> AsyncIterator[bytes]:
+    """
+    Core SSE generator. Yields raw SSE bytes.
+    1. Load student state → get ZPD directives
+    2. Build system prompt with mode + ZPD directives
+    3. Stream Claude response
+    4. Parse stream for <BLOCK> tags
+    5. Emit text / block / zpd / done events
+    """
+
+    def _sse(event: str, data: dict) -> bytes:
+        return f"event: {event}\ndata: {json.dumps(data)}\n\n".encode()
+
+    try:
+        tracks = _infer_tracks(message, track)
+
+        # Load student mastery for ZPD directives
+        try:
+            student_state = await load_student_state(student_id)
+            primary_track = tracks[0]
+            track_mastery = student_state.tracks.get(primary_track)
+            mastery_score = track_mastery.mastery_score if track_mastery else 0.3
+            mastery_band  = track_mastery.mastery_band  if track_mastery else MasteryBand.DEVELOPING
+        except Exception:
+            mastery_score = 0.3
+            mastery_band  = MasteryBand.DEVELOPING
+
+        zpd_zone       = detect_zpd_zone(message)
+        zpd_directives = get_quick_directives(zpd_zone, mastery_band)
+
+        # Emit ZPD state immediately so the UI updates the badge
+        yield _sse("zpd", {
+            "zone":         zpd_zone.value,
+            "mastery_score": mastery_score,
+            "mastery_band": mastery_band.value,
+        })
+
+        system_prompt = _build_conversation_prompt(
+            topic=message[:120],
+            tracks=tracks,
+            grade_level=grade_level,
+            zpd_directives=zpd_directives,
+        )
+
+        # Build Claude message list (cap history at last 10 turns)
+        claude_messages = []
+        for h in history[-10:]:
+            role = "user" if h.get("role") == "user" else "assistant"
+            claude_messages.append({"role": role, "content": h.get("content", "")})
+        claude_messages.append({"role": "user", "content": message})
+
+        # Stream + parse
+        async for event in parse_stream(_stream_claude(system_prompt, claude_messages)):
+            if event["type"] == "text":
+                yield _sse("text", {"delta": event["delta"]})
+            elif event["type"] == "block":
+                yield _sse("block", event["block"])
+
+        yield _sse("done", {})
+
+    except Exception as e:
+        logger.exception(f"[/conversation/stream] Unhandled error: {e}")
+        yield _sse("error", {"message": "Adeline ran into a problem. Please try again."})
+
+
+@router.post("/stream")
+async def conversation_stream(
+    body: ConversationRequest,
+    current_user_id: str = Depends(get_current_user_id),
+):
+    """
+    Stream Adeline's response as SSE with inline block injection.
+
+    Track-aware mode voices (Investigator/Lab/Dialogue/Workshop) are injected
+    automatically — no student-facing mode selection needed.
+    """
+    if not body.message.strip():
+        raise HTTPException(status_code=422, detail="Message cannot be empty")
+
+    return StreamingResponse(
+        _conversation_sse(
+            student_id=body.student_id,
+            message=body.message,
+            track=body.track,
+            grade_level=body.grade_level,
+            history=body.conversation_history,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

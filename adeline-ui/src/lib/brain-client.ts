@@ -958,3 +958,85 @@ export function getSessionWebSocketUrl(sessionId: string, studentId?: string): s
     : "";
   return `${base}/brain/ws/session/${encodeURIComponent(sessionId)}${params}`;
 }
+
+
+// ── Conversation Streaming ────────────────────────────────────────────────────
+
+export interface ConversationMessage {
+  role: "user" | "adeline";
+  content: string;
+}
+
+export type ConversationEvent =
+  | { type: "text";  delta: string }
+  | { type: "block"; block_type: string; content: string; title?: string; source_url?: string; [key: string]: unknown }
+  | { type: "zpd";   zone: "FRUSTRATED" | "IN_ZPD" | "BORED"; mastery_score: number; mastery_band: string }
+  | { type: "done" }
+  | { type: "error"; message: string }
+
+/**
+ * Stream Adeline's conversation response as SSE events.
+ * Yields text deltas, block objects, zpd state, and a final done event.
+ * The caller should append text deltas in order and render block events inline.
+ */
+export async function* streamConversation(params: {
+  studentId: string;
+  message: string;
+  track?: Track;
+  gradeLevel: string;
+  history: ConversationMessage[];
+}): AsyncGenerator<ConversationEvent> {
+  const resp = await fetch(`${BRAIN_URL}/conversation/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify({
+      student_id: params.studentId,
+      message: params.message,
+      track: params.track ?? null,
+      grade_level: params.gradeLevel,
+      conversation_history: params.history.map((m) => ({
+        role: m.role === "adeline" ? "assistant" : "user",
+        content: m.content,
+      })),
+    }),
+  });
+
+  if (!resp.ok) {
+    yield { type: "error", message: `HTTP ${resp.status}` };
+    return;
+  }
+
+  const reader = resp.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+
+    const lines = buf.split("\n");
+    buf = lines.pop()!;
+
+    let eventName = "";
+    for (const line of lines) {
+      if (line.startsWith("event: ")) {
+        eventName = line.slice(7).trim();
+      } else if (line.startsWith("data: ")) {
+        const raw = line.slice(6).trim();
+        if (!raw) continue;
+        try {
+          const payload = JSON.parse(raw);
+          if (eventName === "text")  yield { type: "text",  delta: payload.delta };
+          else if (eventName === "block") yield { type: "block", ...payload };
+          else if (eventName === "zpd")   yield { type: "zpd",   ...payload };
+          else if (eventName === "done")  yield { type: "done" };
+          else if (eventName === "error") yield { type: "error", message: payload.message };
+        } catch {
+          // malformed SSE data — skip
+        }
+        eventName = "";
+      }
+    }
+  }
+}
