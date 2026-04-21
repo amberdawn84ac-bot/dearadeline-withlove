@@ -2,10 +2,11 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Sparkles, Send, Loader2, FlaskConical, Search, Network, ListOrdered, Brain, Presentation } from "lucide-react";
-import { scaffold, generateLesson, listProjects, getProject, reportActivity } from "@/lib/brain-client";
+import { scaffold, generateLesson, listProjects, getProject, reportActivity, streamConversation } from "@/lib/brain-client";
 import type {
   Track, ScaffoldResponse, LessonResponse, LessonBlockResponse,
   ProjectSummary, ProjectDetail, ActivityReportResponse,
+  ConversationMessage,
 } from "@/lib/brain-client";
 import { ProjectCatalog } from "@/components/projects/ProjectCard";
 import { ProjectGuide } from "@/components/projects/ProjectGuide";
@@ -17,12 +18,18 @@ type RichContent =
   | { type: "projectDetail"; project: ProjectDetail }
   | { type: "activityCredit"; result: ActivityReportResponse };
 
+type MessageSegment =
+  | { type: "text"; content: string }
+  | { type: "block"; data: Record<string, unknown> }
+
 interface Message {
   id: string;
   role: "user" | "adeline";
   content: string;
   zpd_zone?: string;
   rich?: RichContent;
+  segments?: MessageSegment[];
+  streaming?: boolean;
 }
 
 interface LessonContext {
@@ -133,6 +140,49 @@ function ActivityCreditCard({ result }: { result: ActivityReportResponse }) {
   );
 }
 
+// ── Inline conversation block card ────────────────────────────────────────────
+
+const BLOCK_CONFIGS: Record<string, { icon: string; bg: string; border: string; color: string; label: string }> = {
+  PRIMARY_SOURCE:       { icon: "📜", bg: "#F0FDF4", border: "#166534",  color: "#166534",  label: "Primary Source" },
+  LAB_MISSION:          { icon: "🧪", bg: "#FFF7ED", border: "#BD6809",  color: "#BD6809",  label: "Lab Mission" },
+  LAB_GUIDE:            { icon: "📋", bg: "#FFF7ED", border: "#BD6809",  color: "#BD6809",  label: "Lab Guide" },
+  EXPERIMENT:           { icon: "⚗️", bg: "#FFF7ED", border: "#BD6809",  color: "#BD6809",  label: "Experiment" },
+  RESEARCH_MISSION:     { icon: "🔍", bg: "#FEFCE8", border: "#CA8A04",  color: "#CA8A04",  label: "Research Mission" },
+  QUIZ:                 { icon: "📝", bg: "#EFF6FF", border: "#1D4ED8",  color: "#1D4ED8",  label: "Quiz" },
+  TIMELINE:             { icon: "📅", bg: "#F5F3FF", border: "#6D28D9",  color: "#6D28D9",  label: "Timeline" },
+  MIND_MAP:             { icon: "🕸️",  bg: "#ECFDF5", border: "#059669",  color: "#059669",  label: "Mind Map" },
+  MNEMONIC:             { icon: "🧠", bg: "#FAF5FF", border: "#7C3AED",  color: "#7C3AED",  label: "Mnemonic" },
+  SOCRATIC_DEBATE:      { icon: "💬", bg: "#FEF2F2", border: "#991B1B",  color: "#991B1B",  label: "Socratic Debate" },
+  PROJECT_BUILDER:      { icon: "🔨", bg: "#FFF7ED", border: "#C2410C",  color: "#C2410C",  label: "Project" },
+  NARRATED_SLIDE:       { icon: "🎞️",  bg: "#EFF6FF", border: "#2563EB",  color: "#2563EB",  label: "Slides" },
+  SCAFFOLDED_PROBLEM:   { icon: "📐", bg: "#F5F3FF", border: "#7C3AED",  color: "#7C3AED",  label: "Problem" },
+  HARD_THING_CHALLENGE: { icon: "🏔️",  bg: "#FEF2F2", border: "#DC2626",  color: "#DC2626",  label: "Challenge" },
+  NARRATIVE:            { icon: "📖", bg: "#FDF6E9", border: "#E7DAC3",  color: "#2F4731",  label: "Narrative" },
+};
+
+function ConversationBlockCard({ block }: { block: Record<string, unknown> }) {
+  const blockType = (block.block_type as string) ?? "NARRATIVE";
+  const c = BLOCK_CONFIGS[blockType] ?? BLOCK_CONFIGS.NARRATIVE;
+  const title   = block.title   as string | undefined;
+  const content = block.content as string | undefined;
+
+  return (
+    <div
+      className="rounded-xl px-4 py-3 space-y-1.5 my-2"
+      style={{ background: c.bg, border: `1.5px solid ${c.border}` }}
+    >
+      <div className="flex items-center gap-2">
+        <span role="img" aria-hidden>{c.icon}</span>
+        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: c.color }}>
+          {c.label}
+        </span>
+      </div>
+      {title   && <p className="text-xs font-semibold" style={{ color: c.color }}>{title}</p>}
+      {content && <p className="text-sm leading-relaxed text-[#2F4731]">{content}</p>}
+    </div>
+  );
+}
+
 // ── AdelineChatPanel ───────────────────────────────────────────────────────────
 
 export function AdelineChatPanel({
@@ -149,6 +199,7 @@ export function AdelineChatPanel({
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [initialPromptSent, setInitialPromptSent] = useState(false);
+  const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -225,29 +276,82 @@ export function AdelineChatPanel({
           rich: { type: "activityCredit", result },
         });
       } else {
-        // Default: lesson topic request
-        const topic = text;
-        addMessage({
-          role: "adeline",
-          content: `Searching the archive for verified sources on "${topic}"…`,
-        });
+        // Default: streaming conversation
+        const streamingId = `${Date.now()}-${Math.random()}`;
+        setMessages((prev) => [
+          ...prev,
+          { id: streamingId, role: "adeline", content: "", segments: [], streaming: true },
+        ]);
 
-        if (onLessonRequest) {
-          onLessonRequest(topic);
-        } else if (onLessonGenerated) {
-          const lesson = await generateLesson({
-            student_id: studentId,
-            track: DEFAULT_TRACK,
-            topic,
-            is_homestead: false,
-            grade_level: gradeLevel,
-          });
-          onLessonGenerated(lesson);
-          addMessage({
-            role: "adeline",
-            content: `I found ${lesson.blocks.filter((b) => b.evidence[0]?.verdict === "VERIFIED").length} verified primary sources for "${lesson.title}". The lesson is ready in the panel.`,
-          });
+        let textBuffer = "";
+
+        try {
+          for await (const event of streamConversation({
+            studentId,
+            message: text,
+            gradeLevel,
+            history: conversationHistory,
+          })) {
+            if (event.type === "text") {
+              textBuffer += event.delta;
+              setMessages((prev) =>
+                prev.map((m) => {
+                  if (m.id !== streamingId) return m;
+                  const segs = m.segments ? [...m.segments] : [];
+                  const last = segs[segs.length - 1];
+                  if (last?.type === "text") {
+                    segs[segs.length - 1] = { type: "text", content: last.content + event.delta };
+                  } else {
+                    segs.push({ type: "text", content: event.delta });
+                  }
+                  return { ...m, content: textBuffer, segments: segs };
+                })
+              );
+            } else if (event.type === "block") {
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              const { type: _t, ...blockData } = event;
+              setMessages((prev) =>
+                prev.map((m) => {
+                  if (m.id !== streamingId) return m;
+                  return {
+                    ...m,
+                    segments: [...(m.segments ?? []), { type: "block" as const, data: blockData as Record<string, unknown> }],
+                  };
+                })
+              );
+            } else if (event.type === "zpd") {
+              setMessages((prev) =>
+                prev.map((m) => m.id === streamingId ? { ...m, zpd_zone: event.zone } : m)
+              );
+            } else if (event.type === "done") {
+              setMessages((prev) =>
+                prev.map((m) => m.id === streamingId ? { ...m, streaming: false } : m)
+              );
+            } else if (event.type === "error") {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === streamingId
+                    ? { ...m, content: event.message, streaming: false }
+                    : m
+                )
+              );
+            }
+          }
+        } catch {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === streamingId
+                ? { ...m, content: "The archive is temporarily unavailable. Please try again in a moment.", streaming: false }
+                : m
+            )
+          );
         }
+
+        setConversationHistory((prev) => [
+          ...prev,
+          { role: "user", content: text },
+          { role: "adeline", content: textBuffer },
+        ]);
       }
     } catch (err) {
       addMessage({
@@ -258,7 +362,7 @@ export function AdelineChatPanel({
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, onLessonGenerated, addMessage]);
+  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, onLessonGenerated, addMessage, conversationHistory]);
 
   // Auto-send initial prompt (e.g. from Daily Bread "Start Deep Dive Study")
   useEffect(() => {
@@ -360,41 +464,76 @@ export function AdelineChatPanel({
                 padding: msg.rich ? "12px" : "10px 14px",
               }}
             >
-              {msg.zpd_zone && (
-                <div className="mb-1.5">
-                  <ZPDBadge zone={msg.zpd_zone} />
+              {/* Streaming conversation message */}
+              {msg.segments !== undefined ? (
+                <div className="space-y-0">
+                  {msg.zpd_zone && (
+                    <div className="mb-1.5">
+                      <ZPDBadge zone={msg.zpd_zone} />
+                    </div>
+                  )}
+                  {msg.segments.length === 0 && msg.streaming ? (
+                    <div className="flex items-center gap-1.5">
+                      <Loader2 size={12} className="animate-spin text-[#BD6809]" />
+                      <span className="text-sm text-[#2F4731]/50 italic">…</span>
+                    </div>
+                  ) : (
+                    msg.segments.map((seg, i) =>
+                      seg.type === "text" ? (
+                        <p key={i} className="text-sm leading-relaxed whitespace-pre-wrap mb-2">
+                          {seg.content}
+                          {msg.streaming && i === msg.segments!.length - 1 && (
+                            <span
+                              className="inline-block w-1.5 h-3.5 ml-0.5 rounded-sm align-middle animate-pulse"
+                              style={{ background: "#BD6809" }}
+                            />
+                          )}
+                        </p>
+                      ) : (
+                        <ConversationBlockCard key={i} block={seg.data} />
+                      )
+                    )
+                  )}
                 </div>
-              )}
-              {msg.content && (
-                <p className="text-sm leading-relaxed whitespace-pre-wrap mb-2">
-                  {msg.content}
-                </p>
-              )}
+              ) : (
+                <>
+                  {msg.zpd_zone && (
+                    <div className="mb-1.5">
+                      <ZPDBadge zone={msg.zpd_zone} />
+                    </div>
+                  )}
+                  {msg.content && (
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap mb-2">
+                      {msg.content}
+                    </p>
+                  )}
 
-              {/* Rich content */}
-              {msg.rich?.type === "projectList" && (
-                <ProjectCatalog
-                  projects={msg.rich.projects}
-                  onSelect={handleProjectSelect}
-                />
-              )}
-              {msg.rich?.type === "projectDetail" && (
-                <ProjectGuide
-                  projectId={msg.rich.project.id}
-                  studentId={studentId}
-                  onSeal={() => {
-                    // Project sealed — refresh student state if needed
-                  }}
-                />
-              )}
-              {msg.rich?.type === "activityCredit" && (
-                <ActivityCreditCard result={msg.rich.result} />
+                  {/* Rich content */}
+                  {msg.rich?.type === "projectList" && (
+                    <ProjectCatalog
+                      projects={msg.rich.projects}
+                      onSelect={handleProjectSelect}
+                    />
+                  )}
+                  {msg.rich?.type === "projectDetail" && (
+                    <ProjectGuide
+                      projectId={msg.rich.project.id}
+                      studentId={studentId}
+                      onSeal={() => {
+                        // Project sealed — refresh student state if needed
+                      }}
+                    />
+                  )}
+                  {msg.rich?.type === "activityCredit" && (
+                    <ActivityCreditCard result={msg.rich.result} />
+                  )}
+                </>
               )}
             </div>
           </div>
         ))}
 
-        {isLoading && (
+        {isLoading && !messages.some((m) => m.streaming) && (
           <div className="flex justify-start">
             <div
               style={{
