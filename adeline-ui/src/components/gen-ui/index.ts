@@ -29,7 +29,7 @@ export type { SocraticDebateProps, SocraticTurn } from "./patterns/SocraticDebat
 export { ProjectBuilder } from "./patterns/ProjectBuilder";
 export type { ProjectBuilderProps, ProjectStep } from "./patterns/ProjectBuilder";
 
-export { AgentThinkingState } from "./patterns/AgentThinkingState";
+export { AgentThinkingState } from "./AgentThinkingState";
 
 export { FocusReset } from "./patterns/FocusReset";
 export type { FocusResetProps } from "./patterns/FocusReset";
