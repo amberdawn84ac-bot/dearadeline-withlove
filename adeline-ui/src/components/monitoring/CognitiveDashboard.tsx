@@ -48,7 +48,7 @@ function GaugeMeter({
   value: number;
   label: string;
   color: string;
-  icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
+  icon: React.ComponentType<{ size?: string | number; style?: React.CSSProperties }>;
 }) {
   const pct = Math.round(value * 100);
   const strokeDashoffset = 157 - (157 * value);
