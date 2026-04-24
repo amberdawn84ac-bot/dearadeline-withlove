@@ -54,16 +54,24 @@ dearadeline-withlove/
 │           ├── learningActivity.ts # xAPI LearningActivity, xAPIVerb
 │           ├── spacedRepetition.ts # SM-2 SpacedRepetitionCard, SM2Result
 │           ├── knowledgeGraph.ts   # KnowledgeNode, KnowledgeEdge, EdgeType
-│           └── agentResponse.ts    # AgentName, TRACK_AGENT_MAP, AgentResponseSchema
+│           ├── agentResponse.ts    # AgentName, TRACK_AGENT_MAP, AgentResponseSchema
+│           ├── evidence.ts         # Evidence, WitnessVerdict
+│           └── standards.ts        # OASStandard, CASEItem
 ├── adeline-brain/              # FastAPI Python — intelligence layer
 │   ├── app/
 │   │   ├── agents/
-│   │   │   └── orchestrator.py     # 7-agent routing: 6 specialist agents + RegistrarAgent
+│   │   │   ├── orchestrator.py     # 7-agent routing: 6 specialist agents + RegistrarAgent
+│   │   │   ├── pedagogy.py         # ZPDZone, pedagogical directive helpers
+│   │   │   ├── cognitive_twin.py   # Per-student cognitive state model
+│   │   │   ├── manager_agent.py    # Top-level task delegation
+│   │   │   └── adapter.py          # Model adapter (Claude ↔ Gemini interop)
 │   │   ├── algorithms/
 │   │   │   ├── zpd_engine.py       # BKT 4-param model, ZPD priority scoring
 │   │   │   ├── spaced_repetition.py # SM-2 algorithm
 │   │   │   ├── adaptive_content.py  # Grade-band difficulty + vocabulary
-│   │   │   └── cognitive_load.py    # Z-score cognitive load analysis
+│   │   │   ├── cognitive_load.py    # Z-score cognitive load analysis
+│   │   │   ├── bkt_tracker.py      # Bayesian Knowledge Tracing tracker
+│   │   │   └── pedagogical_directives.py # Per-student directive generation
 │   │   ├── api/
 │   │   │   ├── lessons.py           # POST /lesson/generate (main endpoint)
 │   │   │   ├── scaffold.py          # POST /lesson/scaffold (ZPD Socratic response)
@@ -71,7 +79,14 @@ dearadeline-withlove/
 │   │   │   ├── journal.py           # POST /journal/seal, GET /journal/progress
 │   │   │   ├── transcripts.py       # GET /transcripts/{student_id}
 │   │   │   ├── students.py          # POST /students/register, GET /students/{id}/state
-│   │   │   └── projects.py          # GET /projects — Art/DIY + Farm project catalog ⬜
+│   │   │   ├── projects.py          # GET /projects, GET /projects/{id}, POST /projects/{id}/seal
+│   │   │   ├── books.py             # Book catalog + recommendations
+│   │   │   ├── reading_session.py   # Reading progress tracking
+│   │   │   ├── conversation.py      # Persistent conversation history
+│   │   │   ├── credits.py           # Credit engine endpoints
+│   │   │   ├── parent.py            # Parent dashboard data
+│   │   │   ├── onboarding.py        # Student onboarding flow
+│   │   │   └── subscriptions.py     # Stripe subscription management
 │   │   ├── connections/
 │   │   │   ├── pgvector_client.py   # Hippocampus: pgvector similarity search
 │   │   │   ├── neo4j_client.py      # GraphRAG: OASStandard + cross-track queries
@@ -89,26 +104,66 @@ dearadeline-withlove/
 │   │   └── migrations/
 │   │       ├── 20260327192741_init_8_track_schema/
 │   │       └── 20260329_add_learning_records/  # xAPI + CASE + SM-2 tables
+│   ├── services/                   # Business logic layer
+│   │   ├── credit_engine.py        # Credit accumulation + GPA calculation
+│   │   ├── reality_layer.py        # Distortion flags + keystone concepts
+│   │   ├── portfolio_generator.py  # Portfolio PDF export
+│   │   ├── transcript_pdf.py       # Academic transcript PDF
+│   │   ├── reading_credit.py       # Reading session → credit mapping
+│   │   └── ...                     # (memory, sefaria, standards_mapper, storage, etc.)
 │   └── scripts/
 │       ├── seed_curriculum.py
-│       └── seed_knowledge_graph.py  # 64 Concept nodes + 55 PREREQUISITE_OF edges
-└── adeline-ui/                 # Next.js 14 App Router — student/parent interface
+│       ├── seed_knowledge_graph.py  # 64 Concept nodes + 55 PREREQUISITE_OF edges
+│       ├── seed_justice_changemaking.py
+│       └── seed_declassified_documents.py
+└── adeline-ui/                 # Next.js 16.2.2 App Router — student/parent interface
     └── src/
         ├── components/
         │   ├── AdelineChatPanel.tsx     # Main chat interface with ZPD badge
-        │   ├── GenUIRenderer.tsx        # Renders all 6 brain block types
+        │   ├── GenUIRenderer.tsx        # Renders all brain block types
         │   ├── StudentStatusBar.tsx
         │   ├── dashboard/
         │   │   ├── ZPDRecommendations.tsx  # Top unmastered tracks by ZPD priority
+        │   │   ├── ZPDProgress.tsx         # Mastery bar + per-track credit hours
+        │   │   ├── KnowledgeTree.tsx        # SVG knowledge graph visualiser
         │   │   └── SpacedRepWidget.tsx     # SM-2 review session widget
-        │   ├── gen-ui/patterns/
+        │   ├── gen-ui/patterns/           # 16+ GenUI block renderers
         │   │   ├── QuizCard.tsx            # Multiple-choice with reveal
-        │   │   └── Flashcard.tsx           # CSS 3D flip card
-        │   └── projects/
-        │       ├── ProjectCard.tsx         # Browse project catalog ⬜
-        │       └── ProjectGuide.tsx        # Step-by-step project runner ⬜
+        │   │   ├── Flashcard.tsx           # CSS 3D flip card
+        │   │   ├── Timeline.tsx            # Evidence-linked timeline
+        │   │   ├── MindMap.tsx             # SVG mind-map renderer
+        │   │   ├── ProjectBuilder.tsx      # Step-by-step project checklist
+        │   │   ├── SocraticDebate.tsx      # Guided debate scaffold
+        │   │   ├── Experiment.tsx          # Lab/experiment runner
+        │   │   └── ...                     # (DragDropTimeline, LabGuide, LiveChart, etc.)
+        │   ├── lessons/
+        │   │   ├── LessonRenderer.tsx      # Full lesson layout
+        │   │   ├── BlockWrapper.tsx        # Per-block evidence + score overlay
+        │   │   └── ...                     # (DistortionFlag, KeystoneConcept, etc.)
+        │   ├── reading-nook/
+        │   │   ├── Bookshelf.tsx           # 4-section shelf (reading/finished/wishlist/discover)
+        │   │   ├── BookCard.tsx            # Book display card
+        │   │   ├── EPUBReader.tsx          # In-browser EPUB reader
+        │   │   └── ReflectionModal.tsx     # Post-reading reflection capture
+        │   ├── projects/
+        │   │   ├── ProjectCard.tsx         # Browse card for project catalog
+        │   │   └── ProjectGuide.tsx        # Step-by-step project runner
+        │   ├── monitoring/
+        │   │   └── CognitiveDashboard.tsx  # Safety flag + cognitive load monitor
+        │   ├── transcript/
+        │   │   └── OSRHEDashboard.tsx      # OSRHE-style academic transcript view
+        │   └── parent/
+        │       ├── AddStudentDialog.tsx
+        │       ├── FamilyProgressGrid.tsx
+        │       └── StudentSwitcher.tsx
         └── lib/
-            └── brain-client.ts            # Type-safe REST client for adeline-brain
+            ├── brain-client.ts            # Type-safe REST client for adeline-brain
+            ├── bookshelf-client.ts        # Reading nook API client
+            ├── parent-client.ts           # Parent dashboard API client
+            ├── citation-export.ts         # MLA/APA citation formatter
+            ├── stripe.ts                  # Stripe client (server-only)
+            ├── supabase.ts                # Supabase auth client
+            └── useAuth.ts / useStudent.ts # Auth + student context hooks
 ```
 
 > ⬜ = not yet implemented
@@ -215,7 +270,7 @@ The project catalog (`projects.py`) returns structured `Project` objects — ste
 
 ---
 
-## Known Gaps (as of 2026-04-09)
+## Known Gaps (as of 2026-04-24)
 
 | Gap | Notes |
 |-----|-------|
@@ -264,9 +319,20 @@ pnpm build
 ```bash
 # adeline-brain (.env)
 POSTGRES_DSN=postgresql://...
-OPENAI_API_KEY=sk-...
-TAVILY_API_KEY=...
+ANTHROPIC_API_KEY=sk-ant-...
 ADELINE_MODEL=claude-sonnet-4-6   # or claude-opus-4-6 for production
+ADELINE_ENV=development           # set to "production" to enable safety gates
+
+# Gemini (optional — used for cheaper synthesis calls; orchestrator auto-falls back to Claude)
+GEMINI_API_KEY=...
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+
+TAVILY_API_KEY=...
+
+# Supabase auth
+SUPABASE_PROJECT_REF=...
+SUPABASE_JWT_SECRET=...
 
 # Neo4j — local Docker
 NEO4J_URI=bolt://neo4j:7687
@@ -289,4 +355,8 @@ UPSTASH_REDIS_REST_TOKEN=...
 NEXT_PUBLIC_BRAIN_URL=http://localhost:8000
 HYGRAPH_ENDPOINT=https://...
 HYGRAPH_TOKEN=...
+NEXT_PUBLIC_SUPABASE_URL=https://...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+STRIPE_SECRET_KEY=sk_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 ```
