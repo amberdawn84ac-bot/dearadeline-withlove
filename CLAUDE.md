@@ -2,7 +2,7 @@
 
 AI context guide for the **dearadeline-withlove** monorepo. Read this before making any changes.
 
-> **Last updated:** 2026-03-29 — Tracks 9+10 added (APPLIED_MATHEMATICS, CREATIVE_ECONOMY), portfolio philosophy, projects router, Upstash/Aura support.
+> **Last updated:** 2026-04-24 — Agent count corrected: 4-agent design expanded to 7 (6 specialist + registrar).
 
 ---
 
@@ -58,7 +58,7 @@ dearadeline-withlove/
 ├── adeline-brain/              # FastAPI Python — intelligence layer
 │   ├── app/
 │   │   ├── agents/
-│   │   │   └── orchestrator.py     # 4-agent routing: Historian/Science/Discipleship/Registrar
+│   │   │   └── orchestrator.py     # 7-agent routing: 6 specialist agents + RegistrarAgent
 │   │   ├── algorithms/
 │   │   │   ├── zpd_engine.py       # BKT 4-param model, ZPD priority scoring
 │   │   │   ├── spaced_repetition.py # SM-2 algorithm
@@ -128,19 +128,22 @@ SearchWitnesses fails    → RESEARCH_MISSION block (student task)
 
 **Never bypass this gate.** If no verified source exists, tell the student to go find one.
 
-### 2. 4-Agent Orchestration
+### 2. 7-Agent Orchestration
 All lesson generation goes through `adeline-brain/app/agents/orchestrator.py`:
 
 | Agent | Tracks | Block Types |
 |-------|--------|-------------|
-| `HistorianAgent` | TRUTH_HISTORY, JUSTICE_CHANGEMAKING | PRIMARY_SOURCE, RESEARCH_MISSION |
-| `ScienceAgent` | CREATION_SCIENCE, HOMESTEADING | PRIMARY_SOURCE, LAB_MISSION, RESEARCH_MISSION |
-| `DiscipleshipAgent` | HEALTH_NATUROPATHY, GOVERNMENT_ECONOMICS, DISCIPLESHIP, ENGLISH_LITERATURE, APPLIED_MATHEMATICS, CREATIVE_ECONOMY | NARRATIVE, PRIMARY_SOURCE, RESEARCH_MISSION |
-| `RegistrarAgent` | All tracks (post-processing) | Emits xAPI + CASE credits |
+| `historian_agent` | TRUTH_HISTORY | PRIMARY_SOURCE, RESEARCH_MISSION |
+| `justice_agent` | JUSTICE_CHANGEMAKING | PRIMARY_SOURCE, RESEARCH_MISSION |
+| `science_agent` | CREATION_SCIENCE, HOMESTEADING | PRIMARY_SOURCE, LAB_MISSION, RESEARCH_MISSION |
+| `literature_agent` | ENGLISH_LITERATURE | NARRATIVE, PRIMARY_SOURCE (no Witness gate) |
+| `practical_agent` | APPLIED_MATHEMATICS, CREATIVE_ECONOMY | NARRATIVE, PRIMARY_SOURCE (no Witness gate) |
+| `discipleship_agent` | HEALTH_NATUROPATHY, GOVERNMENT_ECONOMICS, DISCIPLESHIP | NARRATIVE, PRIMARY_SOURCE, RESEARCH_MISSION |
+| `registrar_agent` | All tracks (post-processing) | Emits xAPI + CASE credits |
 
 **RegistrarAgent always runs last.** Do not skip it — it's how learning gets recorded.
 
-**Justice framing note:** JUSTICE_CHANGEMAKING lessons route through HistorianAgent with a special framing — power-capture tactics (regulatory capture, legislative capture, narrative capture) are named and then *flipped*: what does the changemaker do in response? Evidence is always primary source (lobbying records, civil rights documents, legislative history). Portfolio evidence = actions taken, not essays written.
+**Justice framing note:** `justice_agent` names power-capture tactics (regulatory capture, legislative capture, narrative capture) and then *flips* them — what does the changemaker do in response? Evidence is always primary source (lobbying records, civil rights documents, legislative history). Portfolio evidence = actions taken, not essays written.
 
 ### 3. GraphRAG (Neo4j)
 The knowledge graph powers ZPD reasoning:
