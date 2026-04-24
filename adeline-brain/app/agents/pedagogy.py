@@ -25,11 +25,69 @@ from typing import Optional
 import openai
 
 from app.models.student import StudentState, MasteryBand
+from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL, LEARNLM_MODEL
 
 logger = logging.getLogger(__name__)
 
-EMBED_MODEL = "text-embedding-3-small"
-CHAT_MODEL  = "gpt-4o-mini"
+EMBED_MODEL = "text-embedding-3-small"  # OpenAI embeddings — unchanged (drives pgvector)
+
+
+async def _pedagogical_scaffold_call(system: str, user: str, max_tokens: int = 300) -> str:
+    """
+    LearnLM → Flash 2.5 fallback for all Socratic/scaffold generation.
+    Mirrors the routing logic in orchestrator._pedagogical_call.
+    """
+    import asyncio as _asyncio
+
+    if GEMINI_API_KEY:
+        client = openai.AsyncOpenAI(api_key=GEMINI_API_KEY, base_url=GEMINI_BASE_URL)
+        # Primary: LearnLM
+        try:
+            resp = await client.chat.completions.create(
+                model=LEARNLM_MODEL,
+                max_tokens=max_tokens,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user",   "content": user},
+                ],
+            )
+            return resp.choices[0].message.content or ""
+        except Exception as learnlm_err:
+            logger.warning(
+                f"[Pedagogy] LearnLM unavailable ({learnlm_err}) — "
+                "Flash 2.5 stepping in as substitute teacher"
+            )
+        # Fallback: Flash 2.5
+        for attempt in range(2):
+            try:
+                resp = await client.chat.completions.create(
+                    model=GEMINI_MODEL,
+                    max_tokens=max_tokens,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user",   "content": user},
+                    ],
+                )
+                return resp.choices[0].message.content or ""
+            except Exception as flash_err:
+                if attempt == 0:
+                    logger.warning(f"[Pedagogy] Flash fallback attempt 1 failed ({flash_err}) — retrying...")
+                    await _asyncio.sleep(1)
+                    continue
+                raise RuntimeError(f"Both LearnLM and Flash 2.5 unavailable: {flash_err}") from flash_err
+
+    # No Gemini key — fall back to OpenAI (legacy path)
+    client_oai = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    resp = await client_oai.chat.completions.create(
+        model="gpt-4o-mini",
+        max_tokens=max_tokens,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user},
+        ],
+        temperature=0.7,
+    )
+    return resp.choices[0].message.content or ""
 
 
 # ── ZPD Zone ──────────────────────────────────────────────────────────────────
@@ -252,19 +310,9 @@ async def scaffold(
     )
 
     try:
-        client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        completion = await client.chat.completions.create(
-            model=CHAT_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": student_response},
-            ],
-            temperature=0.7,
-            max_tokens=300,
-        )
-        reply = completion.choices[0].message.content.strip()
+        reply = (await _pedagogical_scaffold_call(system_prompt, student_response, max_tokens=300)).strip()
     except Exception as e:
-        logger.error(f"[Pedagogy] OpenAI call failed: {e}")
+        logger.error(f"[Pedagogy] Scaffold call failed: {e}")
         # Graceful fallback — never leave the student with nothing
         if zone == ZPDZone.FRUSTRATED:
             reply = (
@@ -395,17 +443,11 @@ async def explain_snippet(
     )
 
     try:
-        client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        completion = await client.chat.completions.create(
-            model=CHAT_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Please explain this highlighted text: \"{snippet[:500]}\""},
-            ],
-            temperature=0.7,
+        full_response = (await _pedagogical_scaffold_call(
+            system_prompt,
+            f"Please explain this highlighted text: \"{snippet[:500]}\"",
             max_tokens=400,
-        )
-        full_response = completion.choices[0].message.content.strip()
+        )).strip()
         
         # Parse out the follow-up question if present
         if "**Think about it:**" in full_response:
@@ -417,7 +459,7 @@ async def explain_snippet(
             follow_up = f"What do you think is the most important idea in this passage?"
             
     except Exception as e:
-        logger.error(f"[Pedagogy] explain_snippet OpenAI call failed: {e}")
+        logger.error(f"[Pedagogy] explain_snippet call failed: {e}")
         # Graceful fallback
         explanation = (
             f"This passage is talking about an important part of {lesson_topic}. "

@@ -40,7 +40,7 @@ from app.protocols.witness import evaluate_evidence, build_research_mission_bloc
 from app.connections.pgvector_client import hippocampus
 from app.connections.neo4j_client import neo4j_client
 from app.tools.researcher import search_witnesses
-from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL
+from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL, LEARNLM_MODEL
 from app.algorithms.pedagogical_directives import generate_pedagogical_directives, get_quick_directives
 from app.agents.pedagogy import ZPDZone
 from app.models.student import MasteryBand
@@ -50,41 +50,27 @@ _ANTHROPIC_MODEL = os.getenv("ADELINE_MODEL", "claude-sonnet-4-6")
 logger = logging.getLogger(__name__)
 
 
-def _synthesis_client():
-    """
-    Returns an async OpenAI-compatible client for multimodal synthesis.
-    Uses Gemini Flash when GEMINI_API_KEY is set (30x cheaper than Claude
-    for mechanical JSON extraction tasks). Falls back to Claude otherwise.
-    Returns (client, model_name, is_gemini).
-    """
-    if GEMINI_API_KEY:
-        import openai as _oai
-        return (
-            _oai.AsyncOpenAI(api_key=GEMINI_API_KEY, base_url=GEMINI_BASE_URL),
-            GEMINI_MODEL,
-            True,
-        )
-    return (
-        anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY")),
-        _ANTHROPIC_MODEL,
-        False,
-    )
+def _gemini_client() -> "openai.AsyncOpenAI":
+    """Shared OpenAI-compatible Gemini client (used for both Flash 2.5 and LearnLM)."""
+    import openai as _oai
+    return _oai.AsyncOpenAI(api_key=GEMINI_API_KEY, base_url=GEMINI_BASE_URL)
 
 
-async def _synthesis_call(system: str, user: str, max_tokens: int = 1000) -> str:
+async def _structural_call(system: str, user: str, max_tokens: int = 1000) -> str:
     """
-    Single synthesis API call — uses Gemini Flash if available, else Claude.
-    On Gemini failure, automatically retries once then falls back to Claude.
-    Returns the text content of the response.
+    Schema-strict generation: GenUI JSON structure, format decisions, Witness Protocol.
+
+    Primary:  Gemini Flash 2.5  — fast, instruction-following, production-stable
+    Fallback: Claude            — last resort if both Gemini models are unavailable
     """
     import asyncio as _asyncio
-    client, model, is_gemini = _synthesis_client()
 
-    if is_gemini:
+    if GEMINI_API_KEY:
+        client = _gemini_client()
         for attempt in range(2):
             try:
                 response = await client.chat.completions.create(
-                    model=model,
+                    model=GEMINI_MODEL,
                     max_tokens=max_tokens,
                     messages=[
                         {"role": "system", "content": system},
@@ -92,24 +78,53 @@ async def _synthesis_call(system: str, user: str, max_tokens: int = 1000) -> str
                     ],
                 )
                 return response.choices[0].message.content or ""
-            except Exception as gemini_err:
+            except Exception as flash_err:
                 if attempt == 0:
                     logger.warning(
-                        f"[Synthesis] Gemini attempt {attempt + 1} failed ({gemini_err}) — retrying..."
+                        f"[Structural] Flash attempt 1 failed ({flash_err}) — retrying..."
                     )
                     await _asyncio.sleep(1)
                     continue
                 logger.warning(
-                    f"[Synthesis] Gemini failed after 2 attempts ({gemini_err}) — "
+                    f"[Structural] Flash failed after 2 attempts ({flash_err}) — "
                     "falling back to Claude"
                 )
                 break
-        # Gemini exhausted — fall back to Claude
+
+    # Claude fallback
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    if not anthropic_key:
+        raise RuntimeError("Gemini unavailable and ANTHROPIC_API_KEY not set")
+    fallback = anthropic.AsyncAnthropic(api_key=anthropic_key)
+    response = await fallback.messages.create(
+        model=_ANTHROPIC_MODEL,
+        max_tokens=max_tokens,
+        system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+        messages=[{"role": "user", "content": user}],
+        extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
+    )
+    return response.content[0].text
+
+
+async def _pedagogical_call(system: str, user: str, max_tokens: int = 1000) -> str:
+    """
+    Pedagogical content generation: narrative voice, Socratic scaffolding, ZPD adaptation.
+
+    Primary:  LearnLM (learnlm-2.0-flash-experimental) — educationally fine-tuned,
+              natively understands scaffolding, cognitive load, and Socratic questioning
+    Fallback: Gemini Flash 2.5 — production backstop, never exposes errors to students
+
+    Never falls back to Claude — Flash 2.5 is sufficient and avoids mixing billing.
+    If GEMINI_API_KEY is absent entirely, falls back to Claude as a last resort.
+    """
+    import asyncio as _asyncio
+
+    if not GEMINI_API_KEY:
         anthropic_key = os.getenv("ANTHROPIC_API_KEY")
         if not anthropic_key:
-            raise RuntimeError("Gemini unavailable and ANTHROPIC_API_KEY not set")
-        fallback_client = anthropic.AsyncAnthropic(api_key=anthropic_key)
-        response = await fallback_client.messages.create(
+            raise RuntimeError("Neither GEMINI_API_KEY nor ANTHROPIC_API_KEY is set")
+        client = anthropic.AsyncAnthropic(api_key=anthropic_key)
+        response = await client.messages.create(
             model=_ANTHROPIC_MODEL,
             max_tokens=max_tokens,
             system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
@@ -117,22 +132,50 @@ async def _synthesis_call(system: str, user: str, max_tokens: int = 1000) -> str
             extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
         )
         return response.content[0].text
-    else:
-        # Use Anthropic prompt caching on the system prompt (static prefix cached 5 min)
-        response = await client.messages.create(
-            model=model,
+
+    gemini = _gemini_client()
+
+    # Primary: LearnLM
+    try:
+        response = await gemini.chat.completions.create(
+            model=LEARNLM_MODEL,
             max_tokens=max_tokens,
-            system=[
-                {
-                    "type": "text",
-                    "text": system,
-                    "cache_control": {"type": "ephemeral"},
-                }
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user",   "content": user},
             ],
-            messages=[{"role": "user", "content": user}],
-            extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
         )
-        return response.content[0].text
+        return response.choices[0].message.content or ""
+    except Exception as learnlm_err:
+        logger.warning(
+            f"[Pedagogical] LearnLM unavailable ({learnlm_err}) — "
+            "Flash 2.5 stepping in as substitute teacher"
+        )
+
+    # Fallback: Flash 2.5 — student never sees an error
+    for attempt in range(2):
+        try:
+            response = await gemini.chat.completions.create(
+                model=GEMINI_MODEL,
+                max_tokens=max_tokens,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user",   "content": user},
+                ],
+            )
+            return response.choices[0].message.content or ""
+        except Exception as flash_err:
+            if attempt == 0:
+                logger.warning(
+                    f"[Pedagogical] Flash fallback attempt 1 failed ({flash_err}) — retrying..."
+                )
+                await _asyncio.sleep(1)
+                continue
+            raise RuntimeError(
+                f"Both LearnLM and Flash 2.5 unavailable: {flash_err}"
+            ) from flash_err
+
+    raise RuntimeError("Pedagogical call exhausted all attempts")
 
 # Track routing constants
 # TRUTH_HISTORY is the ONLY track that requires the Witness Protocol —
@@ -334,10 +377,10 @@ async def _synthesize_content(
     )
 
     try:
-        return (await _synthesis_call(system_prompt, user_prompt, max_tokens=800)).strip()
+        return (await _pedagogical_call(system_prompt, user_prompt, max_tokens=800)).strip()
     except Exception as e:
         logger.warning(
-            f"[Synthesis] Content synthesis failed ({type(e).__name__}: {e}) "
+            f"[Pedagogical] Content synthesis failed ({type(e).__name__}: {e}) "
             f"— topic='{request.topic}' track={request.track.value} block={block_type}"
         )
         if raw_content and raw_content.strip():
@@ -670,7 +713,7 @@ RESEARCH_MISSION:
 {_ADELINE_VOICE}
 """
 
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    if not GEMINI_API_KEY and not os.getenv("ANTHROPIC_API_KEY"):
         blocks.append({
             "block_type":  BlockType.NARRATIVE.value,
             "content":     f"Justice investigation: {request.topic}",
@@ -1113,7 +1156,7 @@ async def _synthesize_literature(
     Claude generates literary analysis content.
     If a specific book is provided, the analysis is grounded in that text.
     """
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    if not GEMINI_API_KEY and not os.getenv("ANTHROPIC_API_KEY"):
         if book_title:
             return f"Literary analysis of '{topic}' in the context of *{book_title}* by {book_author}."
         return f"Literary analysis: {topic}"
@@ -1149,17 +1192,9 @@ async def _synthesize_literature(
     )
 
     try:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        client = anthropic.AsyncAnthropic(api_key=api_key)
-        message = await client.messages.create(
-            model=_ANTHROPIC_MODEL,
-            max_tokens=800,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return message.content[0].text
+        return await _pedagogical_call(system_prompt, user_prompt, max_tokens=800)
     except Exception as e:
-        logger.error(f"[LiteratureAgent] Claude synthesis failed: {e}")
+        logger.error(f"[LiteratureAgent] Pedagogical synthesis failed: {e}")
         if book_title:
             return f"Literary analysis of '{topic}' in the context of *{book_title}* by {book_author}."
         return f"Literary analysis: {topic}"
@@ -1238,8 +1273,8 @@ async def practical_agent(state: AdelineState) -> AdelineState:
 
 
 async def _synthesize_practical(request: LessonRequest) -> str:
-    """Claude generates practical/applied content for math and creative economy."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    """LearnLM generates practical/applied content for math and creative economy."""
+    if not GEMINI_API_KEY and not os.getenv("ANTHROPIC_API_KEY"):
         return f"Practical lesson: {request.topic}"
 
     grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
@@ -1266,17 +1301,9 @@ async def _synthesize_practical(request: LessonRequest) -> str:
     )
 
     try:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        client = anthropic.AsyncAnthropic(api_key=api_key)
-        message = await client.messages.create(
-            model=_ANTHROPIC_MODEL,
-            max_tokens=800,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return message.content[0].text
+        return await _pedagogical_call(system_prompt, user_prompt, max_tokens=800)
     except Exception as e:
-        logger.error(f"[PracticalAgent] Claude synthesis failed: {e}")
+        logger.error(f"[PracticalAgent] Pedagogical synthesis failed: {e}")
         return f"Practical lesson: {request.topic}"
 
 
@@ -1335,7 +1362,7 @@ async def _decide_formats(
     )
 
     try:
-        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=120)
+        text = await _structural_call(system_prompt, user_prompt, max_tokens=120)
         text = text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         raw = _json.loads(text)
         chosen = [f for f in raw.get("formats", []) if f in available]
@@ -1459,7 +1486,7 @@ async def _synthesize_mind_map(
         "Extract the concept hierarchy as JSON."
     )
     try:
-        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=800)
+        text = await _structural_call(system_prompt, user_prompt, max_tokens=800)
         return MindMapData.model_validate(json.loads(text.strip()))
     except Exception as e:
         logger.warning(f"[MindMap] synthesis failed: {e}")
@@ -1510,7 +1537,7 @@ async def _synthesize_timeline(
             "Extract the chronological timeline as JSON."
         )
     try:
-        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=800)
+        text = await _structural_call(system_prompt, user_prompt, max_tokens=800)
         return TimelineData.model_validate(json.loads(text.strip()))
     except Exception as e:
         logger.warning(f"[Timeline] synthesis failed: {e}")
@@ -1545,7 +1572,7 @@ async def _synthesize_mnemonic(
         "Create a mnemonic device for the key concepts in this content."
     )
     try:
-        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=400)
+        text = await _structural_call(system_prompt, user_prompt, max_tokens=400)
         raw = json.loads(text.strip())
         if raw.get("skip"):
             return None
@@ -1584,7 +1611,7 @@ async def _synthesize_narrated_slide(
         "Convert this into a narrated slide deck."
     )
     try:
-        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=1200)
+        text = await _structural_call(system_prompt, user_prompt, max_tokens=1200)
         return NarratedSlideData.model_validate(json.loads(text.strip()))
     except Exception as e:
         logger.warning(f"[NarratedSlide] synthesis failed: {e}")

@@ -319,13 +319,17 @@ pnpm build
 ```bash
 # adeline-brain (.env)
 POSTGRES_DSN=postgresql://...
-ANTHROPIC_API_KEY=sk-ant-...
-ADELINE_MODEL=claude-sonnet-4-6   # or claude-opus-4-6 for production
+ANTHROPIC_API_KEY=sk-ant-...      # fallback only — primary generation uses Gemini
+ADELINE_MODEL=claude-sonnet-4-6   # used when Gemini is unavailable
 ADELINE_ENV=development           # set to "production" to enable safety gates
 
-# Gemini (optional — used for cheaper synthesis calls; orchestrator auto-falls back to Claude)
+# Gemini — dual-model architecture (required for full AI functionality)
+# Flash 2.5: schema-strict GenUI JSON, Witness Protocol, format decisions
+# LearnLM:   narrative content, Socratic scaffolding, ZPD adaptation
+# Both use the same API key and base URL. LearnLM falls back to Flash 2.5 on error.
 GEMINI_API_KEY=...
 GEMINI_MODEL=gemini-2.5-flash
+LEARNLM_MODEL=learnlm-2.0-flash-experimental
 GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 
 TAVILY_API_KEY=...

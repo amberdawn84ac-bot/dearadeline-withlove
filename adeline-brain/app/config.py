@@ -86,9 +86,15 @@ if IS_PRODUCTION and not OPENAI_API_KEY:
 # Uses the OpenAI-compatible endpoint so no new dependencies needed.
 # Falls back to Claude if GEMINI_API_KEY is not set.
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL    = os.getenv("GEMINI_MODEL",   "gemini-2.5-flash")
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+# LearnLM — Google's educationally fine-tuned model, used for all pedagogical
+# generation (narrative voice, Socratic scaffolding, ZPD adaptation).
+# Falls back to GEMINI_MODEL (Flash 2.5) on any API error.
+# Uses the same GEMINI_API_KEY and GEMINI_BASE_URL as Flash.
+LEARNLM_MODEL   = os.getenv("LEARNLM_MODEL",  "learnlm-2.0-flash-experimental")
 
 # ── Auth (Supabase JWT) ──────────────────────────────────────────────────────
 # Primary: JWKS (ES256) — public key fetched from Supabase's well-known endpoint.
