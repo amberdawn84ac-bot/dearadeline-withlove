@@ -49,6 +49,12 @@ def _get_user_id_from_auth(authorization: Optional[str]) -> str:
     return get_current_user_id(authorization=authorization)
 
 
+def _get_auth_claims(authorization: Optional[str]) -> tuple[str, str]:
+    """Returns (user_id, email) from Authorization Bearer token."""
+    from app.api.middleware import get_auth_claims
+    return get_auth_claims(authorization)
+
+
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
 class UserProfile(BaseModel):
@@ -299,17 +305,17 @@ async def post_onboarding(
     - 400: Validation error
     - 500: Database error
     """
-    user_id = _get_user_id_from_auth(authorization)
+    user_id, email = _get_auth_claims(authorization)
     conn = await _get_conn()
     try:
 
         row = await conn.fetchrow(
             """
             INSERT INTO "User" (
-                "id", "name", "gradeLevel", "interests", "learningStyle",
+                "id", "name", "email", "role", "gradeLevel", "interests", "learningStyle",
                 "state", "targetGraduationYear", "onboardingComplete"
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+            VALUES ($1, $2, $3, 'STUDENT', $4, $5, $6, $7, $8, true)
             ON CONFLICT ("id") DO UPDATE SET
                 "name" = EXCLUDED."name",
                 "gradeLevel" = EXCLUDED."gradeLevel",
@@ -325,7 +331,7 @@ async def post_onboarding(
                 "interests", "learningStyle", "pacingMultiplier",
                 "state", "targetGraduationYear", "onboardingComplete"
             """,
-            user_id, request.name, request.gradeLevel, request.interests,
+            user_id, request.name, email, request.gradeLevel, request.interests,
             request.learningStyle, request.state, request.targetGraduationYear,
         )
     except Exception as e:

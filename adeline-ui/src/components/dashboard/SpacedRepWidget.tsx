@@ -87,6 +87,7 @@ export function SpacedRepWidget() {
       body: JSON.stringify({
         concept_id: current.concept_id,
         quality,
+        track: current.track,
       }),
     }).catch(console.error);
 

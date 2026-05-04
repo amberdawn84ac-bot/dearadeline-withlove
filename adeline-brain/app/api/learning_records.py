@@ -137,7 +137,7 @@ async def _get_conn():
 
 # ── POST /learning/record ─────────────────────────────────────────────────────
 
-@router.post("/record", response_model=RecordLearningResponse)
+@router.post("/record", response_model=RecordLearningResponse, status_code=201)
 async def record_learning(
     payload: RecordLearningRequest,
     _key: str = Depends(require_internal_key),
@@ -190,7 +190,7 @@ async def record_learning(
 
 # ── POST /learning/transcript ─────────────────────────────────────────────────
 
-@router.post("/transcript", response_model=SealTranscriptResponse)
+@router.post("/transcript", response_model=SealTranscriptResponse, status_code=201)
 async def seal_transcript(
     entry: TranscriptEntryIn,
     _key: str = Depends(require_internal_key),
