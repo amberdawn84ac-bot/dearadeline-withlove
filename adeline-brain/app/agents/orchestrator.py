@@ -7,7 +7,8 @@ Enforces the Witness Protocol before any content reaches the student.
   historian_agent     — TRUTH_HISTORY
                         Strictest Witness Protocol (0.82); PRIMARY_SOURCE focus
   justice_agent       — JUSTICE_CHANGEMAKING
-                        Power-capture framing; primary source evidence
+                        Witness Protocol (0.82); PRIMARY_SOURCE blocks when verified;
+                        power-capture framing; always includes RESEARCH_MISSION
   science_agent       — CREATION_SCIENCE, HOMESTEADING
                         LAB_MISSION blocks for hands-on tracks; homestead lens
   literature_agent    — ENGLISH_LITERATURE
@@ -601,8 +602,14 @@ async def justice_agent(state: AdelineState) -> AdelineState:
     """
     Justice Changemaking specialist — investigative journalism model.
 
-    Does NOT require the Witness Protocol. Justice teaches students to BE
-    investigators. The lesson is an investigation brief, not a verified archive.
+    Applies the Witness Protocol (0.82 threshold) to seeded primary sources.
+    VERIFIED sources (lobbying records, civil rights docs, legislative history)
+    are surfaced as PRIMARY_SOURCE blocks before the NARRATIVE and RESEARCH_MISSION.
+    ARCHIVE_SILENT sources are used as background context for Claude only.
+
+    The investigative model is preserved: the student always receives a
+    RESEARCH_MISSION to find additional evidence; verified sources are shown
+    alongside the mission, not instead of it.
 
     Three focal areas (always present at least one per lesson):
       1. Nation-building propaganda — name the lie, who told it, who profited
@@ -610,7 +617,8 @@ async def justice_agent(state: AdelineState) -> AdelineState:
       3. People harmed — center victims by name, not as statistics
 
     Block structure:
-      NARRATIVE  — presents the harm clearly: who, what, how much they profited
+      PRIMARY_SOURCE   — Witness-verified archive sources (when available, ≥ 0.82)
+      NARRATIVE        — presents the harm clearly: who, what, how much they profited
       RESEARCH_MISSION — gives the student a specific place to look for evidence
                          (lobbying disclosures, court records, internal memos, etc.)
     """
@@ -618,17 +626,44 @@ async def justice_agent(state: AdelineState) -> AdelineState:
     state["agent_name"] = "JusticeAgent"
     blocks: list[dict] = []
 
-    # Pull any seeded primary sources as background context (not for Witness gatekeeping)
     raw_results = await hippocampus.similarity_search(
         query_embedding=state["query_embedding"],
         track=request.track.value,
         top_k=3,
     )
 
-    source_context = "\n\n".join(
-        f"[Source: {r['source_title']}]\n{r['chunk']}"
-        for r in raw_results
-    ) if raw_results else ""
+    # Evaluate each result through the Witness Protocol.
+    # VERIFIED → PRIMARY_SOURCE block; ARCHIVE_SILENT → background context only.
+    silent_context_chunks: list[str] = []
+    for result in raw_results:
+        evidence = evaluate_evidence(
+            source_id=result["id"],
+            source_title=result["source_title"],
+            source_url=result.get("source_url", ""),
+            citation_author=result.get("citation_author", ""),
+            citation_year=result.get("citation_year"),
+            citation_archive_name=result.get("citation_archive_name", ""),
+            similarity_score=float(result["similarity_score"]),
+            chunk=result["chunk"],
+            track=request.track.value,
+        )
+        if evidence.verdict == EvidenceVerdict.VERIFIED:
+            content = await _state_synthesize(
+                state,
+                block_type=BlockType.PRIMARY_SOURCE.value,
+                source_chunks=[result],
+                raw_content=result["chunk"],
+            )
+            blocks.append({
+                "block_type":  BlockType.PRIMARY_SOURCE.value,
+                "content":     content,
+                "evidence":    [evidence.model_dump()],
+                "is_silenced": False,
+            })
+        else:
+            silent_context_chunks.append(f"[Source: {result['source_title']}]\n{result['chunk']}")
+
+    source_context = "\n\n".join(silent_context_chunks)
 
     grade_desc = _GRADE_DESC.get(request.grade_level or "8", "middle school")
     persona    = _TRACK_PERSONA[Track.JUSTICE_CHANGEMAKING]
@@ -638,7 +673,7 @@ async def justice_agent(state: AdelineState) -> AdelineState:
 Grade level: {grade_desc}
 Topic: {request.topic}
 
-{"Background sources from the archive:\\n" + source_context if source_context else "No archive sources found. Rely on well-documented public knowledge."}
+{"Unverified background context (below Witness threshold — do NOT cite as established fact):\\n" + source_context if source_context else "No background context available. Rely on well-documented public knowledge."}
 
 Write a justice investigation lesson in two parts:
 
@@ -1942,7 +1977,7 @@ async def run_orchestrator(
 
     Agent routing:
       TRUTH_HISTORY                          → HistorianAgent (Witness Protocol, strict threshold 0.82)
-      JUSTICE_CHANGEMAKING                   → JusticeAgent (investigative model, no Witness)
+      JUSTICE_CHANGEMAKING                   → JusticeAgent (Witness-gated PRIMARY_SOURCE + investigative RESEARCH_MISSION)
       CREATION_SCIENCE, HOMESTEADING         → ScienceAgent (LAB_MISSION, no Witness)
       ENGLISH_LITERATURE                     → LiteratureAgent (book-context, no Witness)
       APPLIED_MATHEMATICS, CREATIVE_ECONOMY  → PracticalAgent (applied skills, no Witness)
