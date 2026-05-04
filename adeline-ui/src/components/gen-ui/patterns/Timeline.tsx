@@ -127,23 +127,23 @@ function EventItem({
                     style={{ background: `${themeColor}08`, border: `1px solid ${themeColor}20` }}
                   >
                     <span className="text-sm shrink-0 mt-0.5">
-                      {archiveIcon(event.source_title || evidenceForEvent?.citation?.archive_name)}
+                      {archiveIcon(event.source_title || evidenceForEvent?.witnessCitation?.archiveName)}
                     </span>
                     <div className="flex-1 min-w-0">
-                      {(event.source_title || evidenceForEvent?.citation) && (
+                      {(event.source_title || evidenceForEvent?.witnessCitation) && (
                         <p className="text-[10px] font-semibold text-[#374151] leading-snug">
-                          {event.source_title || evidenceForEvent?.citation?.author}
-                          {evidenceForEvent?.citation?.year && (
+                          {event.source_title || evidenceForEvent?.witnessCitation?.author}
+                          {evidenceForEvent?.witnessCitation?.year && (
                             <span className="font-normal text-[#9CA3AF]">
-                              {" "}({evidenceForEvent.citation.year})
+                              {" "}({evidenceForEvent.witnessCitation.year})
                             </span>
                           )}
                         </p>
                       )}
-                      {evidenceForEvent?.citation?.archive_name && (
+                      {evidenceForEvent?.witnessCitation?.archiveName && (
                         <p className="text-[10px] text-[#9CA3AF] flex items-center gap-1 mt-0.5">
                           <Archive size={9} />
-                          {evidenceForEvent.citation.archive_name}
+                          {evidenceForEvent.witnessCitation.archiveName}
                         </p>
                       )}
                     </div>
