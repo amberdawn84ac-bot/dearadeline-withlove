@@ -45,6 +45,7 @@ from app.api.learning_plan import router as learning_plan_router
 from app.api.genui import router as genui_router
 from app.api.realtime import router as realtime_router
 from app.api.conversation import router as conversation_router
+from app.api.animated_lessons import router as animated_lessons_router
 from app.connections.journal_store import journal_store
 from app.connections.conversation_store import conversation_store
 from app.jobs.seed_scheduler import startup_seed_scheduler, shutdown_seed_scheduler
@@ -184,6 +185,7 @@ app.include_router(admin_review_router, prefix="/brain")
 app.include_router(metrics_router)
 app.include_router(realtime_router)
 app.include_router(conversation_router)
+app.include_router(animated_lessons_router)
 
 
 @app.get("/health")

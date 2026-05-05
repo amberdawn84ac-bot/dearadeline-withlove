@@ -247,6 +247,8 @@ export enum BlockType {
   INTERACTIVE_SIM  = "INTERACTIVE_SIM",  // Interactive simulation or visualization
   HIGHLIGHT_ASK    = "HIGHLIGHT_ASK",    // Contextual explanation from highlighted text
   GENUI_ASSEMBLY   = "GENUI_ASSEMBLY",   // Dynamic stateful component assembly with callbacks
+  // ── Living Sketchnote Lessons ────────────────────────────────────
+  ANIMATED_SKETCHNOTE_LESSON = "ANIMATED_SKETCHNOTE_LESSON", // Animated whiteboard lesson with narration
 }
 
 export enum DifficultyLevel {
@@ -360,3 +362,88 @@ export function evaluateWitness(score: number): EvidenceVerdict {
     ? EvidenceVerdict.VERIFIED
     : EvidenceVerdict.ARCHIVE_SILENT;
 }
+
+// ══════════════════════════════════════════════════════════════════
+// 6. LIVING SKETCHNOTE LESSONS
+// ══════════════════════════════════════════════════════════════════
+
+export type LessonRenderMode =
+  | "standard_lesson"
+  | "visual_deep_dive"
+  | "sketchnote_infographic"
+  | "animated_sketchnote_lesson";
+
+export type StyledText = {
+  text: string;
+  style: "bold_marker" | "block_caps" | "script_hand" | "sketch_print" | "tiny_notes" | "label" | "caption";
+  layout: "title_banner" | "section_header" | "callout_bubble" | "flow_step" | "side_note" | "diagram_label" | "closing_quote";
+  decoration?: Array<"underline_swoosh" | "arrow_connector" | "bubble_outline" | "highlight_blob" | "burst_lines" | "doodle_icon" | "motion_lines">;
+  emphasis?: "low" | "medium" | "high";
+};
+
+export type VisualElement = {
+  id: string;
+  type: "handwritten_text" | "doodle" | "diagram" | "arrow" | "bubble" | "label" | "icon" | "character" | "background" | "timeline" | "split_screen";
+  content: string;
+  position: { x: number; y: number };
+  size?: { width: number; height: number };
+  style?: string;
+  color?: string;
+};
+
+export type AnimationInstruction = {
+  elementId: string;
+  animation: "draw_in" | "write_on" | "fade_in" | "pop_in" | "slide_in" | "zoom_in" | "pulse" | "wiggle" | "pan" | "morph" | "highlight";
+  startTime: number;
+  duration: number;
+  easing?: "linear" | "ease_in" | "ease_out" | "ease_in_out";
+};
+
+export type VisualStyle = {
+  format: "animated_sketchnote";
+  artDirection: string;
+  typography: string[];
+  illustrationRules: string[];
+  layoutRules: string[];
+};
+
+export type AnimatedScene = {
+  sceneNumber: number;
+  sceneTitle: StyledText;
+  durationSeconds: number;
+  narration: string;
+  visualBuild: VisualElement[];
+  animationPlan: AnimationInstruction[];
+  teachingLayer: {
+    visualSummary: StyledText[];
+    deepExplanation: StyledText;
+    whyItMatters: StyledText;
+    activity?: StyledText;
+  };
+  soundDesign?: { musicMood?: string; soundEffects?: string[] };
+  narrationAudioUrl?: string;
+};
+
+export type VocabularyWord = { word: string; definition: string; visualCue: string };
+export type AssessmentItem = {
+  question: string;
+  answer: string;
+  type: "short_answer" | "discussion" | "draw_and_explain";
+};
+export type ExtensionActivity = { title: string; instructions: string; materials?: string[] };
+
+export type AnimatedSketchnoteLesson = {
+  lessonType: "animated_sketchnote_lesson";
+  title: StyledText;
+  subtitle: StyledText;
+  targetAges: string;
+  totalDurationSeconds: number;
+  learningGoals: string[];
+  colorPalette: string[];
+  visualStyle: VisualStyle;
+  scenes: AnimatedScene[];
+  fullNarrationScript: string;
+  vocabulary: VocabularyWord[];
+  assessment: AssessmentItem[];
+  extensionActivities: ExtensionActivity[];
+};

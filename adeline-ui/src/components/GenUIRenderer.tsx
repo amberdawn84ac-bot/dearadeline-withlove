@@ -36,6 +36,7 @@ import { InsightReport } from "@/components/gen-ui/patterns/InsightReport";
 import { MnemonicCard } from "@/components/gen-ui/patterns/MnemonicCard";
 import { NarratedSlides } from "@/components/gen-ui/patterns/NarratedSlides";
 import { EmbeddedInterrupt } from "@/components/gen-ui/patterns/EmbeddedInterrupt";
+import AnimatedSketchnoteRenderer from "@/components/gen-ui/patterns/AnimatedSketchnoteRenderer";
 import { TextSelectionMenu } from "@/components/gen-ui/TextSelectionMenu";
 import { WeightTierBadge } from "@/components/lessons/WeightTierBadge";
 import { DistortionFlag } from "@/components/lessons/DistortionFlag";
@@ -907,6 +908,11 @@ function GenUIRenderer({
               break;
             case "NARRATED_SLIDE":
               blockContent = <NarratedSlideBlock block={block} />;
+              break;
+            case "ANIMATED_SKETCHNOTE_LESSON":
+              blockContent = block.animated_sketchnote_data
+                ? <AnimatedSketchnoteRenderer lesson={block.animated_sketchnote_data as any} />
+                : <TextBlock block={block} />;
               break;
             case "BOOK_SUGGESTION":
               blockContent = <BookSuggestionBlock block={block} />;
