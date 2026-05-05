@@ -10,6 +10,7 @@ PATCH /api/parent/students/{id}     — Update student profile
 DELETE /api/parent/students/{id}    — Archive/remove student from family
 """
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional, List
 from uuid import uuid4
@@ -96,14 +97,22 @@ class FamilyDashboard(BaseModel):
 
 # ── Helper Functions ──────────────────────────────────────────────────────────
 
+@asynccontextmanager
 async def _get_conn():
-    """Get PostgreSQL connection with error handling."""
+    """Get PostgreSQL connection with error handling and guaranteed cleanup."""
     from app.config import get_db_conn
+    conn = None
     try:
-        return await get_db_conn()
+        conn = await get_db_conn()
+        yield conn
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[Parent] Database connection failed: {e}")
         raise HTTPException(status_code=503, detail="Database unavailable")
+    finally:
+        if conn:
+            await conn.close()
 
 
 # ── API Endpoints ─────────────────────────────────────────────────────────────

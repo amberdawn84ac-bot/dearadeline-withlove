@@ -50,15 +50,17 @@ async def get_mastery_map(student_id: str, track: str) -> dict[str, float]:
     """
     try:
         conn = await get_db_conn()
-        rows = await conn.fetch(
-            """
-            SELECT "conceptId", "masteryLevel", "updatedAt"
-            FROM "SpacedRepetitionCard"
-            WHERE "studentId" = $1 AND "track" = $2
-            """,
-            student_id, track,
-        )
-        await conn.close()
+        try:
+            rows = await conn.fetch(
+                """
+                SELECT "conceptId", "masteryLevel", "updatedAt"
+                FROM "SpacedRepetitionCard"
+                WHERE "studentId" = $1 AND "track" = $2
+                """,
+                student_id, track,
+            )
+        finally:
+            await conn.close()
         return {r["conceptId"]: float(r["masteryLevel"]) for r in rows}
     except Exception as e:
         logger.warning(f"[BKTTracker] get_mastery_map failed for {student_id}/{track}: {e}")
@@ -71,15 +73,17 @@ async def get_mastery_map_with_timestamps(student_id: str, track: str) -> dict[s
     """
     try:
         conn = await get_db_conn()
-        rows = await conn.fetch(
-            """
-            SELECT "conceptId", "masteryLevel", "updatedAt"
-            FROM "SpacedRepetitionCard"
-            WHERE "studentId" = $1 AND "track" = $2
-            """,
-            student_id, track,
-        )
-        await conn.close()
+        try:
+            rows = await conn.fetch(
+                """
+                SELECT "conceptId", "masteryLevel", "updatedAt"
+                FROM "SpacedRepetitionCard"
+                WHERE "studentId" = $1 AND "track" = $2
+                """,
+                student_id, track,
+            )
+        finally:
+            await conn.close()
         result = {}
         for r in rows:
             ts = r["updatedAt"]
@@ -135,14 +139,14 @@ async def update_bkt(
         await conn.execute(
             """
             INSERT INTO "SpacedRepetitionCard"
-                ("studentId", "conceptId", "track", "masteryLevel", "updatedAt")
-            VALUES ($1, $2, $3, $4, now())
+                ("studentId", "conceptId", "conceptName", "track", "masteryLevel", "updatedAt")
+            VALUES ($1, $2, $3, $4, $5, now())
             ON CONFLICT ("studentId", "conceptId")
             DO UPDATE SET
                 "masteryLevel" = EXCLUDED."masteryLevel",
                 "updatedAt"    = now()
             """,
-            student_id, concept_id, track, new_pL,
+            student_id, concept_id, concept_id, track, new_pL,
         )
         await conn.close()
 
