@@ -63,6 +63,73 @@ export interface AnimatedLessonRequest {
   student_id?: string;
 }
 
+// ── Animated Sketchnote Lesson types (mirrors adeline-core) ───────────────────
+
+export interface StyledText {
+  text: string;
+  style: "bold_marker" | "block_caps" | "script_hand" | "sketch_print" | "tiny_notes" | "label" | "caption";
+  layout: "title_banner" | "section_header" | "callout_bubble" | "flow_step" | "side_note" | "diagram_label" | "closing_quote";
+  decoration?: string[];
+  emphasis?: "low" | "medium" | "high";
+}
+
+export interface VisualElement {
+  id: string;
+  type: "handwritten_text" | "doodle" | "diagram" | "arrow" | "bubble" | "label" | "icon" | "character" | "background" | "timeline" | "split_screen";
+  content: string;
+  position: { x: number; y: number };
+  size?: { width: number; height: number };
+  style?: string;
+  color?: string;
+}
+
+export interface AnimationInstruction {
+  elementId: string;
+  animation: "draw_in" | "write_on" | "fade_in" | "pop_in" | "slide_in" | "zoom_in" | "pulse" | "wiggle" | "pan" | "morph" | "highlight";
+  startTime: number;
+  duration: number;
+  easing?: "linear" | "ease_in" | "ease_out" | "ease_in_out";
+}
+
+export interface AnimatedScene {
+  sceneNumber: number;
+  sceneTitle: StyledText;
+  durationSeconds: number;
+  narration: string;
+  visualBuild: VisualElement[];
+  animationPlan: AnimationInstruction[];
+  teachingLayer: {
+    visualSummary: StyledText[];
+    deepExplanation: StyledText;
+    whyItMatters: StyledText;
+    activity?: StyledText;
+  };
+  soundDesign?: { musicMood?: string; soundEffects?: string[] };
+  narrationAudioUrl?: string;
+}
+
+export interface AnimatedSketchnoteLesson {
+  lessonType: "animated_sketchnote_lesson";
+  title: StyledText;
+  subtitle: StyledText;
+  targetAges: string;
+  totalDurationSeconds: number;
+  learningGoals: string[];
+  colorPalette: string[];
+  visualStyle: {
+    format: "animated_sketchnote";
+    artDirection: string;
+    typography: string[];
+    illustrationRules: string[];
+    layoutRules: string[];
+  };
+  scenes: AnimatedScene[];
+  fullNarrationScript: string;
+  vocabulary: { word: string; definition: string; visualCue: string }[];
+  assessment: { question: string; answer: string; type: "short_answer" | "discussion" | "draw_and_explain" }[];
+  extensionActivities: { title: string; instructions: string; materials?: string[] }[];
+}
+
 export interface WitnessCitation {
   author: string;
   year: number | null;

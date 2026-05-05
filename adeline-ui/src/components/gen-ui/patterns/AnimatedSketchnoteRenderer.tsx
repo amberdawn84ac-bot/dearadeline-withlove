@@ -8,7 +8,7 @@ import type {
   VisualElement,
   AnimationInstruction,
   StyledText,
-} from "@adeline/core";
+} from "@/lib/brain-client";
 
 // ── Typography style → CSS class mapping ─────────────────────────────────────
 

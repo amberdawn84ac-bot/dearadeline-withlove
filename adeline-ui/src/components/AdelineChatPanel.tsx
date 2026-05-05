@@ -12,7 +12,7 @@ import { ProjectCatalog } from "@/components/projects/ProjectCard";
 import { ProjectGuide } from "@/components/projects/ProjectGuide";
 import RenderModeSelector from "@/components/RenderModeSelector";
 import AnimatedSketchnoteRenderer from "@/components/gen-ui/patterns/AnimatedSketchnoteRenderer";
-import type { LessonRenderMode, AnimatedSketchnoteLesson } from "@adeline/core";
+import type { LessonRenderMode, AnimatedSketchnoteLesson } from "@/lib/brain-client";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 

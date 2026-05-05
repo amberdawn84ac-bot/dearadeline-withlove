@@ -1,6 +1,6 @@
 "use client";
 
-import type { LessonRenderMode } from "@adeline/core";
+import type { LessonRenderMode } from "@/lib/brain-client";
 
 const MODES: { value: LessonRenderMode; label: string; icon: string }[] = [
   { value: "standard_lesson",          label: "Standard",         icon: "📖" },
