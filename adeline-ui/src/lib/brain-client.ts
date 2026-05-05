@@ -39,12 +39,28 @@ export type Track =
   | "APPLIED_MATHEMATICS"
   | "CREATIVE_ECONOMY";
 
+export type LessonRenderMode =
+  | "standard_lesson"
+  | "visual_deep_dive"
+  | "sketchnote_infographic"
+  | "animated_sketchnote_lesson";
+
 export interface LessonRequest {
   student_id: string;
   track: Track;
   topic: string;
   is_homestead: boolean;
   grade_level: string;
+  render_mode?: LessonRenderMode;
+}
+
+export interface AnimatedLessonRequest {
+  topic: string;
+  focus?: string;
+  duration_seconds?: number;
+  target_ages?: string;
+  track?: Track;
+  student_id?: string;
 }
 
 export interface WitnessCitation {
@@ -1039,4 +1055,18 @@ export async function* streamConversation(params: {
       }
     }
   }
+}
+
+// ── Animated Sketchnote Lessons ───────────────────────────────────────────────
+
+export async function generateAnimatedLesson(
+  req: AnimatedLessonRequest
+): Promise<unknown> {
+  const res = await fetch("/api/adeline/animated-lesson", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error(`Animated lesson generation failed: ${res.status}`);
+  return res.json();
 }

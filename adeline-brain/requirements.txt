@@ -40,3 +40,7 @@ numpy==1.26.4
 
 # PDF generation
 reportlab==4.1.0
+
+# Living Sketchnote Lessons — AI generation (Gemini) + offline TTS
+google-generativeai>=0.7.0
+pyttsx3>=2.90
