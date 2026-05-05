@@ -25,6 +25,7 @@ calls SearchWitnesses (Tavily → scrape → cosine) before falling back to a
 RESEARCH_MISSION block. If a verified source is found, the lesson continues
 with a PRIMARY_SOURCE block from the auto-found archive.
 """
+import asyncio
 import uuid
 import os
 import logging
@@ -1393,6 +1394,10 @@ async def _run_multimodal_synthesis(
     """
     Decide which formats add value, then run only those synthesis functions.
     Appends new blocks to the blocks list in-place.
+
+    When render_mode == 'animated_sketchnote_lesson' the standard format
+    decision is skipped and a single AnimatedSketchnoteLesson block is
+    generated instead via Gemini.
     """
     if not blocks:
         return
@@ -1400,6 +1405,26 @@ async def _run_multimodal_synthesis(
     request = state["request"]
     primary_content = blocks[0].get("content", "")
     parent_evidence = blocks[0].get("evidence", [])
+
+    # ── Animated sketchnote mode — bypass standard multimodal pipeline ─────────
+    render_mode = getattr(request, "render_mode", None)
+    if render_mode == "animated_sketchnote_lesson":
+        asl = await _synthesize_animated_sketchnote(
+            topic=request.topic,
+            content=primary_content,
+            track=request.track,
+            grade_level=request.grade_level,
+        )
+        if asl:
+            blocks.append({
+                "block_type": BlockType.ANIMATED_SKETCHNOTE_LESSON.value,
+                "content": f"Living Sketchnote: {request.topic} · {len(asl.scenes)} scenes",
+                "evidence": [],
+                "is_silenced": False,
+                "homestead_content": None,
+                "animated_sketchnote_data": asl.model_dump(),
+            })
+        return  # skip remaining multimodal formats
 
     formats = await _decide_formats(
         topic=request.topic,
@@ -1623,6 +1648,67 @@ async def _synthesize_narrated_slide(
         return NarratedSlideData.model_validate(json.loads(text.strip()))
     except Exception as e:
         logger.warning(f"[NarratedSlide] synthesis failed: {e}")
+        return None
+
+
+async def _synthesize_animated_sketchnote(
+    topic: str,
+    content: str,
+    track: "Track",
+    grade_level: str,
+    duration_seconds: int = 180,
+) -> "AnimatedSketchnoteLessonData | None":
+    """
+    Generate a full AnimatedSketchnoteLesson JSON via Gemini.
+    Uses the same master prompt as /lesson/animated — runs as an optional
+    multimodal block appended when render_mode='animated_sketchnote_lesson'.
+    Returns None on any failure — never surfaces errors to the student.
+    """
+    if not GEMINI_API_KEY:
+        logger.warning("[AnimatedSketchnote] GEMINI_API_KEY not set — skipping")
+        return None
+
+    from app.schemas.api_models import AnimatedSketchnoteLessonData
+    from app.prompts.animated_sketchnote import (
+        ANIMATED_SKETCHNOTE_SYSTEM_PROMPT,
+        ANIMATED_SKETCHNOTE_USER_PROMPT,
+    )
+    import json
+    import re
+
+    grade_desc = _GRADE_DESC.get(grade_level, f"grade {grade_level}")
+    target_ages = {
+        "K": "5-6", "1": "6-7", "2": "7-8", "3": "8-9", "4": "9-10",
+        "5": "10-11", "6": "11-12", "7": "12-13", "8": "13-14",
+        "9": "14-15", "10": "15-16", "11": "16-17", "12": "17-18",
+    }.get(grade_level, "10-15")
+
+    user_prompt = ANIMATED_SKETCHNOTE_USER_PROMPT.format(
+        topic=topic,
+        focus=content[:400],
+        duration_seconds=duration_seconds,
+        target_ages=target_ages,
+    )
+
+    try:
+        import google.generativeai as genai  # type: ignore
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel(
+            model_name=GEMINI_MODEL or "gemini-1.5-pro",
+            generation_config={"temperature": 0.7, "max_output_tokens": 8192,
+                               "response_mime_type": "application/json"},
+            system_instruction=ANIMATED_SKETCHNOTE_SYSTEM_PROMPT,
+        )
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, lambda: model.generate_content(user_prompt))
+        raw_text = response.text.strip()
+        raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
+        raw_text = re.sub(r"\s*```$", "", raw_text)
+        data = AnimatedSketchnoteLessonData(**json.loads(raw_text))
+        logger.info(f"[AnimatedSketchnote] Generated {len(data.scenes)} scenes for '{topic}'")
+        return data
+    except Exception as e:
+        logger.warning(f"[AnimatedSketchnote] synthesis failed: {e}")
         return None
 
 
