@@ -179,7 +179,8 @@ type BrainBlockType =
   | "BOOK_SUGGESTION"
   | "INTERACTIVE_SIM"
   | "HIGHLIGHT_ASK"
-  | "GENUI_ASSEMBLY";
+  | "GENUI_ASSEMBLY"
+  | "ANIMATED_SKETCHNOTE_LESSON";
 
 // ── OAS Standard entry ────────────────────────────────────────────────────────
 
@@ -286,9 +287,10 @@ const LABEL_STYLES: Record<BrainBlockType, string> = {
   MNEMONIC:         "bg-[#6B21A8] text-white",
   NARRATED_SLIDE:   "bg-[#1D4ED8] text-white",
   BOOK_SUGGESTION:  "bg-[#78350F] text-white",
-  INTERACTIVE_SIM:  "bg-[#065F46] text-white",
-  HIGHLIGHT_ASK:    "bg-[#374151] text-white",
-  GENUI_ASSEMBLY:   "bg-[#7C3AED] text-white",
+  INTERACTIVE_SIM:           "bg-[#065F46] text-white",
+  HIGHLIGHT_ASK:             "bg-[#374151] text-white",
+  GENUI_ASSEMBLY:            "bg-[#7C3AED] text-white",
+  ANIMATED_SKETCHNOTE_LESSON: "bg-[#3D1419] text-[#FFFEF7]",
 };
 
 const LABEL_NAMES: Record<BrainBlockType, string> = {
@@ -305,9 +307,10 @@ const LABEL_NAMES: Record<BrainBlockType, string> = {
   MNEMONIC:         "Mnemonic",
   NARRATED_SLIDE:   "Lesson Slides",
   BOOK_SUGGESTION:  "Suggested Reading",
-  INTERACTIVE_SIM:  "Interactive",
-  HIGHLIGHT_ASK:    "Highlight & Ask",
-  GENUI_ASSEMBLY:   "Dynamic Component",
+  INTERACTIVE_SIM:           "Interactive",
+  HIGHLIGHT_ASK:             "Highlight & Ask",
+  GENUI_ASSEMBLY:            "Dynamic Component",
+  ANIMATED_SKETCHNOTE_LESSON: "Living Sketchnote",
 };
 
 function BlockLabel({ type }: { type: string }) {
