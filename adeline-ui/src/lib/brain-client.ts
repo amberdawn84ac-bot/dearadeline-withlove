@@ -39,12 +39,95 @@ export type Track =
   | "APPLIED_MATHEMATICS"
   | "CREATIVE_ECONOMY";
 
+export type LessonRenderMode =
+  | "standard_lesson"
+  | "visual_deep_dive"
+  | "sketchnote_infographic"
+  | "animated_sketchnote_lesson";
+
 export interface LessonRequest {
   student_id: string;
   track: Track;
   topic: string;
   is_homestead: boolean;
   grade_level: string;
+  render_mode?: LessonRenderMode;
+}
+
+export interface AnimatedLessonRequest {
+  topic: string;
+  focus?: string;
+  duration_seconds?: number;
+  target_ages?: string;
+  track?: Track;
+  student_id?: string;
+}
+
+// ── Animated Sketchnote Lesson types (mirrors adeline-core) ───────────────────
+
+export interface StyledText {
+  text: string;
+  style: "bold_marker" | "block_caps" | "script_hand" | "sketch_print" | "tiny_notes" | "label" | "caption";
+  layout: "title_banner" | "section_header" | "callout_bubble" | "flow_step" | "side_note" | "diagram_label" | "closing_quote";
+  decoration?: string[];
+  emphasis?: "low" | "medium" | "high";
+}
+
+export interface VisualElement {
+  id: string;
+  type: "handwritten_text" | "doodle" | "diagram" | "arrow" | "bubble" | "label" | "icon" | "character" | "background" | "timeline" | "split_screen";
+  content: string;
+  position: { x: number; y: number };
+  size?: { width: number; height: number };
+  style?: string;
+  color?: string;
+}
+
+export interface AnimationInstruction {
+  elementId: string;
+  animation: "draw_in" | "write_on" | "fade_in" | "pop_in" | "slide_in" | "zoom_in" | "pulse" | "wiggle" | "pan" | "morph" | "highlight";
+  startTime: number;
+  duration: number;
+  easing?: "linear" | "ease_in" | "ease_out" | "ease_in_out";
+}
+
+export interface AnimatedScene {
+  sceneNumber: number;
+  sceneTitle: StyledText;
+  durationSeconds: number;
+  narration: string;
+  visualBuild: VisualElement[];
+  animationPlan: AnimationInstruction[];
+  teachingLayer: {
+    visualSummary: StyledText[];
+    deepExplanation: StyledText;
+    whyItMatters: StyledText;
+    activity?: StyledText;
+  };
+  soundDesign?: { musicMood?: string; soundEffects?: string[] };
+  narrationAudioUrl?: string;
+}
+
+export interface AnimatedSketchnoteLesson {
+  lessonType: "animated_sketchnote_lesson";
+  title: StyledText;
+  subtitle: StyledText;
+  targetAges: string;
+  totalDurationSeconds: number;
+  learningGoals: string[];
+  colorPalette: string[];
+  visualStyle: {
+    format: "animated_sketchnote";
+    artDirection: string;
+    typography: string[];
+    illustrationRules: string[];
+    layoutRules: string[];
+  };
+  scenes: AnimatedScene[];
+  fullNarrationScript: string;
+  vocabulary: { word: string; definition: string; visualCue: string }[];
+  assessment: { question: string; answer: string; type: "short_answer" | "discussion" | "draw_and_explain" }[];
+  extensionActivities: { title: string; instructions: string; materials?: string[] }[];
 }
 
 export interface WitnessCitation {
@@ -65,7 +148,7 @@ export interface Evidence {
 
 export interface MindMapNode { id: string; label: string; children: MindMapNode[]; }
 export interface MindMapData { concept: string; root: MindMapNode; }
-export interface TimelineEvent { date: string; label: string; description: string; source_title?: string; }
+export interface TimelineEvent { date: string; label: string; description: string; source_title?: string; source_url?: string; }
 export interface TimelineData { span: string; events: TimelineEvent[]; }
 export interface MnemonicData { concept: string; acronym: string; words: string[]; tip: string; }
 
@@ -1019,4 +1102,148 @@ export function getSessionWebSocketUrl(sessionId: string, studentId?: string): s
     ? `?student_id=${encodeURIComponent(studentId)}`
     : "";
   return `${base}/brain/ws/session/${encodeURIComponent(sessionId)}${params}`;
+}
+
+
+// ── Conversation Streaming ────────────────────────────────────────────────────
+
+export interface ConversationMessage {
+  role: "user" | "adeline";
+  content: string;
+}
+
+export type ConversationEvent =
+  | { type: "text";  delta: string }
+  | { type: "block"; block_type: string; content: string; title?: string; source_url?: string; [key: string]: unknown }
+  | { type: "zpd";   zone: "FRUSTRATED" | "IN_ZPD" | "BORED"; mastery_score: number; mastery_band: string }
+  | { type: "done" }
+  | { type: "error"; message: string }
+
+/**
+ * Stream Adeline's conversation response as SSE events.
+ * Yields text deltas, block objects, zpd state, and a final done event.
+ * The caller should append text deltas in order and render block events inline.
+ */
+export async function* streamConversation(params: {
+  studentId: string;
+  message: string;
+  track?: Track;
+  gradeLevel: string;
+  history: ConversationMessage[];
+}): AsyncGenerator<ConversationEvent> {
+  const resp = await fetch(`${BRAIN_URL}/conversation/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify({
+      student_id: params.studentId,
+      message: params.message,
+      track: params.track ?? null,
+      grade_level: params.gradeLevel,
+      conversation_history: params.history.map((m) => ({
+        role: m.role === "adeline" ? "assistant" : "user",
+        content: m.content,
+      })),
+    }),
+  });
+
+  if (!resp.ok) {
+    yield { type: "error", message: `HTTP ${resp.status}` };
+    return;
+  }
+
+  const reader = resp.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+
+    const lines = buf.split("\n");
+    buf = lines.pop()!;
+
+    let eventName = "";
+    for (const line of lines) {
+      if (line.startsWith("event: ")) {
+        eventName = line.slice(7).trim();
+      } else if (line.startsWith("data: ")) {
+        const raw = line.slice(6).trim();
+        if (!raw) continue;
+        try {
+          const payload = JSON.parse(raw);
+          if (eventName === "text")  yield { type: "text",  delta: payload.delta };
+          else if (eventName === "block") yield { type: "block", ...payload };
+          else if (eventName === "zpd")   yield { type: "zpd",   ...payload };
+          else if (eventName === "done")  yield { type: "done" };
+          else if (eventName === "error") yield { type: "error", message: payload.message };
+        } catch {
+          // malformed SSE data — skip
+        }
+        eventName = "";
+      }
+    }
+  }
+}
+
+// ── Animated Sketchnote Lessons ───────────────────────────────────────────────
+
+export async function generateAnimatedLesson(
+  req: AnimatedLessonRequest
+): Promise<unknown> {
+  const res = await fetch("/api/adeline/animated-lesson", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error(`Animated lesson generation failed: ${res.status}`);
+  return res.json();
+}
+
+// ── Learning Path ─────────────────────────────────────────────────────────────
+
+export interface LearningPathNode {
+  id: string;
+  title: string;
+  description: string;
+  track: Track;
+  difficulty: string;
+  grade_band: string;
+  standard_code: string;
+  prerequisite_ids: string[];
+  state: "mastered" | "available" | "locked";
+  mastery_score: number | null;
+  track_color: string;
+}
+
+export interface LearningPathEdge {
+  from: string;
+  to: string;
+}
+
+export interface LearningPathResponse {
+  student_id: string;
+  nodes: LearningPathNode[];
+  edges: LearningPathEdge[];
+  mastered_count: number;
+  available_count: number;
+  locked_count: number;
+}
+
+export async function fetchLearningPath(
+  studentId: string,
+  track?: Track,
+): Promise<LearningPathResponse> {
+  const url = new URL(
+    `${BRAIN_URL}/learning-path/${encodeURIComponent(studentId)}/nodes`,
+    typeof window !== "undefined" ? window.location.origin : "http://localhost:3000",
+  );
+  if (track) url.searchParams.set("track", track);
+
+  const res = await fetch(url.toString(), {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Learning path fetch failed: ${res.status}`);
+  return res.json() as Promise<LearningPathResponse>;
 }

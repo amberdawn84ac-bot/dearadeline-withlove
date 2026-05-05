@@ -3,14 +3,18 @@ The Witness Protocol
 "A matter must be established by the testimony of two or three witnesses." — Deuteronomy 19:15
 
 Enforces similarity thresholds for truth claims.
-Witness Protocol applies ONLY to TRUTH_HISTORY — the one track where every block
-must be backed by a verified primary source.
+
+Tracks with Witness enforcement:
+  TRUTH_HISTORY         — every block must be backed by a verified primary source (0.82 default)
+  JUSTICE_CHANGEMAKING  — same primary-source requirement; lobbying records, civil rights docs,
+                          legislative history (threshold configurable independently via env var)
 
 All other tracks bypass Witness entirely (threshold = 0.0), so they never produce
 ARCHIVE_SILENT verdicts or forced Research Missions.
 
-Threshold is configurable via environment variable:
-  WITNESS_HISTORY_THRESHOLD — for TRUTH_HISTORY only (default: 0.82)
+Thresholds are configurable via environment variables:
+  WITNESS_HISTORY_THRESHOLD — for TRUTH_HISTORY (default: 0.82)
+  WITNESS_JUSTICE_THRESHOLD — for JUSTICE_CHANGEMAKING (default: same as TRUTH_HISTORY)
 """
 import os
 from typing import Optional
@@ -20,18 +24,25 @@ import logging
 logger = logging.getLogger(__name__)
 
 _HISTORY_THRESHOLD = float(os.getenv("WITNESS_HISTORY_THRESHOLD", "0.82"))
+_JUSTICE_THRESHOLD = float(os.getenv("WITNESS_JUSTICE_THRESHOLD", str(_HISTORY_THRESHOLD)))
+
+_WITNESS_TRACKS = {"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING"}
 
 
 def get_witness_threshold(track: str) -> float:
     """
-    Witness Protocol is STRICTLY for TRUTH_HISTORY only.
-    - TRUTH_HISTORY: High bar (0.82) for primary-source grounding.
-    - Everything else: Disabled (0.0) — never blocks, never triggers ARCHIVE_SILENT.
+    Returns the cosine-similarity threshold for the given track.
 
-    Threshold is overridable via env var WITNESS_HISTORY_THRESHOLD.
+    - TRUTH_HISTORY:        High bar for primary-source grounding (0.82 default).
+    - JUSTICE_CHANGEMAKING: Same primary-source requirement — lobbying records, civil rights
+                            documents, legislative history must be verified before display.
+                            Independently configurable via WITNESS_JUSTICE_THRESHOLD.
+    - Everything else:      Disabled (0.0) — never blocks, never triggers ARCHIVE_SILENT.
     """
     if track == "TRUTH_HISTORY":
         return _HISTORY_THRESHOLD
+    if track == "JUSTICE_CHANGEMAKING":
+        return _JUSTICE_THRESHOLD
     return 0.0
 
 
@@ -48,12 +59,12 @@ def evaluate_evidence(
 ) -> Evidence:
     """
     Evaluate a retrieved chunk against the Witness Protocol threshold.
-    Only runs the cosine check for TRUTH_HISTORY — all other tracks are
-    immediately VERIFIED without threshold enforcement.
+    Enforces the cosine check for TRUTH_HISTORY and JUSTICE_CHANGEMAKING.
+    All other tracks are immediately VERIFIED without threshold enforcement.
     Returns an Evidence object with verdict, citation, and full metadata.
     """
-    if track != "TRUTH_HISTORY":
-        logger.info(f"[WITNESS] Track={track} | Witness bypassed (non-history) — '{source_title}' auto-VERIFIED")
+    if track not in _WITNESS_TRACKS:
+        logger.info(f"[WITNESS] Track={track} | Witness bypassed — '{source_title}' auto-VERIFIED")
         verdict = EvidenceVerdict.VERIFIED
     else:
         threshold = get_witness_threshold(track)

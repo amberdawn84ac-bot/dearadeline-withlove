@@ -1,10 +1,10 @@
 """
-Knowledge Graph Client — GraphRAG schema for the 8-Track curriculum.
+Knowledge Graph Client — GraphRAG schema for the 10-Track curriculum.
 
 Extends neo4j_client.py with the full Concept graph schema:
 
   Nodes:
-    (:Track)        — 8 curriculum tracks
+    (:Track)        — 10 curriculum tracks
     (:Concept)      — Learning concept within a track
     (:Evidence)     — Primary source chunk (linked from Hippocampus)
     (:OASStandard)  — Oklahoma Academic Standard
@@ -127,34 +127,41 @@ async def upsert_concept(
     standard_code: Optional[str] = None,
     grade_band: Optional[str]    = None,
     tags: list[str]              = None,
+    is_primary_source: bool      = False,
 ) -> None:
     """
     Merge a Concept node and link it to its Track.
     Idempotent — safe to call from seed scripts or on lesson generation.
+
+    is_primary_source: True when mastery of this concept requires a primary
+    artifact (annotated document, lab record, student-made product). Used by
+    the Registrar for Life-to-Credit translation.
     """
     await neo4j_client.run(
         """
         MERGE (c:Concept {id: $id})
-        SET c.title         = $title,
-            c.description   = $description,
-            c.track         = $track,
-            c.difficulty    = $difficulty,
-            c.standard_code = $standard_code,
-            c.grade_band    = $grade_band,
-            c.tags          = $tags
+        SET c.title             = $title,
+            c.description       = $description,
+            c.track             = $track,
+            c.difficulty        = $difficulty,
+            c.standard_code     = $standard_code,
+            c.grade_band        = $grade_band,
+            c.tags              = $tags,
+            c.is_primary_source = $is_primary_source
         WITH c
         MERGE (t:Track {name: $track})
         MERGE (c)-[:BELONGS_TO]->(t)
         """,
         {
-            "id":            concept_id,
-            "title":         title,
-            "description":   description,
-            "track":         track,
-            "difficulty":    difficulty,
-            "standard_code": standard_code or "",
-            "grade_band":    grade_band or "",
-            "tags":          tags or [],
+            "id":                concept_id,
+            "title":             title,
+            "description":       description,
+            "track":             track,
+            "difficulty":        difficulty,
+            "standard_code":     standard_code or "",
+            "grade_band":        grade_band or "",
+            "tags":              tags or [],
+            "is_primary_source": is_primary_source,
         },
     )
 
