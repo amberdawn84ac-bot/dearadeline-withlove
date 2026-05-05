@@ -1137,3 +1137,51 @@ export async function generateAnimatedLesson(
   if (!res.ok) throw new Error(`Animated lesson generation failed: ${res.status}`);
   return res.json();
 }
+
+// ── Learning Path ─────────────────────────────────────────────────────────────
+
+export interface LearningPathNode {
+  id: string;
+  title: string;
+  description: string;
+  track: Track;
+  difficulty: string;
+  grade_band: string;
+  standard_code: string;
+  prerequisite_ids: string[];
+  state: "mastered" | "available" | "locked";
+  mastery_score: number | null;
+  track_color: string;
+}
+
+export interface LearningPathEdge {
+  from: string;
+  to: string;
+}
+
+export interface LearningPathResponse {
+  student_id: string;
+  nodes: LearningPathNode[];
+  edges: LearningPathEdge[];
+  mastered_count: number;
+  available_count: number;
+  locked_count: number;
+}
+
+export async function fetchLearningPath(
+  studentId: string,
+  track?: Track,
+): Promise<LearningPathResponse> {
+  const url = new URL(
+    `${BRAIN_URL}/learning-path/${encodeURIComponent(studentId)}/nodes`,
+    typeof window !== "undefined" ? window.location.origin : "http://localhost:3000",
+  );
+  if (track) url.searchParams.set("track", track);
+
+  const res = await fetch(url.toString(), {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Learning path fetch failed: ${res.status}`);
+  return res.json() as Promise<LearningPathResponse>;
+}
