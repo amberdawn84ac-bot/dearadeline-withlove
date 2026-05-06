@@ -39,7 +39,7 @@ function getAnimationVariant(anim: string) {
   }
 }
 
-function getEasing(easing?: string): string {
+function getEasing(easing?: string): import("framer-motion").Easing {
   switch (easing) {
     case "ease_in":     return "easeIn";
     case "ease_out":    return "easeOut";
