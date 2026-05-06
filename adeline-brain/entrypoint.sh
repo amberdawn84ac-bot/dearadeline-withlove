@@ -1,8 +1,13 @@
 #!/bin/sh
 set -e
 
-echo "[entrypoint] Running Prisma migrations..."
-DIRECT_DATABASE_URL="${DIRECT_DATABASE_URL:-${POSTGRES_DSN:-$DATABASE_URL}}" DATABASE_URL="${DIRECT_DATABASE_URL:-${POSTGRES_DSN:-$DATABASE_URL}}" timeout 30 prisma migrate deploy --schema /app/prisma/schema.prisma || echo "[entrypoint] Prisma migrate failed (non-fatal)"
+_DB="${DIRECT_DATABASE_URL:-${POSTGRES_DSN:-$DATABASE_URL}}"
+if [ -n "$_DB" ]; then
+    echo "[entrypoint] Running Prisma migrations..."
+    DIRECT_DATABASE_URL="$_DB" DATABASE_URL="$_DB" timeout 30 prisma migrate deploy --schema /app/prisma/schema.prisma || echo "[entrypoint] Prisma migrate failed (non-fatal)"
+else
+    echo "[entrypoint] No DATABASE_URL set — skipping Prisma migrate"
+fi
 
 # Run seeds if RUN_SEEDS env var is set
 if [ "$RUN_SEEDS" = "true" ]; then
@@ -30,13 +35,11 @@ if [ "$RUN_SEEDS" = "true" ]; then
     echo "[entrypoint] Seeds complete"
 fi
 
-echo "[entrypoint] Starting gunicorn on port ${PORT:-8000} with 4 workers..."
-exec gunicorn app.main:app \
-  --worker-class uvicorn.workers.UvicornWorker \
+echo "[entrypoint] Starting uvicorn on port ${PORT:-8000}..."
+exec uvicorn app.main:app \
+  --host 0.0.0.0 \
+  --port "${PORT:-8000}" \
   --workers 2 \
-  --bind "0.0.0.0:${PORT:-8000}" \
-  --timeout 120 \
-  --keep-alive 5 \
-  --access-logfile - \
-  --error-logfile - \
+  --timeout-keep-alive 5 \
+  --log-level info \
   "$@"

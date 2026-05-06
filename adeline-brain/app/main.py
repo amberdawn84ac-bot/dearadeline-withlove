@@ -90,34 +90,21 @@ if _SENTRY_DSN:
 async def lifespan(app: FastAPI):
     logger.info("[adeline-brain] Starting up...")
 
-    # Neo4j is optional — ZPD reasoning degrades but the app still works
-    try:
-        await asyncio.wait_for(neo4j_client.connect(), timeout=15.0)
-    except Exception as e:
-        logger.warning(f"[adeline-brain] Neo4j unavailable — ZPD/graph features disabled: {e}")
+    async def _connect_services():
+        for name, coro in [
+            ("Neo4j", neo4j_client.connect()),
+            ("Hippocampus", hippocampus.connect()),
+            ("Bookshelf", bookshelf_search.connect()),
+            ("JournalStore", journal_store.connect()),
+            ("ConversationStore", conversation_store.connect()),
+        ]:
+            try:
+                await asyncio.wait_for(coro, timeout=15.0)
+                logger.info(f"[adeline-brain] {name} connected")
+            except Exception as e:
+                logger.warning(f"[adeline-brain] {name} unavailable: {e}")
 
-    # DB connections are optional at startup so the app doesn't crash
-    # if a service is temporarily unreachable
-    try:
-        await asyncio.wait_for(hippocampus.connect(), timeout=15.0)
-    except Exception as e:
-        logger.warning(f"[adeline-brain] Hippocampus (pgvector) unavailable: {e}")
-
-    try:
-        await asyncio.wait_for(bookshelf_search.connect(), timeout=15.0)
-    except Exception as e:
-        logger.warning(f"[adeline-brain] Bookshelf search unavailable: {e}")
-
-    try:
-        await asyncio.wait_for(journal_store.connect(), timeout=15.0)
-    except Exception as e:
-        logger.warning(f"[adeline-brain] Journal store unavailable: {e}")
-
-    try:
-        await asyncio.wait_for(conversation_store.connect(), timeout=15.0)
-    except Exception as e:
-        logger.warning(f"[adeline-brain] Conversation store unavailable: {e}")
-
+    asyncio.create_task(_connect_services())
     await startup_seed_scheduler()
     yield
     logger.info("[adeline-brain] Shutting down...")
