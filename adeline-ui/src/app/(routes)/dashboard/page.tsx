@@ -70,24 +70,29 @@ function DashboardContent() {
   const { messages, sendMessage: append, status: chatStatus } = chat;
   const isStreaming = chatStatus === 'streaming' || chatStatus === 'submitted';
 
-  // Derive blocks and tool invocations from the latest assistant message's data annotations
+  // Derive blocks and tool invocations from the latest assistant message's data parts
   useEffect(() => {
     const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
     if (!lastAssistant) return;
 
-    const annotations = (lastAssistant as { annotations?: unknown[] }).annotations ?? [];
+    // SDK v3 uses parts array with data parts instead of annotations
+    const parts = (lastAssistant as { parts?: unknown[] }).parts ?? [];
     const blocks: LessonBlockResponse[] = [];
     let title = '';
     let status = '';
 
-    for (const ann of annotations) {
-      const a = ann as Record<string, unknown>;
-      if (a.type === 'block' && a.block) {
-        blocks.push(a.block as LessonBlockResponse);
-      } else if (a.type === 'done') {
-        title = (a.title as string) ?? '';
-      } else if (a.type === 'status') {
-        status = (a.message as string) ?? '';
+    for (const part of parts) {
+      const p = part as Record<string, unknown>;
+      // Data parts have type 'data' and data property
+      if (p.type === 'data' && p.data) {
+        const data = p.data as Record<string, unknown>;
+        if (data.type === 'block' && data.block) {
+          blocks.push(data.block as LessonBlockResponse);
+        } else if (data.type === 'done') {
+          title = (data.title as string) ?? '';
+        } else if (data.type === 'status') {
+          status = (data.message as string) ?? '';
+        }
       }
     }
 
@@ -190,7 +195,11 @@ function DashboardContent() {
             )}
             {streamingBlocks.map((block, idx) => {
               const lastMsg = [...messages].reverse().find((m) => m.role === 'assistant');
-              const toolInvocations = (lastMsg as { toolInvocations?: Array<{ toolName: string; state: string; result: Record<string, unknown> }> })?.toolInvocations ?? [];
+              // SDK v3: tool invocations are in parts array
+              const parts = (lastMsg as { parts?: unknown[] })?.parts ?? [];
+              const toolInvocations = parts
+                .filter((p) => (p as Record<string, unknown>).type === 'tool-invocation')
+                .map((p) => (p as Record<string, unknown>).toolInvocation) as Array<{ toolName: string; state: string; result: Record<string, unknown> }>;
               const blockToolCall = toolInvocations.find(
                 (t) => t.state === 'result' &&
                   (t.toolName === 'render_quiz_widget' || t.toolName === 'render_lab_widget') &&
