@@ -110,7 +110,9 @@ export default function OnboardingPage() {
         throw new Error(detail);
       }
 
-      // Success — wait for DB write to propagate (Railway Postgres needs longer)
+      // Mark completion immediately so OnboardingGate trusts the local flag
+      // even if Railway Postgres replication lag hasn't caught up yet (up to 60s window)
+      localStorage.setItem('onboarding_just_completed', Date.now().toString());
       setStatus('redirecting');
       console.log('[Onboarding] POST successful, waiting 3s for DB propagation...');
       await new Promise((resolve) => setTimeout(resolve, 3000)); // 3s delay for read-after-write consistency
