@@ -2,6 +2,7 @@
 adeline-brain — FastAPI Entry Point
 The Intelligence Layer of Dear Adeline 2.0
 """
+import asyncio
 import json
 import logging
 import os
@@ -91,29 +92,29 @@ async def lifespan(app: FastAPI):
 
     # Neo4j is optional — ZPD reasoning degrades but the app still works
     try:
-        await neo4j_client.connect()
+        await asyncio.wait_for(neo4j_client.connect(), timeout=15.0)
     except Exception as e:
         logger.warning(f"[adeline-brain] Neo4j unavailable — ZPD/graph features disabled: {e}")
 
     # DB connections are optional at startup so the app doesn't crash
     # if a service is temporarily unreachable
     try:
-        await hippocampus.connect()
+        await asyncio.wait_for(hippocampus.connect(), timeout=15.0)
     except Exception as e:
         logger.warning(f"[adeline-brain] Hippocampus (pgvector) unavailable: {e}")
 
     try:
-        await bookshelf_search.connect()
+        await asyncio.wait_for(bookshelf_search.connect(), timeout=15.0)
     except Exception as e:
         logger.warning(f"[adeline-brain] Bookshelf search unavailable: {e}")
 
     try:
-        await journal_store.connect()
+        await asyncio.wait_for(journal_store.connect(), timeout=15.0)
     except Exception as e:
         logger.warning(f"[adeline-brain] Journal store unavailable: {e}")
 
     try:
-        await conversation_store.connect()
+        await asyncio.wait_for(conversation_store.connect(), timeout=15.0)
     except Exception as e:
         logger.warning(f"[adeline-brain] Conversation store unavailable: {e}")
 
