@@ -51,7 +51,7 @@ function DashboardContent() {
   const router = useRouter();
 
   // useChat drives lesson streaming via /api/lesson translation bridge
-  // @ts-ignore - sendMessage works at runtime; type definitions may differ
+  // @ts-ignore - api/headers work at runtime; SDK types are incomplete
   const { messages, sendMessage: append, isLoading: isStreaming } = useChat({
     api: '/api/lesson',
     headers: typeof window !== 'undefined'
