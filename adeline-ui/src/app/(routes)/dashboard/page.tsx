@@ -141,7 +141,7 @@ function DashboardContent() {
   }, []);
 
   const handleSuggestionClick = useCallback((suggestion: LessonSuggestion) => {
-    if (isStreaming || !studentId) return;
+    if (isStreaming || streamingBlocks.length > 0 || !studentId) return;
     setActiveLesson(null);
     setStreamingBlocks([]);
     setStreamingTitle('');
@@ -165,6 +165,7 @@ function DashboardContent() {
     setActiveLesson(null);
     setStreamingBlocks([]);
     setStreamingTitle('');
+    setStreamingStatus('');
   };
 
   return (
