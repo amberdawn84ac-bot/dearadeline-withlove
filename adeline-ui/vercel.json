@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/brain/:path*",
+      "destination": "https://adeline-brain-production.up.railway.app/:path*"
+    }
+  ]
+}
