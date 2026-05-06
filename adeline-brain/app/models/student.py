@@ -12,6 +12,7 @@ These become 'Witness Anchors' in bridge responses.
 """
 from __future__ import annotations
 
+import json as _json
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
@@ -79,11 +80,66 @@ class StudentState:
         return tm.mastered_standards[:limit]
 
 
+_STUDENT_STATE_TTL = 300  # 5 minutes
+
+
+def _serialize_student_state(state: StudentState) -> str:
+    """Convert StudentState to JSON string for Redis storage."""
+    return _json.dumps({
+        "student_id": state.student_id,
+        "tracks": {
+            track: {
+                "track": tm.track,
+                "lesson_count": tm.lesson_count,
+                "mastery_score": tm.mastery_score,
+                "mastery_band": tm.mastery_band.value,
+                "mastered_standards": tm.mastered_standards,
+            }
+            for track, tm in state.tracks.items()
+        },
+    })
+
+
+def _deserialize_student_state(raw: str) -> StudentState:
+    """Reconstruct StudentState from Redis JSON string."""
+    data = _json.loads(raw)
+    tracks = {
+        track: TrackMastery(
+            track=tm["track"],
+            lesson_count=tm["lesson_count"],
+            mastery_score=tm["mastery_score"],
+            mastery_band=MasteryBand(tm["mastery_band"]),
+            mastered_standards=tm["mastered_standards"],
+        )
+        for track, tm in data["tracks"].items()
+    }
+    return StudentState(student_id=data["student_id"], tracks=tracks)
+
+
+async def invalidate_student_state_cache(student_id: str) -> None:
+    """Evict student state cache entry. Call from journal/seal after mastery update."""
+    from app.connections.redis_client import redis_client
+    try:
+        await redis_client.delete(f"student_state:{student_id}")
+    except Exception as e:
+        logger.warning(f"[StudentState] Cache invalidation failed (non-fatal): {e}")
+
+
 async def load_student_state(student_id: str) -> StudentState:
     """
     Build a live StudentState from journal_store (lesson counts) and
     Neo4j (mastered OAS standards).
     """
+    # ── Redis cache check ─────────────────────────────────────────────────────
+    from app.connections.redis_client import redis_client
+    try:
+        cached = await redis_client.get(f"student_state:{student_id}")
+        if cached:
+            logger.debug(f"[StudentState] Cache HIT for student={student_id[:8]}")
+            return _deserialize_student_state(cached)
+    except Exception as e:
+        logger.warning(f"[StudentState] Cache read failed (non-fatal): {e}")
+
     state = StudentState(student_id=student_id)
 
     # ── 1. Lesson counts per track ────────────────────────────────────────────
@@ -136,4 +192,15 @@ async def load_student_state(student_id: str) -> StudentState:
         f"{len(state.tracks)} active tracks, "
         f"{len(rows)} mastered standards"
     )
+
+    # ── Write to Redis cache ──────────────────────────────────────────────────
+    try:
+        await redis_client.set(
+            f"student_state:{student_id}",
+            _serialize_student_state(state),
+            ex=_STUDENT_STATE_TTL,
+        )
+    except Exception as e:
+        logger.warning(f"[StudentState] Cache write failed (non-fatal): {e}")
+
     return state

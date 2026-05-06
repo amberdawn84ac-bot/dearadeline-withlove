@@ -276,7 +276,18 @@ export interface LessonResponse {
 
 // ── Client Functions ───────────────────────────────────────────────────────────
 
-export async function generateLesson(request: LessonRequest): Promise<LessonResponse> {
+export interface LessonJobResponse {
+  job_id: string;
+  status: "queued";
+}
+
+export interface LessonStatusResponse {
+  status: "queued" | "running" | "done" | "failed" | "not_found";
+  result?: LessonResponse;
+  error?: string;
+}
+
+export async function generateLesson(request: LessonRequest): Promise<LessonJobResponse> {
   const res = await fetch(`${BRAIN_URL}/lesson/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
@@ -288,7 +299,58 @@ export async function generateLesson(request: LessonRequest): Promise<LessonResp
     throw new Error(`adeline-brain error: ${res.status} ${res.statusText}`);
   }
 
-  return res.json() as Promise<LessonResponse>;
+  return res.json() as Promise<LessonJobResponse>;
+}
+
+export async function getLessonStatus(jobId: string): Promise<LessonStatusResponse> {
+  const res = await fetch(`${BRAIN_URL}/lesson/status/${encodeURIComponent(jobId)}`, {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new Error(`lesson status error: ${res.status} ${res.statusText}`);
+  }
+
+  return res.json() as Promise<LessonStatusResponse>;
+}
+
+/**
+ * Poll /lesson/status/{jobId} until done or failed.
+ * Calls onProgress with each status update.
+ * Resolves with the final LessonResponse or rejects on timeout/failure.
+ */
+export async function pollLessonResult(
+  jobId: string,
+  options: {
+    intervalMs?: number;
+    timeoutMs?: number;
+    onProgress?: (status: string) => void;
+  } = {}
+): Promise<LessonResponse> {
+  const { intervalMs = 2000, timeoutMs = 90000, onProgress } = options;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const statusResult = await getLessonStatus(jobId);
+    onProgress?.(statusResult.status);
+
+    if (statusResult.status === "done" && statusResult.result) {
+      return statusResult.result;
+    }
+
+    if (statusResult.status === "failed") {
+      throw new Error(statusResult.error ?? "Lesson generation failed");
+    }
+
+    if (statusResult.status === "not_found") {
+      throw new Error("Lesson job not found — it may have expired");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error("Lesson generation timed out after 90 seconds");
 }
 
 export async function listTracks(): Promise<{ tracks: { id: Track; label: string }[] }> {

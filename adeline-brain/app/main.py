@@ -2,10 +2,14 @@
 adeline-brain — FastAPI Entry Point
 The Intelligence Layer of Dear Adeline 2.0
 """
+import json
 import logging
 import os
 
 import openai
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,6 +22,7 @@ from app.schemas.api_models import TRUTH_THRESHOLD
 from app.connections.neo4j_client import neo4j_client
 from app.connections.pgvector_client import hippocampus
 from app.connections.bookshelf_search import bookshelf_search
+from app.connections.redis_client import ping as redis_ping
 from app.api.lessons import router as lessons_router
 from app.api.opportunities import router as opportunities_router
 from app.api.journal import router as journal_router
@@ -51,8 +56,33 @@ from app.connections.journal_store import journal_store
 from app.connections.conversation_store import conversation_store
 from app.jobs.seed_scheduler import startup_seed_scheduler, shutdown_seed_scheduler
 
-logging.basicConfig(level=logging.INFO)
+from pythonjsonlogger import jsonlogger
+
+def _configure_logging():
+    handler = logging.StreamHandler()
+    formatter = jsonlogger.JsonFormatter(
+        fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
+        rename_fields={"asctime": "timestamp", "levelname": "level", "name": "logger"},
+    )
+    handler.setFormatter(formatter)
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+_configure_logging()
 logger = logging.getLogger(__name__)
+
+_SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+if _SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        integrations=[StarletteIntegration(), FastApiIntegration()],
+        traces_sample_rate=0.1,
+        environment=os.getenv("RAILWAY_ENVIRONMENT", "development"),
+        send_default_pii=False,
+    )
+    logger.info("[adeline-brain] Sentry initialized")
 
 
 @asynccontextmanager
@@ -101,11 +131,12 @@ async def lifespan(app: FastAPI):
         pass
 
 
-# ── Rate limiter (in-memory; swap to Redis storage for multi-process) ─────────
+# ── Rate limiter (Redis-backed; shared across Gunicorn workers + Railway replicas) ─
+_REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["120/minute"],       # Global: 120 req/min per IP
-    storage_uri="memory://",
+    storage_uri=_REDIS_URL,
 )
 
 
@@ -230,13 +261,20 @@ async def health():
                 concept_result = await session.run("MATCH (c:Concept) RETURN count(c) as count")
                 concept_record = await concept_result.single()
                 health_status["neo4j_concepts"] = concept_record["count"] if concept_record else 0
-                
+
                 track_result = await session.run("MATCH (t:Track) RETURN count(t) as count")
                 track_record = await track_result.single()
                 health_status["neo4j_tracks"] = track_record["count"] if track_record else 0
     except Exception as e:
         health_status["neo4j_error"] = str(e)
-    
+
+    # Check Redis connectivity
+    try:
+        redis_ok = await redis_ping()
+        health_status["redis"] = "ok" if redis_ok else "unreachable"
+    except Exception as e:
+        health_status["redis"] = f"error: {e}"
+
     return health_status
 
 

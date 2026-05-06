@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Sparkles, Send, Loader2, FlaskConical, Search, Network, ListOrdered, Brain, Presentation } from "lucide-react";
-import { scaffold, generateLesson, listProjects, getProject, reportActivity, streamConversation } from "@/lib/brain-client";
+import { scaffold, generateLesson, pollLessonResult, listProjects, getProject, reportActivity, streamConversation } from "@/lib/brain-client";
 import type {
   Track, ScaffoldResponse, LessonResponse, LessonBlockResponse,
   ProjectSummary, ProjectDetail, ActivityReportResponse,
@@ -380,13 +380,14 @@ export function AdelineChatPanel({
         // Trigger the same flow as handleSend by calling the generate endpoint
         (async () => {
           try {
-            const lesson = await generateLesson({
+            const job = await generateLesson({
               student_id: studentId,
               topic: initialPrompt,
               track: 'DISCIPLESHIP' as Track,
               grade_level: gradeLevel,
               is_homestead: false,
             });
+            const lesson = await pollLessonResult(job.job_id, { intervalMs: 2000, timeoutMs: 90000 });
             addMessage({ role: 'adeline', content: lesson.title || 'Here is your Daily Bread study.' });
             onLessonGenerated?.(lesson);
           } catch {
@@ -757,13 +758,14 @@ export function LessonBlockChatPanel({ studentId, initialTrack = "TRUTH_HISTORY"
     }
 
     try {
-      const lesson: LessonResponse = await generateLesson({
+      const job = await generateLesson({
         student_id: studentId,
         track,
         topic: topic.trim(),
         is_homestead: false,
         grade_level: "9",
       });
+      const lesson: LessonResponse = await pollLessonResult(job.job_id, { intervalMs: 2000, timeoutMs: 90000 });
       setBlocks(lesson.blocks);
     } catch {
       // surface nothing — user can retry
