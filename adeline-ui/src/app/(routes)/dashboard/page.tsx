@@ -197,12 +197,9 @@ function DashboardContent() {
               return (
                 <div key={idx} className="mb-4">
                   <div className="rounded-2xl border border-[#E7DAC3] bg-white p-4">
-                    {block.title && (
-                      <p className="text-xs font-bold uppercase tracking-widest text-[#BD6809] mb-1">
-                        {block.block_type?.replace(/_/g, ' ')}
-                      </p>
-                    )}
-                    {block.title && <p className="text-base font-bold text-[#2F4731] mb-2">{block.title}</p>}
+                    <p className="text-xs font-bold uppercase tracking-widest text-[#BD6809] mb-1">
+                      {block.block_type?.replace(/_/g, ' ')}
+                    </p>
                     <p className="text-sm text-[#2F4731]/80 leading-relaxed whitespace-pre-wrap">{block.content}</p>
                   </div>
                   {blockToolCall && blockToolCall.toolName === 'render_quiz_widget' && (
