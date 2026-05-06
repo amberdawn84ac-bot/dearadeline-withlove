@@ -4,6 +4,7 @@ import { Suspense, useState, useCallback, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Loader2, ArrowLeft, RefreshCw, Award, Hammer, Clock } from 'lucide-react';
 import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
 import { StudentStatusBar } from '@/components/StudentStatusBar';
 import { AdelineChatPanel } from '@/components/AdelineChatPanel';
 import { SpacedRepWidget } from '@/components/dashboard/SpacedRepWidget';
@@ -51,12 +52,13 @@ function DashboardContent() {
   const router = useRouter();
 
   // useChat drives lesson streaming via /api/lesson translation bridge
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const chat = useChat({
-    api: '/api/lesson',
-    headers: typeof window !== 'undefined'
-      ? { Authorization: `Bearer ${localStorage.getItem('auth_token') ?? ''}` }
-      : {},
+    transport: new DefaultChatTransport({
+      api: '/api/lesson',
+      headers: typeof window !== 'undefined'
+        ? { Authorization: `Bearer ${localStorage.getItem('auth_token') ?? ''}` }
+        : undefined,
+    }),
     onFinish: () => {
       setStreamingStatus('');
     },
@@ -64,7 +66,7 @@ function DashboardContent() {
       console.error('[Dashboard] Lesson stream error:', err);
       setStreamingStatus('');
     },
-  } as any);
+  });
   const { messages, sendMessage: append, status: chatStatus } = chat;
   const isStreaming = chatStatus === 'streaming' || chatStatus === 'submitted';
 

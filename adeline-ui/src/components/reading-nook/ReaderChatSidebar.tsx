@@ -20,6 +20,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
 import { MessageCircle, X, ChevronLeft, Send } from 'lucide-react';
 import { useReader } from '@/lib/reader-context';
 
@@ -51,15 +52,16 @@ export function ReaderChatSidebar({ studentId, isOpen, onToggle }: ReaderChatSid
   // Local input state (since this version of useChat doesn't provide it)
   const [inputValue, setInputValue] = useState('');
 
-  // Initialize useChat with correct API for this @ai-sdk/react version
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // Initialize useChat with transport for SDK v3
   const chat = useChat({
     id: `reader-${studentId}-${currentBook?.id || 'unknown'}`,
-    api: '/api/reader-chat',
-    headers: typeof window !== 'undefined'
-      ? { Authorization: `Bearer ${localStorage.getItem('auth_token') ?? ''}` }
-      : {},
-  } as any);
+    transport: new DefaultChatTransport({
+      api: '/api/reader-chat',
+      headers: typeof window !== 'undefined'
+        ? { Authorization: `Bearer ${localStorage.getItem('auth_token') ?? ''}` }
+        : undefined,
+    }),
+  });
   
   const { messages, sendMessage, status, setMessages } = chat;
   const isLoading = status === 'streaming' || status === 'submitted';
