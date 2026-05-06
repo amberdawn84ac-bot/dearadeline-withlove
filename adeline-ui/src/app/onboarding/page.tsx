@@ -38,7 +38,13 @@ export default function OnboardingPage() {
         }
 
         if (!response.ok) {
-          throw new Error(`Failed to check onboarding status: ${response.statusText}`);
+          let detail = `Failed to check onboarding status: ${response.statusText}`;
+          try {
+            const body = await response.text();
+            const parsed = JSON.parse(body);
+            detail = parsed.detail || body;
+          } catch { /* plain text */ }
+          throw new Error(detail);
         }
 
         const data = await response.json();
@@ -89,8 +95,15 @@ export default function OnboardingPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to save onboarding profile');
+        let detail = 'Failed to save onboarding profile';
+        try {
+          const body = await response.text();
+          const parsed = JSON.parse(body);
+          detail = parsed.detail || body;
+        } catch {
+          // body was plain text — use as-is if meaningful
+        }
+        throw new Error(detail);
       }
 
       // Success — redirect to dashboard
