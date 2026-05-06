@@ -120,12 +120,13 @@ async def lifespan(app: FastAPI):
         pass
 
 
-# ── Rate limiter (Redis-backed; shared across Gunicorn workers + Railway replicas) ─
-_REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+# ── Rate limiter (Redis-backed when available, in-memory fallback) ─
+_REDIS_URL = os.getenv("REDIS_URL", "")
+_limiter_storage = _REDIS_URL if _REDIS_URL and _REDIS_URL.startswith("redis://") else "memory://"
 limiter = Limiter(
     key_func=get_remote_address,
-    default_limits=["120/minute"],       # Global: 120 req/min per IP
-    storage_uri=_REDIS_URL,
+    default_limits=["120/minute"],
+    storage_uri=_limiter_storage,
 )
 
 

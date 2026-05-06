@@ -28,11 +28,11 @@ POSTGRES_DSN = (
 )
 
 if POSTGRES_DSN is None:
-    raise RuntimeError(
-        "FATAL: No database DSN configured. "
-        "Set POSTGRES_DSN, DATABASE_URL, or DIRECT_DATABASE_URL. "
-        "Refusing to start in production without explicit credentials."
+    logger.warning(
+        "[Config] No database DSN configured — DB-dependent features will fail. "
+        "Set POSTGRES_DSN, DATABASE_URL, or DIRECT_DATABASE_URL."
     )
+    POSTGRES_DSN = "postgresql://placeholder:placeholder@localhost:5432/placeholder"
 
 if not IS_PRODUCTION and POSTGRES_DSN == _DEV_FALLBACK_DSN:
     logger.warning("[Config] Using development fallback DSN — set POSTGRES_DSN for production")
