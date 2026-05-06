@@ -326,7 +326,7 @@ async def post_onboarding(
                 "id", "name", "email", "role", "gradeLevel", "interests", "learningStyle",
                 "state", "targetGraduationYear", "onboardingComplete"
             )
-            VALUES ($1, $2, $3, 'STUDENT', $4, $5, $6, $7, $8, true)
+            VALUES ($1, $2, $3, 'STUDENT', $4, $5::text[], $6, $7, $8, true)
             ON CONFLICT ("id") DO UPDATE SET
                 "name" = EXCLUDED."name",
                 "gradeLevel" = EXCLUDED."gradeLevel",
@@ -451,7 +451,7 @@ async def patch_onboarding(
             param_index += 1
 
         if request.interests is not None:
-            updates.append(f'"interests" = ${param_index}')
+            updates.append(f'"interests" = ${param_index}::text[]')
             params.append(request.interests)
             param_index += 1
 
