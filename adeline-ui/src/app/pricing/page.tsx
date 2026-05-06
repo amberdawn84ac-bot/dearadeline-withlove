@@ -102,7 +102,7 @@ export default function PricingPage() {
       localStorage.setItem('adeline_tier', 'FAMILY')
       localStorage.setItem('adeline_founder_code', promoCode.trim().toUpperCase())
       // Send to login/signup — they need an account before onboarding
-      router.push('/login')
+      router.push('/login?mode=signup')
     } else {
       setPromoError('Invalid code. Check your spelling and try again.')
     }
@@ -204,7 +204,7 @@ export default function PricingPage() {
               </ul>
 
               <button
-                onClick={() => tier.id === 'FREE' ? router.push('/login') : setCheckout(tier.id)}
+                onClick={() => tier.id === 'FREE' ? router.push('/login?mode=signup') : setCheckout(tier.id)}
                 className={`w-full py-3 rounded-xl font-bold text-sm transition-colors ${
                   tier.popular
                     ? 'bg-[#BD6809] text-white hover:bg-[#a05a08]'

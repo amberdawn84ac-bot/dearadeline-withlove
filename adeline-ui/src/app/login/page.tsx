@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
@@ -9,9 +9,12 @@ import { supabase } from '@/lib/supabase'
 
 type Mode = 'login' | 'signup'
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter()
-  const [mode, setMode] = useState<Mode>('login')
+  const searchParams = useSearchParams()
+  const [mode, setMode] = useState<Mode>(
+    searchParams.get('mode') === 'signup' ? 'signup' : 'login'
+  )
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -171,5 +174,13 @@ export default function LoginPage() {
         </Link>
       </p>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#FFFEF7]" />}>
+      <LoginContent />
+    </Suspense>
   )
 }
