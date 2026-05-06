@@ -233,7 +233,11 @@ async def get_onboarding(authorization: Optional[str] = Header(None)):
     """
     user_id = _get_user_id_from_auth(authorization)
 
-    conn = await _get_conn()
+    try:
+        conn = await _get_conn()
+    except Exception as e:
+        logger.exception("[GET /api/onboarding] DB connection failed")
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {e}")
     try:
         row = await conn.fetchrow(
             """
@@ -307,7 +311,11 @@ async def post_onboarding(
     - 500: Database error
     """
     user_id, email = _get_auth_claims(authorization)
-    conn = await _get_conn()
+    try:
+        conn = await _get_conn()
+    except Exception as e:
+        logger.exception("[POST /api/onboarding] DB connection failed")
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {e}")
     try:
         # Validate invite code before touching the user record
         if request.inviteCode:

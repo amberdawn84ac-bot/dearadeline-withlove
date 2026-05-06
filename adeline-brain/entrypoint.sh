@@ -33,7 +33,7 @@ fi
 echo "[entrypoint] Starting gunicorn on port ${PORT:-8000} with 4 workers..."
 exec gunicorn app.main:app \
   --worker-class uvicorn.workers.UvicornWorker \
-  --workers 4 \
+  --workers 2 \
   --bind "0.0.0.0:${PORT:-8000}" \
   --timeout 120 \
   --keep-alive 5 \
