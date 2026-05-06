@@ -17,11 +17,15 @@ export default function OnboardingPage() {
     const checkOnboardingStatus = async () => {
       try {
         // Fetch current user profile to check onboarding status
-        const response = await fetch('/brain/api/onboarding', {
+        // Add cache-busting to prevent stale reads
+        const cacheBuster = Date.now();
+        const response = await fetch(`/brain/api/onboarding?_=${cacheBuster}`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''}`,
             'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
           },
         });
 
@@ -106,8 +110,9 @@ export default function OnboardingPage() {
         throw new Error(detail);
       }
 
-      // Success — redirect to dashboard
+      // Success — wait briefly for DB write to propagate, then redirect
       setStatus('redirecting');
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // 1s delay for read-after-write consistency
       window.location.href = '/dashboard';
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save onboarding profile';

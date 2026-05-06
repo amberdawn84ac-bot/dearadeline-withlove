@@ -57,11 +57,15 @@ export function OnboardingGate() {
           return;
         }
 
-        const response = await fetch('/brain/api/onboarding', {
+        // Add cache-busting to prevent stale reads after onboarding completion
+        const cacheBuster = Date.now();
+        const response = await fetch(`/brain/api/onboarding?_=${cacheBuster}`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
           },
         });
 
