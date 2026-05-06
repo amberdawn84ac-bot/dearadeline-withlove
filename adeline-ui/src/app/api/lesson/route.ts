@@ -42,14 +42,15 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(lessonRequest),
     });
   } catch (err) {
+    const errorEvent = JSON.stringify({ type: "error", message: `Cannot reach adeline-brain: ${err}` });
     return new Response(
-      `2:[{"type":"error","message":"Cannot reach adeline-brain: ${err}"}]\n` +
-      `d:{"finishReason":"error"}\n`,
+      `data: ${errorEvent}\n\ndata: {"type": "finish-step"}\n\n`,
       {
         status: 200,
         headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-          "x-vercel-ai-data-stream": "v1",
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "X-Accel-Buffering": "no",
         },
       }
     );

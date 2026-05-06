@@ -70,6 +70,21 @@ function DashboardContent() {
   const { messages, sendMessage: append, status: chatStatus } = chat;
   const isStreaming = chatStatus === 'streaming' || chatStatus === 'submitted';
 
+  // DEBUG: Log messages and status to diagnose streaming issues
+  useEffect(() => {
+    console.log('[Dashboard Debug] chatStatus:', chatStatus);
+    console.log('[Dashboard Debug] messages count:', messages.length);
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      console.log('[Dashboard Debug] last message:', {
+        role: lastMsg.role,
+        id: lastMsg.id,
+        partsCount: (lastMsg as { parts?: unknown[] }).parts?.length ?? 0,
+        parts: (lastMsg as { parts?: unknown[] }).parts,
+      });
+    }
+  }, [messages, chatStatus]);
+
   // Derive blocks and tool invocations from the latest assistant message's data parts
   useEffect(() => {
     const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
