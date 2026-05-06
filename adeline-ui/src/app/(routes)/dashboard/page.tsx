@@ -65,7 +65,8 @@ function DashboardContent() {
       setStreamingStatus('');
     },
   } as any);
-  const { messages, sendMessage: append, isLoading: isStreaming } = chat;
+  const { messages, sendMessage: append, status: chatStatus } = chat;
+  const isStreaming = chatStatus === 'streaming' || chatStatus === 'submitted';
 
   // Derive blocks and tool invocations from the latest assistant message's data annotations
   useEffect(() => {
