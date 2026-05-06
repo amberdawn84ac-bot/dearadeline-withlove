@@ -162,6 +162,15 @@ def get_current_user_id(
     return _extract_user_id(payload)
 
 
+def get_auth_claims(authorization: Optional[str]) -> tuple[str, str]:
+    """Returns (user_id, email) decoded from the Bearer JWT."""
+    token = _extract_bearer_token(authorization)
+    payload = _decode_jwt(token)
+    user_id = _extract_user_id(payload)
+    email = payload.get("email", "")
+    return user_id, email
+
+
 async def verify_student_access(
     student_id: str,
     authorization: Optional[str] = Header(default=None),

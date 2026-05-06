@@ -42,8 +42,14 @@ export function StudentProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    fetch('/brain/api/onboarding', {
-      headers: { 'Authorization': `Bearer ${token}` },
+    // Add cache-busting to prevent stale reads after onboarding completion
+    const cacheBuster = Date.now();
+    fetch(`/brain/api/onboarding?_=${cacheBuster}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      },
     })
       .then(r => r.ok ? r.json() : null)
       .then(data => {

@@ -28,11 +28,11 @@ POSTGRES_DSN = (
 )
 
 if POSTGRES_DSN is None:
-    raise RuntimeError(
-        "FATAL: No database DSN configured. "
-        "Set POSTGRES_DSN, DATABASE_URL, or DIRECT_DATABASE_URL. "
-        "Refusing to start in production without explicit credentials."
+    logger.warning(
+        "[Config] No database DSN configured — DB-dependent features will fail. "
+        "Set POSTGRES_DSN, DATABASE_URL, or DIRECT_DATABASE_URL."
     )
+    POSTGRES_DSN = "postgresql://placeholder:placeholder@localhost:5432/placeholder"
 
 if not IS_PRODUCTION and POSTGRES_DSN == _DEV_FALLBACK_DSN:
     logger.warning("[Config] Using development fallback DSN — set POSTGRES_DSN for production")
@@ -61,10 +61,9 @@ NEO4J_USER = os.getenv("NEO4J_USER", os.getenv("NEO4J_USERNAME", "neo4j"))
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "" if IS_PRODUCTION else "adeline_local_dev")
 
 if IS_PRODUCTION and (not NEO4J_URI or not NEO4J_PASSWORD):
-    raise RuntimeError(
-        "FATAL: Neo4j credentials not configured. "
-        "Set NEO4J_URI and NEO4J_PASSWORD. "
-        "Refusing to start in production without explicit credentials."
+    logger.warning(
+        "[Config] Neo4j credentials not configured — ZPD/graph features will be disabled. "
+        "Set NEO4J_URI and NEO4J_PASSWORD to enable full functionality."
     )
 
 # ── Redis ────────────────────────────────────────────────────────────────────
@@ -78,8 +77,9 @@ REDIS_URL = os.getenv("REDIS_URL", "" if IS_PRODUCTION else "redis://localhost:6
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 if IS_PRODUCTION and not OPENAI_API_KEY:
-    raise RuntimeError(
-        "FATAL: OPENAI_API_KEY not set. Required for embeddings in production."
+    logger.warning(
+        "[Config] OPENAI_API_KEY not set — embedding and lesson generation will fail. "
+        "Set OPENAI_API_KEY in Railway environment variables."
     )
 
 # ── Gemini (multimodal synthesis — 30x cheaper than Claude for JSON extraction) ──

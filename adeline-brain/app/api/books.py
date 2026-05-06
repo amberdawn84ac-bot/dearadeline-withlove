@@ -289,9 +289,72 @@ async def _log_registrar_tracking(student_id: str, recommendations: list, adapti
         await conn.close()
 
 
+async def _generate_hyde_document(
+    grade_level: Optional[str],
+    interests: List[str],
+    credit_gaps: Optional[List[dict]] = None,
+    weakest_track: Optional[str] = None,
+) -> str:
+    """
+    Generate a Hypothetical Document Embedding (HyDE) - an ideal book summary
+    that bridges the student's interests and learning gaps.
+    
+    Uses lightweight LLM (gpt-4o-mini) for fast, cost-effective generation.
+    
+    Args:
+        grade_level: Student's grade level
+        interests: List of student interests
+        credit_gaps: List of curriculum gap dicts with bucket and remaining credits
+        weakest_track: Track where student needs most improvement
+        
+    Returns:
+        Hypothetical book summary for embedding (2-3 sentences)
+    """
+    try:
+        client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        
+        # Build context about student needs
+        context_parts = []
+        if grade_level:
+            context_parts.append(f"Grade {grade_level} reading level")
+        if interests:
+            context_parts.append(f"interests: {', '.join(interests)}")
+        if credit_gaps:
+            gap_desc = ", ".join([f"{g.get('bucket', '')} ({g.get('remaining', 0)} credits remaining)" 
+                                  for g in credit_gaps[:3]])
+            context_parts.append(f"learning gaps: {gap_desc}")
+        if weakest_track:
+            context_parts.append(f"needs strengthening in {weakest_track}")
+        
+        student_context = "; ".join(context_parts) or "a curious student"
+        
+        prompt = f"""Write a 2-3 sentence summary of an ideal book that would perfectly engage {student_context}. 
+        Describe the book's themes, setting, and what makes it compelling. Write as if describing an existing published book."""
+        
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a skilled librarian who excels at matching readers with their perfect book."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=150,
+            temperature=0.7,
+        )
+        
+        hyde_summary = response.choices[0].message.content.strip()
+        logger.info(f"[Books/HyDE] Generated hypothetical book: {hyde_summary[:100]}...")
+        return hyde_summary
+        
+    except Exception as e:
+        logger.warning(f"[Books/HyDE] HyDE generation failed, falling back to query: {e}")
+        # Fallback to original query format
+        return _format_embedding_query(grade_level, interests)
+
+
 def _format_embedding_query(grade_level: Optional[str], interests: List[str]) -> str:
     """
     Format student profile into a query string for embedding.
+    Fallback when HyDE generation fails.
 
     Args:
         grade_level: Student's grade level (e.g., "5")
@@ -386,13 +449,16 @@ async def get_recommendations(
             f"interests={interests}"
         )
 
-        # Step 2: Format embedding query text
-        query_text = _format_embedding_query(grade_level, interests)
+        # Step 2: Generate HyDE document (hypothetical ideal book for this student)
+        hyde_document = await _generate_hyde_document(
+            grade_level=grade_level,
+            interests=interests,
+        )
 
-        # Step 3: Create embedding via OpenAI
-        logger.info(f"[Books/Recommendations] Creating embedding for query")
-        embedding = await _embed(query_text)
-        logger.debug(f"[Books/Recommendations] Embedding created (dims: {len(embedding)})")
+        # Step 3: Create embedding via OpenAI (using HyDE document instead of raw query)
+        logger.info(f"[Books/Recommendations] Creating HyDE embedding")
+        embedding = await _embed(hyde_document)
+        logger.debug(f"[Books/Recommendations] HyDE embedding created (dims: {len(embedding)})")
 
         # Step 4: Calculate adaptive reading level based on actual reading history
         adaptive_lexile_min, adaptive_lexile_max, confidence = await _calculate_adaptive_reading_level(
@@ -406,7 +472,7 @@ async def get_recommendations(
 
         # Step 5: Search books by embedding with adaptive lexile filtering
         logger.info(
-            f"[Books/Recommendations] Searching books by embedding "
+            f"[Books/Recommendations] Searching books by HyDE embedding "
             f"(limit={limit}, adaptive_lexile={adaptive_lexile_min}-{adaptive_lexile_max})"
         )
         books = await bookshelf_search.search_books_by_embedding(
@@ -414,7 +480,28 @@ async def get_recommendations(
             lexile_min=adaptive_lexile_min,
             lexile_max=adaptive_lexile_max,
             limit=limit,
+            soft_lexile_fallback=True,
+            tracks_with_lexile_tolerance=["Truth-History", "Discipleship"],
         )
+
+        # Step 5b: External fallback if pgvector results are insufficient
+        from app.services.external_books import fetch_external_books, should_fallback_to_external
+
+        if await should_fallback_to_external(books):
+            logger.warning(
+                f"[Books/Recommendations] Low pgvector matches ({len(books)}), "
+                f"triggering external fallback"
+            )
+            
+            # Build external query from HyDE document
+            external_books = await fetch_external_books(hyde_document, limit=limit - len(books))
+            
+            # Merge external books
+            books.extend(external_books)
+            
+            # Re-sort by relevance
+            books.sort(key=lambda b: b.get("relevance_score", 0), reverse=True)
+            books = books[:limit]  # Trim to requested limit
 
         logger.info(
             f"[Books/Recommendations] Found {len(books)} recommendations for {x_user_id}"
@@ -619,11 +706,16 @@ async def get_gap_weighted_recommendations(
     Returns list of dicts with keys: id, title, author, track, lexile_level,
     grade_band, cover_url, relevance_score.
     """
-    # 1. Build embedding query from grade + interests
-    query_text = _format_embedding_query(grade_level, interests)
+    # 1. Generate HyDE document with gap context for better semantic matching
+    hyde_document = await _generate_hyde_document(
+        grade_level=grade_level,
+        interests=interests,
+        credit_gaps=credit_gaps,
+        weakest_track=weakest_track,
+    )
 
-    # 2. Create embedding
-    embedding = await _embed(query_text)
+    # 2. Create embedding from HyDE document
+    embedding = await _embed(hyde_document)
     if not embedding:
         logger.warning("[Books] Empty embedding for gap-weighted recommendations")
         return []
@@ -637,10 +729,24 @@ async def get_gap_weighted_recommendations(
         logger.warning(f"[Books] Adaptive lexile failed, using static: {e}")
         lexile_min, lexile_max = _get_lexile_range(grade_level)
 
-    # 4. Fetch more candidates than needed for re-ranking
+    # 4. Fetch more candidates than needed for re-ranking (with soft Lexile fallback)
     candidates = await bookshelf_search.search_books_by_embedding(
-        embedding, lexile_min, lexile_max, limit=limit * 3
+        embedding, lexile_min, lexile_max, limit=limit * 3,
+        soft_lexile_fallback=True,
+        tracks_with_lexile_tolerance=["Truth-History", "Discipleship"],
     )
+    
+    # 4b. External fallback if internal candidates insufficient
+    from app.services.external_books import fetch_external_books, should_fallback_to_external
+    
+    if await should_fallback_to_external(candidates):
+        logger.warning(
+            f"[Books/GapWeighted] Low internal matches ({len(candidates)}), "
+            f"triggering external fallback"
+        )
+        external_books = await fetch_external_books(hyde_document, limit=limit)
+        candidates.extend(external_books)
+        candidates.sort(key=lambda b: b.get("relevance_score", 0), reverse=True)
     if not candidates:
         return []
 

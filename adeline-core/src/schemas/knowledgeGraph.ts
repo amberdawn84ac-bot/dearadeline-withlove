@@ -1,7 +1,7 @@
 /**
  * adeline-core/src/schemas/knowledgeGraph.ts
  * ─────────────────────────────────────────────────────────────────
- * 8-Track Knowledge Graph node and edge types (stored in Neo4j).
+ * 10-Track Knowledge Graph node and edge types (stored in Neo4j).
  *
  * The graph enables multi-hop ZPD reasoning:
  * "How did the Dawes Act (Track 7) change soil health (Track 3)?"
@@ -24,6 +24,8 @@ export const KnowledgeNodeSchema = z.object({
   standardCode: z.string().optional(),
   gradeBand:    z.string().optional().describe("'k2', '35', '68', or '912'"),
   tags:         z.array(z.string()).default([]),
+  /** True when mastery requires a primary artifact: document, lab record, or student-made product */
+  isPrimarySource: z.boolean().default(false),
   createdAt:    z.string().datetime(),
 });
 

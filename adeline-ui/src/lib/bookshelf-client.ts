@@ -86,10 +86,10 @@ export class BookshelfAPIError extends Error {
 // ──────────────────────────────────────────────────────────────────────────────
 
 /**
- * All bookshelf API calls go through the Next.js rewrite proxy at /brain/api/bookshelf/.
+ * All bookshelf API calls go through the Next.js rewrite proxy at /brain/bookshelf/.
  * This avoids hardcoding the backend hostname in the browser.
  */
-const BASE_URL = '/brain/api/bookshelf';
+const BASE_URL = '/brain/bookshelf';
 
 /**
  * Helper to make authenticated fetch requests to bookshelf API
@@ -173,16 +173,33 @@ export async function getBook(studentId: string, bookId: string): Promise<Book> 
 
 /**
  * Get AI-recommended books for student
+ * Note: This uses /brain/api/books/ (books router), not /brain/bookshelf/ (bookshelf router)
  */
 export async function getRecommendations(
   studentId: string,
   limit: number = 12
 ): Promise<RecommendationsResponse> {
   const params = new URLSearchParams({ limit: String(limit) });
-  return fetchAPI<RecommendationsResponse>(`/books/recommendations?${params.toString()}`, {
+  // Books router is at /brain/api/books/, not /brain/bookshelf/
+  const url = `/brain/api/books/recommendations?${params.toString()}`;
+
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+
+  const response = await fetch(url, {
     method: 'GET',
-    studentId,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    cache: 'no-store',
   });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Unknown error');
+    throw new BookshelfAPIError(response.status, 'FETCH_ERROR', `Failed to get recommendations: ${response.status} - ${errorText}`);
+  }
+
+  return response.json();
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

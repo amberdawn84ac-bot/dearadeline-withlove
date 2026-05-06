@@ -39,12 +39,95 @@ export type Track =
   | "APPLIED_MATHEMATICS"
   | "CREATIVE_ECONOMY";
 
+export type LessonRenderMode =
+  | "standard_lesson"
+  | "visual_deep_dive"
+  | "sketchnote_infographic"
+  | "animated_sketchnote_lesson";
+
 export interface LessonRequest {
   student_id: string;
   track: Track;
   topic: string;
   is_homestead: boolean;
   grade_level: string;
+  render_mode?: LessonRenderMode;
+}
+
+export interface AnimatedLessonRequest {
+  topic: string;
+  focus?: string;
+  duration_seconds?: number;
+  target_ages?: string;
+  track?: Track;
+  student_id?: string;
+}
+
+// ── Animated Sketchnote Lesson types (mirrors adeline-core) ───────────────────
+
+export interface StyledText {
+  text: string;
+  style: "bold_marker" | "block_caps" | "script_hand" | "sketch_print" | "tiny_notes" | "label" | "caption";
+  layout: "title_banner" | "section_header" | "callout_bubble" | "flow_step" | "side_note" | "diagram_label" | "closing_quote";
+  decoration?: string[];
+  emphasis?: "low" | "medium" | "high";
+}
+
+export interface VisualElement {
+  id: string;
+  type: "handwritten_text" | "doodle" | "diagram" | "arrow" | "bubble" | "label" | "icon" | "character" | "background" | "timeline" | "split_screen";
+  content: string;
+  position: { x: number; y: number };
+  size?: { width: number; height: number };
+  style?: string;
+  color?: string;
+}
+
+export interface AnimationInstruction {
+  elementId: string;
+  animation: "draw_in" | "write_on" | "fade_in" | "pop_in" | "slide_in" | "zoom_in" | "pulse" | "wiggle" | "pan" | "morph" | "highlight";
+  startTime: number;
+  duration: number;
+  easing?: "linear" | "ease_in" | "ease_out" | "ease_in_out";
+}
+
+export interface AnimatedScene {
+  sceneNumber: number;
+  sceneTitle: StyledText;
+  durationSeconds: number;
+  narration: string;
+  visualBuild: VisualElement[];
+  animationPlan: AnimationInstruction[];
+  teachingLayer: {
+    visualSummary: StyledText[];
+    deepExplanation: StyledText;
+    whyItMatters: StyledText;
+    activity?: StyledText;
+  };
+  soundDesign?: { musicMood?: string; soundEffects?: string[] };
+  narrationAudioUrl?: string;
+}
+
+export interface AnimatedSketchnoteLesson {
+  lessonType: "animated_sketchnote_lesson";
+  title: StyledText;
+  subtitle: StyledText;
+  targetAges: string;
+  totalDurationSeconds: number;
+  learningGoals: string[];
+  colorPalette: string[];
+  visualStyle: {
+    format: "animated_sketchnote";
+    artDirection: string;
+    typography: string[];
+    illustrationRules: string[];
+    layoutRules: string[];
+  };
+  scenes: AnimatedScene[];
+  fullNarrationScript: string;
+  vocabulary: { word: string; definition: string; visualCue: string }[];
+  assessment: { question: string; answer: string; type: "short_answer" | "discussion" | "draw_and_explain" }[];
+  extensionActivities: { title: string; instructions: string; materials?: string[] }[];
 }
 
 export interface WitnessCitation {
@@ -141,6 +224,8 @@ export interface LessonBlockResponse {
   epub_url?:            string;
   cover_url?:           string;
   lexile_level?:        number;
+  // Animated Sketchnote Lesson — full lesson payload for ANIMATED_SKETCHNOTE_LESSON blocks
+  animated_sketchnote_data?: AnimatedSketchnoteLesson;
 }
 
 export interface XAPIStatement {
@@ -193,7 +278,18 @@ export interface LessonResponse {
 
 // ── Client Functions ───────────────────────────────────────────────────────────
 
-export async function generateLesson(request: LessonRequest): Promise<LessonResponse> {
+export interface LessonJobResponse {
+  job_id: string;
+  status: "queued";
+}
+
+export interface LessonStatusResponse {
+  status: "queued" | "running" | "done" | "failed" | "not_found";
+  result?: LessonResponse;
+  error?: string;
+}
+
+export async function generateLesson(request: LessonRequest): Promise<LessonJobResponse> {
   const res = await fetch(`${BRAIN_URL}/lesson/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
@@ -205,7 +301,58 @@ export async function generateLesson(request: LessonRequest): Promise<LessonResp
     throw new Error(`adeline-brain error: ${res.status} ${res.statusText}`);
   }
 
-  return res.json() as Promise<LessonResponse>;
+  return res.json() as Promise<LessonJobResponse>;
+}
+
+export async function getLessonStatus(jobId: string): Promise<LessonStatusResponse> {
+  const res = await fetch(`${BRAIN_URL}/lesson/status/${encodeURIComponent(jobId)}`, {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new Error(`lesson status error: ${res.status} ${res.statusText}`);
+  }
+
+  return res.json() as Promise<LessonStatusResponse>;
+}
+
+/**
+ * Poll /lesson/status/{jobId} until done or failed.
+ * Calls onProgress with each status update.
+ * Resolves with the final LessonResponse or rejects on timeout/failure.
+ */
+export async function pollLessonResult(
+  jobId: string,
+  options: {
+    intervalMs?: number;
+    timeoutMs?: number;
+    onProgress?: (status: string) => void;
+  } = {}
+): Promise<LessonResponse> {
+  const { intervalMs = 2000, timeoutMs = 90000, onProgress } = options;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const statusResult = await getLessonStatus(jobId);
+    onProgress?.(statusResult.status);
+
+    if (statusResult.status === "done" && statusResult.result) {
+      return statusResult.result;
+    }
+
+    if (statusResult.status === "failed") {
+      throw new Error(statusResult.error ?? "Lesson generation failed");
+    }
+
+    if (statusResult.status === "not_found") {
+      throw new Error("Lesson job not found — it may have expired");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error("Lesson generation timed out after 90 seconds");
 }
 
 export async function listTracks(): Promise<{ tracks: { id: Track; label: string }[] }> {
@@ -355,14 +502,21 @@ export async function fetchStudentState(
   student_id: string,
   role: "STUDENT" | "PARENT" | "ADMIN" = "STUDENT",
 ): Promise<StudentState> {
+  const headers = getAuthHeaders();
+  console.log('[brain-client] fetchStudentState:', { student_id, hasAuth: !!headers.Authorization });
+
   const res = await fetch(
     `${BRAIN_URL}/students/${encodeURIComponent(student_id)}/state`,
     {
-      headers: getAuthHeaders(),
+      headers,
       cache: "no-store",
     },
   );
-  if (!res.ok) throw new Error(`student state fetch failed: ${res.status}`);
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => 'Unknown error');
+    console.error('[brain-client] fetchStudentState failed:', res.status, errorText);
+    throw new Error(`student state fetch failed: ${res.status} - ${errorText}`);
+  }
   return res.json() as Promise<StudentState>;
 }
 
@@ -1039,4 +1193,66 @@ export async function* streamConversation(params: {
       }
     }
   }
+}
+
+// ── Animated Sketchnote Lessons ───────────────────────────────────────────────
+
+export async function generateAnimatedLesson(
+  req: AnimatedLessonRequest
+): Promise<unknown> {
+  const res = await fetch("/api/adeline/animated-lesson", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error(`Animated lesson generation failed: ${res.status}`);
+  return res.json();
+}
+
+// ── Learning Path ─────────────────────────────────────────────────────────────
+
+export interface LearningPathNode {
+  id: string;
+  title: string;
+  description: string;
+  track: Track;
+  difficulty: string;
+  grade_band: string;
+  standard_code: string;
+  prerequisite_ids: string[];
+  state: "mastered" | "available" | "locked";
+  mastery_score: number | null;
+  track_color: string;
+}
+
+export interface LearningPathEdge {
+  from: string;
+  to: string;
+}
+
+export interface LearningPathResponse {
+  student_id: string;
+  nodes: LearningPathNode[];
+  edges: LearningPathEdge[];
+  mastered_count: number;
+  available_count: number;
+  locked_count: number;
+}
+
+export async function fetchLearningPath(
+  studentId: string,
+  track?: Track,
+): Promise<LearningPathResponse> {
+  const url = new URL(
+    `${BRAIN_URL}/learning-path/${encodeURIComponent(studentId)}/nodes`,
+    typeof window !== "undefined" ? window.location.origin : "http://localhost:3000",
+  );
+  if (track) url.searchParams.set("track", track);
+
+  const res = await fetch(url.toString(), {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Learning path fetch failed: ${res.status}`);
+  return res.json() as Promise<LearningPathResponse>;
 }

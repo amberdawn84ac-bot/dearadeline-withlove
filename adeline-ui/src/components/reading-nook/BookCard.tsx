@@ -34,6 +34,8 @@ export interface Book {
   track: string;
   cover_url?: string;
   source_library?: string;
+  is_external?: boolean;
+  source_url?: string;
 }
 
 export interface ReadingSession {
@@ -203,6 +205,17 @@ export function BookCard({ book, session, onStart }: BookCardProps) {
           >
             {book.grade_band}
           </span>
+
+          {/* EXTERNAL SOURCE BADGE */}
+          {book.is_external && (
+            <span
+              className="text-[10px] font-bold px-2 py-1 rounded-full bg-[#E7DAC3] text-[#8B6914]"
+              title={`Source: ${book.source_library || "External Library"}`}
+              aria-label="External book from Open Library"
+            >
+              🌐 {book.source_library || "Open Library"}
+            </span>
+          )}
         </div>
 
         {/* PROGRESS BAR (if reading) */}
@@ -231,7 +244,13 @@ export function BookCard({ book, session, onStart }: BookCardProps) {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onStart?.(book.id);
+              if (book.is_external && book.source_url) {
+                // External books: open source URL in new tab
+                window.open(book.source_url, "_blank", "noopener,noreferrer");
+              } else {
+                // Internal books: use native reader
+                onStart?.(book.id);
+              }
             }}
             className={`
               w-full py-2 rounded-lg font-semibold text-sm
@@ -239,12 +258,24 @@ export function BookCard({ book, session, onStart }: BookCardProps) {
               ${
                 isReading
                   ? "bg-blue-500 hover:bg-blue-600 text-white"
-                  : "bg-teal-500 hover:bg-teal-600 text-white"
+                  : book.is_external
+                    ? "bg-[#BD6809] hover:bg-[#9A5507] text-white"
+                    : "bg-teal-500 hover:bg-teal-600 text-white"
               }
             `}
-            aria-label={isReading ? "Open Reader" : "Start Reading"}
+            aria-label={
+              book.is_external
+                ? "View on Open Library"
+                : isReading
+                  ? "Open Reader"
+                  : "Start Reading"
+            }
           >
-            {isReading ? "Open Reader" : "Start Reading"}
+            {book.is_external
+              ? "View on Open Library"
+              : isReading
+                ? "Open Reader"
+                : "Start Reading"}
           </button>
         </div>
       )}

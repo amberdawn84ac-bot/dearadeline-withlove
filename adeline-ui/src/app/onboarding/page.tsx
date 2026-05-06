@@ -9,18 +9,23 @@ interface OnboardingPageProps {
 }
 
 export default function OnboardingPage() {
-  const [status, setStatus] = useState<'checking' | 'onboarding' | 'error' | 'redirecting'>('checking');
+  const [status, setStatus] = useState<'checking' | 'onboarding' | 'submitting' | 'error' | 'redirecting'>('checking');
   const [error, setError] = useState<string | null>(null);
+  const [pendingData, setPendingData] = useState<Parameters<typeof handleOnboardingComplete>[0] | null>(null);
 
   useEffect(() => {
     const checkOnboardingStatus = async () => {
       try {
         // Fetch current user profile to check onboarding status
-        const response = await fetch('/brain/api/onboarding', {
+        // Add cache-busting to prevent stale reads
+        const cacheBuster = Date.now();
+        const response = await fetch(`/brain/api/onboarding?_=${cacheBuster}`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''}`,
             'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
           },
         });
 
@@ -37,7 +42,13 @@ export default function OnboardingPage() {
         }
 
         if (!response.ok) {
-          throw new Error(`Failed to check onboarding status: ${response.statusText}`);
+          let detail = `Failed to check onboarding status: ${response.statusText}`;
+          try {
+            const body = await response.text();
+            const parsed = JSON.parse(body);
+            detail = parsed.detail || body;
+          } catch { /* plain text */ }
+          throw new Error(detail);
         }
 
         const data = await response.json();
@@ -62,7 +73,7 @@ export default function OnboardingPage() {
     checkOnboardingStatus();
   }, []);
 
-  const handleOnboardingComplete = async (data: {
+  async function handleOnboardingComplete(data: {
     name: string;
     gradeLevel: string;
     interests: string[];
@@ -70,41 +81,62 @@ export default function OnboardingPage() {
     state: string;
     targetGraduationYear: number;
     coppaConsent: boolean;
-  }) => {
+  }) {
+    setPendingData(data);
+    setError(null);
+    setStatus('submitting');
     try {
-      setStatus('redirecting');
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : '';
+      const inviteCode = typeof window !== 'undefined' ? localStorage.getItem('adeline_founder_code') || undefined : undefined;
 
       const response = await fetch('/brain/api/onboarding', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, ...(inviteCode ? { inviteCode } : {}) }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to save onboarding profile');
+        let detail = 'Failed to save onboarding profile';
+        try {
+          const body = await response.text();
+          const parsed = JSON.parse(body);
+          detail = parsed.detail || body;
+        } catch {
+          // body was plain text — use as-is if meaningful
+        }
+        throw new Error(detail);
       }
 
-      // Success — redirect to dashboard
+      // Mark completion immediately so OnboardingGate trusts the local flag
+      // even if Railway Postgres replication lag hasn't caught up yet (up to 60s window)
+      localStorage.setItem('onboarding_just_completed', Date.now().toString());
+      setStatus('redirecting');
+      console.log('[Onboarding] POST successful, waiting 3s for DB propagation...');
+      await new Promise((resolve) => setTimeout(resolve, 3000)); // 3s delay for read-after-write consistency
+      console.log('[Onboarding] Redirecting to dashboard...');
       window.location.href = '/dashboard';
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save onboarding profile';
       setError(message);
-      setStatus('error');
+      setStatus('onboarding');
+    }
+  }
+
+  const handleRetry = () => {
+    if (pendingData) {
+      handleOnboardingComplete(pendingData);
+    } else {
+      setError(null);
+      setStatus('checking');
+      window.location.reload();
     }
   };
 
-  const handleRetry = () => {
-    setError(null);
-    setStatus('checking');
-    window.location.reload();
-  };
-
   // Loading state
-  if (status === 'checking' || status === 'redirecting') {
+  if (status === 'checking' || status === 'redirecting' || status === 'submitting') {
     return (
       <div className="flex items-center justify-center h-screen bg-[#FFFEF7]">
         <div className="flex flex-col items-center gap-4">
@@ -115,34 +147,22 @@ export default function OnboardingPage() {
     );
   }
 
-  // Error state
-  if (status === 'error') {
-    return (
-      <div className="flex items-center justify-center h-screen bg-[#FFFEF7]">
-        <div className="max-w-md w-full mx-auto px-6">
-          <div className="bg-white rounded-2xl border-2 border-[#E7DAC3] p-8">
-            <div className="flex items-start gap-4 mb-4">
-              <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <h2 className="text-lg font-bold text-[#2F4731] mb-2">Error</h2>
-                <p className="text-[#2F4731]/70 text-sm mb-4">{error}</p>
-              </div>
+  // Onboarding form (with optional inline error banner)
+  return (
+    <div className="flex flex-col items-center justify-center h-screen bg-[#FFFEF7]">
+      {error && (
+        <div className="w-full max-w-2xl px-4 mb-4">
+          <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-red-700 font-medium">{error}</p>
             </div>
-            <button
-              onClick={handleRetry}
-              className="w-full px-4 py-2 bg-[#BD6809] text-white rounded-lg font-semibold hover:bg-[#A55708] transition-colors"
-            >
+            <button onClick={handleRetry} className="text-xs text-red-600 font-semibold underline whitespace-nowrap">
               Try Again
             </button>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  // Onboarding form
-  return (
-    <div className="flex items-center justify-center h-screen bg-[#FFFEF7]">
+      )}
       <WelcomeFlow onComplete={handleOnboardingComplete} />
     </div>
   );

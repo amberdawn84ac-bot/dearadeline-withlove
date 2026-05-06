@@ -2,10 +2,15 @@
 adeline-brain — FastAPI Entry Point
 The Intelligence Layer of Dear Adeline 2.0
 """
+import asyncio
+import json
 import logging
 import os
 
 import openai
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,6 +23,7 @@ from app.schemas.api_models import TRUTH_THRESHOLD
 from app.connections.neo4j_client import neo4j_client
 from app.connections.pgvector_client import hippocampus
 from app.connections.bookshelf_search import bookshelf_search
+from app.connections.redis_client import ping as redis_ping
 from app.api.lessons import router as lessons_router
 from app.api.opportunities import router as opportunities_router
 from app.api.journal import router as journal_router
@@ -45,46 +51,61 @@ from app.api.learning_plan import router as learning_plan_router
 from app.api.genui import router as genui_router
 from app.api.realtime import router as realtime_router
 from app.api.conversation import router as conversation_router
+from app.api.animated_lessons import router as animated_lessons_router
+from app.api.learning_path import router as learning_path_router
+from app.api.lesson_stream import router as lesson_stream_router
 from app.connections.journal_store import journal_store
 from app.connections.conversation_store import conversation_store
 from app.jobs.seed_scheduler import startup_seed_scheduler, shutdown_seed_scheduler
 
-logging.basicConfig(level=logging.INFO)
+from pythonjsonlogger import jsonlogger
+
+def _configure_logging():
+    handler = logging.StreamHandler()
+    formatter = jsonlogger.JsonFormatter(
+        fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
+        rename_fields={"asctime": "timestamp", "levelname": "level", "name": "logger"},
+    )
+    handler.setFormatter(formatter)
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+_configure_logging()
 logger = logging.getLogger(__name__)
+
+_SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+if _SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        integrations=[StarletteIntegration(), FastApiIntegration()],
+        traces_sample_rate=0.1,
+        environment=os.getenv("RAILWAY_ENVIRONMENT", "development"),
+        send_default_pii=False,
+    )
+    logger.info("[adeline-brain] Sentry initialized")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("[adeline-brain] Starting up...")
 
-    # Neo4j is optional — ZPD reasoning degrades but the app still works
-    try:
-        await neo4j_client.connect()
-    except Exception as e:
-        logger.warning(f"[adeline-brain] Neo4j unavailable — ZPD/graph features disabled: {e}")
+    async def _connect_services():
+        for name, coro in [
+            ("Neo4j", neo4j_client.connect()),
+            ("Hippocampus", hippocampus.connect()),
+            ("Bookshelf", bookshelf_search.connect()),
+            ("JournalStore", journal_store.connect()),
+            ("ConversationStore", conversation_store.connect()),
+        ]:
+            try:
+                await asyncio.wait_for(coro, timeout=15.0)
+                logger.info(f"[adeline-brain] {name} connected")
+            except Exception as e:
+                logger.warning(f"[adeline-brain] {name} unavailable: {e}")
 
-    # DB connections are optional at startup so the app doesn't crash
-    # if a service is temporarily unreachable
-    try:
-        await hippocampus.connect()
-    except Exception as e:
-        logger.warning(f"[adeline-brain] Hippocampus (pgvector) unavailable: {e}")
-
-    try:
-        await bookshelf_search.connect()
-    except Exception as e:
-        logger.warning(f"[adeline-brain] Bookshelf search unavailable: {e}")
-
-    try:
-        await journal_store.connect()
-    except Exception as e:
-        logger.warning(f"[adeline-brain] Journal store unavailable: {e}")
-
-    try:
-        await conversation_store.connect()
-    except Exception as e:
-        logger.warning(f"[adeline-brain] Conversation store unavailable: {e}")
-
+    asyncio.create_task(_connect_services())
     await startup_seed_scheduler()
     yield
     logger.info("[adeline-brain] Shutting down...")
@@ -99,11 +120,13 @@ async def lifespan(app: FastAPI):
         pass
 
 
-# ── Rate limiter (in-memory; swap to Redis storage for multi-process) ─────────
+# ── Rate limiter (Redis-backed when available, in-memory fallback) ─
+_REDIS_URL = os.getenv("REDIS_URL", "")
+_limiter_storage = _REDIS_URL if _REDIS_URL and _REDIS_URL.startswith("redis://") else "memory://"
 limiter = Limiter(
     key_func=get_remote_address,
-    default_limits=["120/minute"],       # Global: 120 req/min per IP
-    storage_uri="memory://",
+    default_limits=["120/minute"],
+    storage_uri=_limiter_storage,
 )
 
 
@@ -155,6 +178,7 @@ app.add_middleware(
 )
 
 app.include_router(lessons_router)
+app.include_router(lesson_stream_router)
 app.include_router(opportunities_router)
 app.include_router(journal_router)
 app.include_router(transcripts_router)
@@ -175,22 +199,45 @@ app.include_router(parent_router)
 app.include_router(admin_router)
 app.include_router(learning_plan_router)
 app.include_router(genui_router)
+# ── /brain/* prefix mounts (Vercel proxy: /brain/:path* → Railway /:path*) ──
+app.include_router(onboarding_router, prefix="/brain")
+app.include_router(lessons_router, prefix="/brain")
+app.include_router(lesson_stream_router, prefix="/brain")
+app.include_router(journal_router, prefix="/brain")
+app.include_router(transcripts_router, prefix="/brain")
+app.include_router(learning_records_router, prefix="/brain")
+app.include_router(students_router, prefix="/brain")
+app.include_router(activities_router, prefix="/brain")
+app.include_router(projects_router, prefix="/brain")
+app.include_router(subscriptions_router, prefix="/brain")
+app.include_router(credits_router, prefix="/brain")
+app.include_router(bookshelf_router, prefix="/brain")
 app.include_router(books_router, prefix="/brain")
+app.include_router(reading_session_router, prefix="/brain")
+app.include_router(parent_router, prefix="/brain")
 app.include_router(learning_plan_router, prefix="/brain")
 app.include_router(genui_router, prefix="/brain")
 app.include_router(registrar_reports_router, prefix="/brain")
 app.include_router(admin_tasks_router, prefix="/brain")
 app.include_router(admin_review_router, prefix="/brain")
-app.include_router(metrics_router)
-app.include_router(realtime_router)
-app.include_router(conversation_router)
+app.include_router(metrics_router, prefix="/brain")
+app.include_router(realtime_router, prefix="/brain")
+app.include_router(conversation_router, prefix="/brain")
+app.include_router(animated_lessons_router, prefix="/brain")
+app.include_router(learning_path_router, prefix="/brain")
 
 
 @app.get("/health")
 async def health():
-    """Health check with data population status."""
+    """Lightweight liveness probe — returns immediately so Railway healthcheck passes."""
+    return {"status": "ok", "service": "adeline-brain", "version": "0.2.0"}
+
+
+@app.get("/health/detailed")
+async def health_detailed():
+    """Detailed health check with DB/Neo4j/Redis connectivity. Not used by Railway."""
     from app.config import get_db_conn
-    
+
     health_status = {
         "status": "alive",
         "service": "adeline-brain",
@@ -200,8 +247,7 @@ async def health():
         "neo4j_tracks": 0,
         "books": 0,
     }
-    
-    # Check Hippocampus document count
+
     try:
         conn = await get_db_conn()
         result = await conn.fetchval('SELECT COUNT(*) FROM "HippocampusDocument"')
@@ -209,8 +255,7 @@ async def health():
         await conn.close()
     except Exception as e:
         health_status["hippocampus_error"] = str(e)
-    
-    # Check Book count
+
     try:
         conn = await get_db_conn()
         result = await conn.fetchval('SELECT COUNT(*) FROM "Book"')
@@ -218,21 +263,26 @@ async def health():
         await conn.close()
     except Exception as e:
         health_status["books_error"] = str(e)
-    
-    # Check Neo4j concept/track counts
+
     try:
         if neo4j_client.driver:
             async with neo4j_client.driver.session() as session:
                 concept_result = await session.run("MATCH (c:Concept) RETURN count(c) as count")
                 concept_record = await concept_result.single()
                 health_status["neo4j_concepts"] = concept_record["count"] if concept_record else 0
-                
+
                 track_result = await session.run("MATCH (t:Track) RETURN count(t) as count")
                 track_record = await track_result.single()
                 health_status["neo4j_tracks"] = track_record["count"] if track_record else 0
     except Exception as e:
         health_status["neo4j_error"] = str(e)
-    
+
+    try:
+        redis_ok = await redis_ping()
+        health_status["redis"] = "ok" if redis_ok else "unreachable"
+    except Exception as e:
+        health_status["redis"] = f"error: {e}"
+
     return health_status
 
 

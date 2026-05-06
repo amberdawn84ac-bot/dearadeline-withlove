@@ -3,13 +3,17 @@
 import { Suspense, useState, useCallback, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Loader2, ArrowLeft, RefreshCw, Award, Hammer, Clock } from 'lucide-react';
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
 import { StudentStatusBar } from '@/components/StudentStatusBar';
 import { AdelineChatPanel } from '@/components/AdelineChatPanel';
 import { SpacedRepWidget } from '@/components/dashboard/SpacedRepWidget';
 import { useStudent } from '@/lib/useStudent';
 import LessonRenderer from '@/components/lessons/LessonRenderer';
-import { generateLesson, getLearningPlan } from '@/lib/brain-client';
-import type { LessonResponse, Track, LessonSuggestion, ProjectSuggestion, LearningPlanResponse, BookRecommendation } from '@/lib/brain-client';
+import { MasteryCheckWidget } from '@/components/gen-ui/widgets/MasteryCheckWidget';
+import { LabMissionWidget } from '@/components/gen-ui/widgets/LabMissionWidget';
+import { getLearningPlan } from '@/lib/brain-client';
+import type { LessonResponse, LessonBlockResponse, Track, LessonSuggestion, ProjectSuggestion, BookRecommendation } from '@/lib/brain-client';
 import { RecommendedBooks } from '@/components/dashboard/RecommendedBooks';
 
 // Source badge colors for learning plan suggestions
@@ -35,7 +39,6 @@ function DashboardContent() {
   const studentId = student?.id ?? '';
   const gradeLevel = student?.gradeLevel ?? '8';
   const [activeLesson, setActiveLesson] = useState<LessonResponse | null>(null);
-  const [isStreaming, setIsStreaming] = useState(false);
   const [suggestions, setSuggestions] = useState<LessonSuggestion[]>([]);
   const [projects, setProjects] = useState<ProjectSuggestion[]>([]);
   const [totalCredits, setTotalCredits] = useState(0);
@@ -43,15 +46,77 @@ function DashboardContent() {
   const [recommendedBooks, setRecommendedBooks] = useState<BookRecommendation[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [streamingBlocks, setStreamingBlocks] = useState<LessonBlockResponse[]>([]);
+  const [streamingTitle, setStreamingTitle] = useState('');
+  const [streamingStatus, setStreamingStatus] = useState('');
   const router = useRouter();
+
+  // useChat drives lesson streaming via /api/lesson translation bridge
+  const chat = useChat({
+    transport: new DefaultChatTransport({
+      api: '/api/lesson',
+      headers: typeof window !== 'undefined'
+        ? { Authorization: `Bearer ${localStorage.getItem('auth_token') ?? ''}` }
+        : undefined,
+    }),
+    onFinish: () => {
+      setStreamingStatus('');
+    },
+    onError: (err: Error) => {
+      console.error('[Dashboard] Lesson stream error:', err);
+      setStreamingStatus('');
+    },
+  });
+  const { messages, sendMessage: append, status: chatStatus } = chat;
+  const isStreaming = chatStatus === 'streaming' || chatStatus === 'submitted';
+
+  // DEBUG: Log messages and status to diagnose streaming issues
+  useEffect(() => {
+    console.log('[Dashboard Debug] chatStatus:', chatStatus);
+    console.log('[Dashboard Debug] messages count:', messages.length);
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      console.log('[Dashboard Debug] last message:', {
+        role: lastMsg.role,
+        id: lastMsg.id,
+        partsCount: (lastMsg as { parts?: unknown[] }).parts?.length ?? 0,
+        parts: (lastMsg as { parts?: unknown[] }).parts,
+      });
+    }
+  }, [messages, chatStatus]);
+
+  // Derive blocks from the latest assistant message's annotations
+  useEffect(() => {
+    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+    if (!lastAssistant) return;
+
+    // SDK v3: data annotations are in the annotations array (2: protocol lines)
+    const annotations = (lastAssistant as { annotations?: unknown[] }).annotations ?? [];
+    const blocks: LessonBlockResponse[] = [];
+    let title = '';
+    let status = '';
+
+    for (const ann of annotations) {
+      const a = ann as Record<string, unknown>;
+      if (a.type === 'block' && a.block) {
+        blocks.push(a.block as LessonBlockResponse);
+      } else if (a.type === 'done') {
+        title = (a.title as string) ?? '';
+      } else if (a.type === 'status') {
+        status = (a.message as string) ?? '';
+      }
+    }
+
+    setStreamingBlocks(blocks);
+    if (title) setStreamingTitle(title);
+    setStreamingStatus(status);
+  }, [messages]);
 
   // Fetch dynamic learning plan suggestions
   const fetchSuggestions = useCallback(async () => {
     if (!studentId) return;
-    
     setLoadingSuggestions(true);
     setSuggestionsError(null);
-    
     try {
       const plan = await getLearningPlan(studentId, 6);
       setSuggestions(plan.suggestions);
@@ -68,40 +133,38 @@ function DashboardContent() {
   }, [studentId]);
 
   useEffect(() => {
-    if (studentId) {
-      fetchSuggestions();
-    }
+    if (studentId) fetchSuggestions();
   }, [studentId, fetchSuggestions]);
 
   const handleLessonGenerated = useCallback((lesson: LessonResponse) => {
-    console.log('[Dashboard] Lesson generated:', lesson.title);
     setActiveLesson(lesson);
-    setIsStreaming(false);
   }, []);
 
-  const handleSuggestionClick = useCallback(async (suggestion: LessonSuggestion) => {
+  const handleSuggestionClick = useCallback((suggestion: LessonSuggestion) => {
     if (isStreaming || !studentId) return;
-    
-    setIsStreaming(true);
     setActiveLesson(null);
-    
-    try {
-      const lesson = await generateLesson({
-        student_id: studentId,
-        track: suggestion.track as Track,
-        topic: suggestion.title,
-        is_homestead: false,
-        grade_level: gradeLevel,
-      });
-      handleLessonGenerated(lesson);
-    } catch (error) {
-      console.error('[Dashboard] Lesson generation failed:', error);
-      setIsStreaming(false);
-    }
-  }, [studentId, gradeLevel, isStreaming, handleLessonGenerated]);
+    setStreamingBlocks([]);
+    setStreamingTitle('');
+    setStreamingStatus('Adeline is preparing your lesson…');
+    append({
+      text: suggestion.title,
+    }, {
+      body: {
+        lesson_request: {
+          student_id: studentId,
+          track: suggestion.track as Track,
+          topic: suggestion.title,
+          is_homestead: false,
+          grade_level: gradeLevel,
+        },
+      },
+    });
+  }, [studentId, gradeLevel, isStreaming, append]);
 
   const handleBackToSuggestions = () => {
     setActiveLesson(null);
+    setStreamingBlocks([]);
+    setStreamingTitle('');
   };
 
   return (
@@ -129,24 +192,86 @@ function DashboardContent() {
           <SpacedRepWidget />
         </div>
 
-        {/* ── Idle: suggestion cards ── */}
-        {!activeLesson && (
-          <main className="px-6 pb-8 pt-5">
+        {/* ── Streaming lesson view (shown while generating AND after completion until dismissed) ── */}
+        {!activeLesson && (isStreaming || streamingBlocks.length > 0) && (
+          <div className="px-6 pb-8 pt-5">
+            {!isStreaming && streamingBlocks.length > 0 && (
+              <button
+                onClick={handleBackToSuggestions}
+                className="flex items-center gap-2 text-[#BD6809] hover:text-[#2F4731] mb-4 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="text-sm font-medium">Back to lesson list</span>
+              </button>
+            )}
             {isStreaming && (
-              <div className="flex items-center gap-3 py-10 justify-center">
-                <Loader2 className="w-6 h-6 animate-spin text-[#BD6809]" />
-                <p className="text-[#2F4731]/60 italic">Adeline is preparing your lesson…</p>
+              <div className="flex items-center gap-3 pb-4">
+                <Loader2 className="w-5 h-5 animate-spin text-[#BD6809]" />
+                <p className="text-sm text-[#2F4731]/60 italic">
+                  {streamingStatus || 'Adeline is preparing your lesson…'}
+                </p>
               </div>
             )}
+            {streamingTitle && (
+              <h2 className="text-xl font-bold text-[#2F4731] mb-4">{streamingTitle}</h2>
+            )}
+            {streamingBlocks.map((block, idx) => {
+              const lastMsg = [...messages].reverse().find((m) => m.role === 'assistant');
+              // SDK v3: tool invocations are in annotations array (from 9:/a: protocol lines)
+              const annotations = (lastMsg as { annotations?: unknown[] })?.annotations ?? [];
+              const toolInvocations = annotations
+                .filter((a) => (a as Record<string, unknown>).type === 'tool-invocation')
+                .map((a) => (a as Record<string, unknown>).toolInvocation) as Array<{ toolName: string; state: string; result: Record<string, unknown> }>;
+              const blockToolCall = toolInvocations.find(
+                (t) => t.state === 'result' &&
+                  (t.toolName === 'render_quiz_widget' || t.toolName === 'render_lab_widget') &&
+                  (t.result?.blockId === block.block_id)
+              );
+              return (
+                <div key={idx} className="mb-4">
+                  <div className="rounded-2xl border border-[#E7DAC3] bg-white p-4">
+                    <p className="text-xs font-bold uppercase tracking-widest text-[#BD6809] mb-1">
+                      {block.block_type?.replace(/_/g, ' ')}
+                    </p>
+                    <p className="text-sm text-[#2F4731]/80 leading-relaxed whitespace-pre-wrap">{block.content}</p>
+                  </div>
+                  {blockToolCall && blockToolCall.toolName === 'render_quiz_widget' && (
+                    <MasteryCheckWidget
+                      blockId={blockToolCall.result.blockId as string}
+                      lessonId={blockToolCall.result.lessonId as string}
+                      track={blockToolCall.result.track as string}
+                      title={blockToolCall.result.title as string}
+                      content={blockToolCall.result.content as string}
+                      tags={blockToolCall.result.tags as string[] | undefined}
+                    />
+                  )}
+                  {blockToolCall && blockToolCall.toolName === 'render_lab_widget' && (
+                    <LabMissionWidget
+                      blockId={blockToolCall.result.blockId as string}
+                      lessonId={blockToolCall.result.lessonId as string}
+                      track={blockToolCall.result.track as string}
+                      title={blockToolCall.result.title as string}
+                      content={blockToolCall.result.content as string}
+                      isHomestead={blockToolCall.result.isHomestead as boolean | undefined}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-            {!isStreaming && loadingSuggestions && (
+        {/* ── Idle: suggestion cards ── */}
+        {!activeLesson && !isStreaming && (
+          <main className="px-6 pb-8 pt-5">
+            {loadingSuggestions && (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-6 h-6 animate-spin text-[#BD6809]" />
                 <p className="ml-3 text-[#2F4731]/60">Loading your learning plan…</p>
               </div>
             )}
 
-            {!isStreaming && suggestionsError && (
+            {suggestionsError && (
               <div className="text-center py-12">
                 <p className="text-[#991B1B] mb-4">{suggestionsError}</p>
                 <button
@@ -159,7 +284,7 @@ function DashboardContent() {
               </div>
             )}
 
-            {!isStreaming && !loadingSuggestions && !suggestionsError && (
+            {!loadingSuggestions && !suggestionsError && (
               <>
                 {/* Credits Summary */}
                 <div className="flex items-center gap-6 mb-6 p-4 bg-white rounded-xl border border-[#E7DAC3]">

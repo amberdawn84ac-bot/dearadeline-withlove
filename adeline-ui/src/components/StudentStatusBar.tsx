@@ -31,9 +31,12 @@ export function StudentStatusBar() {
 
   useEffect(() => {
     if (!student?.id) return;
+    console.log('[StudentStatusBar] Fetching state for student:', student.id);
     fetchStudentState(student.id)
       .then(setState)
-      .catch(() => {/* silently fail — status bar is non-critical */});
+      .catch((err) => {
+        console.error('[StudentStatusBar] Failed to fetch student state:', err);
+      });
   }, [student?.id]);
 
   if (!state) return null;

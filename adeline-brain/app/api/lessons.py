@@ -14,19 +14,17 @@ import openai
 from fastapi import APIRouter, HTTPException, Depends, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from arq.connections import RedisSettings, create_pool as arq_create_pool
+from arq.jobs import Job as ARQJob, JobStatus
 
 from app.schemas.api_models import LessonRequest, LessonResponse, TRUTH_THRESHOLD, UserRole
 from app.protocols.witness import get_witness_threshold
 from app.api.middleware import require_role, get_current_user_id
-from app.agents.orchestrator import run_orchestrator
 from app.connections.pgvector_client import hippocampus
 from app.connections.knowledge_graph import get_cross_track_bias
-from app.algorithms.zpd_engine import apply_cross_track_bias, AdaptiveBKTParams, apply_decay, compute_priority
 from app.models.student import load_student_state
 from app.connections.canonical_store import canonical_store, canonical_slug
 from app.tools.graph_query import tool_get_zpd_candidates
-from app.agents.adapter import adapt_canonical_for_student, AdaptationRequest, _HIGH_STAKES_TRACKS
-from app.api.metrics import record_lesson_served
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lesson", tags=["lessons"])
@@ -94,6 +92,33 @@ async def _embed(text: str) -> list[float]:
     return resp.data[0].embedding
 
 
+async def _get_arq_redis_pool():
+    """Create a short-lived ARQ Redis pool for enqueue/status operations."""
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    if redis_url.startswith("https://") or redis_url.startswith("http://"):
+        raise ValueError(
+            f"REDIS_URL must be a redis:// TCP DSN for ARQ, got: {redis_url}"
+        )
+    return await arq_create_pool(RedisSettings.from_dsn(redis_url))
+
+
+async def _enqueue_lesson_job(lesson_request_dict: dict, student_id: str):
+    """Enqueue a lesson generation job and return the ARQ Job object."""
+    pool = await _get_arq_redis_pool()
+    job = await pool.enqueue_job(
+        "generate_lesson_job",
+        lesson_request_dict,
+        student_id,
+    )
+    await pool.aclose()
+    return job
+
+
+def _get_arq_job(job_id: str, pool) -> ARQJob:
+    """Return an ARQ Job handle for status checking."""
+    return ARQJob(job_id, pool)
+
+
 async def _persist_learning_records(lesson: LessonResponse) -> None:
     """
     Fire-and-forget: persist xAPI statements and CASE credit entry generated
@@ -150,7 +175,7 @@ async def _persist_learning_records(lesson: LessonResponse) -> None:
 
 @router.post(
     "/generate",
-    response_model=LessonResponse,
+    status_code=202,
 )
 @limiter.limit("20/hour")
 async def generate_lesson(
@@ -159,251 +184,56 @@ async def generate_lesson(
     student_id: str = Depends(get_current_user_id),
 ):
     """
-    Generate a Truth-First lesson for a student.
+    Enqueue a lesson generation job and return immediately.
 
-    Flow:
-      1. Check canonical store (topic + track) — if exists, adapt cheaply for student
-      2. If no canonical: embed topic, run full orchestrator (research + generation)
-      3. Save new canonical for future students
-      4. Retrieve top-k chunks from Hippocampus (pgvector)
-      5. Evaluate each chunk via the Witness Protocol (track-aware thresholds)
-      6. Graph-link to OAS Standards via Neo4j
-      7. RegistrarAgent emits xAPI statements + CASE credits
-      8. Fire-and-forget persistence to DB (non-blocking)
-      9. Return structured LessonResponse
+    The full orchestration pipeline (embed → canonical check → agent → registrar)
+    runs in an ARQ background worker. Poll GET /lesson/status/{job_id} for the result.
     """
-    lr = lesson_request  # alias for brevity
+    job = await _enqueue_lesson_job(lesson_request.model_dump(mode="json"), student_id)
     logger.info(
-        f"[/lessons/generate] topic='{lr.topic}' track={lr.track.value} "
-        f"grade={lr.grade_level} homestead={lr.is_homestead}"
+        f"[/lesson/generate] Enqueued job={job.job_id} "
+        f"topic='{lesson_request.topic}' track={lesson_request.track.value}"
     )
+    return {"job_id": job.job_id, "status": "queued"}
+
+
+@router.get("/status/{job_id}")
+async def get_lesson_status(
+    job_id: str,
+    student_id: str = Depends(get_current_user_id),
+):
+    """
+    Poll for lesson generation status.
+
+    Returns:
+      { status: "queued" }               — job is waiting
+      { status: "running" }              — job is executing
+      { status: "done", result: {...} }  — lesson ready
+      { status: "failed", error: "..." } — generation failed
+    """
+    pool = None
     try:
-        # ── Phase 1: ZPD-driven topic selection ───────────────────────────────
-        # When no topic is provided: use top BKT-scored ZPD candidate as topic.
-        # When a topic IS provided: still fetch ZPD candidates so the orchestrator
-        # gets ZPD context injected into its prompt (via cross_track_acknowledgment
-        # or mastery_score/band). This makes every lesson ZPD-aware.
-        canonical = None
-        zpd_injected_topic: Optional[str] = None
+        pool = await _get_arq_redis_pool()
+        job = _get_arq_job(job_id, pool)
+        status = await job.status()
 
-        if not lr.topic or lr.topic.strip() == "":
-            logger.info("[/lessons/generate] No topic — running ZPD auto-selection")
-            zpd_result = await _get_best_canonical_for_zpd(student_id, lr.track.value)
-            if zpd_result:
-                if isinstance(zpd_result, tuple):
-                    canonical, zpd_injected_topic = zpd_result
-                else:
-                    canonical = zpd_result  # legacy: just a canonical dict
-
-            if canonical:
-                logger.info(f"[/lessons/generate] ZPD canonical HIT: {canonical.get('topic')}")
-            elif zpd_injected_topic:
-                # No canonical but BKT gave us the best topic to generate fresh
-                lr = lr.model_copy(update={"topic": zpd_injected_topic})
-                logger.info(f"[/lessons/generate] ZPD injected topic: '{zpd_injected_topic}'")
-            else:
-                logger.info("[/lessons/generate] ZPD returned nothing — orchestrator will use defaults")
+        if status == JobStatus.complete:
+            result = await job.result(timeout=0)
+            return {"status": "done", "result": result}
+        elif status in (JobStatus.deferred, JobStatus.queued):
+            return {"status": "queued"}
+        elif status == JobStatus.in_progress:
+            return {"status": "running"}
+        elif status == JobStatus.not_found:
+            return {"status": "not_found"}
         else:
-            # Topic provided: check canonical store, then continue with ZPD context in background
-            slug = canonical_slug(lr.topic, lr.track.value)
-            try:
-                canonical = await canonical_store.get(slug)
-            except Exception as e:
-                logger.warning(f"[/lessons/generate] Canonical store read failed (non-fatal): {e}")
-
-        if canonical:
-            logger.info(f"[/lessons/generate] Canonical HIT — adapting for student grade={lr.grade_level}")
-            _adapt_start = time.monotonic()
-            student_state = await load_student_state(student_id)
-            track_mastery = student_state.get(lr.track.value)
-            interaction_count = track_mastery.lesson_count if track_mastery else 10
-
-            interests: list[str] = []
-            recent_quiz_scores: list[float] = []
-            last_practiced_dt = None
-            proficiency_map: dict[str, float] = {}
-            try:
-                from app.config import get_db_conn
-                from datetime import datetime, timezone
-                conn = await get_db_conn()
-                row = await conn.fetchrow('SELECT interests FROM "User" WHERE id = $1', student_id)
-                interests = row["interests"] or [] if row else []
-                cards = await conn.fetch(
-                    'SELECT "easeFactor" FROM "SpacedRepetitionCard" '
-                    'WHERE "studentId" = $1 ORDER BY "updatedAt" DESC LIMIT 5',
-                    student_id,
-                )
-                recent_quiz_scores = [float(r["easeFactor"]) for r in cards]
-                # Fetch proficiency data for the track: {conceptId: masteryLevel}
-                prof_cards = await conn.fetch(
-                    'SELECT "conceptId", "masteryLevel" FROM "SpacedRepetitionCard" '
-                    'WHERE "studentId" = $1 AND "track" = $2',
-                    student_id, lr.track.value,
-                )
-                proficiency_map = {r["conceptId"]: float(r["masteryLevel"]) for r in prof_cards}
-                journal_row = await conn.fetchrow(
-                    'SELECT sealed_at FROM student_journal '
-                    'WHERE student_id = $1 AND track = $2 '
-                    'ORDER BY sealed_at DESC LIMIT 1',
-                    student_id, lr.track.value,
-                )
-                if journal_row and journal_row["sealed_at"]:
-                    last_practiced_dt = journal_row["sealed_at"]
-                    if last_practiced_dt.tzinfo is None:
-                        last_practiced_dt = last_practiced_dt.replace(tzinfo=timezone.utc)
-                await conn.close()
-            except Exception:
-                pass
-
-            _visual_interests = {"art", "drawing", "visual", "film", "video", "photography", "design"}
-            _kinesthetic_interests = {"farming", "building", "cooking", "crafting", "garden", "homestead"}
-            interests_lower = {i.lower() for i in interests}
-            if interests_lower & _visual_interests:
-                modality = "visual"
-            elif interests_lower & _kinesthetic_interests:
-                modality = "kinesthetic"
-            else:
-                modality = "text"
-
-            # ── Compute full ZPD state ────────────────────────────────────────
-            bkt_pL = track_mastery.mastery_score  # proxy until per-concept BKT is stored
-            decay_adj = (
-                apply_decay(bkt_pL, last_practiced_dt)
-                if last_practiced_dt else bkt_pL
-            )
-            priority = compute_priority(
-                prereq=min(1.0, bkt_pL + 0.2),
-                mastery=decay_adj,
-                deps=1,
-                max_deps=1,
-            )
-            ct_bias_value = 0.0
-            try:
-                ct_bias_value, _ = await get_cross_track_bias(
-                    student_id=student_id,
-                    target_track=lr.track.value,
-                )
-            except Exception:
-                pass
-
-            adapt_req = AdaptationRequest(
-                grade_level=lr.grade_level,
-                track=lr.track.value,
-                interests=interests,
-                interaction_count=interaction_count,
-                recent_quiz_scores=recent_quiz_scores,
-                preferred_modality=modality,
-                bkt_pL=bkt_pL,
-                bkt_pT=0.15,
-                priority_score=priority,
-                decay_adjusted_mastery=decay_adj,
-                cross_track_bias=ct_bias_value,
-                proficiency_map=proficiency_map,
-            )
-            adapted_blocks = await adapt_canonical_for_student(canonical, adapt_req)
-            _adapt_ms = (time.monotonic() - _adapt_start) * 1000
-            record_lesson_served(
-                source="canonical",
-                track=lr.track.value,
-                grade=lr.grade_level,
-                adaptation_ms=_adapt_ms,
-                student_id_prefix=student_id[:8],
-            )
-            from app.schemas.api_models import LessonBlockResponse
-            blocks = [LessonBlockResponse(**b) for b in adapted_blocks]
-            return LessonResponse(
-                title=canonical["title"],
-                track=lr.track,
-                blocks=blocks,
-                has_research_missions=any(b.get("block_type") == "RESEARCH_MISSION" for b in adapted_blocks),
-                oas_standards=canonical.get("oas_standards", []),
-                researcher_activated=canonical.get("researcher_activated", False),
-                agent_name=canonical.get("agent_name", ""),
-            )
-
-        # ── Phase 2: Full generation (no canonical exists yet) ───────────────
-        logger.info(f"[/lessons/generate] No canonical — running full orchestrator")
-        # Ensure slug is always defined for the canonical-save step below
-        slug = canonical_slug(lr.topic, lr.track.value)
-        query_embedding = await _embed(lr.topic)
-
-        student_state     = await load_student_state(student_id)
-        track_mastery     = student_state.get(lr.track.value)
-        interaction_count = track_mastery.lesson_count
-
-        cross_track_acknowledgment: str | None = None
-        if interaction_count == 0:
-            try:
-                bias_value, cross_track_acknowledgment = await get_cross_track_bias(
-                    student_id=student_id,
-                    target_track=lr.track.value,
-                )
-                if bias_value > 0.0:
-                    biased = apply_cross_track_bias(AdaptiveBKTParams(), bias_value)
-                    logger.info(
-                        f"[Lessons] Cross-track bias {lr.track.value}: "
-                        f"pL 0.1 → {biased.pL:.3f} (bias={bias_value:.3f})"
-                    )
-            except Exception as e:
-                logger.warning(f"[Lessons] Cross-track bias lookup failed (non-fatal): {e}")
-                cross_track_acknowledgment = None
-
-        lesson = await run_orchestrator(
-            lr,
-            query_embedding,
-            interaction_count=interaction_count,
-            cross_track_acknowledgment=cross_track_acknowledgment,
-            mastery_score=track_mastery.mastery_score,
-            mastery_band=track_mastery.mastery_band.value,
-        )
-
-        # ── Phase 3: Save as canonical for future students ───────────────────
-        try:
-            needs_review = (
-                lesson.researcher_activated
-                or lr.track.value in _HIGH_STAKES_TRACKS
-            )
-            review_reason: str | None = None
-            if needs_review:
-                review_reason = (
-                    "researcher_activated" if lesson.researcher_activated
-                    else "high_stakes_track"
-                )
-            canonical_record = {
-                "id": lesson.lesson_id,
-                "topic_slug": slug,
-                "topic": lr.topic,
-                "track": lr.track.value,
-                "title": lesson.title,
-                "blocks": [b.model_dump() for b in lesson.blocks],
-                "oas_standards": lesson.oas_standards,
-                "researcher_activated": lesson.researcher_activated,
-                "agent_name": lesson.agent_name,
-                "pending_approval": needs_review,
-                "needs_review_reason": review_reason,
-            }
-            await canonical_store.save(slug, canonical_record, pending=needs_review)
-            logger.info(
-                f"[/lessons/generate] Saved canonical — {slug} "
-                f"(pending={needs_review}, reason={review_reason})"
-            )
-        except Exception as e:
-            logger.warning(f"[/lessons/generate] Canonical save failed (non-fatal): {e}")
-
-        # Persist learning records fire-and-forget (don't block lesson response)
-        record_lesson_served(
-            source="orchestrator",
-            track=lr.track.value,
-            grade=lr.grade_level,
-            student_id_prefix=student_id[:8],
-        )
-        asyncio.create_task(_persist_learning_records(lesson))
-        return lesson
-    except openai.APIConnectionError as e:
-        raise HTTPException(status_code=503, detail=f"Embedding service unavailable: {e}")
+            return {"status": "unknown", "detail": str(status)}
     except Exception as e:
-        logger.exception("[/lessons/generate] Unexpected error")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[/lesson/status] Error checking job {job_id}: {e}")
+        return {"status": "failed", "error": str(e)}
+    finally:
+        if pool is not None:
+            await pool.aclose()
 
 
 @router.get("/health")

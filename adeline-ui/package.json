@@ -12,10 +12,12 @@
   },
   "dependencies": {
     "@adeline/core": "file:../adeline-core",
+    "@ai-sdk/react": "^3.0.177",
     "@stripe/react-stripe-js": "^2.4.0",
     "@stripe/stripe-js": "^3.0.0",
     "@supabase/supabase-js": "^2.101.1",
     "@tailwindcss/typography": "^0.5.19",
+    "ai": "^6.0.175",
     "clsx": "^2.1.1",
     "epubjs": "^0.3.93",
     "framer-motion": "^12.34.0",

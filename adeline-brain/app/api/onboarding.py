@@ -49,6 +49,12 @@ def _get_user_id_from_auth(authorization: Optional[str]) -> str:
     return get_current_user_id(authorization=authorization)
 
 
+def _get_auth_claims(authorization: Optional[str]) -> tuple[str, str]:
+    """Returns (user_id, email) from Authorization Bearer token."""
+    from app.api.middleware import get_auth_claims
+    return get_auth_claims(authorization)
+
+
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
 class UserProfile(BaseModel):
@@ -83,6 +89,7 @@ class OnboardingRequest(BaseModel):
     state: str
     targetGraduationYear: int
     coppaConsent: bool
+    inviteCode: Optional[str] = None  # required in Founder Alpha; optional once open
 
     @validator("name")
     def validate_name(cls, v):
@@ -226,7 +233,11 @@ async def get_onboarding(authorization: Optional[str] = Header(None)):
     """
     user_id = _get_user_id_from_auth(authorization)
 
-    conn = await _get_conn()
+    try:
+        conn = await _get_conn()
+    except Exception as e:
+        logger.exception("[GET /api/onboarding] DB connection failed")
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {e}")
     try:
         row = await conn.fetchrow(
             """
@@ -299,17 +310,31 @@ async def post_onboarding(
     - 400: Validation error
     - 500: Database error
     """
-    user_id = _get_user_id_from_auth(authorization)
-    conn = await _get_conn()
+    user_id, email = _get_auth_claims(authorization)
     try:
+        conn = await _get_conn()
+    except Exception as e:
+        logger.exception("[POST /api/onboarding] DB connection failed")
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {e}")
+    try:
+        # Validate invite code before touching the user record
+        if request.inviteCode:
+            code_row = await conn.fetchrow(
+                'SELECT id, "isUsed" FROM "InviteCode" WHERE code = $1',
+                request.inviteCode,
+            )
+            if not code_row:
+                raise HTTPException(status_code=400, detail="Invalid invite code.")
+            if code_row["isUsed"]:
+                raise HTTPException(status_code=403, detail="This invite code has already been used.")
 
         row = await conn.fetchrow(
             """
             INSERT INTO "User" (
-                "id", "name", "gradeLevel", "interests", "learningStyle",
+                "id", "name", "email", "role", "gradeLevel", "interests", "learningStyle",
                 "state", "targetGraduationYear", "onboardingComplete"
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+            VALUES ($1, $2, $3, 'STUDENT', $4, $5::text[], $6, $7, $8, true)
             ON CONFLICT ("id") DO UPDATE SET
                 "name" = EXCLUDED."name",
                 "gradeLevel" = EXCLUDED."gradeLevel",
@@ -325,9 +350,18 @@ async def post_onboarding(
                 "interests", "learningStyle", "pacingMultiplier",
                 "state", "targetGraduationYear", "onboardingComplete"
             """,
-            user_id, request.name, request.gradeLevel, request.interests,
+            user_id, request.name, email, request.gradeLevel, request.interests,
             request.learningStyle, request.state, request.targetGraduationYear,
         )
+
+        # Claim the invite code atomically after successful insert
+        if request.inviteCode:
+            await conn.execute(
+                'UPDATE "InviteCode" SET "isUsed" = true, "claimedByEmail" = $1 WHERE code = $2',
+                email, request.inviteCode,
+            )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("[POST /api/onboarding] DB error")
         raise HTTPException(status_code=500, detail=str(e))
@@ -425,7 +459,7 @@ async def patch_onboarding(
             param_index += 1
 
         if request.interests is not None:
-            updates.append(f'"interests" = ${param_index}')
+            updates.append(f'"interests" = ${param_index}::text[]')
             params.append(request.interests)
             param_index += 1
 

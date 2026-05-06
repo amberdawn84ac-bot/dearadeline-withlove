@@ -9,6 +9,7 @@ Environment variables (either convention accepted):
   NEO4J_PASSWORD  — password
   NEO4J_DATABASE  — optional database name (Aura multi-database)
 """
+import asyncio
 import os
 import logging
 from typing import Optional
@@ -30,9 +31,9 @@ class Neo4jClient:
             NEO4J_URI,
             auth=(NEO4J_USER, NEO4J_PASSWORD),
             max_connection_pool_size=int(os.getenv("NEO4J_MAX_POOL_SIZE", "50")),
-            connection_acquisition_timeout=float(os.getenv("NEO4J_ACQUIRE_TIMEOUT", "30")),
+            connection_acquisition_timeout=float(os.getenv("NEO4J_ACQUIRE_TIMEOUT", "10")),
         )
-        await self._driver.verify_connectivity()
+        await asyncio.wait_for(self._driver.verify_connectivity(), timeout=10.0)
         logger.info(f"[Neo4j] Connected to {NEO4J_URI}")
 
     async def close(self):

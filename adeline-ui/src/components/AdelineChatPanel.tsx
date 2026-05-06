@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Sparkles, Send, Loader2, FlaskConical, Search, Network, ListOrdered, Brain, Presentation } from "lucide-react";
-import { scaffold, generateLesson, listProjects, getProject, reportActivity, streamConversation } from "@/lib/brain-client";
+import { scaffold, generateLesson, pollLessonResult, listProjects, getProject, reportActivity, streamConversation } from "@/lib/brain-client";
 import type {
   Track, ScaffoldResponse, LessonResponse, LessonBlockResponse,
   ProjectSummary, ProjectDetail, ActivityReportResponse,
@@ -10,6 +10,9 @@ import type {
 } from "@/lib/brain-client";
 import { ProjectCatalog } from "@/components/projects/ProjectCard";
 import { ProjectGuide } from "@/components/projects/ProjectGuide";
+import RenderModeSelector from "@/components/RenderModeSelector";
+import AnimatedSketchnoteRenderer from "@/components/gen-ui/patterns/AnimatedSketchnoteRenderer";
+import type { LessonRenderMode, AnimatedSketchnoteLesson } from "@/lib/brain-client";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -377,13 +380,14 @@ export function AdelineChatPanel({
         // Trigger the same flow as handleSend by calling the generate endpoint
         (async () => {
           try {
-            const lesson = await generateLesson({
+            const job = await generateLesson({
               student_id: studentId,
               topic: initialPrompt,
               track: 'DISCIPLESHIP' as Track,
               grade_level: gradeLevel,
               is_homestead: false,
             });
+            const lesson = await pollLessonResult(job.job_id, { intervalMs: 2000, timeoutMs: 90000 });
             addMessage({ role: 'adeline', content: lesson.title || 'Here is your Daily Bread study.' });
             onLessonGenerated?.(lesson);
           } catch {
@@ -708,7 +712,9 @@ function BlockBubble({ block }: { block: LessonBlockResponse }) {
 export function LessonBlockChatPanel({ studentId, initialTrack = "TRUTH_HISTORY" }: LessonBlockChatPanelProps) {
   const [topic, setTopic] = useState("");
   const [track, setTrack] = useState<Track>(initialTrack);
+  const [renderMode, setRenderMode] = useState<LessonRenderMode>("standard_lesson");
   const [blocks, setBlocks] = useState<LessonBlockResponse[]>([]);
+  const [animatedLesson, setAnimatedLesson] = useState<AnimatedSketchnoteLesson | null>(null);
   const [visibleCount, setVisibleCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -728,16 +734,38 @@ export function LessonBlockChatPanel({ studentId, initialTrack = "TRUTH_HISTORY"
     e.preventDefault();
     if (!topic.trim() || loading) return;
     setBlocks([]);
+    setAnimatedLesson(null);
     setVisibleCount(0);
     setLoading(true);
+
+    if (renderMode === "animated_sketchnote_lesson") {
+      try {
+        const res = await fetch("/api/adeline/animated-lesson", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ topic: topic.trim(), duration_seconds: 180 }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAnimatedLesson(data as AnimatedSketchnoteLesson);
+        }
+      } catch {
+        // surface nothing — user can retry
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     try {
-      const lesson: LessonResponse = await generateLesson({
+      const job = await generateLesson({
         student_id: studentId,
         track,
         topic: topic.trim(),
         is_homestead: false,
         grade_level: "9",
       });
+      const lesson: LessonResponse = await pollLessonResult(job.job_id, { intervalMs: 2000, timeoutMs: 90000 });
       setBlocks(lesson.blocks);
     } catch {
       // surface nothing — user can retry
@@ -751,8 +779,13 @@ export function LessonBlockChatPanel({ studentId, initialTrack = "TRUTH_HISTORY"
 
   return (
     <div className="flex flex-col h-full" style={{ background: "#FFFEF7" }}>
+      {/* Render mode selector */}
+      <div className="shrink-0 px-4 pt-4 pb-1">
+        <RenderModeSelector value={renderMode} onChange={setRenderMode} disabled={loading} />
+      </div>
+
       {/* Track selector */}
-      <div className="shrink-0 px-4 pt-4 pb-2">
+      <div className="shrink-0 px-4 pt-2 pb-2">
         <div className="flex gap-1.5 flex-wrap">
           {TRACK_OPTIONS.map((t) => (
             <button
@@ -772,6 +805,11 @@ export function LessonBlockChatPanel({ studentId, initialTrack = "TRUTH_HISTORY"
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+        {/* Animated sketchnote output */}
+        {animatedLesson && (
+          <AnimatedSketchnoteRenderer lesson={animatedLesson} />
+        )}
+
         {visibleBlocks.map((block) => (
           <div key={block.block_id} className="flex justify-start">
             <BlockBubble block={block} />

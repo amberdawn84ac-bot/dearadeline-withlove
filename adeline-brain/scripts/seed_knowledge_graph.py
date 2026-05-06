@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Seed the 8-Track GraphRAG knowledge graph.
+Seed the 10-Track GraphRAG knowledge graph.
 
 Creates:
-  - 8 Track nodes (one per 8-Track Constitution track)
-  - ~64 Concept nodes (8 per track, spanning k-2 through 9-12)
+  - 10 Track nodes (one per 10-Track Constitution track)
+  - 80 Concept nodes (8 per track, spanning k-2 through 9-12)
   - PREREQUISITE_OF edges encoding the learning dependency graph
   - CROSS_TRACK_LINK edges encoding thematic connections between tracks
     (e.g., HOMESTEADING soil science ↔ CREATION_SCIENCE biology)
@@ -41,338 +41,348 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 
-# ── Concept definitions: (id, title, description, track, difficulty, standard_code, grade_band) ──
+# ── Concept definitions ───────────────────────────────────────────────────────
+# Tuple shape: (id, title, description, track, difficulty, standard_code, grade_band, is_primary_source)
+#
+# is_primary_source = True  →  mastery requires a primary artifact
+#                               (annotated document, lab record, student-made product,
+#                                real transaction). Used by the Registrar for
+#                               Life-to-Credit translation.
+# is_primary_source = False →  mastery is demonstrated through conceptual understanding
+#                               (framework, schema, philosophical reasoning).
 
 CONCEPTS = [
     # ── TRUTH_HISTORY ──────────────────────────────────────────────────────────
     ("th-001", "Oral Tradition & Family History",
      "Understanding how stories pass through generations before written records.",
-     "TRUTH_HISTORY", "EMERGING", "OK-US-K.1", "k2"),
+     "TRUTH_HISTORY", "EMERGING", "OK-US-K.1", "k2", False),   # conceptual foundation
 
     ("th-002", "Primary vs. Secondary Sources",
      "Distinguishing direct accounts from interpretations of events.",
-     "TRUTH_HISTORY", "DEVELOPING", "OK-US-3.1", "35"),
+     "TRUTH_HISTORY", "DEVELOPING", "OK-US-3.1", "35", True),   # requires source analysis
 
     ("th-003", "Bias and Perspective in Historical Sources",
      "Identifying author perspective, motive, and potential bias in documents.",
-     "TRUTH_HISTORY", "EXPANDING", "OK-US-6.2", "68"),
+     "TRUTH_HISTORY", "EXPANDING", "OK-US-6.2", "68", True),    # requires source analysis
 
     ("th-004", "The Dawes Act and Indigenous Land Loss",
      "How the 1887 Dawes Act fragmented tribal sovereignty and transferred land.",
-     "TRUTH_HISTORY", "EXPANDING", "OK-US-8.3", "68"),
+     "TRUTH_HISTORY", "EXPANDING", "OK-US-8.3", "68", True),    # primary document (the Act)
 
     ("th-005", "Historiography: Who Writes History?",
      "Examining how historical narratives are constructed, contested, and revised.",
-     "TRUTH_HISTORY", "MASTERING", "OK-US-11.1", "912"),
+     "TRUTH_HISTORY", "MASTERING", "OK-US-11.1", "912", True),  # historiographic documents
 
     ("th-006", "Propaganda and Media Manipulation",
      "Analyzing techniques used to shape public opinion through selective narrative.",
-     "TRUTH_HISTORY", "MASTERING", "OK-US-11.3", "912"),
+     "TRUTH_HISTORY", "MASTERING", "OK-US-11.3", "912", True),  # primary media artifacts
 
     ("th-007", "The Oklahoma Land Run: Multiple Perspectives",
      "Examining the 1889 Land Run from Settler, Freedmen, and Indigenous viewpoints.",
-     "TRUTH_HISTORY", "DEVELOPING", "OK-US-4.2", "35"),
+     "TRUTH_HISTORY", "DEVELOPING", "OK-US-4.2", "35", True),   # primary testimonies
 
     ("th-008", "Witness Protocol: Evaluating Source Credibility",
      "Applying a structured framework to verify historical claims against primary sources.",
-     "TRUTH_HISTORY", "MASTERING", "OK-US-12.1", "912"),
+     "TRUTH_HISTORY", "MASTERING", "OK-US-12.1", "912", True),  # source evaluation practice
 
     # ── CREATION_SCIENCE ───────────────────────────────────────────────────────
     ("cs-001", "Observation and the Scientific Method",
      "Using the five senses and direct observation to ask and answer questions.",
-     "CREATION_SCIENCE", "EMERGING", "OK-SC-K.1", "k2"),
+     "CREATION_SCIENCE", "EMERGING", "OK-SC-K.1", "k2", True),  # lab/observation record
 
     ("cs-002", "Plant Life Cycles and Seeds",
      "Understanding germination, growth, and reproduction in plants.",
-     "CREATION_SCIENCE", "EMERGING", "OK-SC-1.3", "k2"),
+     "CREATION_SCIENCE", "EMERGING", "OK-SC-1.3", "k2", True),  # plant growth journal
 
     ("cs-003", "Ecosystems and Food Webs",
      "How producers, consumers, and decomposers interact in a balanced system.",
-     "CREATION_SCIENCE", "DEVELOPING", "OK-SC-4.2", "35"),
+     "CREATION_SCIENCE", "DEVELOPING", "OK-SC-4.2", "35", False),  # conceptual framework
 
     ("cs-004", "Cell Biology: Building Blocks of Life",
      "Structure and function of plant and animal cells; organelles.",
-     "CREATION_SCIENCE", "EXPANDING", "OK-SC-7.1", "68"),
+     "CREATION_SCIENCE", "EXPANDING", "OK-SC-7.1", "68", True),  # microscope observation
 
     ("cs-005", "Genetics and Heredity",
      "How traits are passed from parent to offspring via DNA.",
-     "CREATION_SCIENCE", "EXPANDING", "OK-SC-7.3", "68"),
+     "CREATION_SCIENCE", "EXPANDING", "OK-SC-7.3", "68", False),  # conceptual
 
     ("cs-006", "Intelligent Design: Evidence from Biochemistry",
      "Examining irreducible complexity and specified information as evidence of design.",
-     "CREATION_SCIENCE", "MASTERING", "OK-SC-B.4", "912"),
+     "CREATION_SCIENCE", "MASTERING", "OK-SC-B.4", "912", True),  # research papers/primary sources
 
     ("cs-007", "Earth Science: Geology and Landforms",
      "Formation of landforms, rock cycles, and geological time.",
-     "CREATION_SCIENCE", "DEVELOPING", "OK-SC-4.4", "35"),
+     "CREATION_SCIENCE", "DEVELOPING", "OK-SC-4.4", "35", True),  # field observation record
 
     ("cs-008", "Chemistry: Matter and Its Properties",
      "States of matter, elements, compounds, and chemical change.",
-     "CREATION_SCIENCE", "EXPANDING", "OK-SC-8.1", "68"),
+     "CREATION_SCIENCE", "EXPANDING", "OK-SC-8.1", "68", True),  # lab experiments
 
     # ── HOMESTEADING ───────────────────────────────────────────────────────────
     ("hs-001", "Garden Basics: Soil, Seeds, and Water",
      "Starting a garden by understanding the role of soil health, seeds, and watering.",
-     "HOMESTEADING", "EMERGING", "OK-AG-K.1", "k2"),
+     "HOMESTEADING", "EMERGING", "OK-AG-K.1", "k2", True),  # hands-on garden record
 
     ("hs-002", "Composting and Soil Amendments",
      "Building healthy soil through composting kitchen scraps and organic matter.",
-     "HOMESTEADING", "DEVELOPING", "OK-AG-3.2", "35"),
+     "HOMESTEADING", "DEVELOPING", "OK-AG-3.2", "35", True),  # compost log
 
     ("hs-003", "Soil pH and Crop Selection",
      "Measuring soil pH and matching crops to soil conditions for optimal yield.",
-     "HOMESTEADING", "EXPANDING", "OK-AG-7.4", "68"),
+     "HOMESTEADING", "EXPANDING", "OK-AG-7.4", "68", True),  # soil test results
 
     ("hs-004", "Permaculture Design Principles",
      "Applying observation, edge effect, and stacking functions to land design.",
-     "HOMESTEADING", "EXPANDING", "OK-AG-8.1", "68"),
+     "HOMESTEADING", "EXPANDING", "OK-AG-8.1", "68", False),  # design framework
 
     ("hs-005", "Food Preservation: Canning and Fermentation",
      "Water-bath canning, lacto-fermentation, and dehydrating for long-term food storage.",
-     "HOMESTEADING", "DEVELOPING", "OK-AG-5.3", "35"),
+     "HOMESTEADING", "DEVELOPING", "OK-AG-5.3", "35", True),  # preserved goods as artifact
 
     ("hs-006", "Animal Husbandry Fundamentals",
      "Caring for chickens, goats, or cattle; feed, housing, and health basics.",
-     "HOMESTEADING", "DEVELOPING", "OK-AG-4.1", "35"),
+     "HOMESTEADING", "DEVELOPING", "OK-AG-4.1", "35", True),  # care log/direct animal work
 
     ("hs-007", "Regenerative Agriculture and Land Management",
      "No-till farming, cover crops, and holistic grazing for soil restoration.",
-     "HOMESTEADING", "MASTERING", "OK-AG-11.2", "912"),
+     "HOMESTEADING", "MASTERING", "OK-AG-11.2", "912", True),  # field practice record
 
     ("hs-008", "Water Systems: Rainwater Harvesting and Irrigation",
      "Designing water-catchment systems for drought resilience.",
-     "HOMESTEADING", "MASTERING", "OK-AG-10.3", "912"),
+     "HOMESTEADING", "MASTERING", "OK-AG-10.3", "912", True),  # built/designed system
 
     # ── GOVERNMENT_ECONOMICS ───────────────────────────────────────────────────
     ("ge-001", "Community Rules and Why We Have Them",
      "Why communities create rules, and how families and classrooms govern themselves.",
-     "GOVERNMENT_ECONOMICS", "EMERGING", "OK-SS-K.2", "k2"),
+     "GOVERNMENT_ECONOMICS", "EMERGING", "OK-SS-K.2", "k2", False),  # conceptual
 
     ("ge-002", "Local Government: How Our Town Works",
      "Roles of mayor, city council, and local services.",
-     "GOVERNMENT_ECONOMICS", "DEVELOPING", "OK-SS-3.4", "35"),
+     "GOVERNMENT_ECONOMICS", "DEVELOPING", "OK-SS-3.4", "35", True),  # meeting minutes/civic docs
 
     ("ge-003", "Budgeting and Personal Finance",
      "Income, expenses, savings, and the value of avoiding debt.",
-     "GOVERNMENT_ECONOMICS", "DEVELOPING", "OK-SS-4.5", "35"),
+     "GOVERNMENT_ECONOMICS", "DEVELOPING", "OK-SS-4.5", "35", True),  # real budget document
 
     ("ge-004", "The U.S. Constitution and Separation of Powers",
      "Three branches of government and the design of checks and balances.",
-     "GOVERNMENT_ECONOMICS", "EXPANDING", "OK-SS-8.2", "68"),
+     "GOVERNMENT_ECONOMICS", "EXPANDING", "OK-SS-8.2", "68", True),  # primary document
 
     ("ge-005", "Monetary Policy and the Federal Reserve",
      "How the Fed controls interest rates and money supply; inflation effects.",
-     "GOVERNMENT_ECONOMICS", "MASTERING", "OK-SS-12.3", "912"),
+     "GOVERNMENT_ECONOMICS", "MASTERING", "OK-SS-12.3", "912", True),  # Fed reports
 
     ("ge-006", "Regulatory Capture and Crony Capitalism",
      "When regulatory agencies serve industry interests over public interest.",
-     "GOVERNMENT_ECONOMICS", "MASTERING", "OK-SS-12.4", "912"),
+     "GOVERNMENT_ECONOMICS", "MASTERING", "OK-SS-12.4", "912", True),  # lobbying records/primary docs
 
     ("ge-007", "Supply, Demand, and Free Markets",
      "How prices are set by voluntary exchange; market signals.",
-     "GOVERNMENT_ECONOMICS", "EXPANDING", "OK-SS-7.3", "68"),
+     "GOVERNMENT_ECONOMICS", "EXPANDING", "OK-SS-7.3", "68", False),  # conceptual framework
 
     ("ge-008", "Taxation: Types, Purpose, and Critique",
      "Income, property, sales taxes; how taxation funds (and distorts) the economy.",
-     "GOVERNMENT_ECONOMICS", "EXPANDING", "OK-SS-6.4", "68"),
+     "GOVERNMENT_ECONOMICS", "EXPANDING", "OK-SS-6.4", "68", False),  # conceptual
 
     # ── JUSTICE_CHANGEMAKING ───────────────────────────────────────────────────
     ("jc-001", "Fairness and Sharing in Community",
      "Basic concepts of fair treatment and helping others in a community.",
-     "JUSTICE_CHANGEMAKING", "EMERGING", "OK-SS-K.3", "k2"),
+     "JUSTICE_CHANGEMAKING", "EMERGING", "OK-SS-K.3", "k2", False),  # conceptual
 
     ("jc-002", "Oklahoma History: The Five Civilized Tribes",
      "Sovereignty, culture, and resilience of the Cherokee, Choctaw, Chickasaw, Creek, and Seminole Nations.",
-     "JUSTICE_CHANGEMAKING", "DEVELOPING", "OK-US-5.1", "35"),
+     "JUSTICE_CHANGEMAKING", "DEVELOPING", "OK-US-5.1", "35", True),  # tribal primary sources
 
     ("jc-003", "The Trail of Tears",
      "Forced removal of the Five Tribes from southeastern homelands to Indian Territory.",
-     "JUSTICE_CHANGEMAKING", "DEVELOPING", "OK-US-5.3", "35"),
+     "JUSTICE_CHANGEMAKING", "DEVELOPING", "OK-US-5.3", "35", True),  # primary accounts
 
     ("jc-004", "Systemic Injustice: Structural vs. Individual Racism",
      "Distinguishing interpersonal prejudice from policies that produce unequal outcomes.",
-     "JUSTICE_CHANGEMAKING", "EXPANDING", "OK-SS-8.5", "68"),
+     "JUSTICE_CHANGEMAKING", "EXPANDING", "OK-SS-8.5", "68", False),  # conceptual framework
 
     ("jc-005", "The Tulsa Race Massacre of 1921",
      "The destruction of Greenwood District ('Black Wall Street') and its legacy.",
-     "JUSTICE_CHANGEMAKING", "EXPANDING", "OK-US-8.4", "68"),
+     "JUSTICE_CHANGEMAKING", "EXPANDING", "OK-US-8.4", "68", True),  # primary documents/testimony
 
     ("jc-006", "Advocacy and Community Organizing",
      "How to research an issue, build coalitions, and petition decision-makers.",
-     "JUSTICE_CHANGEMAKING", "MASTERING", "OK-SS-11.2", "912"),
+     "JUSTICE_CHANGEMAKING", "MASTERING", "OK-SS-11.2", "912", True),  # real advocacy actions
 
     ("jc-007", "Grassroots vs. Institutional Change",
      "Comparing bottom-up social movements with top-down policy reform.",
-     "JUSTICE_CHANGEMAKING", "MASTERING", "OK-SS-12.2", "912"),
+     "JUSTICE_CHANGEMAKING", "MASTERING", "OK-SS-12.2", "912", False),  # conceptual
 
     ("jc-008", "Restorative Justice Principles",
      "Repairing harm through accountability, community, and reconciliation.",
-     "JUSTICE_CHANGEMAKING", "EXPANDING", "OK-SS-9.3", "68"),
+     "JUSTICE_CHANGEMAKING", "EXPANDING", "OK-SS-9.3", "68", False),  # conceptual
 
     # ── DISCIPLESHIP ──────────────────────────────────────────────────────────
     ("ds-001", "God's Love and Our Identity",
      "Understanding that we are created in God's image and loved unconditionally.",
-     "DISCIPLESHIP", "EMERGING", "DISC-K.1", "k2"),
+     "DISCIPLESHIP", "EMERGING", "DISC-K.1", "k2", False),   # foundational/relational
 
     ("ds-002", "Scripture Memory and the Psalms",
      "Memorizing key scriptures; introduction to the poetry of the Psalms.",
-     "DISCIPLESHIP", "DEVELOPING", "DISC-3.2", "35"),
+     "DISCIPLESHIP", "DEVELOPING", "DISC-3.2", "35", True),  # scripture as primary text
 
     ("ds-003", "Biblical Worldview: Creation, Fall, Redemption, Restoration",
      "The four-act structure of the biblical narrative as a lens on all of life.",
-     "DISCIPLESHIP", "DEVELOPING", "DISC-4.1", "35"),
+     "DISCIPLESHIP", "DEVELOPING", "DISC-4.1", "35", False),  # conceptual framework
 
     ("ds-004", "Apologetics: Making a Defense of the Faith",
      "Evidential and presuppositional approaches to defending Christian truth claims.",
-     "DISCIPLESHIP", "MASTERING", "DISC-11.1", "912"),
+     "DISCIPLESHIP", "MASTERING", "DISC-11.1", "912", True),  # primary arguments/texts
 
     ("ds-005", "Cultural Discernment: Analyzing Media and Worldviews",
      "Applying biblical wisdom to evaluate art, entertainment, and news.",
-     "DISCIPLESHIP", "EXPANDING", "DISC-7.2", "68"),
+     "DISCIPLESHIP", "EXPANDING", "DISC-7.2", "68", True),   # primary media analysis
 
     ("ds-006", "Systematic Theology: Doctrines of God",
      "Study of God's attributes: omniscience, omnipotence, holiness, love.",
-     "DISCIPLESHIP", "MASTERING", "DISC-12.1", "912"),
+     "DISCIPLESHIP", "MASTERING", "DISC-12.1", "912", True),  # theological primary texts
 
     ("ds-007", "Prayer and Spiritual Disciplines",
      "Developing a practice of prayer, fasting, Scripture reading, and community.",
-     "DISCIPLESHIP", "DEVELOPING", "DISC-5.1", "35"),
+     "DISCIPLESHIP", "DEVELOPING", "DISC-5.1", "35", True),  # prayer journal as artifact
 
     ("ds-008", "Ethics: What Is Right and How Do We Know?",
      "Introduction to moral philosophy from a Christian epistemological framework.",
-     "DISCIPLESHIP", "MASTERING", "DISC-10.1", "912"),
+     "DISCIPLESHIP", "MASTERING", "DISC-10.1", "912", False),  # philosophical reasoning
 
     # ── HEALTH_NATUROPATHY ────────────────────────────────────────────────────
     ("hn-001", "Healthy Habits: Sleep, Food, and Movement",
      "Building daily routines around sleep, nutrition, and physical activity.",
-     "HEALTH_NATUROPATHY", "EMERGING", "OK-HE-K.1", "k2"),
+     "HEALTH_NATUROPATHY", "EMERGING", "OK-HE-K.1", "k2", True),   # habit journal
 
     ("hn-002", "Nutrition Basics: Macronutrients and Micronutrients",
      "Understanding proteins, carbohydrates, fats, vitamins, and minerals.",
-     "HEALTH_NATUROPATHY", "DEVELOPING", "OK-HE-4.2", "35"),
+     "HEALTH_NATUROPATHY", "DEVELOPING", "OK-HE-4.2", "35", False),  # conceptual
 
     ("hn-003", "Herbal Medicine: Common Medicinal Plants",
      "Uses, preparations, and safety of common herbs (chamomile, echinacea, elderberry).",
-     "HEALTH_NATUROPATHY", "DEVELOPING", "OK-HE-5.3", "35"),
+     "HEALTH_NATUROPATHY", "DEVELOPING", "OK-HE-5.3", "35", True),  # prepared herb artifact
 
     ("hn-004", "The Gut Microbiome and Digestive Health",
      "How beneficial bacteria influence immunity, mood, and overall health.",
-     "HEALTH_NATUROPATHY", "EXPANDING", "OK-HE-7.4", "68"),
+     "HEALTH_NATUROPATHY", "EXPANDING", "OK-HE-7.4", "68", False),  # conceptual
 
     ("hn-005", "Naturopathic Principles: Vis Medicatrix Naturae",
      "The healing power of nature; the body's innate ability to self-heal.",
-     "HEALTH_NATUROPATHY", "EXPANDING", "OK-HE-8.2", "68"),
+     "HEALTH_NATUROPATHY", "EXPANDING", "OK-HE-8.2", "68", False),  # philosophical
 
     ("hn-006", "Functional Medicine: Root Cause Analysis",
      "Moving beyond symptom management to identify underlying causes of disease.",
-     "HEALTH_NATUROPATHY", "MASTERING", "OK-HE-11.1", "912"),
+     "HEALTH_NATUROPATHY", "MASTERING", "OK-HE-11.1", "912", False),  # conceptual
 
     ("hn-007", "Anatomy and Physiology: Body Systems Overview",
      "Structure and function of the major body systems: nervous, endocrine, circulatory.",
-     "HEALTH_NATUROPATHY", "EXPANDING", "OK-SC-7.2", "68"),
+     "HEALTH_NATUROPATHY", "EXPANDING", "OK-SC-7.2", "68", False),  # conceptual
 
     ("hn-008", "Mental Health and Emotional Resilience",
      "Understanding stress, grief, and building emotional regulation practices.",
-     "HEALTH_NATUROPATHY", "DEVELOPING", "OK-HE-6.1", "35"),
+     "HEALTH_NATUROPATHY", "DEVELOPING", "OK-HE-6.1", "35", True),  # reflective journal
 
     # ── ENGLISH_LITERATURE ────────────────────────────────────────────────────
     ("el-001", "Story Elements: Character, Setting, Plot",
      "Identifying the basic building blocks of a narrative story.",
-     "ENGLISH_LITERATURE", "EMERGING", "OK-ELA-K.5", "k2"),
+     "ENGLISH_LITERATURE", "EMERGING", "OK-ELA-K.5", "k2", False),  # conceptual
 
     ("el-002", "Reading Comprehension and Inference",
      "Using text evidence to answer literal and inferential questions.",
-     "ENGLISH_LITERATURE", "DEVELOPING", "OK-ELA-3.3", "35"),
+     "ENGLISH_LITERATURE", "DEVELOPING", "OK-ELA-3.3", "35", True),  # annotated text
 
     ("el-003", "Literary Devices: Metaphor, Simile, and Imagery",
      "Identifying and analyzing figurative language in poetry and prose.",
-     "ENGLISH_LITERATURE", "DEVELOPING", "OK-ELA-4.4", "35"),
+     "ENGLISH_LITERATURE", "DEVELOPING", "OK-ELA-4.4", "35", True),  # marked-up text
 
     ("el-004", "Narrative Writing: Voice and Structure",
      "Developing a personal writing voice; structuring beginning, middle, and end.",
-     "ENGLISH_LITERATURE", "EXPANDING", "OK-ELA-6.5", "68"),
+     "ENGLISH_LITERATURE", "EXPANDING", "OK-ELA-6.5", "68", True),  # student-written piece
 
     ("el-005", "Classic Literature: Theme and Symbol",
      "Deep reading of classic texts to identify recurring themes and symbolic language.",
-     "ENGLISH_LITERATURE", "EXPANDING", "OK-ELA-7.4", "68"),
+     "ENGLISH_LITERATURE", "EXPANDING", "OK-ELA-7.4", "68", True),  # annotated classic text
 
     ("el-006", "Rhetoric and Persuasive Writing",
      "Ethos, pathos, logos; crafting well-reasoned arguments.",
-     "ENGLISH_LITERATURE", "MASTERING", "OK-ELA-10.3", "912"),
+     "ENGLISH_LITERATURE", "MASTERING", "OK-ELA-10.3", "912", True),  # student-written essay
 
     ("el-007", "Research Writing and Citation",
      "MLA format, source evaluation, thesis development, and academic writing.",
-     "ENGLISH_LITERATURE", "MASTERING", "OK-ELA-11.5", "912"),
+     "ENGLISH_LITERATURE", "MASTERING", "OK-ELA-11.5", "912", True),  # research paper artifact
 
     ("el-008", "Archetype and Allegory in Literature",
      "Recognizing universal patterns and extended metaphors in canonical works.",
-     "ENGLISH_LITERATURE", "MASTERING", "OK-ELA-12.2", "912"),
+     "ENGLISH_LITERATURE", "MASTERING", "OK-ELA-12.2", "912", True),  # annotated canonical text
 
     # ── APPLIED_MATHEMATICS (Track 9) ────────────────────────────────────────
+    # All concepts require real-world numbers, transactions, or documents.
     ("am-001", "Counting, Money, and Making Change",
      "Recognizing coins and bills; making change at a farm stand or market.",
-     "APPLIED_MATHEMATICS", "EMERGING", "OK-MATH-K.3", "k2"),
+     "APPLIED_MATHEMATICS", "EMERGING", "OK-MATH-K.3", "k2", True),  # real transaction
 
     ("am-002", "Budgeting a Household or Garden",
      "Building a simple budget: income, fixed costs, variable costs, savings.",
-     "APPLIED_MATHEMATICS", "DEVELOPING", "OK-MATH-3.5", "35"),
+     "APPLIED_MATHEMATICS", "DEVELOPING", "OK-MATH-3.5", "35", True),  # real budget document
 
     ("am-003", "Fractions in the Kitchen and Field",
      "Using halves, thirds, and quarters in recipes, land division, and crop rows.",
-     "APPLIED_MATHEMATICS", "DEVELOPING", "OK-MATH-4.2", "35"),
+     "APPLIED_MATHEMATICS", "DEVELOPING", "OK-MATH-4.2", "35", True),  # real measurement record
 
     ("am-004", "Area, Perimeter, and Land Measurement",
      "Calculating square footage for garden beds, rooms, and fence lines.",
-     "APPLIED_MATHEMATICS", "EXPANDING", "OK-MATH-6.4", "68"),
+     "APPLIED_MATHEMATICS", "EXPANDING", "OK-MATH-6.4", "68", True),  # real measurement
 
     ("am-005", "Percentages, Interest, and Loans",
      "How interest rates work on savings and loans; reading a simple amortization schedule.",
-     "APPLIED_MATHEMATICS", "EXPANDING", "OK-MATH-7.5", "68"),
+     "APPLIED_MATHEMATICS", "EXPANDING", "OK-MATH-7.5", "68", True),  # real financial document
 
     ("am-006", "Crop Yield and Pricing for Market",
      "Calculating cost-per-unit, markup, and break-even point for farm products.",
-     "APPLIED_MATHEMATICS", "EXPANDING", "OK-MATH-8.3", "68"),
+     "APPLIED_MATHEMATICS", "EXPANDING", "OK-MATH-8.3", "68", True),  # real market data
 
     ("am-007", "Reading a Balance Sheet and Profit/Loss Statement",
      "Assets, liabilities, equity; what a small-business P&L statement tells you.",
-     "APPLIED_MATHEMATICS", "MASTERING", "OK-MATH-10.2", "912"),
+     "APPLIED_MATHEMATICS", "MASTERING", "OK-MATH-10.2", "912", True),  # real financial document
 
     ("am-008", "Building Structures: Load, Materials, and Cost Estimation",
      "Estimating materials (lumber, concrete) and labor cost for a small structure.",
-     "APPLIED_MATHEMATICS", "MASTERING", "OK-MATH-11.4", "912"),
+     "APPLIED_MATHEMATICS", "MASTERING", "OK-MATH-11.4", "912", True),  # real project estimate
 
     # ── CREATIVE_ECONOMY (Track 10) ──────────────────────────────────────────
+    # All concepts produce or require a real artifact or market interaction.
     ("ce-001", "What Can I Make? Materials Around Us",
      "Identifying found and natural materials that can be turned into sellable goods.",
-     "CREATIVE_ECONOMY", "EMERGING", "CE-K.1", "k2"),
+     "CREATIVE_ECONOMY", "EMERGING", "CE-K.1", "k2", True),  # physical artifact
 
     ("ce-002", "Craft Basics: Tools, Safety, and Simple Projects",
      "Foundational hand-tool use, sewing basics, and first finished project.",
-     "CREATIVE_ECONOMY", "DEVELOPING", "CE-3.1", "35"),
+     "CREATIVE_ECONOMY", "DEVELOPING", "CE-3.1", "35", True),  # first finished project
 
     ("ce-003", "Upcycling: Turning Discards into Products",
      "Finding, cleaning, and transforming secondhand materials into finished goods.",
-     "CREATIVE_ECONOMY", "DEVELOPING", "CE-4.3", "35"),
+     "CREATIVE_ECONOMY", "DEVELOPING", "CE-4.3", "35", True),  # finished upcycled product
 
     ("ce-004", "Pricing Handmade Goods: Cost + Labor + Margin",
      "Calculating material cost, time cost, and a fair selling price for a craft item.",
-     "CREATIVE_ECONOMY", "EXPANDING", "CE-6.2", "68"),
+     "CREATIVE_ECONOMY", "EXPANDING", "CE-6.2", "68", True),  # real pricing worksheet
 
     ("ce-005", "Market Display and Customer Experience",
      "Arranging a booth, signage, pricing tags, and making a buyer feel welcome.",
-     "CREATIVE_ECONOMY", "EXPANDING", "CE-7.1", "68"),
+     "CREATIVE_ECONOMY", "EXPANDING", "CE-7.1", "68", True),  # real market participation
 
     ("ce-006", "Branding: Name, Logo, and Story for a Small Business",
      "Creating a consistent brand identity across packaging, social, and market presence.",
-     "CREATIVE_ECONOMY", "EXPANDING", "CE-8.2", "68"),
+     "CREATIVE_ECONOMY", "EXPANDING", "CE-8.2", "68", True),  # student-made brand identity
 
     ("ce-007", "Business Math for Makers: Revenue, Expense, and Reinvestment",
      "Tracking sales, logging expenses, and deciding how much to reinvest in materials.",
-     "CREATIVE_ECONOMY", "MASTERING", "CE-10.1", "912"),
+     "CREATIVE_ECONOMY", "MASTERING", "CE-10.1", "912", True),  # real sales/expense log
 
     ("ce-008", "Online Selling: Platforms, Photography, and Fulfillment",
      "Setting up a shop; product photography; shipping and packaging basics.",
-     "CREATIVE_ECONOMY", "MASTERING", "CE-11.3", "912"),
+     "CREATIVE_ECONOMY", "MASTERING", "CE-11.3", "912", True),  # live shop as artifact
 ]
 
 
@@ -527,7 +537,7 @@ async def main() -> None:
 
     logger.info(f"Seeding {len(CONCEPTS)} Concept nodes…")
     for concept_args in CONCEPTS:
-        concept_id, title, description, track, difficulty, standard_code, grade_band = concept_args
+        concept_id, title, description, track, difficulty, standard_code, grade_band, is_primary_source = concept_args
         await upsert_concept(
             concept_id=concept_id,
             title=title,
@@ -536,6 +546,7 @@ async def main() -> None:
             difficulty=difficulty,
             standard_code=standard_code,
             grade_band=grade_band,
+            is_primary_source=is_primary_source,
         )
 
     logger.info(f"Seeding {len(PREREQUISITES)} PREREQUISITE_OF edges…")

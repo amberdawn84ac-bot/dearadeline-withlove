@@ -13,7 +13,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, AlertTriangle, Brain, Zap, Shield, ChevronDown, ChevronUp, Wifi, WifiOff } from "lucide-react";
+import { Activity, AlertTriangle, Brain, Zap, Shield, ChevronDown, ChevronUp, Wifi, WifiOff, type LucideIcon } from "lucide-react";
 import {
   useStudentMonitor,
   type CognitiveTwinSnapshot,
@@ -48,7 +48,7 @@ function GaugeMeter({
   value: number;
   label: string;
   color: string;
-  icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
+  icon: LucideIcon;
 }) {
   const pct = Math.round(value * 100);
   const strokeDashoffset = 157 - (157 * value);

@@ -7,7 +7,7 @@
  * visitor without requiring an account. Uses the demo student.
  */
 import { useState } from "react";
-import { generateLesson } from "@/lib/brain-client";
+import { generateLesson, pollLessonResult } from "@/lib/brain-client";
 import type { LessonResponse, Track } from "@/lib/brain-client";
 
 const DEMO_TRACKS: { id: Track; label: string; emoji: string }[] = [
@@ -35,13 +35,14 @@ export function HomeLessonDemo() {
     setLesson(null);
     setError("");
     try {
-      const result = await generateLesson({
+      const job = await generateLesson({
         student_id:   DEMO_STUDENT,
         track,
         topic:        topic.trim(),
         grade_level:  "8",
         is_homestead: false,
       });
+      const result = await pollLessonResult(job.job_id, { intervalMs: 2000, timeoutMs: 90000 });
       setLesson(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not reach Adeline");
