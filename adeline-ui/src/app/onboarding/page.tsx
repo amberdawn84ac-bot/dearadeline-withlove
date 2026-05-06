@@ -110,9 +110,11 @@ export default function OnboardingPage() {
         throw new Error(detail);
       }
 
-      // Success — wait briefly for DB write to propagate, then redirect
+      // Success — wait for DB write to propagate (Railway Postgres needs longer)
       setStatus('redirecting');
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // 1s delay for read-after-write consistency
+      console.log('[Onboarding] POST successful, waiting 3s for DB propagation...');
+      await new Promise((resolve) => setTimeout(resolve, 3000)); // 3s delay for read-after-write consistency
+      console.log('[Onboarding] Redirecting to dashboard...');
       window.location.href = '/dashboard';
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save onboarding profile';

@@ -502,14 +502,21 @@ export async function fetchStudentState(
   student_id: string,
   role: "STUDENT" | "PARENT" | "ADMIN" = "STUDENT",
 ): Promise<StudentState> {
+  const headers = getAuthHeaders();
+  console.log('[brain-client] fetchStudentState:', { student_id, hasAuth: !!headers.Authorization });
+
   const res = await fetch(
     `${BRAIN_URL}/students/${encodeURIComponent(student_id)}/state`,
     {
-      headers: getAuthHeaders(),
+      headers,
       cache: "no-store",
     },
   );
-  if (!res.ok) throw new Error(`student state fetch failed: ${res.status}`);
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => 'Unknown error');
+    console.error('[brain-client] fetchStudentState failed:', res.status, errorText);
+    throw new Error(`student state fetch failed: ${res.status} - ${errorText}`);
+  }
   return res.json() as Promise<StudentState>;
 }
 

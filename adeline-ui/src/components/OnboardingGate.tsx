@@ -59,6 +59,7 @@ export function OnboardingGate() {
 
         // Add cache-busting to prevent stale reads after onboarding completion
         const cacheBuster = Date.now();
+        console.log('[OnboardingGate] Checking status for pathname:', pathname, 'cacheBuster:', cacheBuster);
         const response = await fetch(`/brain/api/onboarding?_=${cacheBuster}`, {
           method: 'GET',
           headers: {
@@ -71,31 +72,37 @@ export function OnboardingGate() {
 
         if (response.status === 401) {
           // Not authenticated, go to login
+          console.log('[OnboardingGate] 401, redirecting to login');
           window.location.href = '/login';
           return;
         }
 
         if (!response.ok) {
           // Error fetching profile, log but don't block (user can retry)
-          console.error('Error checking onboarding status:', response.statusText);
+          console.error('[OnboardingGate] Error checking onboarding status:', response.status, response.statusText);
           return;
         }
 
         const data = await response.json();
         const userProfile = data.user;
         const onboardingComplete = userProfile.onboardingComplete;
+        console.log('[OnboardingGate] onboardingComplete:', onboardingComplete, 'pathname:', pathname);
 
         // If on /onboarding and already complete, go to dashboard
         if (pathname === '/onboarding' && onboardingComplete) {
+          console.log('[OnboardingGate] On /onboarding and complete, redirecting to dashboard');
           window.location.href = '/dashboard';
           return;
         }
 
         // If on protected route and not complete, go to onboarding
         if (isProtectedRoute && !onboardingComplete) {
+          console.log('[OnboardingGate] Protected route but not complete, redirecting to /onboarding');
           window.location.href = '/onboarding';
           return;
         }
+
+        console.log('[OnboardingGate] No redirect needed');
       } catch (err) {
         console.error('Error in onboarding gate:', err);
         // Don't block on error — let user retry
