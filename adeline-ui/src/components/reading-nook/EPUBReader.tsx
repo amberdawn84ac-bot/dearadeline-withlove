@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, BookOpen, Clock, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BookOpen, Clock, X, MessageCircle } from 'lucide-react';
 import { TRACK_CONFIG } from './BookCard';
+import { useReader } from '@/lib/reader-context';
 
 // epubjs doesn't provide TypeScript types (@types/epubjs not available)
 // Using `any` for EPUB book and rendition refs is necessary but safe
@@ -46,10 +47,19 @@ export function EPUBReader({
   const [readingMinutes, setReadingMinutes] = useState(0);
   const [showTOC, setShowTOC] = useState(false);
   const [chapter, setChapter] = useState('');
+  const [chapterTitle, setChapterTitle] = useState('');
   const [bookmarks, setBookmarks] = useState<Array<{ cfi: string; chapter: string }>>([]);
+
+  // Text selection state for "Discuss with Adeline" feature
+  const [selectedText, setSelectedText] = useState<string | null>(null);
+  const [selectedCfiRange, setSelectedCfiRange] = useState<string | null>(null);
+  const [selectionPosition, setSelectionPosition] = useState<{ top: number; left: number } | null>(null);
 
   const saveProgressRef = useRef<NodeJS.Timeout | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Get ReaderContext for chat integration
+  const readerContext = useReader();
 
   // Save progress to backend
   const saveProgress = useCallback(async () => {
@@ -140,10 +150,57 @@ export function EPUBReader({
 
         renditionRef.current = rendition;
 
+        // Helper function to get chapter title from navigation
+        const getChapterTitle = (href: string): string => {
+          if (!newBook.navigation || !newBook.navigation.toc) {
+            return 'Current Section';
+          }
+          
+          // Find matching TOC item by href
+          const findTocItem = (items: any[], targetHref: string): string | null => {
+            for (const item of items) {
+              // Check if href matches (strip any anchor fragments)
+              const itemHref = item.href?.split('#')[0];
+              const target = targetHref?.split('#')[0];
+              
+              if (itemHref === target && item.label) {
+                return item.label.trim();
+              }
+              
+              // Check subitems
+              if (item.subitems?.length > 0) {
+                const subResult = findTocItem(item.subitems, targetHref);
+                if (subResult) return subResult;
+              }
+            }
+            return null;
+          };
+          
+          const title = findTocItem(newBook.navigation.toc, href);
+          return title || 'Current Section';
+        };
+
         // Create event handlers with proper references for cleanup
         const handleRelocated = (location: any) => {
-          setLocation(location.start.cfi);
-          setChapter(location.start.href);
+          const cfi = location.start.cfi;
+          const href = location.start.href;
+          
+          setLocation(cfi);
+          setChapter(href);
+          
+          // Extract chapter title from navigation
+          const chapterTitle = getChapterTitle(href);
+          setChapterTitle(chapterTitle);
+          
+          // Update context with current location
+          if (readerContext) {
+            readerContext.setLocation({
+              cfi,
+              chapterTitle,
+              href,
+              progress: Math.round(newBook.locations.percentage(cfi) * 100),
+            });
+          }
 
           // Check if at end of book
           if (newBook.spine.get(location.start.spine).next() === null) {
@@ -153,8 +210,32 @@ export function EPUBReader({
           }
 
           // Update progress percentage
-          const progress = newBook.locations.percentage(location.start.cfi);
+          const progress = newBook.locations.percentage(cfi);
           setProgress(Math.round(progress * 100));
+        };
+        
+        // Handle text selection for "Discuss with Adeline" feature
+        const handleSelected = (cfiRange: string, contents: any) => {
+          // Get selected text from the range
+          const selected = rendition.getRange(cfiRange);
+          if (selected && selected.toString().trim()) {
+            const text = selected.toString().trim();
+            setSelectedText(text);
+            setSelectedCfiRange(cfiRange);
+            
+            // Calculate position for floating button
+            const range = selected.getRangeAt(0);
+            const rect = range.getBoundingClientRect();
+            setSelectionPosition({
+              top: rect.top - 50, // Position above selection
+              left: rect.left + rect.width / 2,
+            });
+            
+            // Pass to context
+            if (readerContext) {
+              readerContext.setSelectedText(text, cfiRange);
+            }
+          }
         };
 
         const handleError = (err: any) => {
@@ -168,9 +249,21 @@ export function EPUBReader({
 
         rendition.on('relocated', handleRelocated);
         rendition.on('error', handleError);
+        rendition.on('selected', handleSelected);
 
         // Display first page
         await rendition.display();
+        
+        // Set current book in context
+        if (readerContext) {
+          readerContext.setCurrentBook({
+            id: bookId,
+            title: book.title,
+            author: book.author,
+            track: book.track,
+            lexile_level: book.lexile_level,
+          });
+        }
 
         // Generate locations for progress tracking
         await newBook.ready.then(() => {
@@ -183,6 +276,7 @@ export function EPUBReader({
         return () => {
           rendition.off('relocated', handleRelocated);
           rendition.off('error', handleError);
+          rendition.off('selected', handleSelected);
         };
       } catch (err: any) {
         console.error('Error initializing EPUB:', err);
@@ -331,7 +425,41 @@ export function EPUBReader({
         </div>
 
         {/* EPUB viewer */}
-        <div ref={viewerRef} className="flex-1 overflow-auto" />
+        <div ref={viewerRef} className="flex-1 overflow-auto relative">
+          {/* Floating Discuss Button - appears when text is selected */}
+          {selectedText && selectionPosition && (
+            <button
+              onClick={() => {
+                // Trigger the discussion via context
+                if (readerContext) {
+                  readerContext.setSelectedText(selectedText, selectedCfiRange || undefined);
+                }
+                // Clear selection after clicking
+                setSelectedText(null);
+                setSelectionPosition(null);
+              }}
+              className="fixed z-50 flex items-center gap-2 px-4 py-2 
+                         bg-[#BD6809] hover:bg-[#9A5507] text-white 
+                         rounded-full shadow-lg 
+                         transition-all duration-200 
+                         animate-in fade-in zoom-in"
+              style={{
+                top: `${selectionPosition.top}px`,
+                left: `${selectionPosition.left}px`,
+                transform: 'translateX(-50%)',
+              }}
+              aria-label="Discuss selected text with Adeline"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span className="text-sm font-semibold">Discuss</span>
+              {/* Tooltip arrow */}
+              <div 
+                className="absolute -bottom-1 left-1/2 -translate-x-1/2 
+                           w-2 h-2 bg-[#BD6809] rotate-45"
+              />
+            </button>
+          )}
+        </div>
 
         {/* Finish button (at end) */}
         {isAtEnd && (

@@ -59,6 +59,9 @@ class BookshelfSearch:
         lexile_max: Optional[int] = None,
         track: Optional[str] = None,
         limit: int = 12,
+        soft_lexile_fallback: bool = True,
+        soft_expansion: int = 200,
+        tracks_with_lexile_tolerance: Optional[List[str]] = None,
     ) -> List[Dict]:
         """
         Search books by semantic similarity using pgvector cosine similarity.
@@ -69,6 +72,9 @@ class BookshelfSearch:
             lexile_max: Maximum lexile level (inclusive)
             track: Filter by curriculum track (e.g., "ENGLISH_LITERATURE")
             limit: Maximum number of results to return
+            soft_lexile_fallback: If True, expands Lexile range when < 3 results found
+            soft_expansion: Points to expand range by when falling back (default 200)
+            tracks_with_lexile_tolerance: Tracks that get softer Lexile constraints
 
         Returns:
             List of books ranked by relevance_score (descending).
@@ -87,6 +93,8 @@ class BookshelfSearch:
             logger.error("[Bookshelf Search] Pool not connected")
             return []
 
+        tolerance_tracks = tracks_with_lexile_tolerance or ["Truth-History", "Discipleship"]
+        
         try:
             async with self._pool.acquire() as conn:
                 # Convert embedding to pgvector format: "[1.0, 2.0, ...]"
@@ -96,13 +104,27 @@ class BookshelfSearch:
                 where_clauses = ["embedding IS NOT NULL"]
                 params = [embedding_str]
 
+                # Check if we're querying a track with Lexile tolerance
+                track_has_tolerance = track in tolerance_tracks if track else False
+                
+                # Apply Lexile filters with optional tolerance for certain tracks
                 if lexile_min is not None:
-                    where_clauses.append(f"lexile_level >= ${len(params) + 1}")
-                    params.append(lexile_min)
+                    if track_has_tolerance:
+                        # Soften the constraint for tolerance tracks
+                        where_clauses.append(f"lexile_level >= ${len(params) + 1}")
+                        params.append(max(0, lexile_min - 100))
+                    else:
+                        where_clauses.append(f"lexile_level >= ${len(params) + 1}")
+                        params.append(lexile_min)
 
                 if lexile_max is not None:
-                    where_clauses.append(f"lexile_level <= ${len(params) + 1}")
-                    params.append(lexile_max)
+                    if track_has_tolerance:
+                        # Soften the constraint for tolerance tracks
+                        where_clauses.append(f"lexile_level <= ${len(params) + 1}")
+                        params.append(min(1500, lexile_max + 100))
+                    else:
+                        where_clauses.append(f"lexile_level <= ${len(params) + 1}")
+                        params.append(lexile_max)
 
                 if track is not None:
                     where_clauses.append(f"track = ${len(params) + 1}")
@@ -151,6 +173,74 @@ class BookshelfSearch:
                     books.append(book)
 
                 logger.debug(f"[Bookshelf Search] Found {len(books)} books for query")
+                
+                # Soft fallback: expand Lexile range if results are insufficient
+                if soft_lexile_fallback and len(books) < 3 and (lexile_min is not None or lexile_max is not None):
+                    logger.warning(
+                        f"[Bookshelf Search] Strict Lexile filter returned {len(books)} books. "
+                        f"Expanding range by ±{soft_expansion} points."
+                    )
+                    
+                    # Reset params and expand range
+                    params = [embedding_str]
+                    where_clauses = ["embedding IS NOT NULL"]
+                    
+                    if lexile_min is not None:
+                        where_clauses.append(f"lexile_level >= ${len(params) + 1}")
+                        params.append(max(0, lexile_min - soft_expansion))
+                    
+                    if lexile_max is not None:
+                        where_clauses.append(f"lexile_level <= ${len(params) + 1}")
+                        params.append(min(1500, lexile_max + soft_expansion))
+                    
+                    if track is not None:
+                        where_clauses.append(f"track = ${len(params) + 1}")
+                        params.append(track)
+                    
+                    where_clause = " AND ".join(where_clauses)
+                    limit_param_idx = len(params) + 1
+                    
+                    expanded_query = f"""
+                        SELECT
+                            id,
+                            title,
+                            author,
+                            lexile_level,
+                            grade_band,
+                            track,
+                            "coverUrl",
+                            source_url,
+                            source_library,
+                            (1 - (embedding <-> $1::vector)) AS relevance_score
+                        FROM "Book"
+                        WHERE {where_clause}
+                        ORDER BY embedding <-> $1::vector
+                        LIMIT ${limit_param_idx}
+                    """
+                    
+                    params.append(limit)
+                    
+                    expanded_rows = await conn.fetch(expanded_query, *params)
+                    
+                    # Convert expanded results
+                    books = []
+                    for row in expanded_rows:
+                        book = {
+                            "id": row["id"],
+                            "title": row["title"],
+                            "author": row["author"],
+                            "lexile_level": row["lexile_level"],
+                            "grade_band": row["grade_band"],
+                            "track": row["track"],
+                            "cover_url": row["coverUrl"],
+                            "source_url": row["source_url"],
+                            "source_library": row["source_library"],
+                            "relevance_score": float(row["relevance_score"]),
+                        }
+                        books.append(book)
+                    
+                    logger.info(f"[Bookshelf Search] Expanded range returned {len(books)} books")
+                
                 return books
 
         except Exception as e:

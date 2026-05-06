@@ -59,13 +59,48 @@ You may inject a block mid-sentence. Text before and after the block will render
 separately. After the block, continue your response naturally.
 """
 
+# Socratic Reading Co-Pilot persona for Literature discussions
+_SOCRATIC_READING_COPILOT = """You are Adeline — a Socratic Reading Co-Pilot.
+
+READING DISCUSSION RULES:
+1. NEVER give away the answer or summarize the whole book
+2. ALWAYS acknowledge the specific chapter and highlighted passage first
+3. Ask LEADING QUESTIONS to help the student deduce meaning from context:
+   - "What do you think the author meant by...?"
+   - "How does this connect to what happened earlier?"
+   - "What emotions or ideas might this word carry here?"
+4. Connect themes to the student's track/mastery when relevant:
+   - Homesteading track: connect to soil, seasons, stewardship, craftsmanship
+   - Applied Mathematics: patterns, logic, problem-solving in the text
+   - Natural Philosophy: scientific metaphors, observation, wonder
+   - Truth-History: historical context, primary source mindset
+   - Discipleship: character formation, moral choices, wisdom
+5. Guide students to discover layers of meaning through questioning
+6. End EVERY response with a question or invitation — never a lecture
+7. If a student asks for a word definition, give a brief hint first, then ask them to infer from context
+
+TONE: Warm, bookish, like a trusted older sibling who loves stories. Encourage curiosity, not anxiety.
+"""
+
+
+class CurrentBookContext(BaseModel):
+    id: str
+    title: str
+    author: str
+    cfi: Optional[str] = None
+    chapter: Optional[str] = None
+    progress_percent: Optional[int] = None
+
 
 class ConversationRequest(BaseModel):
     student_id: str
     message: str
     track: Optional[str] = None
-    grade_level: str
+    grade_level: Optional[str] = "8"  # Default to middle school
     conversation_history: list[dict] = []
+    # Reading context for Literature Agent
+    current_book: Optional[CurrentBookContext] = None
+    highlighted_text: Optional[str] = None
 
 
 def _build_conversation_prompt(
@@ -73,8 +108,44 @@ def _build_conversation_prompt(
     tracks: list[str],
     grade_level: str,
     zpd_directives: str,
+    current_book: Optional[CurrentBookContext] = None,
+    highlighted_text: Optional[str] = None,
 ) -> str:
     """Build the full system prompt for a conversation turn."""
+    # Check if this is a reading discussion (Literature track or has book context)
+    is_reading_discussion = (
+        current_book is not None or 
+        (highlighted_text and "highlighted this passage" in topic)
+    )
+    
+    if is_reading_discussion:
+        # Use Socratic Reading Co-Pilot persona
+        base_prompt = _SOCRATIC_READING_COPILOT
+        
+        # Build reading context section
+        reading_context = ""
+        if current_book:
+            reading_context += f"\nCURRENT BOOK: '{current_book.title}' by {current_book.author}"
+            if current_book.chapter:
+                reading_context += f"\nCHAPTER: {current_book.chapter}"
+            if current_book.progress_percent is not None:
+                reading_context += f"\nREADING PROGRESS: {current_book.progress_percent}%"
+        
+        if highlighted_text:
+            reading_context += f"\n\nSTUDENT HAS HIGHLIGHTED:\"{highlighted_text[:300]}{'...' if len(highlighted_text) > 300 else ''}\""
+        
+        tracks_str = ", ".join(t.replace("_", " ").title() for t in tracks) if tracks else "General"
+        
+        return (
+            f"{base_prompt}\n\n"
+            f"{reading_context}\n\n"
+            f"STUDENT TRACKS: {tracks_str}\n"
+            f"STUDENT GRADE: {grade_level}\n\n"
+            f"{zpd_directives}\n\n"
+            "Remember: Guide through questions, don't give away answers. Connect to their track when relevant."
+        )
+    
+    # Standard conversation prompt for non-reading topics
     mode_section = get_mode_directives(tracks)
     tracks_str = ", ".join(t.replace("_", " ").title() for t in tracks) if tracks else "General"
 
@@ -121,6 +192,8 @@ async def _conversation_sse(
     track: Optional[str],
     grade_level: str,
     history: list[dict],
+    current_book: Optional[CurrentBookContext] = None,
+    highlighted_text: Optional[str] = None,
 ) -> AsyncIterator[bytes]:
     """
     Core SSE generator. Yields raw SSE bytes.
@@ -163,6 +236,8 @@ async def _conversation_sse(
             tracks=tracks,
             grade_level=grade_level,
             zpd_directives=zpd_directives,
+            current_book=current_book,
+            highlighted_text=highlighted_text,
         )
 
         # Build Claude message list (cap history at last 10 turns)
@@ -196,6 +271,10 @@ async def conversation_stream(
 
     Track-aware mode voices (Investigator/Lab/Dialogue/Workshop) are injected
     automatically — no student-facing mode selection needed.
+    
+    For reading discussions (ENGLISH_LITERATURE track with book context),
+    Adeline acts as a Socratic Reading Co-Pilot — guiding through questions
+    rather than giving direct answers.
     """
     if not body.message.strip():
         raise HTTPException(status_code=422, detail="Message cannot be empty")
@@ -207,6 +286,8 @@ async def conversation_stream(
             track=body.track,
             grade_level=body.grade_level,
             history=body.conversation_history,
+            current_book=body.current_book,
+            highlighted_text=body.highlighted_text,
         ),
         media_type="text/event-stream",
         headers={

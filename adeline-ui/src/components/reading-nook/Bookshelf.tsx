@@ -35,6 +35,8 @@ export interface BookInSession {
   totalPages?: number;
   studentReflection?: string;
   completedAt?: string;
+  isExternal?: boolean;
+  sourceUrl?: string;
 }
 
 export interface ShelfData {
@@ -238,15 +240,17 @@ export default function Bookshelf({
           id: book.id,
           title: book.title,
           author: book.author,
-          sourceLibrary: null,
+          sourceLibrary: book.source_library || null,
           isDownloaded: false,
           format: "epub",
-          coverUrl: null,
+          coverUrl: book.cover_url || null,
           track: book.track || "",
           lexile_level: book.lexile_level || 0,
           grade_band: book.grade_band || "",
           sessionId: "",
           pagesRead: 0,
+          isExternal: book.is_external || false,
+          sourceUrl: book.source_url || undefined,
         })
       );
 
@@ -267,7 +271,7 @@ export default function Bookshelf({
     load();
   }, [studentId, fetchShelf, fetchRecommendations]);
 
-  // Handle book click — navigate to reader
+  // Handle book click — navigate to reader or open external link
   const handleBookClick = async (bookId: string) => {
     try {
       // Check if book is already in a session (reading, finished, or wishlist)
@@ -277,6 +281,14 @@ export default function Bookshelf({
         ...shelf!.wishlist,
       ];
       const existingSession = allBooks.find((b) => b.id === bookId);
+
+      // Check if this is an external book from Discover
+      const discoverBook = recommendations.find((b) => b.id === bookId);
+      if (discoverBook?.isExternal && discoverBook?.sourceUrl) {
+        // External books: open source URL in new tab
+        window.open(discoverBook.sourceUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
 
       if (!existingSession) {
         // Book is from Discover — create a session first
@@ -311,6 +323,13 @@ export default function Bookshelf({
   // Handle add to reading list — from Discover section
   const handleAddToReadingList = async (bookId: string) => {
     try {
+      // Check if external book — skip for now (future: sync to wishlist)
+      const book = recommendations.find((b) => b.id === bookId);
+      if (book?.isExternal) {
+        alert(`"${book.title}" is available on Open Library. Click the book to view it there.`);
+        return;
+      }
+
       setAddingToList(bookId);
 
       const createRes = await fetch("/brain/api/reading-session", {
@@ -333,7 +352,6 @@ export default function Bookshelf({
       await fetchShelf();
 
       // Show success notification
-      const book = recommendations.find((b) => b.id === bookId);
       if (book) {
         alert(`Added "${book.title}" to your reading list!`);
       }
