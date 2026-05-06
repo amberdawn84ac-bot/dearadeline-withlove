@@ -52,14 +52,14 @@ export function ReaderChatSidebar({ studentId, isOpen, onToggle }: ReaderChatSid
   const [inputValue, setInputValue] = useState('');
 
   // Initialize useChat with correct API for this @ai-sdk/react version
-  // @ts-ignore - api property works at runtime despite type errors
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const chat = useChat({
     id: `reader-${studentId}-${currentBook?.id || 'unknown'}`,
     api: '/api/reader-chat',
     headers: typeof window !== 'undefined'
       ? { Authorization: `Bearer ${localStorage.getItem('auth_token') ?? ''}` }
       : {},
-  });
+  } as any);
   
   const { messages, sendMessage, status, setMessages } = chat;
   const isLoading = status === 'streaming' || status === 'submitted';
