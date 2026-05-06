@@ -14,6 +14,7 @@ const nextConfig = {
   async rewrites() {
     const target =
       process.env.BRAIN_INTERNAL_URL ||
+      process.env.BRAIN_URL ||
       (process.env.NODE_ENV === "production"
         ? "http://adeline-brain:8000"
         : "http://localhost:8000");
