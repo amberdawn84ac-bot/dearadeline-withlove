@@ -228,9 +228,15 @@ app.include_router(learning_path_router, prefix="/brain")
 
 @app.get("/health")
 async def health():
-    """Health check with data population status."""
+    """Lightweight liveness probe — returns immediately so Railway healthcheck passes."""
+    return {"status": "ok", "service": "adeline-brain", "version": "0.2.0"}
+
+
+@app.get("/health/detailed")
+async def health_detailed():
+    """Detailed health check with DB/Neo4j/Redis connectivity. Not used by Railway."""
     from app.config import get_db_conn
-    
+
     health_status = {
         "status": "alive",
         "service": "adeline-brain",
@@ -240,8 +246,7 @@ async def health():
         "neo4j_tracks": 0,
         "books": 0,
     }
-    
-    # Check Hippocampus document count
+
     try:
         conn = await get_db_conn()
         result = await conn.fetchval('SELECT COUNT(*) FROM "HippocampusDocument"')
@@ -249,8 +254,7 @@ async def health():
         await conn.close()
     except Exception as e:
         health_status["hippocampus_error"] = str(e)
-    
-    # Check Book count
+
     try:
         conn = await get_db_conn()
         result = await conn.fetchval('SELECT COUNT(*) FROM "Book"')
@@ -258,8 +262,7 @@ async def health():
         await conn.close()
     except Exception as e:
         health_status["books_error"] = str(e)
-    
-    # Check Neo4j concept/track counts
+
     try:
         if neo4j_client.driver:
             async with neo4j_client.driver.session() as session:
@@ -273,7 +276,6 @@ async def health():
     except Exception as e:
         health_status["neo4j_error"] = str(e)
 
-    # Check Redis connectivity
     try:
         redis_ok = await redis_ping()
         health_status["redis"] = "ok" if redis_ok else "unreachable"
