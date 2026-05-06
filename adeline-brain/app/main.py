@@ -53,6 +53,7 @@ from app.api.realtime import router as realtime_router
 from app.api.conversation import router as conversation_router
 from app.api.animated_lessons import router as animated_lessons_router
 from app.api.learning_path import router as learning_path_router
+from app.api.lesson_stream import router as lesson_stream_router
 from app.connections.journal_store import journal_store
 from app.connections.conversation_store import conversation_store
 from app.jobs.seed_scheduler import startup_seed_scheduler, shutdown_seed_scheduler
@@ -176,6 +177,7 @@ app.add_middleware(
 )
 
 app.include_router(lessons_router)
+app.include_router(lesson_stream_router)
 app.include_router(opportunities_router)
 app.include_router(journal_router)
 app.include_router(transcripts_router)
@@ -199,6 +201,7 @@ app.include_router(genui_router)
 # ── /brain/* prefix mounts (Vercel proxy: /brain/:path* → Railway /:path*) ──
 app.include_router(onboarding_router, prefix="/brain")
 app.include_router(lessons_router, prefix="/brain")
+app.include_router(lesson_stream_router, prefix="/brain")
 app.include_router(journal_router, prefix="/brain")
 app.include_router(transcripts_router, prefix="/brain")
 app.include_router(learning_records_router, prefix="/brain")
