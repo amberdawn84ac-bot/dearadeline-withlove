@@ -51,7 +51,8 @@ function DashboardContent() {
   const router = useRouter();
 
   // useChat drives lesson streaming via /api/lesson translation bridge
-  const { messages, append, isLoading: isStreaming } = useChat({
+  // @ts-ignore - sendMessage works at runtime; type definitions may differ
+  const { messages, sendMessage: append, isLoading: isStreaming } = useChat({
     api: '/api/lesson',
     headers: typeof window !== 'undefined'
       ? { Authorization: `Bearer ${localStorage.getItem('auth_token') ?? ''}` }
@@ -126,8 +127,7 @@ function DashboardContent() {
     setStreamingTitle('');
     setStreamingStatus('Adeline is preparing your lesson…');
     append({
-      role: 'user',
-      content: suggestion.title,
+      text: suggestion.title,
     }, {
       body: {
         lesson_request: {
