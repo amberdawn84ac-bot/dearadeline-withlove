@@ -72,15 +72,16 @@ export default function OnboardingPage() {
     coppaConsent: boolean;
   }) => {
     try {
-      setStatus('redirecting');
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : '';
+      const inviteCode = typeof window !== 'undefined' ? localStorage.getItem('adeline_founder_code') || undefined : undefined;
 
       const response = await fetch('/brain/api/onboarding', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, ...(inviteCode ? { inviteCode } : {}) }),
       });
 
       if (!response.ok) {
@@ -89,6 +90,7 @@ export default function OnboardingPage() {
       }
 
       // Success — redirect to dashboard
+      setStatus('redirecting');
       window.location.href = '/dashboard';
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save onboarding profile';
