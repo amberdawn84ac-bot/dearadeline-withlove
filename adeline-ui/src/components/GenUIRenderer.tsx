@@ -914,7 +914,7 @@ function GenUIRenderer({
               break;
             case "ANIMATED_SKETCHNOTE_LESSON":
               blockContent = block.animated_sketchnote_data
-                ? <AnimatedSketchnoteRenderer lesson={block.animated_sketchnote_data as any} />
+                ? <AnimatedSketchnoteRenderer lesson={block.animated_sketchnote_data} />
                 : <TextBlock block={block} />;
               break;
             case "BOOK_SUGGESTION":

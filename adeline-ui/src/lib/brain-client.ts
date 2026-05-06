@@ -224,6 +224,8 @@ export interface LessonBlockResponse {
   epub_url?:            string;
   cover_url?:           string;
   lexile_level?:        number;
+  // Animated Sketchnote Lesson — full lesson payload for ANIMATED_SKETCHNOTE_LESSON blocks
+  animated_sketchnote_data?: AnimatedSketchnoteLesson;
 }
 
 export interface XAPIStatement {
