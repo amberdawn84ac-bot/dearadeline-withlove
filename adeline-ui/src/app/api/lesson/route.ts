@@ -1,18 +1,18 @@
 /**
  * POST /api/lesson
  *
- * Next.js → FastAPI SSE translation bridge for SDK v3.
+ * Next.js → FastAPI SSE translation bridge.
  *
  * Receives a POST from useChat({ transport: new DefaultChatTransport({ api: '/api/lesson' }) }),
  * calls FastAPI POST /brain/lesson/stream, and translates the SSE events into the
- * Vercel AI SDK v3 UI Message Stream format.
+ * Vercel AI SDK Data Stream Protocol.
  *
- * SDK v3 expects JSON SSE events (not the old text-based protocol):
- *   data: {"type": "text-start", "id": "..."}
- *   data: {"type": "text-delta", "text": "..."}
- *   data: {"type": "data", "data": {...}}        — data annotations
- *   data: {"type": "tool-input-start", ...}       — tool calls
- *   data: {"type": "finish-step"}                 — step completion
+ * Data Stream Protocol format:
+ *   0:"text chunk"\n        — text content
+ *   2:[{"key":"value"}]\n    — data annotation (arbitrary JSON array)
+ *   9:{"toolCallId":"..."}\n — tool call
+ *   a:{"toolCallId":"..."}\n — tool result
+ *   d:{"finishReason":"stop"}\n — finish marker
  */
 
 import { NextRequest } from "next/server";
@@ -42,15 +42,14 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(lessonRequest),
     });
   } catch (err) {
-    const errorEvent = JSON.stringify({ type: "error", message: `Cannot reach adeline-brain: ${err}` });
     return new Response(
-      `data: ${errorEvent}\n\ndata: {"type": "finish-step"}\n\n`,
+      `2:[{"type":"error","message":"Cannot reach adeline-brain: ${err}"}]\n` +
+      `d:{"finishReason":"error"}\n`,
       {
         status: 200,
         headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          "X-Accel-Buffering": "no",
+          "Content-Type": "text/plain; charset=utf-8",
+          "x-vercel-ai-data-stream": "v1",
         },
       }
     );
@@ -58,21 +57,20 @@ export async function POST(req: NextRequest) {
 
   if (!upstream.ok || !upstream.body) {
     const detail = await upstream.text().catch(() => "");
-    const errorEvent = JSON.stringify({ type: "error", message: `Backend error ${upstream.status}: ${detail}` });
     return new Response(
-      `data: ${errorEvent}\n\n`,
+      `2:[{"type":"error","message":"Backend error ${upstream.status}: ${detail}"}]\n` +
+      `d:{"finishReason":"error"}\n`,
       {
         status: 200,
         headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          "X-Accel-Buffering": "no",
+          "Content-Type": "text/plain; charset=utf-8",
+          "x-vercel-ai-data-stream": "v1",
         },
       }
     );
   }
 
-  // Stream-transform: FastAPI SSE → SDK v3 UI Message Stream (JSON SSE format)
+  // Stream-transform: FastAPI SSE → Vercel AI SDK Data Stream Protocol
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
 
@@ -81,10 +79,8 @@ export async function POST(req: NextRequest) {
       const reader = upstream.body!.getReader();
       let buffer = "";
 
-      const enqueue = (event: Record<string, unknown>) => {
-        const line = `data: ${JSON.stringify(event)}\n\n`;
+      const enqueue = (line: string) =>
         controller.enqueue(encoder.encode(line));
-      };
 
       try {
         while (true) {
@@ -108,61 +104,62 @@ export async function POST(req: NextRequest) {
 
             switch (event.type) {
               case "status":
-                // Data annotation for status updates
-                enqueue({ type: "data", data: { type: "status", message: event.message } });
+                // 2: — data annotation
+                enqueue(
+                  `2:[${JSON.stringify({ type: "status", message: event.message })}]\n`
+                );
                 break;
 
               case "block":
-                // Data annotation for blocks
-                enqueue({ type: "data", data: { type: "block", block: event.block } });
+                // 2: — data annotation for blocks
+                enqueue(
+                  `2:[${JSON.stringify({ type: "block", block: event.block })}]\n`
+                );
                 break;
 
               case "tool_call": {
                 const toolCallId = crypto.randomUUID();
-                // Tool call start
-                enqueue({
-                  type: "tool-input-start",
-                  toolCallId,
-                  toolName: event.name,
-                });
-                // Tool input (args)
-                enqueue({
-                  type: "tool-input-delta",
-                  toolCallId,
-                  input: JSON.stringify(event.props),
-                });
-                // Tool call complete
-                enqueue({
-                  type: "tool-input-finish",
-                  toolCallId,
-                });
-                // Tool result (immediately resolve)
-                enqueue({
-                  type: "tool-result",
-                  toolCallId,
-                  result: event.props,
-                });
+                // 9: — tool call part
+                enqueue(
+                  `9:${JSON.stringify({
+                    toolCallId,
+                    toolName: event.name,
+                    args: event.props,
+                  })}\n`
+                );
+                // a: — tool result (immediately resolve so toolInvocation.state === "result")
+                enqueue(
+                  `a:${JSON.stringify({
+                    toolCallId,
+                    result: event.props,
+                  })}\n`
+                );
                 break;
               }
 
               case "done":
-                // Data annotation for done event
-                enqueue({ type: "data", data: { type: "done", ...event } });
-                // Finish the step
-                enqueue({ type: "finish-step" });
+                // 2: — data annotation for done event
+                enqueue(
+                  `2:[${JSON.stringify({ type: "done", ...event })}]\n`
+                );
+                // d: — finish marker
+                enqueue(`d:${JSON.stringify({ finishReason: "stop" })}\n`);
                 break;
 
               case "error":
-                // Data annotation for error
-                enqueue({ type: "data", data: { type: "error", message: event.message } });
-                enqueue({ type: "finish-step" });
+                enqueue(
+                  `2:[${JSON.stringify({ type: "error", message: event.message })}]\n`
+                );
+                enqueue(`d:${JSON.stringify({ finishReason: "error" })}\n`);
                 break;
             }
           }
         }
       } catch (err) {
-        enqueue({ type: "data", data: { type: "error", message: String(err) } });
-        enqueue({ type: "finish-step" });
+        enqueue(
+          `2:[${JSON.stringify({ type: "error", message: String(err) })}]\n`
+        );
+        enqueue(`d:${JSON.stringify({ finishReason: "error" })}\n`);
       } finally {
         controller.close();
       }
@@ -172,7 +169,8 @@ export async function POST(req: NextRequest) {
   return new Response(readable, {
     status: 200,
     headers: {
-      "Content-Type": "text/event-stream",
+      "Content-Type": "text/plain; charset=utf-8",
+      "x-vercel-ai-data-stream": "v1",
       "Cache-Control": "no-cache",
       "X-Accel-Buffering": "no",
     },

@@ -85,29 +85,25 @@ function DashboardContent() {
     }
   }, [messages, chatStatus]);
 
-  // Derive blocks and tool invocations from the latest assistant message's data parts
+  // Derive blocks from the latest assistant message's annotations
   useEffect(() => {
     const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
     if (!lastAssistant) return;
 
-    // SDK v3 uses parts array with data parts instead of annotations
-    const parts = (lastAssistant as { parts?: unknown[] }).parts ?? [];
+    // SDK v3: data annotations are in the annotations array (2: protocol lines)
+    const annotations = (lastAssistant as { annotations?: unknown[] }).annotations ?? [];
     const blocks: LessonBlockResponse[] = [];
     let title = '';
     let status = '';
 
-    for (const part of parts) {
-      const p = part as Record<string, unknown>;
-      // Data parts have type 'data' and data property
-      if (p.type === 'data' && p.data) {
-        const data = p.data as Record<string, unknown>;
-        if (data.type === 'block' && data.block) {
-          blocks.push(data.block as LessonBlockResponse);
-        } else if (data.type === 'done') {
-          title = (data.title as string) ?? '';
-        } else if (data.type === 'status') {
-          status = (data.message as string) ?? '';
-        }
+    for (const ann of annotations) {
+      const a = ann as Record<string, unknown>;
+      if (a.type === 'block' && a.block) {
+        blocks.push(a.block as LessonBlockResponse);
+      } else if (a.type === 'done') {
+        title = (a.title as string) ?? '';
+      } else if (a.type === 'status') {
+        status = (a.message as string) ?? '';
       }
     }
 
@@ -210,11 +206,11 @@ function DashboardContent() {
             )}
             {streamingBlocks.map((block, idx) => {
               const lastMsg = [...messages].reverse().find((m) => m.role === 'assistant');
-              // SDK v3: tool invocations are in parts array
-              const parts = (lastMsg as { parts?: unknown[] })?.parts ?? [];
-              const toolInvocations = parts
-                .filter((p) => (p as Record<string, unknown>).type === 'tool-invocation')
-                .map((p) => (p as Record<string, unknown>).toolInvocation) as Array<{ toolName: string; state: string; result: Record<string, unknown> }>;
+              // SDK v3: tool invocations are in annotations array (from 9:/a: protocol lines)
+              const annotations = (lastMsg as { annotations?: unknown[] })?.annotations ?? [];
+              const toolInvocations = annotations
+                .filter((a) => (a as Record<string, unknown>).type === 'tool-invocation')
+                .map((a) => (a as Record<string, unknown>).toolInvocation) as Array<{ toolName: string; state: string; result: Record<string, unknown> }>;
               const blockToolCall = toolInvocations.find(
                 (t) => t.state === 'result' &&
                   (t.toolName === 'render_quiz_widget' || t.toolName === 'render_lab_widget') &&
