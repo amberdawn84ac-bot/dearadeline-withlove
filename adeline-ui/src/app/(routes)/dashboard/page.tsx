@@ -51,8 +51,8 @@ function DashboardContent() {
   const router = useRouter();
 
   // useChat drives lesson streaming via /api/lesson translation bridge
-  // @ts-ignore - api/headers work at runtime; SDK types are incomplete
-  const { messages, sendMessage: append, isLoading: isStreaming } = useChat({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const chat = useChat({
     api: '/api/lesson',
     headers: typeof window !== 'undefined'
       ? { Authorization: `Bearer ${localStorage.getItem('auth_token') ?? ''}` }
@@ -64,7 +64,8 @@ function DashboardContent() {
       console.error('[Dashboard] Lesson stream error:', err);
       setStreamingStatus('');
     },
-  });
+  } as any);
+  const { messages, sendMessage: append, isLoading: isStreaming } = chat;
 
   // Derive blocks and tool invocations from the latest assistant message's data annotations
   useEffect(() => {
