@@ -85,8 +85,22 @@ export function OnboardingGate() {
 
         const data = await response.json();
         const userProfile = data.user;
-        const onboardingComplete = userProfile.onboardingComplete;
+        let onboardingComplete = userProfile.onboardingComplete;
         console.log('[OnboardingGate] onboardingComplete:', onboardingComplete, 'pathname:', pathname);
+
+        // Check if we recently completed onboarding (handles DB replication lag)
+        // The onboarding page sets this flag after successful POST
+        const justCompleted = localStorage.getItem('onboarding_just_completed');
+        if (justCompleted && !onboardingComplete) {
+          const timestamp = parseInt(justCompleted, 10);
+          const secondsSince = (Date.now() - timestamp) / 1000;
+          if (secondsSince < 60) {
+            console.log('[OnboardingGate] Trusting local flag, onboarding completed', secondsSince, 'seconds ago');
+            onboardingComplete = true;
+          } else {
+            localStorage.removeItem('onboarding_just_completed');
+          }
+        }
 
         // If on /onboarding and already complete, go to dashboard
         if (pathname === '/onboarding' && onboardingComplete) {
