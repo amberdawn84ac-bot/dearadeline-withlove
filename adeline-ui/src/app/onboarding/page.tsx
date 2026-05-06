@@ -36,7 +36,14 @@ export default function OnboardingPage() {
         }
 
         if (response.status === 404) {
-          // New user — no profile yet, show onboarding form
+          // New user — no profile yet. Still respect the local flag in case
+          // the DB hasn't propagated a recent successful POST yet.
+          const justCompleted = localStorage.getItem('onboarding_just_completed');
+          if (justCompleted && (Date.now() - parseInt(justCompleted, 10)) / 1000 < 60) {
+            setStatus('redirecting');
+            window.location.href = '/dashboard';
+            return;
+          }
           setStatus('onboarding');
           return;
         }
@@ -54,8 +61,16 @@ export default function OnboardingPage() {
         const data = await response.json();
         const userProfile = data.user;
 
-        // If onboarding is already complete, redirect to dashboard
-        if (userProfile.onboardingComplete) {
+        // Trust the local flag if DB is stale (handles read-after-write lag)
+        let onboardingComplete = userProfile.onboardingComplete;
+        if (!onboardingComplete) {
+          const justCompleted = localStorage.getItem('onboarding_just_completed');
+          if (justCompleted && (Date.now() - parseInt(justCompleted, 10)) / 1000 < 60) {
+            onboardingComplete = true;
+          }
+        }
+
+        if (onboardingComplete) {
           setStatus('redirecting');
           window.location.href = '/dashboard';
           return;
@@ -107,16 +122,36 @@ export default function OnboardingPage() {
         } catch {
           // body was plain text — use as-is if meaningful
         }
+
+        // The profile may have been written in a prior attempt whose response
+        // never reached the client (network drop, invite code race, etc.).
+        // Check whether onboarding actually completed before showing an error.
+        try {
+          const profileCheck = await fetch(`/brain/api/onboarding?_=${Date.now()}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+            },
+          });
+          if (profileCheck.ok) {
+            const profileData = await profileCheck.json();
+            if (profileData?.user?.onboardingComplete) {
+              localStorage.setItem('onboarding_just_completed', Date.now().toString());
+              setStatus('redirecting');
+              window.location.href = '/dashboard';
+              return;
+            }
+          }
+        } catch {
+          // Profile check failed — fall through to show the original error
+        }
+
         throw new Error(detail);
       }
 
-      // Mark completion immediately so OnboardingGate trusts the local flag
-      // even if Railway Postgres replication lag hasn't caught up yet (up to 60s window)
+      // Mark completion so the gate trusts the local flag during any DB lag
       localStorage.setItem('onboarding_just_completed', Date.now().toString());
       setStatus('redirecting');
-      console.log('[Onboarding] POST successful, waiting 3s for DB propagation...');
-      await new Promise((resolve) => setTimeout(resolve, 3000)); // 3s delay for read-after-write consistency
-      console.log('[Onboarding] Redirecting to dashboard...');
       window.location.href = '/dashboard';
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save onboarding profile';

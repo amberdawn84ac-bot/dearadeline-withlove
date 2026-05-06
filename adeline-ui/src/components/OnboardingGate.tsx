@@ -57,6 +57,21 @@ export function OnboardingGate() {
           return;
         }
 
+        // If onboarding was completed within the last 10 seconds, trust it
+        // entirely without hitting the API. This prevents a stale DB read from
+        // bouncing the user back to /onboarding immediately after the POST.
+        const justCompletedRaw = localStorage.getItem('onboarding_just_completed');
+        if (justCompletedRaw) {
+          const secondsSince = (Date.now() - parseInt(justCompletedRaw, 10)) / 1000;
+          if (secondsSince < 10) {
+            if (pathname === '/onboarding') {
+              window.location.href = '/dashboard';
+            }
+            // On a protected route: user just completed — let them stay
+            return;
+          }
+        }
+
         // Add cache-busting to prevent stale reads after onboarding completion
         const cacheBuster = Date.now();
         console.log('[OnboardingGate] Checking status for pathname:', pathname, 'cacheBuster:', cacheBuster);
