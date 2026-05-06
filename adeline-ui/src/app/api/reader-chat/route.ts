@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Stream-transform: FastAPI SSE → Vercel AI SDK Data Stream Protocol
+  // Stream-transform: FastAPI SSE → SDK v3 UI Message Stream (JSON SSE format)
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
 
@@ -93,8 +93,10 @@ export async function POST(req: NextRequest) {
       const reader = upstream.body!.getReader();
       let buffer = "";
 
-      const enqueue = (line: string) =>
+      const enqueue = (event: Record<string, unknown>) => {
+        const line = `data: ${JSON.stringify(event)}\n\n`;
         controller.enqueue(encoder.encode(line));
+      };
 
       try {
         while (true) {
@@ -116,39 +118,33 @@ export async function POST(req: NextRequest) {
               continue;
             }
 
-            // Translate FastAPI events to Vercel AI SDK format
+            // Translate FastAPI events to SDK v3 format
             switch (event.type) {
               case "text":
-                // Text delta: 0:"content"
-                enqueue(`0:${JSON.stringify(event.delta)}\n`);
+                // Text delta as data annotation (since conversation doesn't have text-delta events)
+                enqueue({ type: "data", data: { type: "text", delta: event.delta } });
                 break;
 
               case "status":
-                // Data annotation: 2:[{...}]
-                enqueue(
-                  `2:[${JSON.stringify({ type: "status", message: event.message })}]\n`
-                );
+                // Data annotation for status
+                enqueue({ type: "data", data: { type: "status", message: event.message } });
                 break;
 
               case "done":
-                // Done marker: d:{"finishReason":"stop"}
-                enqueue(`d:{"finishReason":"stop"}\n`);
+                // Finish the step
+                enqueue({ type: "finish-step" });
                 break;
 
               case "error":
-                enqueue(
-                  `2:[${JSON.stringify({ type: "error", message: event.message })}]\n`
-                );
-                enqueue(`d:{"finishReason":"error"}\n`);
+                enqueue({ type: "data", data: { type: "error", message: event.message } });
+                enqueue({ type: "finish-step" });
                 break;
             }
           }
         }
       } catch (err) {
-        enqueue(
-          `2:[${JSON.stringify({ type: "error", message: String(err) })}]\n`
-        );
-        enqueue(`d:{"finishReason":"error"}\n`);
+        enqueue({ type: "data", data: { type: "error", message: String(err) } });
+        enqueue({ type: "finish-step" });
       } finally {
         controller.close();
       }
@@ -158,8 +154,7 @@ export async function POST(req: NextRequest) {
   return new Response(readable, {
     status: 200,
     headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "x-vercel-ai-data-stream": "v1",
+      "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       "X-Accel-Buffering": "no",
     },
