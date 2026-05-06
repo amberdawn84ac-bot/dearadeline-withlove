@@ -289,7 +289,7 @@ async def _run_registrar_background(
 @router.post("/stream")
 @limiter.limit("20/hour")
 async def stream_lesson(
-    http_request: Request,
+    request: Request,
     lesson_request: LessonRequest,
     background_tasks: BackgroundTasks,
     student_id: str = Depends(get_current_user_id),
