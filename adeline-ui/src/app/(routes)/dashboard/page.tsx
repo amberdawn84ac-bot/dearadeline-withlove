@@ -60,7 +60,7 @@ function DashboardContent() {
     onFinish: () => {
       setStreamingStatus('');
     },
-    onError: (err) => {
+    onError: (err: Error) => {
       console.error('[Dashboard] Lesson stream error:', err);
       setStreamingStatus('');
     },
