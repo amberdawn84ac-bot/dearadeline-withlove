@@ -4,7 +4,8 @@ set -e
 _DB="${DIRECT_DATABASE_URL:-${POSTGRES_DSN:-$DATABASE_URL}}"
 if [ -n "$_DB" ]; then
     echo "[entrypoint] Running Prisma migrations..."
-    DIRECT_DATABASE_URL="$_DB" DATABASE_URL="$_DB" timeout 30 prisma migrate deploy --schema /app/prisma/schema.prisma || echo "[entrypoint] Prisma migrate failed (non-fatal)"
+    # Set HOME to writable directory for Prisma cache
+    HOME=/tmp DIRECT_DATABASE_URL="$_DB" DATABASE_URL="$_DB" timeout 30 prisma migrate deploy --schema /app/prisma/schema.prisma || echo "[entrypoint] Prisma migrate failed (non-fatal)"
 else
     echo "[entrypoint] No DATABASE_URL set — skipping Prisma migrate"
 fi
