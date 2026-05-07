@@ -40,8 +40,9 @@ function LoginContent() {
           setLoading(false)
           return
         }
-        // Auto-confirmed — set cookie and go to onboarding
+        // Auto-confirmed — new signup always needs onboarding
         await setAuthCookie(data.session.access_token)
+        localStorage.setItem('auth_token', data.session.access_token)
         router.push('/onboarding')
       } else {
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
@@ -50,7 +51,24 @@ function LoginContent() {
         })
         if (signInError) throw signInError
         if (!data.session) throw new Error('No session returned')
-        await setAuthCookie(data.session.access_token)
+        const token = data.session.access_token
+        await setAuthCookie(token)
+        localStorage.setItem('auth_token', token)
+        // Send returning users directly to dashboard if they already completed onboarding
+        try {
+          const profileRes = await fetch(`/brain/api/onboarding?_=${Date.now()}`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Cache-Control': 'no-cache' },
+          })
+          if (profileRes.ok) {
+            const profileData = await profileRes.json()
+            if (profileData?.user?.onboardingComplete) {
+              router.push('/dashboard')
+              return
+            }
+          }
+        } catch {
+          // Profile check failed — fall through to onboarding; gate will sort it out
+        }
         router.push('/onboarding')
       }
     } catch (err: unknown) {
