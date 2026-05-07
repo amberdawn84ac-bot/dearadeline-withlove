@@ -52,12 +52,11 @@ function DashboardContent() {
   const router = useRouter();
 
   // useChat drives lesson streaming via /api/lesson translation bridge
+  // Auth is handled via HttpOnly cookies, automatically sent by browser
   const chat = useChat({
     transport: new DefaultChatTransport({
       api: '/api/lesson',
-      headers: typeof window !== 'undefined'
-        ? { Authorization: `Bearer ${localStorage.getItem('auth_token') ?? ''}` }
-        : undefined,
+      // No Authorization header needed - cookie auth is automatic
     }),
     onFinish: () => {
       setStreamingStatus('');

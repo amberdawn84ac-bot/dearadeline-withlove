@@ -66,12 +66,12 @@ export function EPUBReader({
     if (!location || !sessionId) return;
 
     try {
-      const response = await fetch(`/api/reading-session/${sessionId}`, {
+      const response = await fetch(`/brain/api/reading-session/${sessionId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''}`,
         },
+        credentials: 'include', // Important: sends auth cookies
         body: JSON.stringify({
           current_location: location,
           reading_minutes: readingMinutes,

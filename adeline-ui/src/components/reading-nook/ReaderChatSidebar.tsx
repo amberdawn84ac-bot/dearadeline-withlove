@@ -53,13 +53,12 @@ export function ReaderChatSidebar({ studentId, isOpen, onToggle }: ReaderChatSid
   const [inputValue, setInputValue] = useState('');
 
   // Initialize useChat with transport for SDK v3
+  // Auth is handled via HttpOnly cookies, automatically sent by browser
   const chat = useChat({
     id: `reader-${studentId}-${currentBook?.id || 'unknown'}`,
     transport: new DefaultChatTransport({
       api: '/api/reader-chat',
-      headers: typeof window !== 'undefined'
-        ? { Authorization: `Bearer ${localStorage.getItem('auth_token') ?? ''}` }
-        : undefined,
+      // No Authorization header needed - cookie auth is automatic
     }),
   });
   

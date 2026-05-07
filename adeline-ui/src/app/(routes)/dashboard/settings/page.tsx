@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { SettingsForm } from '@/components/settings/SettingsForm';
 
@@ -27,7 +28,13 @@ export default function SettingsPage() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : '';
+        // Get live session from Supabase
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        if (!token) {
+          window.location.href = '/login';
+          return;
+        }
 
         const response = await fetch('/brain/api/onboarding', {
           method: 'GET',
@@ -35,6 +42,7 @@ export default function SettingsPage() {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
+          credentials: 'include', // Important: sends auth cookies
         });
 
         if (response.status === 401) {

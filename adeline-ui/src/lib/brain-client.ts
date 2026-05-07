@@ -12,17 +12,16 @@ const BRAIN_URL = "/brain";
 
 /**
  * Get auth headers for brain API calls.
- * Sends the Supabase JWT from localStorage (set by useAuth hook).
+ * 
+ * Note: Authentication is now handled via HttpOnly cookies which are
+ * automatically sent by the browser with credentials: 'include'.
+ * This function remains for backward compatibility and any future
+ * header needs, but auth is no longer via localStorage/Authorization header.
  */
 function getAuthHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {};
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("auth_token");
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
-  }
-  return headers;
+  // Cookies are sent automatically by the browser
+  // No need for Authorization header with localStorage token
+  return {};
 }
 
 // ── Request / Response Types (mirrors adeline-core) ───────────────────────────

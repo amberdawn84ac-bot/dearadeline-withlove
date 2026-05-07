@@ -29,12 +29,12 @@ export function ReflectionModal({
       setError(null);
 
       try {
-        const response = await fetch(`/api/reading-session/${sessionId}`, {
+        const response = await fetch(`/brain/api/reading-session/${sessionId}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''}`,
           },
+          credentials: 'include', // Important: sends auth cookies
           body: JSON.stringify({
             status: 'finished',
             student_reflection: reflection.trim() || null,
@@ -74,12 +74,12 @@ export function ReflectionModal({
     setError(null);
 
     try {
-      const response = await fetch(`/api/reading-session/${sessionId}`, {
+      const response = await fetch(`/brain/api/reading-session/${sessionId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''}`,
         },
+        credentials: 'include', // Important: sends auth cookies
         body: JSON.stringify({
           status: 'finished',
         }),

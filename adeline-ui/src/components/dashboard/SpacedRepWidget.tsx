@@ -47,11 +47,10 @@ export function SpacedRepWidget() {
   const fetchDue = useCallback(async () => {
     if (!studentId) return;
     setLoading(true);
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
     try {
-      const res = await fetch(`/brain/learning/reviews/${encodeURIComponent(studentId)}`, { headers });
+      const res = await fetch(`/brain/learning/reviews/${encodeURIComponent(studentId)}`, {
+        credentials: 'include', // Important: sends auth cookies
+      });
       if (!res.ok) return;
       const data: ReviewsApiResponse = await res.json();
       setDueReviews(data.reviews ?? []);
@@ -78,12 +77,10 @@ export function SpacedRepWidget() {
   const submitRating = async (quality: number) => {
     if (!current) return;
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
     await fetch("/brain/learning/reviews", {
       method: "POST",
-      headers,
+      headers: { "Content-Type": "application/json" },
+      credentials: 'include', // Important: sends auth cookies
       body: JSON.stringify({
         concept_id: current.concept_id,
         quality,

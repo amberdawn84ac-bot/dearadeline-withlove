@@ -93,6 +93,9 @@ const BASE_URL = '/brain/bookshelf';
 
 /**
  * Helper to make authenticated fetch requests to bookshelf API
+ * 
+ * Note: Authentication is now handled via HttpOnly cookies which are
+ * automatically sent by the browser with credentials: 'include'.
  */
 async function fetchAPI<T>(
   endpoint: string,
@@ -101,16 +104,13 @@ async function fetchAPI<T>(
   const { studentId, ...fetchOptions } = options;
   const url = `${BASE_URL}${endpoint}`;
 
-  // JWT Bearer token from Supabase auth
-  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-
   const response = await fetch(url, {
     ...fetchOptions,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       ...fetchOptions.headers,
     },
+    credentials: 'include', // Important: sends auth cookies
     cache: 'no-store',
   });
 
@@ -183,14 +183,12 @@ export async function getRecommendations(
   // Books router is at /brain/api/books/, not /brain/bookshelf/
   const url = `/brain/api/books/recommendations?${params.toString()}`;
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-
   const response = await fetch(url, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
     },
+    credentials: 'include', // Important: sends auth cookies
     cache: 'no-store',
   });
 

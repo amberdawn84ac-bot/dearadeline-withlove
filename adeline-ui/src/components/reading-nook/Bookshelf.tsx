@@ -156,12 +156,9 @@ export default function Bookshelf({
   const [error, setError] = useState<string | null>(null);
   const [addingToList, setAddingToList] = useState<string | null>(null);
 
-  // Get auth headers for brain API calls — JWT Bearer token from Supabase
+  // Auth is handled via HttpOnly cookies, automatically sent by browser
+  // No need to manually set Authorization header from localStorage
   const getAuthHeaders = useCallback((): Record<string, string> => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
-    if (token) {
-      return { "Authorization": `Bearer ${token}` };
-    }
     return {};
   }, []);
 
@@ -174,6 +171,7 @@ export default function Bookshelf({
       // Fetch shelf from GET /api/reading-session
       const shelfRes = await fetch("/brain/api/reading-session", {
         headers: getAuthHeaders(),
+        credentials: 'include', // Important: sends auth cookies
       });
 
       if (!shelfRes.ok) {
@@ -298,6 +296,7 @@ export default function Bookshelf({
             "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
+          credentials: 'include', // Important: sends auth cookies
           body: JSON.stringify({
             book_id: bookId,
             status: "reading",
@@ -338,6 +337,7 @@ export default function Bookshelf({
           "Content-Type": "application/json",
           ...getAuthHeaders(),
         },
+        credentials: 'include', // Important: sends auth cookies
         body: JSON.stringify({
           book_id: bookId,
           status: "reading",

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Loader2, Check, AlertCircle } from 'lucide-react';
 import { INTERESTS_OPTIONS, US_STATES } from '@/components/onboarding/constants';
+import { supabase } from '@/lib/supabase';
 
 interface UserProfile {
   id: string;
@@ -65,7 +66,12 @@ export function SettingsForm({ initialProfile }: SettingsFormProps) {
       setSaveStatus('idle');
       setSaveError(null);
 
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : '';
+      // Get live session from Supabase
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
 
       const updateData: Record<string, unknown> = {
         gradeLevel,
@@ -87,6 +93,7 @@ export function SettingsForm({ initialProfile }: SettingsFormProps) {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Important: sends auth cookies
         body: JSON.stringify(updateData),
       });
 

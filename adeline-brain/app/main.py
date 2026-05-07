@@ -49,6 +49,7 @@ from app.api.parent import router as parent_router
 from app.api.admin import router as admin_router
 from app.api.learning_plan import router as learning_plan_router
 from app.api.genui import router as genui_router
+from app.api.auth import router as auth_router
 from app.api.realtime import router as realtime_router
 from app.api.conversation import router as conversation_router
 from app.api.animated_lessons import router as animated_lessons_router
@@ -200,6 +201,9 @@ app.include_router(admin_router)
 app.include_router(learning_plan_router)
 app.include_router(genui_router)
 # ── /brain/* prefix mounts (Vercel proxy: /brain/:path* → Railway /:path*) ──
+# Auth endpoints (for cookie-based auth)
+app.include_router(auth_router, prefix="/brain")
+# ── Other /brain/* routes ──
 app.include_router(onboarding_router, prefix="/brain")
 app.include_router(lessons_router, prefix="/brain")
 app.include_router(lesson_stream_router, prefix="/brain")

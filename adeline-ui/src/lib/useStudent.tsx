@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuth } from './useAuth';
+import { supabase } from './supabase';
 
 interface StudentProfile {
   id: string;
@@ -29,44 +30,51 @@ export function StudentProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (authLoading) return;
-    if (!user) {
-      setStudent(null);
-      setLoading(false);
-      return;
-    }
+    async function fetchProfile() {
+      if (authLoading) return;
+      if (!user) {
+        setStudent(null);
+        setLoading(false);
+        return;
+      }
 
-    const token = localStorage.getItem('auth_token');
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+      // Get live session from Supabase
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        setLoading(false);
+        return;
+      }
 
-    // Add cache-busting to prevent stale reads after onboarding completion
-    const cacheBuster = Date.now();
-    fetch(`/brain/api/onboarding?_=${cacheBuster}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-      },
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.user) {
-          setStudent({
-            id: user.id,
-            name: data.user.name ?? '',
-            gradeLevel: data.user.gradeLevel ?? '8',
-            interests: data.user.interests ?? [],
-            learningStyle: data.user.learningStyle ?? null,
-            state: data.user.state ?? null,
-            onboardingComplete: data.user.onboardingComplete ?? false,
-          });
-        }
+      // Add cache-busting to prevent stale reads after onboarding completion
+      const cacheBuster = Date.now();
+      fetch(`/brain/api/onboarding?_=${cacheBuster}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        },
+        credentials: 'include', // Important: sends auth cookies
       })
-      .catch(err => console.error('[StudentProvider] Failed to fetch profile:', err))
-      .finally(() => setLoading(false));
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data?.user) {
+            setStudent({
+              id: user.id,
+              name: data.user.name ?? '',
+              gradeLevel: data.user.gradeLevel ?? '8',
+              interests: data.user.interests ?? [],
+              learningStyle: data.user.learningStyle ?? null,
+              state: data.user.state ?? null,
+              onboardingComplete: data.user.onboardingComplete ?? false,
+            });
+          }
+        })
+        .catch(err => console.error('[StudentProvider] Failed to fetch profile:', err))
+        .finally(() => setLoading(false));
+    }
+
+    fetchProfile();
   }, [user, authLoading]);
 
   return (

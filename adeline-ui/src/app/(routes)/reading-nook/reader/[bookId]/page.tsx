@@ -70,14 +70,10 @@ export default function ReaderPage() {
       try {
         setLoading(true);
         
-        // Get auth token
-        const token = typeof window !== 'undefined' 
-          ? localStorage.getItem('auth_token') 
-          : '';
-        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-
         // Fetch book details
-        const bookRes = await fetch(`/brain/api/books/${bookId}`, headers.Authorization ? { headers } : undefined);
+        const bookRes = await fetch(`/brain/api/books/${bookId}`, {
+          credentials: 'include', // Important: sends auth cookies
+        });
         if (!bookRes.ok) {
           throw new Error(`Failed to fetch book: ${bookRes.status}`);
         }
@@ -85,7 +81,9 @@ export default function ReaderPage() {
         setBook(bookData);
 
         // Fetch or create reading session
-        const sessionRes = await fetch(`/brain/api/reading-session?book_id=${bookId}`, headers.Authorization ? { headers } : undefined);
+        const sessionRes = await fetch(`/brain/api/reading-session?book_id=${bookId}`, {
+          credentials: 'include', // Important: sends auth cookies
+        });
         if (sessionRes.ok) {
           const sessionData = await sessionRes.json();
           // Find active reading session
@@ -112,16 +110,12 @@ export default function ReaderPage() {
     if (!session?.id) return;
 
     try {
-      const token = typeof window !== 'undefined' 
-        ? localStorage.getItem('auth_token') 
-        : '';
-      
       await fetch(`/brain/api/reading-session/${session.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
+        credentials: 'include', // Important: sends auth cookies
         body: JSON.stringify({ status: 'finished' }),
       });
 

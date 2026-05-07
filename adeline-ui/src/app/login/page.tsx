@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { setAuthCookie } from '@/lib/auth-cookies'
 
 type Mode = 'login' | 'signup'
 
@@ -39,8 +40,8 @@ function LoginContent() {
           setLoading(false)
           return
         }
-        // Auto-confirmed — store token and go to onboarding
-        localStorage.setItem('auth_token', data.session.access_token)
+        // Auto-confirmed — set cookie and go to onboarding
+        await setAuthCookie(data.session.access_token)
         router.push('/onboarding')
       } else {
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
@@ -49,7 +50,7 @@ function LoginContent() {
         })
         if (signInError) throw signInError
         if (!data.session) throw new Error('No session returned')
-        localStorage.setItem('auth_token', data.session.access_token)
+        await setAuthCookie(data.session.access_token)
         router.push('/onboarding')
       }
     } catch (err: unknown) {
