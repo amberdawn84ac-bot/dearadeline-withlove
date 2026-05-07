@@ -317,49 +317,51 @@ async def post_onboarding(
         logger.exception("[POST /api/onboarding] DB connection failed")
         raise HTTPException(status_code=500, detail=f"Database connection failed: {e}")
     try:
-        # Validate invite code before touching the user record
-        if request.inviteCode:
-            code_row = await conn.fetchrow(
-                'SELECT id, "isUsed" FROM "InviteCode" WHERE code = $1',
-                request.inviteCode,
-            )
-            if not code_row:
-                raise HTTPException(status_code=400, detail="Invalid invite code.")
-            if code_row["isUsed"]:
-                raise HTTPException(status_code=403, detail="This invite code has already been used.")
+        async with conn.transaction():
+            # Validate invite code inside the transaction so the used-check and
+            # the claim are atomic — prevents two concurrent requests from
+            # both passing the isUsed check before either commits.
+            if request.inviteCode:
+                code_row = await conn.fetchrow(
+                    'SELECT id, "isUsed" FROM "InviteCode" WHERE code = $1 FOR UPDATE',
+                    request.inviteCode,
+                )
+                if not code_row:
+                    raise HTTPException(status_code=400, detail="Invalid invite code.")
+                if code_row["isUsed"]:
+                    raise HTTPException(status_code=403, detail="This invite code has already been used.")
 
-        row = await conn.fetchrow(
-            """
-            INSERT INTO "User" (
-                "id", "name", "email", "role", "gradeLevel", "interests", "learningStyle",
-                "state", "targetGraduationYear", "onboardingComplete"
+            row = await conn.fetchrow(
+                """
+                INSERT INTO "User" (
+                    "id", "name", "email", "role", "gradeLevel", "interests", "learningStyle",
+                    "state", "targetGraduationYear", "onboardingComplete"
+                )
+                VALUES ($1, $2, $3, 'STUDENT', $4, $5::text[], $6, $7, $8, true)
+                ON CONFLICT ("id") DO UPDATE SET
+                    "name" = EXCLUDED."name",
+                    "gradeLevel" = EXCLUDED."gradeLevel",
+                    "interests" = EXCLUDED."interests",
+                    "learningStyle" = EXCLUDED."learningStyle",
+                    "state" = EXCLUDED."state",
+                    "targetGraduationYear" = EXCLUDED."targetGraduationYear",
+                    "onboardingComplete" = true,
+                    "updatedAt" = NOW()
+                RETURNING
+                    "id", "name", "gradeLevel",
+                    "mathLevel", "elaLevel", "scienceLevel", "historyLevel",
+                    "interests", "learningStyle", "pacingMultiplier",
+                    "state", "targetGraduationYear", "onboardingComplete"
+                """,
+                user_id, request.name, email, request.gradeLevel, request.interests,
+                request.learningStyle, request.state, request.targetGraduationYear,
             )
-            VALUES ($1, $2, $3, 'STUDENT', $4, $5::text[], $6, $7, $8, true)
-            ON CONFLICT ("id") DO UPDATE SET
-                "name" = EXCLUDED."name",
-                "gradeLevel" = EXCLUDED."gradeLevel",
-                "interests" = EXCLUDED."interests",
-                "learningStyle" = EXCLUDED."learningStyle",
-                "state" = EXCLUDED."state",
-                "targetGraduationYear" = EXCLUDED."targetGraduationYear",
-                "onboardingComplete" = true,
-                "updatedAt" = NOW()
-            RETURNING
-                "id", "name", "gradeLevel",
-                "mathLevel", "elaLevel", "scienceLevel", "historyLevel",
-                "interests", "learningStyle", "pacingMultiplier",
-                "state", "targetGraduationYear", "onboardingComplete"
-            """,
-            user_id, request.name, email, request.gradeLevel, request.interests,
-            request.learningStyle, request.state, request.targetGraduationYear,
-        )
 
-        # Claim the invite code atomically after successful insert
-        if request.inviteCode:
-            await conn.execute(
-                'UPDATE "InviteCode" SET "isUsed" = true, "claimedByEmail" = $1 WHERE code = $2',
-                email, request.inviteCode,
-            )
+            if request.inviteCode:
+                await conn.execute(
+                    'UPDATE "InviteCode" SET "isUsed" = true, "claimedByEmail" = $1 WHERE code = $2',
+                    email, request.inviteCode,
+                )
     except HTTPException:
         raise
     except Exception as e:

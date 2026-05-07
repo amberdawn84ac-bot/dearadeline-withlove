@@ -219,6 +219,8 @@ async def get_lesson_status(
 
         if status == JobStatus.complete:
             result = await job.result(timeout=0)
+            if result is None:
+                return {"status": "failed", "error": "Lesson job completed but returned no result"}
             return {"status": "done", "result": result}
         elif status in (JobStatus.deferred, JobStatus.queued):
             return {"status": "queued"}

@@ -161,6 +161,7 @@ export async function POST(req: NextRequest) {
         );
         enqueue(`d:${JSON.stringify({ finishReason: "error" })}\n`);
       } finally {
+        reader.releaseLock();
         controller.close();
       }
     },

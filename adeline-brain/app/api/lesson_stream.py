@@ -311,8 +311,8 @@ async def stream_lesson(
                 try:
                     payload = json.loads(chunk.replace("data: ", "").strip())
                     registrar_snapshot.update(payload.get("_state_for_registrar", {}))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"[stream_lesson] Failed to parse done event for registrar; credits may not be recorded: {e}")
 
         # Schedule registrar after stream is fully consumed
         background_tasks.add_task(

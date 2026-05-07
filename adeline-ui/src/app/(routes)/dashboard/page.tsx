@@ -141,7 +141,7 @@ function DashboardContent() {
   }, []);
 
   const handleSuggestionClick = useCallback((suggestion: LessonSuggestion) => {
-    if (isStreaming || !studentId) return;
+    if (isStreaming || streamingBlocks.length > 0 || !studentId) return;
     setActiveLesson(null);
     setStreamingBlocks([]);
     setStreamingTitle('');
@@ -165,6 +165,7 @@ function DashboardContent() {
     setActiveLesson(null);
     setStreamingBlocks([]);
     setStreamingTitle('');
+    setStreamingStatus('');
   };
 
   return (
@@ -192,15 +193,26 @@ function DashboardContent() {
           <SpacedRepWidget />
         </div>
 
-        {/* ── Streaming lesson view ── */}
-        {!activeLesson && isStreaming && (
+        {/* ── Streaming lesson view (shown while generating AND after completion until dismissed) ── */}
+        {!activeLesson && (isStreaming || streamingBlocks.length > 0) && (
           <div className="px-6 pb-8 pt-5">
-            <div className="flex items-center gap-3 pb-4">
-              <Loader2 className="w-5 h-5 animate-spin text-[#BD6809]" />
-              <p className="text-sm text-[#2F4731]/60 italic">
-                {streamingStatus || 'Adeline is preparing your lesson…'}
-              </p>
-            </div>
+            {!isStreaming && streamingBlocks.length > 0 && (
+              <button
+                onClick={handleBackToSuggestions}
+                className="flex items-center gap-2 text-[#BD6809] hover:text-[#2F4731] mb-4 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="text-sm font-medium">Back to lesson list</span>
+              </button>
+            )}
+            {isStreaming && (
+              <div className="flex items-center gap-3 pb-4">
+                <Loader2 className="w-5 h-5 animate-spin text-[#BD6809]" />
+                <p className="text-sm text-[#2F4731]/60 italic">
+                  {streamingStatus || 'Adeline is preparing your lesson…'}
+                </p>
+              </div>
+            )}
             {streamingTitle && (
               <h2 className="text-xl font-bold text-[#2F4731] mb-4">{streamingTitle}</h2>
             )}
