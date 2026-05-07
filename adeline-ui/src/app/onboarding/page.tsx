@@ -29,7 +29,7 @@ export default function OnboardingPage() {
 
         // Fetch current user profile to check onboarding status
         const cacheBuster = Date.now();
-        const response = await fetch(`/brain?_=${cacheBuster}`, {
+        const response = await fetch(`/brain/api/onboarding?_=${cacheBuster}`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -112,8 +112,8 @@ export default function OnboardingPage() {
         ? new URLSearchParams(window.location.search).get('invite') || undefined
         : undefined;
 
-      console.log('[OnboardingPage] POST /brain - submitting...');
-      const response = await fetch('/brain', {
+      console.log('[OnboardingPage] POST /brain/api/onboarding - submitting...');
+      const response = await fetch('/brain/api/onboarding', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -145,7 +145,7 @@ export default function OnboardingPage() {
       while (attempts < maxAttempts) {
         attempts++;
         const cacheBuster = Date.now();
-        const checkRes = await fetch(`/brain?_=${cacheBuster}`, {
+        const checkRes = await fetch(`/brain/api/onboarding?_=${cacheBuster}`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
