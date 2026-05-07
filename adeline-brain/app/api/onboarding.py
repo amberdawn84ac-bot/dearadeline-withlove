@@ -318,18 +318,18 @@ async def post_onboarding(
         raise HTTPException(status_code=500, detail=f"Database connection failed: {e}")
     try:
         async with conn.transaction():
-            # Validate invite code inside the transaction so the used-check and
-            # the claim are atomic — prevents two concurrent requests from
-            # both passing the isUsed check before either commits.
-            if request.inviteCode:
-                code_row = await conn.fetchrow(
-                    'SELECT id, "isUsed" FROM "InviteCode" WHERE code = $1 FOR UPDATE',
-                    request.inviteCode,
-                )
-                if not code_row:
-                    raise HTTPException(status_code=400, detail="Invalid invite code.")
-                if code_row["isUsed"]:
-                    raise HTTPException(status_code=403, detail="This invite code has already been used.")
+            # TEMPORARY BYPASS: Invite code validation disabled for testing
+            # TODO: Re-enable before production launch
+            # if request.inviteCode:
+            #     code_row = await conn.fetchrow(
+            #         'SELECT id, "isUsed" FROM "InviteCode" WHERE code = $1 FOR UPDATE',
+            #         request.inviteCode,
+            #     )
+            #     if not code_row:
+            #         raise HTTPException(status_code=400, detail="Invalid invite code.")
+            #     if code_row["isUsed"]:
+            #         raise HTTPException(status_code=403, detail="This invite code has already been used.")
+            # NOTE: Invite code marking also skipped during bypass
 
             row = await conn.fetchrow(
                 """
@@ -357,11 +357,12 @@ async def post_onboarding(
                 request.learningStyle, request.state, request.targetGraduationYear,
             )
 
-            if request.inviteCode:
-                await conn.execute(
-                    'UPDATE "InviteCode" SET "isUsed" = true, "claimedByEmail" = $1 WHERE code = $2',
-                    email, request.inviteCode,
-                )
+            # TEMPORARY BYPASS: Invite code marking disabled
+            # if request.inviteCode:
+            #     await conn.execute(
+            #         'UPDATE "InviteCode" SET "isUsed" = true, "claimedByEmail" = $1 WHERE code = $2',
+            #         email, request.inviteCode,
+            #     )
     except HTTPException:
         raise
     except Exception as e:
