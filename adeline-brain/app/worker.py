@@ -11,7 +11,6 @@ import os
 from arq import cron
 from arq.connections import RedisSettings
 
-from app.jobs.lesson_jobs import generate_lesson_job
 from app.jobs.warmup_jobs import warmup_canonical_cache
 
 logger = logging.getLogger(__name__)
@@ -65,7 +64,8 @@ async def shutdown(ctx: dict) -> None:
 
 class WorkerSettings:
     # ARQ requires actual function objects, not string paths
-    functions = [generate_lesson_job, warmup_canonical_cache]
+    # NOTE: generate_lesson_job removed — lessons now use streaming via /lesson/stream
+    functions = [warmup_canonical_cache]
     cron_jobs = [
         cron(warmup_canonical_cache, hour=2, minute=0),
     ]

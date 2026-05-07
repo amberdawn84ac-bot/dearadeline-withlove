@@ -12,8 +12,14 @@ SSE event shapes:
   data: {"type": "done",      "lesson_id": "...", "title": "..."}
   data: {"type": "error",     "message": "..."}
 
-The RegistrarAgent (xAPI + CASE credits) runs as a FastAPI BackgroundTask
-after the stream closes — it never blocks the student.
+Canonical Persistence:
+  - Pre-generation cache check: Instant load from PostgreSQL/Redis if lesson exists
+  - Post-generation background save: New lessons persisted via BackgroundTask
+    without blocking the real-time stream
+
+Background Tasks:
+  - RegistrarAgent (xAPI + CASE credits) runs after stream closes
+  - CanonicalStore saves lesson to DB/Redis for future cache hits
 """
 import json
 import logging
@@ -26,7 +32,7 @@ from fastapi.responses import StreamingResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.schemas.api_models import LessonRequest, LessonResponse, LessonBlockResponse
+from app.schemas.api_models import LessonRequest, LessonResponse, LessonBlockResponse, Track
 from app.api.middleware import get_current_user_id
 from app.models.student import load_student_state
 
@@ -197,6 +203,17 @@ async def _stream_lesson(
             "xapi_statements": state.get("xapi_statements", []),
             "credits_awarded":  state.get("credits_awarded", []),
         },
+        # Pass state for the background canonical save task
+        "_state_for_canonical": {
+            "slug": slug,
+            "topic": request.topic,
+            "track": request.track.value,
+            "title": title,
+            "blocks": state.get("blocks", []),
+            "oas_standards": state.get("oas_standards", []),
+            "researcher_activated": state.get("researcher_activated", False),
+            "agent_name": state.get("agent_name", ""),
+        },
     })
 
 
@@ -286,6 +303,35 @@ async def _run_registrar_background(
         logger.warning(f"[LessonStream] Registrar background task failed (non-fatal): {e}")
 
 
+async def _save_canonical_background(
+    state_for_canonical: dict,
+) -> None:
+    """Background task: save generated lesson to canonical store after stream ends."""
+    try:
+        from app.connections.canonical_store import canonical_store
+
+        slug = state_for_canonical.get("slug")
+        if not slug:
+            logger.warning("[LessonStream] Cannot save canonical: missing slug")
+            return
+
+        record = {
+            "id": str(uuid.uuid4()),
+            "topic": state_for_canonical.get("topic", ""),
+            "track": state_for_canonical.get("track", ""),
+            "title": state_for_canonical.get("title", ""),
+            "blocks": state_for_canonical.get("blocks", []),
+            "oas_standards": state_for_canonical.get("oas_standards", []),
+            "researcher_activated": state_for_canonical.get("researcher_activated", False),
+            "agent_name": state_for_canonical.get("agent_name", ""),
+        }
+
+        await canonical_store.save(slug, record, pending=False)
+        logger.info(f"[LessonStream] Canonical saved — slug={slug}, topic='{record['topic']}'")
+    except Exception as e:
+        logger.warning(f"[LessonStream] Canonical save failed (non-fatal): {e}")
+
+
 @router.post("/stream")
 @limiter.limit("20/hour")
 async def stream_lesson(
@@ -298,21 +344,33 @@ async def stream_lesson(
     Stream a lesson as Server-Sent Events.
 
     Returns immediately with a StreamingResponse. Blocks arrive as SSE events
-    as soon as each agent step completes. The RegistrarAgent runs in background.
+    as soon as each agent step completes.
+
+    Canonical Persistence:
+      - Pre-generation: Checks canonical store for existing lesson (slug = SHA256(topic:track)).
+        If found, instantly streams cached blocks without running the orchestrator.
+      - Post-generation: New lessons are saved to the canonical store via BackgroundTask
+        after the stream completes, ensuring future requests are instant cache hits.
+
+    Background Tasks:
+      - RegistrarAgent emits xAPI statements + CASE credits
+      - CanonicalStore saves lesson for future cache hits
     """
     lesson_id = str(uuid.uuid4())
 
     async def event_generator():
         registrar_snapshot = {}
+        canonical_snapshot = {}
         async for chunk in _stream_lesson(lesson_request, student_id, lesson_id):
             yield chunk
-            # Capture the registrar state from the done event
+            # Capture state from the done event for background tasks
             if '"type": "done"' in chunk:
                 try:
                     payload = json.loads(chunk.replace("data: ", "").strip())
                     registrar_snapshot.update(payload.get("_state_for_registrar", {}))
+                    canonical_snapshot.update(payload.get("_state_for_canonical", {}))
                 except Exception as e:
-                    logger.warning(f"[stream_lesson] Failed to parse done event for registrar; credits may not be recorded: {e}")
+                    logger.warning(f"[stream_lesson] Failed to parse done event for background tasks: {e}")
 
         # Schedule registrar after stream is fully consumed
         background_tasks.add_task(
@@ -321,6 +379,13 @@ async def stream_lesson(
             lesson_request,
             lesson_id,
         )
+
+        # Schedule canonical save after stream is fully consumed (only if not from cache)
+        if canonical_snapshot and not canonical_snapshot.get("from_canonical"):
+            background_tasks.add_task(
+                _save_canonical_background,
+                canonical_snapshot,
+            )
 
     return StreamingResponse(
         event_generator(),

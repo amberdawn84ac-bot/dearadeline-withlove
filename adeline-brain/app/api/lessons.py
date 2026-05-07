@@ -14,8 +14,6 @@ import openai
 from fastapi import APIRouter, HTTPException, Depends, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from arq.connections import RedisSettings, create_pool as arq_create_pool
-from arq.jobs import Job as ARQJob, JobStatus
 
 from app.schemas.api_models import LessonRequest, LessonResponse, TRUTH_THRESHOLD, UserRole
 from app.protocols.witness import get_witness_threshold
@@ -92,33 +90,6 @@ async def _embed(text: str) -> list[float]:
     return resp.data[0].embedding
 
 
-async def _get_arq_redis_pool():
-    """Create a short-lived ARQ Redis pool for enqueue/status operations."""
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    if redis_url.startswith("https://") or redis_url.startswith("http://"):
-        raise ValueError(
-            f"REDIS_URL must be a redis:// TCP DSN for ARQ, got: {redis_url}"
-        )
-    return await arq_create_pool(RedisSettings.from_dsn(redis_url))
-
-
-async def _enqueue_lesson_job(lesson_request_dict: dict, student_id: str):
-    """Enqueue a lesson generation job and return the ARQ Job object."""
-    pool = await _get_arq_redis_pool()
-    job = await pool.enqueue_job(
-        "generate_lesson_job",
-        lesson_request_dict,
-        student_id,
-    )
-    await pool.aclose()
-    return job
-
-
-def _get_arq_job(job_id: str, pool) -> ARQJob:
-    """Return an ARQ Job handle for status checking."""
-    return ARQJob(job_id, pool)
-
-
 async def _persist_learning_records(lesson: LessonResponse) -> None:
     """
     Fire-and-forget: persist xAPI statements and CASE credit entry generated
@@ -172,70 +143,6 @@ async def _persist_learning_records(lesson: LessonResponse) -> None:
     except Exception as e:
         logger.warning(f"[Lessons] Learning record persistence failed (non-fatal): {e}")
 
-
-@router.post(
-    "/generate",
-    status_code=202,
-)
-@limiter.limit("20/hour")
-async def generate_lesson(
-    request: Request,
-    lesson_request: LessonRequest,
-    student_id: str = Depends(get_current_user_id),
-):
-    """
-    Enqueue a lesson generation job and return immediately.
-
-    The full orchestration pipeline (embed → canonical check → agent → registrar)
-    runs in an ARQ background worker. Poll GET /lesson/status/{job_id} for the result.
-    """
-    job = await _enqueue_lesson_job(lesson_request.model_dump(mode="json"), student_id)
-    logger.info(
-        f"[/lesson/generate] Enqueued job={job.job_id} "
-        f"topic='{lesson_request.topic}' track={lesson_request.track.value}"
-    )
-    return {"job_id": job.job_id, "status": "queued"}
-
-
-@router.get("/status/{job_id}")
-async def get_lesson_status(
-    job_id: str,
-    student_id: str = Depends(get_current_user_id),
-):
-    """
-    Poll for lesson generation status.
-
-    Returns:
-      { status: "queued" }               — job is waiting
-      { status: "running" }              — job is executing
-      { status: "done", result: {...} }  — lesson ready
-      { status: "failed", error: "..." } — generation failed
-    """
-    pool = None
-    try:
-        pool = await _get_arq_redis_pool()
-        job = _get_arq_job(job_id, pool)
-        status = await job.status()
-
-        if status == JobStatus.complete:
-            result = await job.result(timeout=0)
-            if result is None:
-                return {"status": "failed", "error": "Lesson job completed but returned no result"}
-            return {"status": "done", "result": result}
-        elif status in (JobStatus.deferred, JobStatus.queued):
-            return {"status": "queued"}
-        elif status == JobStatus.in_progress:
-            return {"status": "running"}
-        elif status == JobStatus.not_found:
-            return {"status": "not_found"}
-        else:
-            return {"status": "unknown", "detail": str(status)}
-    except Exception as e:
-        logger.error(f"[/lesson/status] Error checking job {job_id}: {e}")
-        return {"status": "failed", "error": str(e)}
-    finally:
-        if pool is not None:
-            await pool.aclose()
 
 
 @router.get("/health")
