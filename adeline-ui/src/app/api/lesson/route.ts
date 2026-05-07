@@ -19,7 +19,9 @@ import { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 const BRAIN_URL =
-  process.env.BRAIN_INTERNAL_URL ?? process.env.NEXT_PUBLIC_BRAIN_URL ?? "http://localhost:8000";
+  process.env.BRAIN_PUBLIC_URL ??
+  process.env.BRAIN_INTERNAL_URL ??
+  "http://localhost:8000";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
