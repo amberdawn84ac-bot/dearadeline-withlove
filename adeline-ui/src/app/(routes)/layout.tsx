@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { AppSidebar } from "@/components/nav/AppSidebar";
 import { StudentProvider } from "@/lib/useStudent";
 
