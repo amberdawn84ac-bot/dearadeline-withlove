@@ -92,7 +92,9 @@ async def _stream_lesson(
                 blocks_data = json.loads(blocks_data)
             for block in blocks_data:
                 yield _sse({"type": "block", "block": block})
-                yield _from_block_tool_call(block, lesson_id, request.track.value)
+                tool_event = _from_block_tool_call(block, lesson_id, request.track.value)
+                if tool_event:
+                    yield tool_event
             yield _sse({
                 "type": "done",
                 "lesson_id": lesson_id,
