@@ -241,7 +241,7 @@ class Evidence(BaseModel):
     source_type:      str = "PRIMARY_SOURCE"
     witness_citation: WitnessCitation = Field(default_factory=WitnessCitation)
     similarity_score: float = Field(ge=0.0, le=1.0)
-    verdict:          EvidenceVerdict
+    verdict:          Optional[EvidenceVerdict] = None
     chunk:            str
 
     @field_validator("similarity_score")
