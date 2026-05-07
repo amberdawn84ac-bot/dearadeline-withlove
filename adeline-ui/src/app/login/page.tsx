@@ -21,6 +21,7 @@ function LoginContent() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const inviteCode = searchParams.get('invite')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -42,8 +43,9 @@ function LoginContent() {
         }
         // Auto-confirmed — new signup always needs onboarding
         await setAuthCookie(data.session.access_token)
-        localStorage.setItem('auth_token', data.session.access_token)
-        router.push('/onboarding')
+        // Pass invite code to onboarding if present
+        const onboardingUrl = inviteCode ? `/onboarding?invite=${inviteCode}` : '/onboarding'
+        router.push(onboardingUrl)
       } else {
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
           email,
@@ -53,7 +55,6 @@ function LoginContent() {
         if (!data.session) throw new Error('No session returned')
         const token = data.session.access_token
         await setAuthCookie(token)
-        localStorage.setItem('auth_token', token)
         // Send returning users directly to dashboard if they already completed onboarding
         try {
           const profileRes = await fetch(`/brain/api/onboarding?_=${Date.now()}`, {

@@ -107,8 +107,9 @@ export default function OnboardingPage() {
       }
       const token = sessionData.session.access_token;
 
-      const inviteCode = typeof window !== 'undefined' 
-        ? localStorage.getItem('adeline_founder_code') || undefined 
+      // Get invite code from URL query params
+      const inviteCode = typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('invite') || undefined
         : undefined;
 
       console.log('[OnboardingPage] POST /brain/api/onboarding - submitting...');
