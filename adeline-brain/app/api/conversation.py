@@ -18,10 +18,12 @@ import logging
 import os
 from typing import Optional, AsyncIterator
 
-import anthropic
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
+
+from app.config import create_llm, ADELINE_MODEL
 
 from app.api.middleware import get_current_user_id
 from app.algorithms.pedagogical_directives import get_mode_directives, get_quick_directives
@@ -32,7 +34,7 @@ from app.utils.stream_parser import parse_stream
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/conversation", tags=["conversation"])
 
-_MODEL = os.getenv("ADELINE_MODEL", "claude-sonnet-4-6")
+_MODEL = ADELINE_MODEL
 
 _ADELINE_BASE = """You are Adeline — a Truth-First K-12 AI Mentor grounded in the 10-Track Constitution.
 
@@ -170,20 +172,25 @@ def _infer_tracks(message: str, explicit_track: Optional[str]) -> list[str]:
     return ["TRUTH_HISTORY"]
 
 
-async def _stream_claude(
+async def _stream_llm(
     system_prompt: str,
     messages: list[dict],
 ) -> AsyncIterator[str]:
-    """Yield raw text chunks from Claude's streaming API."""
-    client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-    async with client.messages.stream(
-        model=_MODEL,
-        system=system_prompt,
-        messages=messages,
-        max_tokens=2000,
-    ) as stream:
-        async for text_chunk in stream.text_stream:
-            yield text_chunk
+    """Yield raw text chunks using the active LLM provider via LangChain."""
+    lc_messages = [SystemMessage(content=system_prompt)]
+    for m in messages:
+        role = m.get("role", "user")
+        content = m.get("content", "")
+        if role == "user":
+            lc_messages.append(HumanMessage(content=content))
+        else:
+            from langchain_core.messages import AIMessage
+            lc_messages.append(AIMessage(content=content))
+
+    llm = create_llm(max_tokens=2000)
+    async for chunk in llm.astream(lc_messages):
+        if chunk.content:
+            yield chunk.content
 
 
 async def _conversation_sse(
@@ -240,15 +247,15 @@ async def _conversation_sse(
             highlighted_text=highlighted_text,
         )
 
-        # Build Claude message list (cap history at last 10 turns)
-        claude_messages = []
+        # Build message list (cap history at last 10 turns)
+        llm_messages = []
         for h in history[-10:]:
             role = "user" if h.get("role") == "user" else "assistant"
-            claude_messages.append({"role": role, "content": h.get("content", "")})
-        claude_messages.append({"role": "user", "content": message})
+            llm_messages.append({"role": role, "content": h.get("content", "")})
+        llm_messages.append({"role": "user", "content": message})
 
         # Stream + parse
-        async for event in parse_stream(_stream_claude(system_prompt, claude_messages)):
+        async for event in parse_stream(_stream_llm(system_prompt, llm_messages)):
             if event["type"] == "text":
                 yield _sse("text", {"delta": event["delta"]})
             elif event["type"] == "block":

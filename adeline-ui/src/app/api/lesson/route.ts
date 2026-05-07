@@ -10,8 +10,8 @@
  * Data Stream Protocol format:
  *   0:"text chunk"\n        — text content
  *   2:[{"key":"value"}]\n    — data annotation (arbitrary JSON array)
- *   9:{"toolCallId":"..."}\n — tool call
- *   a:{"toolCallId":"..."}\n — tool result
+ *   9:[{"toolCallId":"..."}]\n — tool call  (SDK v3: must be a JSON array)
+ *   a:[{"toolCallId":"..."}]\n — tool result (SDK v3: must be a JSON array)
  *   d:{"finishReason":"stop"}\n — finish marker
  */
 
@@ -103,6 +103,8 @@ export async function POST(req: NextRequest) {
       const enqueue = (line: string) =>
         controller.enqueue(encoder.encode(line));
 
+      let firstChunk = true;
+
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -123,37 +125,52 @@ export async function POST(req: NextRequest) {
               continue;
             }
 
+            if (firstChunk) {
+              console.log("[lesson/route] First SSE event from brain:", JSON.stringify(event).slice(0, 200));
+              firstChunk = false;
+            }
+
             switch (event.type) {
-              case "status":
-                // 2: — data annotation
+              case "status": {
+                const statusMsg = String(event.message ?? "");
+                // 0: — text chunk so useChat registers content and activates
+                enqueue(`0:${JSON.stringify(statusMsg)}\n`);
+                // 2: — data annotation for UI status display
                 enqueue(
-                  `2:[${JSON.stringify({ type: "status", message: event.message })}]\n`
+                  `2:[${JSON.stringify({ type: "status", message: statusMsg })}]\n`
                 );
                 break;
+              }
 
-              case "block":
-                // 2: — data annotation for blocks
+              case "block": {
+                const blockContent = (event.block as Record<string, unknown>)?.content as string | undefined;
+                // 0: — text chunk: emit the block's text content so useChat stays active
+                if (blockContent) {
+                  enqueue(`0:${JSON.stringify(blockContent + "\n\n")}\n`);
+                }
+                // 2: — data annotation carries the full structured block
                 enqueue(
                   `2:[${JSON.stringify({ type: "block", block: event.block })}]\n`
                 );
                 break;
+              }
 
               case "tool_call": {
                 const toolCallId = crypto.randomUUID();
-                // 9: — tool call part
+                // 9: — tool call part (SDK v3 requires a JSON ARRAY)
                 enqueue(
-                  `9:${JSON.stringify({
+                  `9:[${JSON.stringify({
                     toolCallId,
                     toolName: event.name,
                     args: event.props,
-                  })}\n`
+                  })}]\n`
                 );
-                // a: — tool result (immediately resolve so toolInvocation.state === "result")
+                // a: — tool result array (immediately resolve so toolInvocation.state === "result")
                 enqueue(
-                  `a:${JSON.stringify({
+                  `a:[${JSON.stringify({
                     toolCallId,
                     result: event.props,
-                  })}\n`
+                  })}]\n`
                 );
                 break;
               }

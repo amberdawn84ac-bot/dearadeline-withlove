@@ -42,12 +42,12 @@ from app.protocols.witness import evaluate_evidence, build_research_mission_bloc
 from app.connections.pgvector_client import hippocampus
 from app.connections.neo4j_client import neo4j_client
 from app.tools.researcher import search_witnesses
-from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL
+from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL, GOOGLE_API_KEY, ADELINE_MODEL
 from app.algorithms.pedagogical_directives import generate_pedagogical_directives, get_quick_directives
 from app.agents.pedagogy import ZPDZone
 from app.models.student import MasteryBand
 
-_ANTHROPIC_MODEL = os.getenv("ADELINE_MODEL", "claude-sonnet-4-6")
+_ANTHROPIC_MODEL = ADELINE_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -55,10 +55,21 @@ logger = logging.getLogger(__name__)
 def _synthesis_client():
     """
     Returns an async OpenAI-compatible client for multimodal synthesis.
-    Uses Gemini Flash when GEMINI_API_KEY is set (30x cheaper than Claude
-    for mechanical JSON extraction tasks). Falls back to Claude otherwise.
+    Priority order:
+      1. ADELINE_MODEL starts with "gemini" + GOOGLE_API_KEY set
+         → ChatGoogleGenerativeAI via OpenAI-compat endpoint
+      2. GEMINI_API_KEY set (legacy cheap synthesis key)
+         → Gemini Flash via OpenAI-compat endpoint
+      3. Fallback → Claude via ANTHROPIC_API_KEY
     Returns (client, model_name, is_gemini).
     """
+    if _ANTHROPIC_MODEL.lower().startswith("gemini") and GOOGLE_API_KEY:
+        import openai as _oai
+        return (
+            _oai.AsyncOpenAI(api_key=GOOGLE_API_KEY, base_url=GEMINI_BASE_URL),
+            _ANTHROPIC_MODEL,
+            True,
+        )
     if GEMINI_API_KEY:
         import openai as _oai
         return (
@@ -287,7 +298,7 @@ async def _synthesize_content(
         mastery_score: Student's current mastery score (0.0-1.0)
         mastery_band: Student's current mastery band
     """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return raw_content
 
     grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
@@ -706,7 +717,7 @@ RESEARCH_MISSION:
 {_ADELINE_VOICE}
 """
 
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         blocks.append({
             "block_type":  BlockType.NARRATIVE.value,
             "content":     f"Justice investigation: {request.topic}",
@@ -718,16 +729,10 @@ RESEARCH_MISSION:
 
     raw_output = ""
     try:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        client = anthropic.AsyncAnthropic(api_key=api_key)
-        message = await client.messages.create(
-            model=_ANTHROPIC_MODEL,
-            max_tokens=1200,
-            messages=[{"role": "user", "content": investigation_prompt}],
-        )
-        raw_output = message.content[0].text.strip()
+        raw_output = await _synthesis_call("", investigation_prompt, max_tokens=1200)
+        raw_output = raw_output.strip()
     except Exception as e:
-        logger.warning(f"[JusticeAgent] Claude call failed ({e}) — using fallback NARRATIVE")
+        logger.warning(f"[JusticeAgent] LLM call failed ({e}) — using fallback NARRATIVE")
         blocks.append({
             "block_type":  BlockType.NARRATIVE.value,
             "content":     f"Justice investigation: {request.topic}",
@@ -1149,7 +1154,7 @@ async def _synthesize_literature(
     Claude generates literary analysis content.
     If a specific book is provided, the analysis is grounded in that text.
     """
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         if book_title:
             return f"Literary analysis of '{topic}' in the context of *{book_title}* by {book_author}."
         return f"Literary analysis: {topic}"
@@ -1185,17 +1190,9 @@ async def _synthesize_literature(
     )
 
     try:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        client = anthropic.AsyncAnthropic(api_key=api_key)
-        message = await client.messages.create(
-            model=_ANTHROPIC_MODEL,
-            max_tokens=800,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return message.content[0].text
+        return await _synthesis_call(system_prompt, user_prompt, max_tokens=800)
     except Exception as e:
-        logger.error(f"[LiteratureAgent] Claude synthesis failed: {e}")
+        logger.error(f"[LiteratureAgent] LLM synthesis failed: {e}")
         if book_title:
             return f"Literary analysis of '{topic}' in the context of *{book_title}* by {book_author}."
         return f"Literary analysis: {topic}"
@@ -1274,8 +1271,8 @@ async def practical_agent(state: AdelineState) -> AdelineState:
 
 
 async def _synthesize_practical(request: LessonRequest) -> str:
-    """Claude generates practical/applied content for math and creative economy."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    """LLM generates practical/applied content for math and creative economy."""
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return f"Practical lesson: {request.topic}"
 
     grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
@@ -1302,17 +1299,9 @@ async def _synthesize_practical(request: LessonRequest) -> str:
     )
 
     try:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        client = anthropic.AsyncAnthropic(api_key=api_key)
-        message = await client.messages.create(
-            model=_ANTHROPIC_MODEL,
-            max_tokens=800,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return message.content[0].text
+        return await _synthesis_call(system_prompt, user_prompt, max_tokens=800)
     except Exception as e:
-        logger.error(f"[PracticalAgent] Claude synthesis failed: {e}")
+        logger.error(f"[PracticalAgent] LLM synthesis failed: {e}")
         return f"Practical lesson: {request.topic}"
 
 
@@ -1337,7 +1326,7 @@ async def _decide_formats(
     """
     import json as _json
 
-    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         defaults = ["MIND_MAP", "NARRATED_SLIDE"]
         if allow_timeline:
             defaults.insert(1, "TIMELINE")
@@ -1500,7 +1489,7 @@ async def _synthesize_mind_map(
     Extract a concept hierarchy from lesson content.
     Returns None on any failure — never surfaces errors to the student.
     """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return None
     from app.schemas.api_models import MindMapData
     import json
@@ -1539,7 +1528,7 @@ async def _synthesize_timeline(
     For homesteading: generates a seasonal calendar.
     Returns None on any failure.
     """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return None
     from app.schemas.api_models import TimelineData
     import json
@@ -1585,7 +1574,7 @@ async def _synthesize_mnemonic(
     Generate a mnemonic device when ≥3 concepts are present in the content.
     Returns None if fewer than 3 concepts detected or on any failure.
     """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return None
     from app.schemas.api_models import MnemonicData
     import json
@@ -1625,7 +1614,7 @@ async def _synthesize_narrated_slide(
     Convert lesson content into a 3-5 slide narrated presentation.
     Returns None on any failure.
     """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return None
     from app.schemas.api_models import NarratedSlideData
     import json

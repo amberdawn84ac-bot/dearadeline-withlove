@@ -217,11 +217,15 @@ function DashboardContent() {
             )}
             {streamingBlocks.map((block, idx) => {
               const lastMsg = [...messages].reverse().find((m) => m.role === 'assistant');
-              // SDK v3: tool invocations are in annotations array (from 9:/a: protocol lines)
-              const annotations = (lastMsg as { annotations?: unknown[] })?.annotations ?? [];
-              const toolInvocations = annotations
-                .filter((a) => (a as Record<string, unknown>).type === 'tool-invocation')
-                .map((a) => (a as Record<string, unknown>).toolInvocation) as Array<{ toolName: string; state: string; result: Record<string, unknown> }>;
+              // SDK v3: tool invocations live in message.toolInvocations (top-level) or
+              // as parts with type 'tool-invocation'. Annotations (2: lines) do NOT carry them.
+              const rawInvocations =
+                (lastMsg as { toolInvocations?: unknown[] })?.toolInvocations ??
+                (lastMsg as { parts?: unknown[] })?.parts
+                  ?.filter((p) => (p as Record<string, unknown>).type === 'tool-invocation')
+                  ?.map((p) => (p as Record<string, unknown>).toolInvocation) ??
+                [];
+              const toolInvocations = rawInvocations as Array<{ toolName: string; state: string; result: Record<string, unknown> }>;
               const blockToolCall = toolInvocations.find(
                 (t) => t.state === 'result' &&
                   (t.toolName === 'render_quiz_widget' || t.toolName === 'render_lab_widget') &&

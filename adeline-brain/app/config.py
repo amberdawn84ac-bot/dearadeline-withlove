@@ -90,6 +90,62 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
+# ── Primary LLM (LangGraph-compatible factory) ────────────────────────────────
+# ADELINE_MODEL drives the factory below.  Valid prefixes:
+#   "gemini"  → ChatGoogleGenerativeAI  (uses GOOGLE_API_KEY)
+#   "claude"  → ChatAnthropic           (uses ANTHROPIC_API_KEY)
+#   "gpt"     → ChatOpenAI              (uses OPENAI_API_KEY)
+
+ADELINE_MODEL   = os.getenv("ADELINE_MODEL", "claude-sonnet-4-6")
+GOOGLE_API_KEY  = os.getenv("GOOGLE_API_KEY", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+
+def create_llm(model: str | None = None, **kwargs):
+    """
+    LangGraph-compatible LLM factory.
+
+    Selects the correct LangChain Chat class based on the model name prefix:
+      gemini* → ChatGoogleGenerativeAI
+      claude* → ChatAnthropic
+      gpt*    → ChatOpenAI
+
+    Extra kwargs (e.g. temperature, max_tokens) are forwarded to the constructor.
+    All classes implement the standard LangChain Runnable interface and support
+    .bind_tools() for LangGraph tool-calling nodes.
+    """
+    target = (model or ADELINE_MODEL).lower()
+
+    if target.startswith("gemini"):
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(
+            model=model or ADELINE_MODEL,
+            google_api_key=GOOGLE_API_KEY or None,
+            convert_system_message_to_human=True,
+            **kwargs,
+        )
+
+    if target.startswith("claude"):
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(
+            model=model or ADELINE_MODEL,
+            anthropic_api_key=ANTHROPIC_API_KEY or None,
+            **kwargs,
+        )
+
+    if target.startswith("gpt"):
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=model or ADELINE_MODEL,
+            openai_api_key=OPENAI_API_KEY or None,
+            **kwargs,
+        )
+
+    raise ValueError(
+        f"[create_llm] Unrecognised model prefix '{target}'. "
+        "Expected 'gemini', 'claude', or 'gpt'."
+    )
+
 # ── Auth (Supabase JWT) ──────────────────────────────────────────────────────
 # Primary: JWKS (ES256) — public key fetched from Supabase's well-known endpoint.
 # Fallback: SUPABASE_JWT_SECRET (HS256) — for legacy tokens or local dev.
