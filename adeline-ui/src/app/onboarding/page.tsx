@@ -69,8 +69,6 @@ export default function OnboardingPage() {
 
         if (userProfile.onboardingComplete) {
           console.log('[OnboardingPage] Already complete, redirecting to dashboard');
-          // Set flag so OnboardingGate skips the DB call on /dashboard (handles replication lag)
-          localStorage.setItem('onboarding_just_completed', Date.now().toString());
           setStatus('redirecting');
           window.location.href = '/dashboard';
           return;

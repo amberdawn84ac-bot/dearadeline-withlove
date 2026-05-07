@@ -56,20 +56,6 @@ export function OnboardingGate() {
           return;
         }
         const token = sessionData.session.access_token;
-        // Keep localStorage in sync for other code that reads it
-        localStorage.setItem('auth_token', token);
-
-        // Short-circuit: if user just completed onboarding (within 60s), skip the API
-        // call entirely to avoid a stale DB read bouncing them back to /onboarding.
-        const justCompletedRaw = localStorage.getItem('onboarding_just_completed');
-        if (justCompletedRaw) {
-          const secondsSince = (Date.now() - parseInt(justCompletedRaw, 10)) / 1000;
-          if (secondsSince < 60) {
-            // They're either on a protected route (let them stay) or /onboarding (handled by that page)
-            return;
-          }
-          localStorage.removeItem('onboarding_just_completed');
-        }
 
         // Only gate-check protected routes — /onboarding handles its own redirect to /dashboard
         if (!isProtectedRoute) {
