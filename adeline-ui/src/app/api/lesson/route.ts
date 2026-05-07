@@ -24,6 +24,7 @@ const BRAIN_URL = (
   "http://localhost:8000"
 ).replace(/\/$/, "");
 
+export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 

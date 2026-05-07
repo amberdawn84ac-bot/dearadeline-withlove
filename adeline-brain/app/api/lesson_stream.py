@@ -83,8 +83,8 @@ async def _stream_lesson(
 
     # ── Phase 1: Canonical check ──────────────────────────────────────────────
     yield _sse({"type": "status", "message": "Checking curated lesson library..."})
+    slug = canonical_slug(request.topic, request.track.value)
     try:
-        slug = canonical_slug(request.topic, request.track.value)
         canonical = await canonical_store.get(slug)
         if canonical and not canonical.get("pendingApproval"):
             blocks_data = canonical.get("blocksJson") or canonical.get("blocks_json") or []

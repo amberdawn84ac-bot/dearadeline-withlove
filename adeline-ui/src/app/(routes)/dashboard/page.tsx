@@ -58,7 +58,12 @@ function DashboardContent() {
       api: '/api/lesson',
       // No Authorization header needed - cookie auth is automatic
     }),
-    onFinish: () => {
+    onResponse: (response) => {
+      console.log('[Dashboard] Stream response status:', response.status);
+      console.log('[Dashboard] Stream headers:', Object.fromEntries(response.headers.entries()));
+    },
+    onFinish: (message) => {
+      console.log('[Dashboard] Stream finished, message:', message);
       setStreamingStatus('');
     },
     onError: (err: Error) => {
