@@ -57,21 +57,6 @@ export function OnboardingGate() {
           return;
         }
 
-        // If onboarding was completed within the last 10 seconds, trust it
-        // entirely without hitting the API. This prevents a stale DB read from
-        // bouncing the user back to /onboarding immediately after the POST.
-        const justCompletedRaw = localStorage.getItem('onboarding_just_completed');
-        if (justCompletedRaw) {
-          const secondsSince = (Date.now() - parseInt(justCompletedRaw, 10)) / 1000;
-          if (secondsSince < 10) {
-            if (pathname === '/onboarding') {
-              window.location.href = '/dashboard';
-            }
-            // On a protected route: user just completed — let them stay
-            return;
-          }
-        }
-
         // Add cache-busting to prevent stale reads after onboarding completion
         const cacheBuster = Date.now();
         console.log('[OnboardingGate] Checking status for pathname:', pathname, 'cacheBuster:', cacheBuster);
@@ -100,22 +85,8 @@ export function OnboardingGate() {
 
         const data = await response.json();
         const userProfile = data.user;
-        let onboardingComplete = userProfile.onboardingComplete;
+        const onboardingComplete = userProfile.onboardingComplete;
         console.log('[OnboardingGate] onboardingComplete:', onboardingComplete, 'pathname:', pathname);
-
-        // Check if we recently completed onboarding (handles DB replication lag)
-        // The onboarding page sets this flag after successful POST
-        const justCompleted = localStorage.getItem('onboarding_just_completed');
-        if (justCompleted && !onboardingComplete) {
-          const timestamp = parseInt(justCompleted, 10);
-          const secondsSince = (Date.now() - timestamp) / 1000;
-          if (secondsSince < 60) {
-            console.log('[OnboardingGate] Trusting local flag, onboarding completed', secondsSince, 'seconds ago');
-            onboardingComplete = true;
-          } else {
-            localStorage.removeItem('onboarding_just_completed');
-          }
-        }
 
         // If on /onboarding and already complete, go to dashboard
         if (pathname === '/onboarding' && onboardingComplete) {

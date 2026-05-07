@@ -36,14 +36,7 @@ export default function OnboardingPage() {
         }
 
         if (response.status === 404) {
-          // New user — no profile yet. Still respect the local flag in case
-          // the DB hasn't propagated a recent successful POST yet.
-          const justCompleted = localStorage.getItem('onboarding_just_completed');
-          if (justCompleted && (Date.now() - parseInt(justCompleted, 10)) / 1000 < 60) {
-            setStatus('redirecting');
-            window.location.href = '/dashboard';
-            return;
-          }
+          // New user — no profile yet, show the onboarding form
           setStatus('onboarding');
           return;
         }
@@ -61,16 +54,7 @@ export default function OnboardingPage() {
         const data = await response.json();
         const userProfile = data.user;
 
-        // Trust the local flag if DB is stale (handles read-after-write lag)
-        let onboardingComplete = userProfile.onboardingComplete;
-        if (!onboardingComplete) {
-          const justCompleted = localStorage.getItem('onboarding_just_completed');
-          if (justCompleted && (Date.now() - parseInt(justCompleted, 10)) / 1000 < 60) {
-            onboardingComplete = true;
-          }
-        }
-
-        if (onboardingComplete) {
+        if (userProfile.onboardingComplete) {
           setStatus('redirecting');
           window.location.href = '/dashboard';
           return;
@@ -123,38 +107,18 @@ export default function OnboardingPage() {
           // body was plain text — use as-is if meaningful
         }
 
-        // The profile may have been written in a prior attempt whose response
-        // never reached the client (network drop, invite code race, etc.).
-        // Check whether onboarding actually completed before showing an error.
-        try {
-          const profileCheck = await fetch(`/brain/api/onboarding?_=${Date.now()}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-            },
-          });
-          if (profileCheck.ok) {
-            const profileData = await profileCheck.json();
-            if (profileData?.user?.onboardingComplete) {
-              localStorage.setItem('onboarding_just_completed', Date.now().toString());
-              setStatus('redirecting');
-              window.location.href = '/dashboard';
-              return;
-            }
-          }
-        } catch {
-          // Profile check failed — fall through to show the original error
-        }
-
-        throw new Error(detail);
+          throw new Error(detail);
       }
 
-      // Success — set local flag to handle DB replication lag, then wait for propagation
-      localStorage.setItem('onboarding_just_completed', Date.now().toString());
+      // Parse the POST response to confirm onboarding completed
+      const responseData = await response.json();
+      if (!responseData?.user?.onboardingComplete) {
+        throw new Error('Onboarding completed but response missing confirmation');
+      }
+
+      // POST response is authoritative - it comes from the same DB transaction that wrote the data
       setStatus('redirecting');
-      console.log('[Onboarding] POST successful, waiting 3s for DB propagation...');
-      await new Promise((resolve) => setTimeout(resolve, 3000)); // 3s delay for read-after-write consistency
-      console.log('[Onboarding] Redirecting to dashboard...');
+      console.log('[Onboarding] POST successful, redirecting to dashboard...');
       window.location.href = '/dashboard';
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save onboarding profile';
