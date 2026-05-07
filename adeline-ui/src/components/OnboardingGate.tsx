@@ -62,7 +62,7 @@ export function OnboardingGate() {
           return;
         }
 
-        const response = await fetch(`/brain?_=${Date.now()}`, {
+        const response = await fetch(`/brain/api/onboarding?_=${Date.now()}`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
