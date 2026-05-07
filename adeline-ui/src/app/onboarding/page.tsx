@@ -144,6 +144,8 @@ export default function OnboardingPage() {
       }
 
       // POST response is authoritative - it comes from the same DB transaction that wrote the data
+      // Set the local flag so OnboardingGate skips its DB call during any replication lag window
+      localStorage.setItem('onboarding_just_completed', Date.now().toString());
       setStatus('redirecting');
       console.log('[OnboardingPage] POST successful, redirecting to dashboard...');
       window.location.href = '/dashboard';
