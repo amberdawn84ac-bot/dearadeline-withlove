@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 /**
  * OnboardingGate: Ensures user completes onboarding before accessing protected routes.
@@ -47,10 +48,22 @@ export function OnboardingGate() {
     // Check onboarding status
     const checkOnboarding = async () => {
       try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : '';
+        // Get live session from Supabase (more reliable than localStorage)
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError) {
+          console.error('[OnboardingGate] Supabase session error:', sessionError);
+          if (pathname !== '/login') {
+            window.location.href = '/login';
+          }
+          return;
+        }
+
+        const token = sessionData.session?.access_token;
 
         // Unauthenticated users should go to login
         if (!token) {
+          console.log('[OnboardingGate] No token, redirecting to login');
           if (pathname !== '/login') {
             window.location.href = '/login';
           }
@@ -59,8 +72,10 @@ export function OnboardingGate() {
 
         // Add cache-busting to prevent stale reads after onboarding completion
         const cacheBuster = Date.now();
-        console.log('[OnboardingGate] Checking status for pathname:', pathname, 'cacheBuster:', cacheBuster);
-        const response = await fetch(`/brain/api/onboarding?_=${cacheBuster}`, {
+        const url = `/brain/api/onboarding?_=${cacheBuster}`;
+        console.log('[OnboardingGate] Fetching:', url, 'pathname:', pathname);
+
+        const response = await fetch(url, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -70,23 +85,47 @@ export function OnboardingGate() {
           },
         });
 
+        console.log('[OnboardingGate] Response status:', response.status, 'statusText:', response.statusText);
+
         if (response.status === 401) {
-          // Not authenticated, go to login
-          console.log('[OnboardingGate] 401, redirecting to login');
+          console.log('[OnboardingGate] 401 Unauthorized, redirecting to login');
           window.location.href = '/login';
           return;
         }
 
+        if (response.status === 404) {
+          // 404 means user profile doesn't exist yet - needs onboarding
+          console.log('[OnboardingGate] 404 User not found, needs onboarding');
+          if (isProtectedRoute) {
+            console.log('[OnboardingGate] Protected route without profile, redirecting to /onboarding');
+            window.location.href = '/onboarding';
+          }
+          return;
+        }
+
         if (!response.ok) {
-          // Error fetching profile, log but don't block (user can retry)
           console.error('[OnboardingGate] Error checking onboarding status:', response.status, response.statusText);
+          // Log response body for debugging
+          try {
+            const errorBody = await response.text();
+            console.error('[OnboardingGate] Error body:', errorBody);
+          } catch {
+            // Ignore error reading body
+          }
           return;
         }
 
         const data = await response.json();
+        console.log('[OnboardingGate] Response data:', data);
+
         const userProfile = data.user;
+        if (!userProfile) {
+          console.error('[OnboardingGate] No user in response data');
+          return;
+        }
+
         const onboardingComplete = userProfile.onboardingComplete;
-        console.log('[OnboardingGate] onboardingComplete:', onboardingComplete, 'pathname:', pathname);
+        console.log('[OnboardingGate] onboardingComplete:', onboardingComplete);
 
         // If on /onboarding and already complete, go to dashboard
         if (pathname === '/onboarding' && onboardingComplete) {
@@ -104,7 +143,7 @@ export function OnboardingGate() {
 
         console.log('[OnboardingGate] No redirect needed');
       } catch (err) {
-        console.error('Error in onboarding gate:', err);
+        console.error('[OnboardingGate] Unexpected error:', err);
         // Don't block on error — let user retry
       }
     };

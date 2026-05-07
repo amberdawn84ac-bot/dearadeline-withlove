@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { WelcomeFlow } from '@/components/onboarding/WelcomeFlow';
+import { supabase } from '@/lib/supabase';
 
 interface OnboardingPageProps {
   params?: Record<string, unknown>;
@@ -16,27 +17,39 @@ export default function OnboardingPage() {
   useEffect(() => {
     const checkOnboardingStatus = async () => {
       try {
+        // Get live session from Supabase
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !sessionData.session) {
+          console.log('[OnboardingPage] No session, redirecting to login');
+          window.location.href = '/login';
+          return;
+        }
+
+        const token = sessionData.session.access_token;
+
         // Fetch current user profile to check onboarding status
-        // Add cache-busting to prevent stale reads
         const cacheBuster = Date.now();
         const response = await fetch(`/brain/api/onboarding?_=${cacheBuster}`, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
           },
         });
 
+        console.log('[OnboardingPage] GET /brain/api/onboarding status:', response.status);
+
         if (response.status === 401) {
-          // Not authenticated, redirect to login
+          console.log('[OnboardingPage] 401 Unauthorized, redirecting to login');
           window.location.href = '/login';
           return;
         }
 
         if (response.status === 404) {
           // New user — no profile yet, show the onboarding form
+          console.log('[OnboardingPage] 404 No profile, showing onboarding form');
           setStatus('onboarding');
           return;
         }
@@ -55,6 +68,7 @@ export default function OnboardingPage() {
         const userProfile = data.user;
 
         if (userProfile.onboardingComplete) {
+          console.log('[OnboardingPage] Already complete, redirecting to dashboard');
           setStatus('redirecting');
           window.location.href = '/dashboard';
           return;
@@ -64,6 +78,7 @@ export default function OnboardingPage() {
         setStatus('onboarding');
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to check onboarding status';
+        console.error('[OnboardingPage] Error:', message);
         setError(message);
         setStatus('error');
       }
@@ -85,9 +100,17 @@ export default function OnboardingPage() {
     setError(null);
     setStatus('submitting');
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : '';
+      // Get live session from Supabase
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) {
+        throw new Error('Not authenticated - please log in again');
+      }
+      const token = sessionData.session.access_token;
+
+      // Get invite code from localStorage if present
       const inviteCode = typeof window !== 'undefined' ? localStorage.getItem('adeline_founder_code') || undefined : undefined;
 
+      console.log('[OnboardingPage] POST /brain/api/onboarding - submitting...');
       const response = await fetch('/brain/api/onboarding', {
         method: 'POST',
         headers: {
@@ -97,28 +120,32 @@ export default function OnboardingPage() {
         body: JSON.stringify({ ...data, ...(inviteCode ? { inviteCode } : {}) }),
       });
 
+      console.log('[OnboardingPage] POST response status:', response.status);
+
       if (!response.ok) {
         let detail = 'Failed to save onboarding profile';
         try {
           const body = await response.text();
+          console.error('[OnboardingPage] POST error body:', body);
           const parsed = JSON.parse(body);
           detail = parsed.detail || body;
         } catch {
           // body was plain text — use as-is if meaningful
         }
-
-          throw new Error(detail);
+        throw new Error(detail);
       }
 
       // Parse the POST response to confirm onboarding completed
       const responseData = await response.json();
+      console.log('[OnboardingPage] POST response data:', responseData);
+
       if (!responseData?.user?.onboardingComplete) {
         throw new Error('Onboarding completed but response missing confirmation');
       }
 
       // POST response is authoritative - it comes from the same DB transaction that wrote the data
       setStatus('redirecting');
-      console.log('[Onboarding] POST successful, redirecting to dashboard...');
+      console.log('[OnboardingPage] POST successful, redirecting to dashboard...');
       window.location.href = '/dashboard';
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save onboarding profile';
