@@ -13,6 +13,7 @@ import LessonRenderer from '@/components/lessons/LessonRenderer';
 import { MasteryCheckWidget } from '@/components/gen-ui/widgets/MasteryCheckWidget';
 import { LabMissionWidget } from '@/components/gen-ui/widgets/LabMissionWidget';
 import { getLearningPlan } from '@/lib/brain-client';
+import { supabase } from '@/lib/supabase';
 import type { LessonResponse, LessonBlockResponse, Track, LessonSuggestion, ProjectSuggestion, BookRecommendation } from '@/lib/brain-client';
 import { RecommendedBooks } from '@/components/dashboard/RecommendedBooks';
 
@@ -52,11 +53,20 @@ function DashboardContent() {
   const router = useRouter();
 
   // useChat drives lesson streaming via /api/lesson translation bridge
-  // Auth is handled via HttpOnly cookies, automatically sent by browser
   const chat = useChat({
     transport: new DefaultChatTransport({
       api: '/api/lesson',
-      // No Authorization header needed - cookie auth is automatic
+      fetch: async (url, options) => {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        return fetch(url, {
+          ...options,
+          headers: {
+            ...(options?.headers as Record<string, string> | undefined),
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+      },
     }),
     onFinish: (message) => {
       console.log('[Dashboard] Stream finished, message:', message);
