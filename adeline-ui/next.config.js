@@ -26,7 +26,7 @@ const nextConfig = {
     return [
       {
         source: "/brain/:path*",
-        destination: `${backendUrl}/:path*`,
+        destination: `${backendUrl}/brain/:path*`,
       },
     ];
   },
