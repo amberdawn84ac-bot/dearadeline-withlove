@@ -110,8 +110,9 @@ export default function OnboardingPage() {
         throw new Error(detail);
       }
 
-      // Success — wait for DB write to propagate (Railway Postgres needs longer)
+      // Success — set local flag to handle DB replication lag, then wait for propagation
       setStatus('redirecting');
+      localStorage.setItem('onboarding_just_completed', Date.now().toString());
       console.log('[Onboarding] POST successful, waiting 3s for DB propagation...');
       await new Promise((resolve) => setTimeout(resolve, 3000)); // 3s delay for read-after-write consistency
       console.log('[Onboarding] Redirecting to dashboard...');
