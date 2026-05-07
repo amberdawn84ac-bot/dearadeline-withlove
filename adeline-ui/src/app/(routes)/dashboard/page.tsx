@@ -95,25 +95,30 @@ function DashboardContent() {
     }
   }, [messages, chatStatus]);
 
-  // Derive blocks from the latest assistant message's annotations
+  // Derive blocks from the latest assistant message's parts
+  // AI SDK v6: 2: data stream lines → DataUIPart in message.parts (type starts with "data-")
   useEffect(() => {
     const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
     if (!lastAssistant) return;
 
-    // SDK v3: data annotations are in the annotations array (2: protocol lines)
-    const annotations = (lastAssistant as { annotations?: unknown[] }).annotations ?? [];
+    const parts = (lastAssistant as { parts?: unknown[] }).parts ?? [];
     const blocks: LessonBlockResponse[] = [];
     let title = '';
     let status = '';
 
-    for (const ann of annotations) {
-      const a = ann as Record<string, unknown>;
-      if (a.type === 'block' && a.block) {
-        blocks.push(a.block as LessonBlockResponse);
-      } else if (a.type === 'done') {
-        title = (a.title as string) ?? '';
-      } else if (a.type === 'status') {
-        status = (a.message as string) ?? '';
+    for (const part of parts) {
+      const p = part as Record<string, unknown>;
+      // DataUIPart has type "data-<name>" and a "value" field with our payload
+      if (typeof p.type === 'string' && p.type.startsWith('data-')) {
+        const val = p.value as Record<string, unknown> | undefined;
+        if (!val) continue;
+        if (val.type === 'block' && val.block) {
+          blocks.push(val.block as LessonBlockResponse);
+        } else if (val.type === 'done') {
+          title = (val.title as string) ?? '';
+        } else if (val.type === 'status') {
+          status = (val.message as string) ?? '';
+        }
       }
     }
 
@@ -228,20 +233,22 @@ function DashboardContent() {
             )}
             {streamingBlocks.map((block, idx) => {
               const lastMsg = [...messages].reverse().find((m) => m.role === 'assistant');
-              // SDK v3: tool invocations live in message.toolInvocations (top-level) or
-              // as parts with type 'tool-invocation'. Annotations (2: lines) do NOT carry them.
-              const rawInvocations =
-                (lastMsg as { toolInvocations?: unknown[] })?.toolInvocations ??
-                (lastMsg as { parts?: unknown[] })?.parts
-                  ?.filter((p) => (p as Record<string, unknown>).type === 'tool-invocation')
-                  ?.map((p) => (p as Record<string, unknown>).toolInvocation) ??
-                [];
-              const toolInvocations = rawInvocations as Array<{ toolName: string; state: string; result: Record<string, unknown> }>;
-              const blockToolCall = toolInvocations.find(
-                (t) => t.state === 'result' &&
-                  (t.toolName === 'render_quiz_widget' || t.toolName === 'render_lab_widget') &&
-                  (t.result?.blockId === block.block_id)
-              );
+              // AI SDK v6: tool calls are in message.parts as ToolUIPart or DynamicToolUIPart
+              const toolParts = ((lastMsg as { parts?: unknown[] })?.parts ?? [])
+                .filter((p) => {
+                  const t = (p as Record<string, unknown>).type as string | undefined;
+                  return t === 'tool-invocation' || t === 'tool-result';
+                })
+                .map((p) => p as Record<string, unknown>);
+              const blockToolCall = toolParts.find((p) => {
+                const inv = (p.toolInvocation ?? p) as Record<string, unknown>;
+                const result = inv.result as Record<string, unknown> | undefined;
+                return (
+                  (inv.state === 'result') &&
+                  (inv.toolName === 'render_quiz_widget' || inv.toolName === 'render_lab_widget') &&
+                  result?.blockId === block.block_id
+                );
+              })?.toolInvocation as { toolName: string; state: string; result: Record<string, unknown> } | undefined;
               return (
                 <div key={idx} className="mb-4">
                   <div className="rounded-2xl border border-[#E7DAC3] bg-white p-4">
