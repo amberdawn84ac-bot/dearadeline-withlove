@@ -99,16 +99,17 @@ export default function OnboardingPage() {
     setPendingData(data);
     setError(null);
     setStatus('submitting');
+
     try {
-      // Get live session from Supabase
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !sessionData.session) {
         throw new Error('Not authenticated - please log in again');
       }
       const token = sessionData.session.access_token;
 
-      // Get invite code from localStorage if present
-      const inviteCode = typeof window !== 'undefined' ? localStorage.getItem('adeline_founder_code') || undefined : undefined;
+      const inviteCode = typeof window !== 'undefined' 
+        ? localStorage.getItem('adeline_founder_code') || undefined 
+        : undefined;
 
       console.log('[OnboardingPage] POST /brain/api/onboarding - submitting...');
       const response = await fetch('/brain/api/onboarding', {
@@ -120,35 +121,56 @@ export default function OnboardingPage() {
         body: JSON.stringify({ ...data, ...(inviteCode ? { inviteCode } : {}) }),
       });
 
-      console.log('[OnboardingPage] POST response status:', response.status);
-
       if (!response.ok) {
         let detail = 'Failed to save onboarding profile';
         try {
           const body = await response.text();
-          console.error('[OnboardingPage] POST error body:', body);
           const parsed = JSON.parse(body);
           detail = parsed.detail || body;
-        } catch {
-          // body was plain text — use as-is if meaningful
-        }
+        } catch {}
         throw new Error(detail);
       }
 
-      // Parse the POST response to confirm onboarding completed
       const responseData = await response.json();
-      console.log('[OnboardingPage] POST response data:', responseData);
-
       if (!responseData?.user?.onboardingComplete) {
         throw new Error('Onboarding completed but response missing confirmation');
       }
 
-      // POST response is authoritative - it comes from the same DB transaction that wrote the data
+      console.log('[OnboardingPage] POST successful - now verifying DB propagation...');
+
+      // PRODUCTION FIX: Poll until GET confirms the flag is truly visible
+      let attempts = 0;
+      const maxAttempts = 12; // ~6 seconds max
+      while (attempts < maxAttempts) {
+        attempts++;
+        const cacheBuster = Date.now();
+        const checkRes = await fetch(`/brain/api/onboarding?_=${cacheBuster}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+          },
+        });
+
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          if (checkData.user?.onboardingComplete === true) {
+            console.log('[OnboardingPage] DB confirmed onboardingComplete=true');
+            setStatus('redirecting');
+            window.location.href = '/dashboard';
+            return;
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      console.warn('[OnboardingPage] Polling timed out - redirecting anyway');
       setStatus('redirecting');
-      console.log('[OnboardingPage] POST successful, redirecting to dashboard...');
       window.location.href = '/dashboard';
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save onboarding profile';
+      console.error('[OnboardingPage] Error:', message);
       setError(message);
       setStatus('onboarding');
     }
