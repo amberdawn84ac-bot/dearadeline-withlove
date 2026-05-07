@@ -11,6 +11,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Brain, CheckCircle, RefreshCw, ChevronRight } from "lucide-react";
 import { useStudent } from "@/lib/useStudent";
+import { supabase } from "@/lib/supabase";
 
 interface DueReview {
   review_id: string;
@@ -48,8 +49,11 @@ export function SpacedRepWidget() {
     if (!studentId) return;
     setLoading(true);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
       const res = await fetch(`/brain/learning/reviews/${encodeURIComponent(studentId)}`, {
-        credentials: 'include', // Important: sends auth cookies
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        credentials: 'include',
       });
       if (!res.ok) return;
       const data: ReviewsApiResponse = await res.json();
@@ -77,10 +81,15 @@ export function SpacedRepWidget() {
   const submitRating = async (quality: number) => {
     if (!current) return;
 
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
     await fetch("/brain/learning/reviews", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: 'include', // Important: sends auth cookies
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+      credentials: 'include',
       body: JSON.stringify({
         concept_id: current.concept_id,
         quality,
