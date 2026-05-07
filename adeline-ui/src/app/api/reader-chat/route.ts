@@ -17,8 +17,11 @@
 
 import { NextRequest } from "next/server";
 
-const BRAIN_URL =
-  process.env.NEXT_PUBLIC_BRAIN_URL ?? "http://localhost:8000";
+const BRAIN_URL = (
+  process.env.NEXT_PUBLIC_BRAIN_URL ||
+  process.env.BRAIN_INTERNAL_URL ||
+  "http://localhost:8000"
+).replace(/\/$/, "");
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -40,7 +43,7 @@ export async function POST(req: NextRequest) {
   let upstream: Response;
   try {
     // Call the brain's conversation endpoint
-    upstream = await fetch(`${BRAIN_URL}/brain/conversation/stream`, {
+    upstream = await fetch(`${BRAIN_URL}/conversation/stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
