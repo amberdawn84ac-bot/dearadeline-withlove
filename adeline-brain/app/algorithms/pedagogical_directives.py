@@ -321,8 +321,10 @@ def get_mode_directives(tracks: list[str]) -> str:
     """
     Return blended mode directives for the given active tracks.
     Multiple tracks may map to the same mode — deduplication is handled automatically.
+    Adeline moves between voices as the conversation calls for it.
     """
     modes = {TRACK_TO_MODE[t] for t in tracks if t in TRACK_TO_MODE}
     if not modes:
         return ""
-    return "\n\n".join(_MODE_DIRECTIVES[mode] for mode in sorted(modes))
+    parts = [_MODE_DIRECTIVES[mode] for mode in sorted(modes)]
+    return "\n\n".join(parts)
