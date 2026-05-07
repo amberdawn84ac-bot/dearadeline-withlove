@@ -16,28 +16,47 @@
  */
 
 import { NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
 const BRAIN_URL =
-  process.env.NEXT_PUBLIC_BRAIN_URL ?? "http://localhost:8000";
+  process.env.BRAIN_INTERNAL_URL ?? process.env.NEXT_PUBLIC_BRAIN_URL ?? "http://localhost:8000";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get("authorization") ?? "";
   const body = await req.json();
 
   // useChat sends { messages: [...] }. The last user message contains our request payload.
   // We pass the raw body through as lesson_request fields.
   const lessonRequest = body.lesson_request ?? body;
 
+  // Read the Supabase JWT from the HttpOnly cookie (set by Supabase Auth on login).
+  // Falls back to the Authorization header if present (e.g., direct API calls).
+  let resolvedAuth = req.headers.get("authorization") ?? "";
+  if (!resolvedAuth) {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => req.cookies.getAll(),
+          setAll: () => {},
+        },
+      },
+    );
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (token) resolvedAuth = `Bearer ${token}`;
+  }
+
   let upstream: Response;
   try {
-    upstream = await fetch(`${BRAIN_URL}/brain/lesson/stream`, {
+    upstream = await fetch(`${BRAIN_URL}/lesson/stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(authHeader ? { Authorization: authHeader } : {}),
+        ...(resolvedAuth ? { Authorization: resolvedAuth } : {}),
       },
       body: JSON.stringify(lessonRequest),
     });
