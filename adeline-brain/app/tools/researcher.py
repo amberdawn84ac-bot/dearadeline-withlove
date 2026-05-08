@@ -7,7 +7,7 @@ Layer 1 (Hippocampus): Semantic search in verified corpus
   - Query all source types (PRIMARY_SOURCE, EDUCATIONAL, etc)
   - Return any result >= track-aware threshold (0.82 for history, 0.75 for science)
 
-Layer 2 (Deep Web): Parallel search across primary source repositories
+Layer 2 (Deep Web): Free DuckDuckGo search across primary source domains
   
   For HISTORY tracks (TRUTH_HISTORY, JUSTICE_CHANGEMAKING):
     - Government archives: NARA, CIA FOIA, FBI Vault, Congressional Record, Federal Register, DNSA
@@ -31,13 +31,14 @@ Flow:
   6. Persist acquired docs to Hippocampus
   7. Return newly acquired docs
   8. If both empty: Return [] (triggers RESEARCH_MISSION)
+
+Search backend: DuckDuckGo (100% free, no API key required).
 """
 import asyncio
 import os
 import logging
 from typing import Optional
 
-import httpx
 import numpy as np
 import openai
 
@@ -47,20 +48,14 @@ from app.schemas.api_models import (
 from app.connections.pgvector_client import hippocampus
 from app.protocols.witness import get_witness_threshold
 from app.protocols.content_filter import should_return_document
-from app.utils.rate_limiter import TokenBucket
 
 logger = logging.getLogger(__name__)
 
-# Initialize Tavily rate limiter: 10 tokens max, 0.5 tokens/second refill
-# This limits to ~10 API calls, with gradual refill for sustained load
-tavily_limiter = TokenBucket(max_tokens=10, refill_rate=0.5)
+# Semaphore to cap concurrent DuckDuckGo searches (rate-friendly)
+_ddg_semaphore = asyncio.Semaphore(3)
 
-# Semaphore to cap concurrent Tavily HTTP calls (prevents burst rate-limiting)
-_tavily_semaphore = asyncio.Semaphore(5)
-
-EMBED_MODEL       = "text-embedding-3-small"
-TAVILY_URL        = "https://api.tavily.com/search"
-TAVILY_TIMEOUT    = 15.0
+EMBED_MODEL = "text-embedding-3-small"
+DDG_MAX_RESULTS = 3  # Per-domain result cap
 
 PRIMARY_SOURCE_DOMAINS = {
     # Government declassified archives
@@ -197,73 +192,88 @@ async def _embed(text: str) -> list[float]:
 
 # ── Deep web search helpers ────────────────────────────────────────────────────
 
+def _parse_ddg_results(raw: str, archive_name: str) -> list[dict]:
+    """
+    Parse DuckDuckGoSearchResults string output into structured dicts.
+
+    DDG returns a string like:
+      snippet: ..., title: ..., link: ..., date: ...\nsnippet: ...
+    We parse each result into {title, url, archive, snippet}.
+    """
+    results = []
+    # Each result block is separated by a blank line or starts with 'snippet:'
+    import re
+    # DuckDuckGoSearchResults returns a comma-separated string of result dicts repr
+    # Try to parse as a Python literal first (langchain_community format)
+    try:
+        import ast
+        parsed = ast.literal_eval(raw)
+        if isinstance(parsed, list):
+            for item in parsed[:DDG_MAX_RESULTS]:
+                if isinstance(item, dict):
+                    results.append({
+                        'title': item.get('title', ''),
+                        'url': item.get('link', item.get('url', '')),
+                        'archive': archive_name,
+                        'snippet': item.get('snippet', ''),
+                    })
+            return results
+    except Exception:
+        pass
+
+    # Fallback: parse the flat string format
+    # Format: [snippet: ..., title: ..., link: ...]
+    for block in re.split(r'(?=\[snippet:)', raw):
+        block = block.strip().strip('[]')
+        if not block:
+            continue
+        title_m  = re.search(r'title:\s*([^,\]]+)', block)
+        link_m   = re.search(r'link:\s*(https?://\S+)', block)
+        snip_m   = re.search(r'snippet:\s*(.+?)(?=,\s*title:|,\s*link:|$)', block, re.DOTALL)
+        results.append({
+            'title':   title_m.group(1).strip()  if title_m  else '',
+            'url':     link_m.group(1).strip()   if link_m   else '',
+            'archive': archive_name,
+            'snippet': snip_m.group(1).strip()   if snip_m   else block[:500],
+        })
+        if len(results) >= DDG_MAX_RESULTS:
+            break
+    return results
+
+
 async def search_archive_async(query: str, archive_name: str, domains_map: dict = None) -> list[dict]:
     """
-    Search a single archive/domain via Tavily.
+    Search a single archive/domain via DuckDuckGo (free, no API key).
     Returns list of documents with title, url, archive, snippet.
-    
-    Args:
-        query: Search query
-        archive_name: Name of the archive/domain to search
-        domains_map: Which domain map to use (defaults to PRIMARY_SOURCE_DOMAINS)
     """
     if domains_map is None:
         domains_map = PRIMARY_SOURCE_DOMAINS
-    
+
     domain = domains_map.get(archive_name)
     if not domain:
         return []
 
-    api_key = os.getenv("TAVILY_API_KEY", "")
-    if not api_key:
-        logger.error(f"[Researcher] TAVILY_API_KEY not set in environment — cannot search {archive_name}. Web search disabled.")
-        return []
-
-    # Rate limit Tavily API calls
-    if not await tavily_limiter.acquire(tokens=1.0):
-        logger.warning(f"[Tavily] Rate limit reached for {archive_name}; waiting for token refill...")
-        await tavily_limiter.wait_for_acquire(tokens=1.0)
-
+    # Build a site-scoped query
     search_query = f'{query} site:{domain}'
-    payload = {
-        "api_key": api_key,
-        "query": search_query,
-        "include_domains": [domain],
-        "max_results": 3,
-        "search_depth": "basic",
-    }
 
     for attempt in range(3):
         try:
-            async with httpx.AsyncClient(timeout=TAVILY_TIMEOUT) as client:
-                resp = await client.post(TAVILY_URL, json=payload)
-                if resp.status_code == 429:
-                    wait = 2 ** attempt
-                    logger.warning(
-                        f"[Tavily] Rate limited on {archive_name} (attempt {attempt + 1}) — "
-                        f"backing off {wait}s"
-                    )
-                    await asyncio.sleep(wait)
-                    continue
-                resp.raise_for_status()
-
-                results = []
-                for result in resp.json().get('results', []):
-                    results.append({
-                        'title': result.get('title', ''),
-                        'url': result.get('url', ''),
-                        'archive': archive_name,
-                        'snippet': result.get('content', ''),
-                    })
-                return results
-        except httpx.TimeoutException:
-            logger.warning(f"[Researcher] Timeout searching {archive_name} (attempt {attempt + 1})")
-            if attempt < 2:
-                await asyncio.sleep(2 ** attempt)
-                continue
+            from langchain_community.tools import DuckDuckGoSearchResults
+            ddg = DuckDuckGoSearchResults(num_results=DDG_MAX_RESULTS, output_format="list")
+            # Run synchronously in thread pool to avoid blocking the event loop
+            raw = await asyncio.get_event_loop().run_in_executor(
+                None, ddg.run, search_query
+            )
+            results = _parse_ddg_results(str(raw), archive_name)
+            logger.info(f"[Researcher/DDG] {archive_name}: {len(results)} results for '{query[:60]}'")
+            return results
         except Exception as e:
-            logger.warning(f"[Researcher] Failed to search {archive_name}: {e}")
-            break
+            wait = 2 ** attempt
+            logger.warning(
+                f"[Researcher/DDG] Failed searching {archive_name} (attempt {attempt + 1}): {e} "
+                f"— retrying in {wait}s"
+            )
+            await asyncio.sleep(wait)
     return []
 
 
@@ -272,15 +282,14 @@ async def search_with_fallback(query: str, track: str = None) -> tuple[list[dict
     Search archives with fallback detection.
 
     Returns (results, fallback_flag) where fallback_flag is True if all archives
-    returned empty results (Tavily unavailable or no matches). Callers can use this
-    flag to trigger RESEARCH_MISSION assignment immediately.
+    returned empty results (no matches found).
     """
     results = await search_all_archives_parallel(query, track)
     fallback = len(results) == 0
     if fallback:
         logger.warning(
             f"[Researcher] search_with_fallback returned empty for "
-            f"query='{query}' track={track} — Tavily unavailable or no matches"
+            f"query='{query}' track={track} — no matches found"
         )
     return results, fallback
 
@@ -303,7 +312,7 @@ async def search_all_archives_parallel(query: str, track: str = None) -> list[di
     archives = list(domains_map.keys())
 
     async def _search_with_semaphore(archive: str) -> list[dict]:
-        async with _tavily_semaphore:
+        async with _ddg_semaphore:
             return await search_archive_async(query, archive, domains_map)
 
     tasks = [_search_with_semaphore(archive) for archive in archives]
@@ -354,10 +363,7 @@ async def search_witnesses(
     try:
         logger.info(f"[Researcher] Searching for witnesses — query='{query}' track={track}")
         
-        # Check if Tavily is configured for deep web search
-        tavily_configured = bool(os.getenv("TAVILY_API_KEY"))
-        if not tavily_configured:
-            logger.warning("[Researcher] TAVILY_API_KEY not set — deep web search will be disabled. Only Hippocampus search available.")
+        logger.info("[Researcher] Deep web search via DuckDuckGo (free — no API key required)")
 
         # Step 1: Embed the query
         embedding_response = await _embed(query)
@@ -416,16 +422,12 @@ async def search_witnesses(
         else:
             logger.info(f"[Researcher] Hippocampus empty for track={track}. Triggering deep web search.")
         
-        if not tavily_configured:
-            logger.error(f"[Researcher] Cannot search web — TAVILY_API_KEY not configured. Returning empty.")
-            return []
-
         archive_results, fallback = await search_with_fallback(query, track=track)
         logger.info(f"[Researcher] Deep web search returned {len(archive_results)} raw results")
 
         if fallback:
             logger.warning(
-                f"[Tavily] All archives returned empty — assigning RESEARCH_MISSION for "
+                f"[Researcher/DDG] All archives returned empty — assigning RESEARCH_MISSION for "
                 f"topic='{query}' track={track}"
             )
 
