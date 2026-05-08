@@ -2,6 +2,7 @@
 Books API — /api/books/* endpoints for Bookshelf v1
 Provides list and detail views of the book catalog with filtering, pagination, and metadata.
 """
+import hashlib
 import logging
 import os
 from typing import List, Optional
@@ -14,6 +15,7 @@ from pydantic import BaseModel
 from app.schemas.api_models import UserRole
 from app.api.middleware import require_role, get_current_user_id
 from app.connections.bookshelf_search import bookshelf_search
+from app.connections.redis_client import redis_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/books", tags=["books"])
@@ -298,21 +300,40 @@ async def _generate_hyde_document(
     """
     Generate a Hypothetical Document Embedding (HyDE) - an ideal book summary
     that bridges the student's interests and learning gaps.
-    
+
     Uses lightweight LLM (gpt-4o-mini) for fast, cost-effective generation.
-    
+    Results are cached in Redis for 24 hours to avoid repeated LLM calls.
+
     Args:
         grade_level: Student's grade level
         interests: List of student interests
         credit_gaps: List of curriculum gap dicts with bucket and remaining credits
         weakest_track: Track where student needs most improvement
-        
+
     Returns:
         Hypothetical book summary for embedding (2-3 sentences)
     """
+    # ── Redis cache check ─────────────────────────────────────────────────────
+    # Build cache key from inputs (hash for deterministic key)
+    cache_key_parts = [str(grade_level), ",".join(sorted(interests))]
+    if credit_gaps:
+        gap_str = ",".join([f"{g.get('bucket', '')}:{g.get('remaining', 0)}" for g in credit_gaps])
+        cache_key_parts.append(gap_str)
+    if weakest_track:
+        cache_key_parts.append(weakest_track)
+    cache_key = f"hyde:book:{hashlib.md5('|'.join(cache_key_parts).encode()).hexdigest()}"
+
+    try:
+        cached = await redis_client.get(cache_key)
+        if cached:
+            logger.info("[Books/HyDE] Cache HIT — returning cached document")
+            return cached
+    except Exception as e:
+        logger.warning(f"[Books/HyDE] Redis cache read failed (non-fatal): {e}")
+
     try:
         client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        
+
         # Build context about student needs
         context_parts = []
         if grade_level:
@@ -320,17 +341,17 @@ async def _generate_hyde_document(
         if interests:
             context_parts.append(f"interests: {', '.join(interests)}")
         if credit_gaps:
-            gap_desc = ", ".join([f"{g.get('bucket', '')} ({g.get('remaining', 0)} credits remaining)" 
+            gap_desc = ", ".join([f"{g.get('bucket', '')} ({g.get('remaining', 0)} credits remaining)"
                                   for g in credit_gaps[:3]])
             context_parts.append(f"learning gaps: {gap_desc}")
         if weakest_track:
             context_parts.append(f"needs strengthening in {weakest_track}")
-        
+
         student_context = "; ".join(context_parts) or "a curious student"
-        
-        prompt = f"""Write a 2-3 sentence summary of an ideal book that would perfectly engage {student_context}. 
+
+        prompt = f"""Write a 2-3 sentence summary of an ideal book that would perfectly engage {student_context}.
         Describe the book's themes, setting, and what makes it compelling. Write as if describing an existing published book."""
-        
+
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -340,9 +361,17 @@ async def _generate_hyde_document(
             max_tokens=150,
             temperature=0.7,
         )
-        
+
         hyde_summary = response.choices[0].message.content.strip()
         logger.info(f"[Books/HyDE] Generated hypothetical book: {hyde_summary[:100]}...")
+
+        # ── Cache the result ───────────────────────────────────────────────────────
+        try:
+            await redis_client.set(cache_key, hyde_summary, ex=86400)  # 24 hour TTL
+            logger.info("[Books/HyDE] Cached result for 24 hours")
+        except Exception as e:
+            logger.warning(f"[Books/HyDE] Redis cache write failed (non-fatal): {e}")
+
         return hyde_summary
         
     except Exception as e:

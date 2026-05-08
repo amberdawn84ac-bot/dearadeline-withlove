@@ -17,7 +17,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Header
 from app.api.middleware import get_current_user_id, verify_student_access, require_internal_key
 from pydantic import BaseModel, Field
 
@@ -193,6 +193,7 @@ async def record_learning(
 @router.post("/transcript", response_model=SealTranscriptResponse, status_code=201)
 async def seal_transcript(
     entry: TranscriptEntryIn,
+    background_tasks: BackgroundTasks,
     _key: str = Depends(require_internal_key),
 ):
     """
@@ -240,6 +241,16 @@ async def seal_transcript(
         f"[Transcript] Sealed entry for student={entry.student_id}, "
         f"lesson={entry.lesson_id}, credits={entry.credit_hours} {entry.credit_type}"
     )
+
+    # ── Sliding-window queue: pop completed lesson + replenish in background ──────
+    from app.api.learning_plan import pop_completed_lesson, _replenish_learning_plan_queue
+
+    async def _pop_and_replenish(student_id: str, course_title: str) -> None:
+        await pop_completed_lesson(student_id, course_title)
+        await _replenish_learning_plan_queue(student_id)
+
+    background_tasks.add_task(_pop_and_replenish, entry.student_id, entry.course_title)
+
     return SealTranscriptResponse(
         sealed=True,
         entry_id=entry.id,

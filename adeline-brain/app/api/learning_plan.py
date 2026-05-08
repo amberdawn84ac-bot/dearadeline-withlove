@@ -20,12 +20,13 @@ This is the heart of Adeline's adaptive curriculum — connecting:
   - DiscipleshipAgent (all other tracks)
   - RegistrarAgent (credits, xAPI, transcript)
 """
+import json
 import logging
 import random
 from typing import Optional
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Query, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Header
 from pydantic import BaseModel
 
 from app.schemas.api_models import Track
@@ -34,6 +35,7 @@ from app.models.student import load_student_state, MasteryBand
 from app.connections.journal_store import journal_store
 from app.connections.neo4j_client import neo4j_client
 from app.connections.pgvector_client import hippocampus
+from app.connections.redis_client import redis_client
 from app.tools.graph_query import tool_get_zpd_candidates, ZPDCandidate
 
 # Graduation requirements (Oklahoma public school standards - 23 credits)
@@ -648,11 +650,135 @@ async def _get_available_projects(track: str = None, limit: int = 3) -> list[Pro
     return projects
 
 
+# ── Redis sliding-window helpers ──────────────────────────────────────────────
+
+def _plan_cache_key(student_id: str) -> str:
+    return f"learning_plan:{student_id}"
+
+
+async def pop_completed_lesson(student_id: str, lesson_title: str) -> None:
+    """
+    Remove a completed lesson from the Redis queue by title.
+    Called synchronously before the background replenishment fires.
+    """
+    cache_key = _plan_cache_key(student_id)
+    try:
+        raw = await redis_client.get(cache_key)
+        if not raw:
+            return
+        plan = json.loads(raw)
+        original_count = len(plan.get("suggestions", []))
+        plan["suggestions"] = [
+            s for s in plan.get("suggestions", [])
+            if s.get("title") != lesson_title
+        ]
+        if len(plan["suggestions"]) < original_count:
+            await redis_client.set(cache_key, json.dumps(plan), ex=3600)
+            logger.info(
+                f"[LearningPlan] Popped '{lesson_title}' from queue for student={student_id}. "
+                f"Queue: {original_count} → {len(plan['suggestions'])}"
+            )
+    except Exception as e:
+        logger.warning(f"[LearningPlan] Failed to pop completed lesson (non-fatal): {e}")
+
+
+async def _replenish_learning_plan_queue(student_id: str) -> None:
+    """
+    Background task: read credit gaps, generate 1-2 targeted new suggestions,
+    and append them to the Redis queue so the dashboard always has fresh cards.
+    """
+    cache_key = _plan_cache_key(student_id)
+    try:
+        # 1. Load current queue
+        raw = await redis_client.get(cache_key)
+        plan = json.loads(raw) if raw else {}
+        current_suggestions: list[dict] = plan.get("suggestions", [])
+        current_titles = {s.get("title") for s in current_suggestions}
+
+        # 2. Load what's needed to generate a gap-targeted suggestion
+        profile = {}
+        try:
+            profile = await _get_student_profile(student_id)
+        except Exception:
+            pass
+        grade_level = profile.get("grade_level", "8")
+
+        credits_by_bucket = await _get_credits_by_bucket(student_id)
+        credit_gaps = _calculate_credit_gaps(credits_by_bucket, grade_level)
+
+        student_state = None
+        try:
+            student_state = await load_student_state(student_id)
+        except Exception:
+            pass
+
+        track_scores: dict[str, float] = {}
+        if student_state and student_state.tracks:
+            for track_name, mastery in student_state.tracks.items():
+                track_scores[track_name] = mastery.mastery_score
+
+        weakest_track = min(track_scores, key=track_scores.get) if track_scores else None
+
+        # 3. Build up to 2 new suggestions, prioritised by graduation gaps
+        new_suggestions: list[LessonSuggestion] = []
+
+        # Priority 1: ZPD candidates in the highest-priority gap track
+        for gap in sorted(credit_gaps, key=lambda g: g.priority):
+            if gap.remaining <= 0:
+                continue
+            for track, bucket in TRACK_TO_BUCKET.items():
+                effective_bucket = bucket[0] if isinstance(bucket, list) else bucket
+                if effective_bucket != gap.bucket:
+                    continue
+                try:
+                    candidates = await tool_get_zpd_candidates(student_id, track, limit=2)
+                    for c in candidates:
+                        s = _zpd_to_suggestion(c, priority_boost=0.3)
+                        if s.title not in current_titles:
+                            new_suggestions.append(s)
+                            current_titles.add(s.title)
+                        if len(new_suggestions) >= 2:
+                            break
+                except Exception:
+                    pass
+            if len(new_suggestions) >= 2:
+                break
+
+        # Priority 2: Starter topic for the weakest track if still short
+        if len(new_suggestions) < 2 and weakest_track and weakest_track in STARTER_TOPICS:
+            starters = STARTER_TOPICS[weakest_track]
+            for idx, topic in enumerate(starters):
+                s = _starter_suggestion(weakest_track, topic, idx)
+                if s.title not in current_titles:
+                    new_suggestions.append(s)
+                    current_titles.add(s.title)
+                if len(new_suggestions) >= 2:
+                    break
+
+        if not new_suggestions:
+            logger.info(f"[LearningPlan/Replenish] No new suggestions generated for student={student_id}")
+            return
+
+        # 4. Append and write back to Redis (1-hour TTL keeps queue fresh)
+        for s in new_suggestions:
+            current_suggestions.append(s.model_dump())
+        plan["suggestions"] = current_suggestions
+        plan["generated_at"] = datetime.now(timezone.utc).isoformat()
+        await redis_client.set(cache_key, json.dumps(plan), ex=3600)
+        logger.info(
+            f"[LearningPlan/Replenish] Appended {len(new_suggestions)} new suggestion(s) "
+            f"for student={student_id}. Queue now has {len(current_suggestions)} items."
+        )
+    except Exception as e:
+        logger.warning(f"[LearningPlan/Replenish] Background replenishment failed (non-fatal): {e}")
+
+
 @router.get("/{student_id}", response_model=LearningPlanResponse)
 async def get_learning_plan(
     student_id: str,
     limit: int = Query(6, ge=1, le=12),
     include_all_tracks: bool = Query(False),
+    refresh: bool = Query(False, description="Force regeneration, bypassing cache"),
     _user_id: str = Depends(verify_student_access),
 ):
     """
@@ -665,6 +791,11 @@ async def get_learning_plan(
     - Portfolio projects (real-world accomplishments, not assignments)
     - Registrar credits (what the student has earned, what they still need)
     - Agent routing (HistorianAgent, ScienceAgent, DiscipleshipAgent)
+
+    Caching:
+    - Learning plans are cached in Redis for 5 minutes to avoid expensive
+      regeneration on every dashboard load.
+    - Pass ?refresh=true to force regeneration.
 
     The algorithm:
     1. Load student profile (interests, grade, learning style)
@@ -682,6 +813,17 @@ async def get_learning_plan(
     - Tracks with lower mastery → boosted (help balance progress)
     - Starter/exploration topics → lower priority
     """
+    # ── Redis sliding-window cache check ─────────────────────────────────────────
+    cache_key = _plan_cache_key(student_id)
+    if not refresh:
+        try:
+            cached = await redis_client.get(cache_key)
+            if cached:
+                logger.info(f"[LearningPlan] Cache HIT for student={student_id}")
+                return LearningPlanResponse(**json.loads(cached))
+        except Exception as e:
+            logger.warning(f"[LearningPlan] Redis cache read failed (non-fatal): {e}")
+
     suggestions: list[LessonSuggestion] = []
 
     # 1. Load student profile (interests, grade, learning style)
@@ -912,7 +1054,7 @@ async def get_learning_plan(
         f"{len(grade_standards)} standards for student={student_id}"
     )
 
-    return LearningPlanResponse(
+    response = LearningPlanResponse(
         student_id=student_id,
         suggestions=final_suggestions,
         projects=projects,
@@ -927,3 +1069,12 @@ async def get_learning_plan(
         grade_standards=grade_standards,  # Only populated for K-8
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
+
+    # ── Cache the response (1 hour TTL — replenishment extends as lessons complete) ──
+    try:
+        await redis_client.set(cache_key, response.model_dump_json(), ex=3600)
+        logger.info(f"[LearningPlan] Cached response for student={student_id} (1 hr TTL)")
+    except Exception as e:
+        logger.warning(f"[LearningPlan] Redis cache write failed (non-fatal): {e}")
+
+    return response

@@ -87,7 +87,8 @@ async def _stream_lesson(
     try:
         canonical = await canonical_store.get(slug)
         if canonical and not canonical.get("pendingApproval"):
-            blocks_data = canonical.get("blocksJson") or canonical.get("blocks_json") or []
+            # canonical_store returns "blocks" (not "blocksJson")
+            blocks_data = canonical.get("blocks") or []
             if isinstance(blocks_data, str):
                 blocks_data = json.loads(blocks_data)
             for block in blocks_data:
