@@ -231,55 +231,70 @@ function DashboardContent() {
             {streamingTitle && (
               <h2 className="text-xl font-bold text-[#2F4731] mb-4">{streamingTitle}</h2>
             )}
-            {streamingBlocks.map((block, idx) => {
-              const lastMsg = [...messages].reverse().find((m) => m.role === 'assistant');
-              // AI SDK v6: tool calls are in message.parts as ToolUIPart or DynamicToolUIPart
-              const toolParts = ((lastMsg as { parts?: unknown[] })?.parts ?? [])
-                .filter((p) => {
-                  const t = (p as Record<string, unknown>).type as string | undefined;
-                  return t === 'tool-invocation' || t === 'tool-result';
-                })
-                .map((p) => p as Record<string, unknown>);
-              const blockToolCall = toolParts.find((p) => {
-                const inv = (p.toolInvocation ?? p) as Record<string, unknown>;
-                const result = inv.result as Record<string, unknown> | undefined;
+
+            {/* Structured blocks (populated once parts are parsed) */}
+            {streamingBlocks.length > 0 ? (
+              streamingBlocks.map((block, idx) => {
+                const lastMsg = [...messages].reverse().find((m) => m.role === 'assistant');
+                const toolParts = ((lastMsg as { parts?: unknown[] })?.parts ?? [])
+                  .filter((p) => {
+                    const t = (p as Record<string, unknown>).type as string | undefined;
+                    return t === 'tool-invocation' || t === 'tool-result';
+                  })
+                  .map((p) => p as Record<string, unknown>);
+                const blockToolCall = toolParts.find((p) => {
+                  const inv = (p.toolInvocation ?? p) as Record<string, unknown>;
+                  const result = inv.result as Record<string, unknown> | undefined;
+                  return (
+                    (inv.state === 'result') &&
+                    (inv.toolName === 'render_quiz_widget' || inv.toolName === 'render_lab_widget') &&
+                    result?.blockId === block.block_id
+                  );
+                })?.toolInvocation as { toolName: string; state: string; result: Record<string, unknown> } | undefined;
                 return (
-                  (inv.state === 'result') &&
-                  (inv.toolName === 'render_quiz_widget' || inv.toolName === 'render_lab_widget') &&
-                  result?.blockId === block.block_id
-                );
-              })?.toolInvocation as { toolName: string; state: string; result: Record<string, unknown> } | undefined;
-              return (
-                <div key={idx} className="mb-4">
-                  <div className="rounded-2xl border border-[#E7DAC3] bg-white p-4">
-                    <p className="text-xs font-bold uppercase tracking-widest text-[#BD6809] mb-1">
-                      {block.block_type?.replace(/_/g, ' ')}
-                    </p>
-                    <p className="text-sm text-[#2F4731]/80 leading-relaxed whitespace-pre-wrap">{block.content}</p>
+                  <div key={idx} className="mb-4">
+                    <div className="rounded-2xl border border-[#E7DAC3] bg-white p-4">
+                      <p className="text-xs font-bold uppercase tracking-widest text-[#BD6809] mb-1">
+                        {block.block_type?.replace(/_/g, ' ')}
+                      </p>
+                      <p className="text-sm text-[#2F4731]/80 leading-relaxed whitespace-pre-wrap">{block.content}</p>
+                    </div>
+                    {blockToolCall && blockToolCall.toolName === 'render_quiz_widget' && (
+                      <MasteryCheckWidget
+                        blockId={blockToolCall.result.blockId as string}
+                        lessonId={blockToolCall.result.lessonId as string}
+                        track={blockToolCall.result.track as string}
+                        title={blockToolCall.result.title as string}
+                        content={blockToolCall.result.content as string}
+                        tags={blockToolCall.result.tags as string[] | undefined}
+                      />
+                    )}
+                    {blockToolCall && blockToolCall.toolName === 'render_lab_widget' && (
+                      <LabMissionWidget
+                        blockId={blockToolCall.result.blockId as string}
+                        lessonId={blockToolCall.result.lessonId as string}
+                        track={blockToolCall.result.track as string}
+                        title={blockToolCall.result.title as string}
+                        content={blockToolCall.result.content as string}
+                        isHomestead={blockToolCall.result.isHomestead as boolean | undefined}
+                      />
+                    )}
                   </div>
-                  {blockToolCall && blockToolCall.toolName === 'render_quiz_widget' && (
-                    <MasteryCheckWidget
-                      blockId={blockToolCall.result.blockId as string}
-                      lessonId={blockToolCall.result.lessonId as string}
-                      track={blockToolCall.result.track as string}
-                      title={blockToolCall.result.title as string}
-                      content={blockToolCall.result.content as string}
-                      tags={blockToolCall.result.tags as string[] | undefined}
-                    />
-                  )}
-                  {blockToolCall && blockToolCall.toolName === 'render_lab_widget' && (
-                    <LabMissionWidget
-                      blockId={blockToolCall.result.blockId as string}
-                      lessonId={blockToolCall.result.lessonId as string}
-                      track={blockToolCall.result.track as string}
-                      title={blockToolCall.result.title as string}
-                      content={blockToolCall.result.content as string}
-                      isHomestead={blockToolCall.result.isHomestead as boolean | undefined}
-                    />
-                  )}
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              /* Fallback: render live m.content while parts haven't been parsed yet */
+              messages
+                .filter((m) => m.role === 'assistant')
+                .slice(-1)
+                .map((m) =>
+                  m.content ? (
+                    <div key={m.id} className="prose prose-stone max-w-none whitespace-pre-wrap text-[#2F4731] text-sm leading-relaxed">
+                      {m.content}
+                    </div>
+                  ) : null
+                )
+            )}
           </div>
         )}
 
