@@ -137,6 +137,36 @@ class CanonicalStore:
         await self._redis_delete(slug)
         logger.info(f"[CanonicalStore] Cache invalidated — {slug}")
 
+    async def archive(self, slug: str, reason: str = "force_regenerate") -> bool:
+        """
+        Soft-delete a canonical lesson: mark pendingApproval=TRUE in DB and evict Redis.
+
+        Preserves the DB row so xAPI statements retain their foreign key references.
+        The record is invisible to canonical_store.get() (which filters pendingApproval=FALSE)
+        so the next lesson request triggers a full fresh generation.
+
+        Returns True if a row was archived, False if slug was not found.
+        """
+        from app.config import get_db_conn
+        conn = await get_db_conn()
+        try:
+            result = await conn.execute(
+                'UPDATE "CanonicalLesson" '
+                'SET "pendingApproval" = TRUE, "needsReviewReason" = $2, "updatedAt" = NOW() '
+                'WHERE "topicSlug" = $1 AND ("pendingApproval" IS FALSE OR "pendingApproval" IS NULL)',
+                slug, reason,
+            )
+            archived = result != "UPDATE 0"
+        finally:
+            await conn.close()
+
+        await self._redis_delete(slug)
+        if archived:
+            logger.info(f"[CanonicalStore] Archived canonical — slug={slug} reason={reason}")
+        else:
+            logger.info(f"[CanonicalStore] Archive no-op (not found or already pending) — slug={slug}")
+        return archived
+
     async def approve(self, slug: str, approved_by: str = "") -> bool:
         """Mark a pending canonical as approved: clear flag in DB, then publish to Redis."""
         from app.config import get_db_conn

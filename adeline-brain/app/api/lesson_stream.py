@@ -84,9 +84,18 @@ async def _stream_lesson(
     # ── Phase 1: Canonical check ──────────────────────────────────────────────
     yield _sse({"type": "status", "message": "Checking curated lesson library..."})
     slug = canonical_slug(request.topic, request.track.value)
+
+    if request.force_regenerate:
+        yield _sse({"type": "status", "message": "Regenerating lesson — clearing cached version..."})
+        try:
+            await canonical_store.archive(slug, reason="force_regenerate")
+            logger.info(f"[LessonStream] force_regenerate: archived canonical slug={slug}")
+        except Exception as e:
+            logger.warning(f"[LessonStream] force_regenerate: archive failed (non-fatal): {e}")
+
     try:
         canonical = await canonical_store.get(slug)
-        if canonical and not canonical.get("pendingApproval"):
+        if canonical and not canonical.get("pendingApproval") and not request.force_regenerate:
             # canonical_store returns "blocks" (not "blocksJson")
             blocks_data = canonical.get("blocks") or []
             if isinstance(blocks_data, str):
