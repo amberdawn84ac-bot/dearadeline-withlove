@@ -54,6 +54,7 @@ export interface LessonRequest {
   is_homestead: boolean;
   grade_level: string;
   render_mode?: LessonRenderMode;
+  force_regenerate?: boolean;
 }
 
 export interface AnimatedLessonRequest {

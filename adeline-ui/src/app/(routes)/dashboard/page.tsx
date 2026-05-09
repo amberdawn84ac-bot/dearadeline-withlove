@@ -50,6 +50,7 @@ function DashboardContent() {
   const [streamingBlocks, setStreamingBlocks] = useState<LessonBlockResponse[]>([]);
   const [streamingTitle, setStreamingTitle] = useState('');
   const [streamingStatus, setStreamingStatus] = useState('');
+  const [currentLessonMeta, setCurrentLessonMeta] = useState<{ topic: string; track: Track } | null>(null);
   const router = useRouter();
 
   // useChat drives lesson streaming via /api/lesson translation bridge
@@ -161,6 +162,7 @@ function DashboardContent() {
     setStreamingBlocks([]);
     setStreamingTitle('');
     setStreamingStatus('Adeline is preparing your lesson…');
+    setCurrentLessonMeta({ topic: suggestion.title, track: suggestion.track as Track });
     append({
       text: suggestion.title,
     }, {
@@ -175,6 +177,27 @@ function DashboardContent() {
       },
     });
   }, [studentId, gradeLevel, isStreaming, append]);
+
+  const handleRegenerateLesson = useCallback(() => {
+    if (!currentLessonMeta || !studentId || isStreaming) return;
+    setStreamingBlocks([]);
+    setStreamingTitle('');
+    setStreamingStatus('Regenerating your lesson…');
+    append({
+      text: currentLessonMeta.topic,
+    }, {
+      body: {
+        lesson_request: {
+          student_id: studentId,
+          track: currentLessonMeta.track,
+          topic: currentLessonMeta.topic,
+          is_homestead: false,
+          grade_level: gradeLevel,
+          force_regenerate: true,
+        },
+      },
+    });
+  }, [currentLessonMeta, studentId, gradeLevel, isStreaming, append]);
 
   const handleBackToSuggestions = () => {
     setActiveLesson(null);
@@ -212,13 +235,25 @@ function DashboardContent() {
         {!activeLesson && (isStreaming || streamingBlocks.length > 0) && (
           <div className="px-6 pb-8 pt-5">
             {!isStreaming && streamingBlocks.length > 0 && (
-              <button
-                onClick={handleBackToSuggestions}
-                className="flex items-center gap-2 text-[#BD6809] hover:text-[#2F4731] mb-4 transition-colors"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span className="text-sm font-medium">Back to lesson list</span>
-              </button>
+              <div className="flex items-center gap-3 mb-4">
+                <button
+                  onClick={handleBackToSuggestions}
+                  className="flex items-center gap-2 text-[#BD6809] hover:text-[#2F4731] transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span className="text-sm font-medium">Back to lesson list</span>
+                </button>
+                {currentLessonMeta && (
+                  <button
+                    onClick={handleRegenerateLesson}
+                    className="flex items-center gap-2 text-[#2F4731]/50 hover:text-[#2F4731] transition-colors ml-auto"
+                    title="Regenerate this lesson with fresh content"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span className="text-sm font-medium">Regenerate lesson</span>
+                  </button>
+                )}
+              </div>
             )}
             {isStreaming && (
               <div className="flex items-center gap-3 pb-4">
@@ -287,13 +322,17 @@ function DashboardContent() {
               messages
                 .filter((m) => m.role === 'assistant')
                 .slice(-1)
-                .map((m) =>
-                  m.content ? (
+                .map((m) => {
+                  const text = m.parts
+                    ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+                    .map((p) => p.text)
+                    .join('') ?? '';
+                  return text ? (
                     <div key={m.id} className="prose prose-stone max-w-none whitespace-pre-wrap text-[#2F4731] text-sm leading-relaxed">
-                      {m.content}
+                      {text}
                     </div>
-                  ) : null
-                )
+                  ) : null;
+                })
             )}
           </div>
         )}
