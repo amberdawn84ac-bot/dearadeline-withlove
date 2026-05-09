@@ -84,6 +84,7 @@ async def _stream_lesson(
     # ── Phase 1: Canonical check ──────────────────────────────────────────────
     yield _sse({"type": "status", "message": "Checking curated lesson library..."})
     slug = canonical_slug(request.topic, request.track.value)
+    logger.info(f"[LessonStream] topic='{request.topic}' track={request.track.value} force_regenerate={request.force_regenerate} slug={slug}")
 
     if request.force_regenerate:
         yield _sse({"type": "status", "message": "Regenerating lesson — clearing cached version..."})
@@ -94,8 +95,10 @@ async def _stream_lesson(
             logger.warning(f"[LessonStream] force_regenerate: archive failed (non-fatal): {e}")
 
     try:
-        canonical = await canonical_store.get(slug)
-        if canonical and not canonical.get("pendingApproval") and not request.force_regenerate:
+        canonical = None if request.force_regenerate else await canonical_store.get(slug)
+        # Redis payload uses snake_case key; DB payload also uses snake_case via _db_get
+        is_pending = canonical.get("pending_approval") or canonical.get("pendingApproval") if canonical else False
+        if canonical and not is_pending:
             # canonical_store returns "blocks" (not "blocksJson")
             blocks_data = canonical.get("blocks") or []
             if isinstance(blocks_data, str):
