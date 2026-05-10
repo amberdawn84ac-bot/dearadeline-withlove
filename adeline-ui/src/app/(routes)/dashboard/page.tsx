@@ -5,7 +5,6 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Loader2, ArrowLeft, RefreshCw, Award, Hammer, Clock } from 'lucide-react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import type { UIToolInvocation as ToolInvocation } from 'ai';
 import { StudentStatusBar } from '@/components/StudentStatusBar';
 import { AdelineChatPanel } from '@/components/AdelineChatPanel';
 import { SpacedRepWidget } from '@/components/dashboard/SpacedRepWidget';
@@ -27,9 +26,14 @@ type LessonAnnotation =
   | { type: 'status'; message: string }
   | { type: 'error'; message: string };
 
-type ResultInvocation = Extract<ToolInvocation, { state: 'result' }> & {
+// Structural type for a resolved tool call — no SDK generic dependency.
+interface ResultInvocation {
+  state: 'result';
+  toolCallId: string;
+  toolName: string;
+  args: unknown;
   result: Record<string, unknown>;
-};
+}
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -49,8 +53,8 @@ const DIFFICULTY_BADGES: Record<string, { bg: string; text: string }> = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function isResultInvocation(t: ToolInvocation): t is ResultInvocation {
-  return t.state === 'result';
+function isResultInvocation(t: unknown): t is ResultInvocation {
+  return typeof t === 'object' && t !== null && (t as ResultInvocation).state === 'result';
 }
 
 // ── DashboardContent ───────────────────────────────────────────────────────────
