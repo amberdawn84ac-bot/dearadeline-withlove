@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Loader2, ArrowLeft, RefreshCw, Award, Hammer, Clock } from 'lucide-react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
+import type { ToolInvocation } from 'ai';
 import { StudentStatusBar } from '@/components/StudentStatusBar';
 import { AdelineChatPanel } from '@/components/AdelineChatPanel';
 import { SpacedRepWidget } from '@/components/dashboard/SpacedRepWidget';
@@ -17,21 +18,42 @@ import { supabase } from '@/lib/supabase';
 import type { LessonResponse, LessonBlockResponse, Track, LessonSuggestion, ProjectSuggestion, BookRecommendation } from '@/lib/brain-client';
 import { RecommendedBooks } from '@/components/dashboard/RecommendedBooks';
 
-// Source badge colors for learning plan suggestions
-const SOURCE_BADGES: Record<string, { bg: string; text: string; label: string }> = {
-  zpd: { bg: '#F0FDF4', text: '#166534', label: 'Ready to Learn' },
-  cross_track: { bg: '#EFF6FF', text: '#1D4ED8', label: 'Cross-Track' },
-  continue: { bg: '#FDF6E9', text: '#BD6809', label: 'Continue' },
-  explore: { bg: '#F3F4F6', text: '#374151', label: 'Explore' },
-  interest: { bg: '#FDF2F8', text: '#BE185D', label: 'Your Interest' },
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+// Discriminated union matching what /api/lesson sends as 2: data stream annotations
+type LessonAnnotation =
+  | { type: 'block'; block: LessonBlockResponse }
+  | { type: 'done'; title?: string }
+  | { type: 'status'; message: string }
+  | { type: 'error'; message: string };
+
+type ResultInvocation = Extract<ToolInvocation, { state: 'result' }> & {
+  result: Record<string, unknown>;
 };
 
-// Difficulty badge colors for projects
+// ── Constants ──────────────────────────────────────────────────────────────────
+
+const SOURCE_BADGES: Record<string, { bg: string; text: string; label: string }> = {
+  zpd:        { bg: '#F0FDF4', text: '#166534', label: 'Ready to Learn' },
+  cross_track: { bg: '#EFF6FF', text: '#1D4ED8', label: 'Cross-Track' },
+  continue:   { bg: '#FDF6E9', text: '#BD6809', label: 'Continue' },
+  explore:    { bg: '#F3F4F6', text: '#374151', label: 'Explore' },
+  interest:   { bg: '#FDF2F8', text: '#BE185D', label: 'Your Interest' },
+};
+
 const DIFFICULTY_BADGES: Record<string, { bg: string; text: string }> = {
   SEEDLING: { bg: '#F0FDF4', text: '#166534' },
-  GROWING: { bg: '#FEF3C7', text: '#92400E' },
-  HARVEST: { bg: '#FEE2E2', text: '#991B1B' },
+  GROWING:  { bg: '#FEF3C7', text: '#92400E' },
+  HARVEST:  { bg: '#FEE2E2', text: '#991B1B' },
 };
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function isResultInvocation(t: ToolInvocation): t is ResultInvocation {
+  return t.state === 'result';
+}
+
+// ── DashboardContent ───────────────────────────────────────────────────────────
 
 function DashboardContent() {
   const { student, loading: profileLoading } = useStudent();
@@ -47,14 +69,11 @@ function DashboardContent() {
   const [recommendedBooks, setRecommendedBooks] = useState<BookRecommendation[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
-  const [streamingBlocks, setStreamingBlocks] = useState<LessonBlockResponse[]>([]);
-  const [streamingTitle, setStreamingTitle] = useState('');
-  const [streamingStatus, setStreamingStatus] = useState('');
   const [currentLessonMeta, setCurrentLessonMeta] = useState<{ topic: string; track: Track } | null>(null);
   const router = useRouter();
 
   // useChat drives lesson streaming via /api/lesson translation bridge
-  const chat = useChat({
+  const { messages, setMessages, sendMessage: append, status: chatStatus } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/lesson',
       fetch: async (url, options) => {
@@ -69,64 +88,31 @@ function DashboardContent() {
         });
       },
     }),
-    onFinish: (message) => {
-      console.log('[Dashboard] Stream finished, message:', message);
-      setStreamingStatus('');
-    },
     onError: (err: Error) => {
       console.error('[Dashboard] Lesson stream error:', err);
-      setStreamingStatus('');
     },
   });
-  const { messages, sendMessage: append, status: chatStatus } = chat;
+
   const isStreaming = chatStatus === 'streaming' || chatStatus === 'submitted';
 
-  // DEBUG: Log messages and status to diagnose streaming issues
-  useEffect(() => {
-    console.log('[Dashboard Debug] chatStatus:', chatStatus);
-    console.log('[Dashboard Debug] messages count:', messages.length);
-    if (messages.length > 0) {
-      const lastMsg = messages[messages.length - 1];
-      console.log('[Dashboard Debug] last message:', {
-        role: lastMsg.role,
-        id: lastMsg.id,
-        partsCount: (lastMsg as { parts?: unknown[] }).parts?.length ?? 0,
-        parts: (lastMsg as { parts?: unknown[] }).parts,
-      });
-    }
-  }, [messages, chatStatus]);
-
-  // Derive blocks from the latest assistant message's parts
-  // AI SDK v6: 2: data stream lines → DataUIPart in message.parts (type starts with "data-")
-  useEffect(() => {
-    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
-    if (!lastAssistant) return;
-
-    const parts = (lastAssistant as { parts?: unknown[] }).parts ?? [];
-    const blocks: LessonBlockResponse[] = [];
-    let title = '';
-    let status = '';
-
-    for (const part of parts) {
-      const p = part as Record<string, unknown>;
-      // DataUIPart has type "data-<name>" and a "value" field with our payload
-      if (typeof p.type === 'string' && p.type.startsWith('data-')) {
-        const val = p.value as Record<string, unknown> | undefined;
-        if (!val) continue;
-        if (val.type === 'block' && val.block) {
-          blocks.push(val.block as LessonBlockResponse);
-        } else if (val.type === 'done') {
-          title = (val.title as string) ?? '';
-        } else if (val.type === 'status') {
-          status = (val.message as string) ?? '';
-        }
-      }
-    }
-
-    setStreamingBlocks(blocks);
-    if (title) setStreamingTitle(title);
-    setStreamingStatus(status);
-  }, [messages]);
+  // Derive everything from the last assistant message — no manual state parsing.
+  // If blocks are absent here, the fix is in /api/lesson stream format, not this file.
+  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+  const lessonAnnotations = (lastAssistant?.annotations ?? []) as LessonAnnotation[];
+  const lessonBlocks = lessonAnnotations
+    .filter((a): a is Extract<LessonAnnotation, { type: 'block' }> => a.type === 'block')
+    .map((a) => a.block);
+  const doneEvent = lessonAnnotations.find(
+    (a): a is Extract<LessonAnnotation, { type: 'done' }> => a.type === 'done',
+  );
+  const statusEvent = lessonAnnotations.find(
+    (a): a is Extract<LessonAnnotation, { type: 'status' }> => a.type === 'status',
+  );
+  const lessonTitle = doneEvent?.title ?? '';
+  const lessonStatus = isStreaming
+    ? (statusEvent?.message ?? 'Adeline is preparing your lesson…')
+    : '';
+  const lessonToolInvocations = (lastAssistant?.toolInvocations ?? []).filter(isResultInvocation);
 
   // Fetch dynamic learning plan suggestions
   const fetchSuggestions = useCallback(async () => {
@@ -156,55 +142,54 @@ function DashboardContent() {
     setActiveLesson(lesson);
   }, []);
 
-  const handleSuggestionClick = useCallback((suggestion: LessonSuggestion) => {
-    if (isStreaming || streamingBlocks.length > 0 || !studentId) return;
+  const handleBackToSuggestions = useCallback(() => {
     setActiveLesson(null);
-    setStreamingBlocks([]);
-    setStreamingTitle('');
-    setStreamingStatus('Adeline is preparing your lesson…');
-    setCurrentLessonMeta({ topic: suggestion.title, track: suggestion.track as Track });
-    append({
-      text: suggestion.title,
-    }, {
-      body: {
-        lesson_request: {
-          student_id: studentId,
-          track: suggestion.track as Track,
-          topic: suggestion.title,
-          is_homestead: false,
-          grade_level: gradeLevel,
+    setMessages([]);
+  }, [setMessages]);
+
+  const handleSuggestionClick = useCallback(
+    (suggestion: LessonSuggestion) => {
+      const hasContent = messages.some((m) => m.role === 'assistant');
+      if (isStreaming || hasContent || !studentId) return;
+      setActiveLesson(null);
+      setCurrentLessonMeta({ topic: suggestion.title, track: suggestion.track as Track });
+      append(
+        { text: suggestion.title },
+        {
+          body: {
+            lesson_request: {
+              student_id: studentId,
+              track: suggestion.track as Track,
+              topic: suggestion.title,
+              is_homestead: false,
+              grade_level: gradeLevel,
+            },
+          },
         },
-      },
-    });
-  }, [studentId, gradeLevel, isStreaming, append]);
+      );
+    },
+    [studentId, gradeLevel, isStreaming, messages, append],
+  );
 
   const handleRegenerateLesson = useCallback(() => {
     if (!currentLessonMeta || !studentId || isStreaming) return;
-    setStreamingBlocks([]);
-    setStreamingTitle('');
-    setStreamingStatus('Regenerating your lesson…');
-    append({
-      text: currentLessonMeta.topic,
-    }, {
-      body: {
-        lesson_request: {
-          student_id: studentId,
-          track: currentLessonMeta.track,
-          topic: currentLessonMeta.topic,
-          is_homestead: false,
-          grade_level: gradeLevel,
-          force_regenerate: true,
+    setMessages([]);
+    append(
+      { text: currentLessonMeta.topic },
+      {
+        body: {
+          lesson_request: {
+            student_id: studentId,
+            track: currentLessonMeta.track,
+            topic: currentLessonMeta.topic,
+            is_homestead: false,
+            grade_level: gradeLevel,
+            force_regenerate: true,
+          },
         },
       },
-    });
-  }, [currentLessonMeta, studentId, gradeLevel, isStreaming, append]);
-
-  const handleBackToSuggestions = () => {
-    setActiveLesson(null);
-    setStreamingBlocks([]);
-    setStreamingTitle('');
-    setStreamingStatus('');
-  };
+    );
+  }, [currentLessonMeta, studentId, gradeLevel, isStreaming, setMessages, append]);
 
   return (
     <div className="flex flex-col h-screen -m-6 md:-m-8 overflow-hidden bg-[#FFFEF7]">
@@ -221,20 +206,18 @@ function DashboardContent() {
 
       {/* ── Scrollable content below chat ── */}
       <div className="flex-1 overflow-y-auto min-w-0">
-        {/* Status bar */}
         <div className="px-6 pt-5">
           <StudentStatusBar />
         </div>
 
-        {/* Spaced rep widget — compact strip */}
         <div className="px-6 pt-3">
           <SpacedRepWidget />
         </div>
 
-        {/* ── Streaming lesson view (shown while generating AND after completion until dismissed) ── */}
-        {!activeLesson && (isStreaming || streamingBlocks.length > 0) && (
+        {/* ── Streaming lesson view ── */}
+        {!activeLesson && (isStreaming || lessonBlocks.length > 0) && (
           <div className="px-6 pb-8 pt-5">
-            {!isStreaming && streamingBlocks.length > 0 && (
+            {!isStreaming && lessonBlocks.length > 0 && (
               <div className="flex items-center gap-3 mb-4">
                 <button
                   onClick={handleBackToSuggestions}
@@ -255,70 +238,62 @@ function DashboardContent() {
                 )}
               </div>
             )}
+
             {isStreaming && (
               <div className="flex items-center gap-3 pb-4">
                 <Loader2 className="w-5 h-5 animate-spin text-[#BD6809]" />
-                <p className="text-sm text-[#2F4731]/60 italic">
-                  {streamingStatus || 'Adeline is preparing your lesson…'}
-                </p>
+                <p className="text-sm text-[#2F4731]/60 italic">{lessonStatus}</p>
               </div>
             )}
-            {streamingTitle && (
-              <h2 className="text-xl font-bold text-[#2F4731] mb-4">{streamingTitle}</h2>
+
+            {lessonTitle && (
+              <h2 className="text-xl font-bold text-[#2F4731] mb-4">{lessonTitle}</h2>
             )}
 
-            {/* Structured blocks (populated once parts are parsed) */}
-            {streamingBlocks.length > 0 ? (
-              streamingBlocks.map((block, idx) => {
-                const lastMsg = [...messages].reverse().find((m) => m.role === 'assistant');
-                const toolParts = ((lastMsg as { parts?: unknown[] })?.parts ?? [])
-                  .filter((p) => {
-                    const t = (p as Record<string, unknown>).type as string | undefined;
-                    return t === 'tool-invocation' || t === 'tool-result';
-                  })
-                  .map((p) => p as Record<string, unknown>);
-                const blockToolCall = toolParts.find((p) => {
-                  const inv = (p.toolInvocation ?? p) as Record<string, unknown>;
-                  const result = inv.result as Record<string, unknown> | undefined;
-                  return (
-                    (inv.state === 'result') &&
-                    (inv.toolName === 'render_quiz_widget' || inv.toolName === 'render_lab_widget') &&
-                    result?.blockId === block.block_id
-                  );
-                })?.toolInvocation as { toolName: string; state: string; result: Record<string, unknown> } | undefined;
+            {/* Standard toolInvocations render — no manual state, no data-part parsing */}
+            {lessonBlocks.length > 0 ? (
+              lessonBlocks.map((block, idx) => {
+                const widget = lessonToolInvocations.find(
+                  (t) =>
+                    (t.toolName === 'render_quiz_widget' || t.toolName === 'render_lab_widget') &&
+                    (t.result as Record<string, unknown>)?.blockId === block.block_id,
+                );
                 return (
                   <div key={idx} className="mb-4">
                     <div className="rounded-2xl border border-[#E7DAC3] bg-white p-4">
                       <p className="text-xs font-bold uppercase tracking-widest text-[#BD6809] mb-1">
                         {block.block_type?.replace(/_/g, ' ')}
                       </p>
-                      <p className="text-sm text-[#2F4731]/80 leading-relaxed whitespace-pre-wrap">{block.content}</p>
+                      <p className="text-sm text-[#2F4731]/80 leading-relaxed whitespace-pre-wrap">
+                        {block.content}
+                      </p>
                     </div>
-                    {blockToolCall && blockToolCall.toolName === 'render_quiz_widget' && (
+
+                    {widget?.toolName === 'render_quiz_widget' && (
                       <MasteryCheckWidget
-                        blockId={blockToolCall.result.blockId as string}
-                        lessonId={blockToolCall.result.lessonId as string}
-                        track={blockToolCall.result.track as string}
-                        title={blockToolCall.result.title as string}
-                        content={blockToolCall.result.content as string}
-                        tags={blockToolCall.result.tags as string[] | undefined}
+                        blockId={widget.result.blockId as string}
+                        lessonId={widget.result.lessonId as string}
+                        track={widget.result.track as string}
+                        title={widget.result.title as string}
+                        content={widget.result.content as string}
+                        tags={widget.result.tags as string[] | undefined}
                       />
                     )}
-                    {blockToolCall && blockToolCall.toolName === 'render_lab_widget' && (
+                    {widget?.toolName === 'render_lab_widget' && (
                       <LabMissionWidget
-                        blockId={blockToolCall.result.blockId as string}
-                        lessonId={blockToolCall.result.lessonId as string}
-                        track={blockToolCall.result.track as string}
-                        title={blockToolCall.result.title as string}
-                        content={blockToolCall.result.content as string}
-                        isHomestead={blockToolCall.result.isHomestead as boolean | undefined}
+                        blockId={widget.result.blockId as string}
+                        lessonId={widget.result.lessonId as string}
+                        track={widget.result.track as string}
+                        title={widget.result.title as string}
+                        content={widget.result.content as string}
+                        isHomestead={widget.result.isHomestead as boolean | undefined}
                       />
                     )}
                   </div>
                 );
               })
             ) : (
-              /* Fallback: render live m.content while parts haven't been parsed yet */
+              // While streaming and no blocks yet, show the raw text content
               messages
                 .filter((m) => m.role === 'assistant')
                 .slice(-1)
@@ -326,9 +301,12 @@ function DashboardContent() {
                   const text = m.parts
                     ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
                     .map((p) => p.text)
-                    .join('') ?? '';
+                    .join('') ?? m.content ?? '';
                   return text ? (
-                    <div key={m.id} className="prose prose-stone max-w-none whitespace-pre-wrap text-[#2F4731] text-sm leading-relaxed">
+                    <div
+                      key={m.id}
+                      className="prose prose-stone max-w-none whitespace-pre-wrap text-[#2F4731] text-sm leading-relaxed"
+                    >
                       {text}
                     </div>
                   ) : null;
@@ -338,7 +316,7 @@ function DashboardContent() {
         )}
 
         {/* ── Idle: suggestion cards ── */}
-        {!activeLesson && !isStreaming && (
+        {!activeLesson && !isStreaming && lessonBlocks.length === 0 && (
           <main className="px-6 pb-8 pt-5">
             {loadingSuggestions && (
               <div className="flex items-center justify-center py-12">
@@ -410,7 +388,7 @@ function DashboardContent() {
                 )}
 
                 <div className="grid sm:grid-cols-2 gap-4">
-                  {suggestions.map(suggestion => {
+                  {suggestions.map((suggestion) => {
                     const sourceBadge = SOURCE_BADGES[suggestion.source] || SOURCE_BADGES.explore;
                     return (
                       <button
@@ -451,7 +429,6 @@ function DashboardContent() {
                   })}
                 </div>
 
-                {/* Recommended Reading */}
                 <RecommendedBooks books={recommendedBooks} />
 
                 {/* Projects Section */}
@@ -459,15 +436,13 @@ function DashboardContent() {
                   <>
                     <div className="flex items-center gap-2 mt-8 mb-4">
                       <Hammer className="w-4 h-4 text-[#BD6809]" />
-                      <p className="text-sm font-bold text-[#2F4731]">
-                        Portfolio Projects
-                      </p>
+                      <p className="text-sm font-bold text-[#2F4731]">Portfolio Projects</p>
                       <span className="text-xs text-[#2F4731]/50">
                         — Real accomplishments, not assignments
                       </span>
                     </div>
                     <div className="grid sm:grid-cols-3 gap-4">
-                      {projects.map(project => {
+                      {projects.map((project) => {
                         const diffBadge = DIFFICULTY_BADGES[project.difficulty] || DIFFICULTY_BADGES.SEEDLING;
                         return (
                           <button
@@ -504,7 +479,7 @@ function DashboardContent() {
           </main>
         )}
 
-        {/* Active lesson */}
+        {/* Active lesson (legacy poll-based path) */}
         {activeLesson && (
           <div className="px-6 pb-8 pt-5">
             <button
@@ -524,11 +499,13 @@ function DashboardContent() {
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center h-screen bg-[#FFFEF7]">
-        <Loader2 className="w-8 h-8 animate-spin text-[#BD6809]" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-screen bg-[#FFFEF7]">
+          <Loader2 className="w-8 h-8 animate-spin text-[#BD6809]" />
+        </div>
+      }
+    >
       <DashboardContent />
     </Suspense>
   );

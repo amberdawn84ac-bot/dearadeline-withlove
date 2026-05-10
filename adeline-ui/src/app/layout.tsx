@@ -7,7 +7,6 @@ import {
   Swanky_and_Moo_Moo,
 } from "next/font/google";
 import localFont from 'next/font/local';
-import { OnboardingGate } from "@/components/OnboardingGate";
 import "./globals.css";
 
 const inter = Inter({
@@ -75,7 +74,6 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${emilysCandy.variable} ${kalam.variable} ${kranky.variable} ${permanentMarker.variable} ${swankyAndMooMoo.variable} antialiased`}
       >
-        <OnboardingGate />
         {children}
       </body>
     </html>
