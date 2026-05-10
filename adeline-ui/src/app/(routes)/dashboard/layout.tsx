@@ -1,10 +1,24 @@
 /**
- * Dashboard layout — server component.
+ * dashboard/layout.tsx — SECONDARY ONBOARDING GATE (server component)
  *
- * Runs before any client code mounts. Checks whether the authenticated user has
- * completed onboarding and redirects server-side if not. This is the correct fix
- * for the /dashboard ↔ /onboarding ping-pong: the redirect happens once, at the
- * server, before React has a chance to run.
+ * Responsibility: verify onboarding completion for /dashboard/*.
+ *
+ * Contract with middleware.ts:
+ *   middleware.ts is the PRIMARY gatekeeper. By the time execution
+ *   reaches this layout, middleware has ALREADY confirmed a valid
+ *   Supabase session. An unauthenticated request can never reach here.
+ *
+ * What this layout does:
+ *   1. Reads the session from cookies (defense-in-depth — never trust
+ *      that middleware ran; always verify before touching the backend).
+ *   2. If somehow no session exists → redirect to /login and stop.
+ *      The brain API is NEVER called without a confirmed access token.
+ *   3. If session exists → call the brain API to check onboardingComplete.
+ *   4. Incomplete → server-side redirect('/onboarding') before React mounts.
+ *   5. Brain unreachable → let the user through (don't block on infra failure).
+ *
+ * force-dynamic prevents Vercel from pre-building this layout at build
+ * time, which would cause a Supabase cookie-read error in the SSG phase.
  */
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
@@ -43,10 +57,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
     data: { session },
   } = await supabase.auth.getSession()
 
+  // GUARD: No session → redirect immediately. The brain API is never
+  // called without a confirmed token. Middleware should have caught this
+  // first, but we never assume it did.
   if (!session?.access_token) {
     redirect('/login')
   }
 
+  // Session confirmed. Now check onboarding status.
   let shouldRedirectToOnboarding = false
 
   try {
@@ -56,14 +74,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
     })
 
     if (res.status === 404) {
+      // No profile yet — user needs onboarding
       shouldRedirectToOnboarding = true
     } else if (res.ok) {
       const data = (await res.json()) as { user?: { onboardingComplete?: boolean } }
       shouldRedirectToOnboarding = !(data.user?.onboardingComplete ?? false)
     }
-    // Any other non-ok status (5xx etc.) — don't block; let user access dashboard
+    // 5xx or unexpected status → don't block; let user access dashboard
   } catch {
-    // Brain unreachable — let through without blocking the user
+    // Brain unreachable → let through without blocking the user
   }
 
   if (shouldRedirectToOnboarding) {
