@@ -510,6 +510,92 @@ async def _researcher_fallback(
     return None
 
 
+async def _generate_from_knowledge(
+    state: AdelineState,
+    silent_sources: list[str],
+) -> list[dict]:
+    """
+    Knowledge-generation fallback — Adeline ALWAYS teaches.
+
+    Called when both Hippocampus and the Researcher return empty.
+    Uses Gemini (via _synthesis_call) to generate a real lesson from training
+    knowledge, then appends a RESEARCH_MISSION as optional enrichment.
+
+    The student gets a full lesson. The research mission is a bonus "dig deeper"
+    activity — never the main content.
+    """
+    request = state["request"]
+    track_name = request.track.value.replace("_", " ").title()
+    grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
+    persona = _TRACK_PERSONA.get(request.track, "a knowledgeable mentor")
+
+    system_prompt = (
+        f"You are Adeline — {persona}\n\n"
+        f"You are teaching a {grade_desc} student.\n\n"
+        f"{_ADELINE_VOICE}\n"
+        "IMPORTANT: You are teaching from your own knowledge because the primary source "
+        "archive does not yet have verified documents on this topic. That is fine — teach "
+        "the lesson anyway. Be specific: name real people, real dates, real places, real events. "
+        "Do NOT say 'I don't have sources' or 'research this yourself.' TEACH.\n\n"
+        "Structure your response as THREE sections, separated by ---:\n"
+        "SECTION 1: Opening hook — one vivid paragraph that drops the student into the moment.\n"
+        "SECTION 2: The lesson — 2-3 paragraphs with specific facts, names, dates. "
+        "Ground every claim in real history. End with a direct question or challenge.\n"
+        "SECTION 3: A single sentence connecting this topic to why it matters RIGHT NOW.\n"
+    )
+
+    user_prompt = (
+        f"Topic: {request.topic}\n"
+        f"Track: {track_name}\n\n"
+        f"Teach this lesson. Be specific. Make it land."
+    )
+
+    blocks: list[dict] = []
+
+    try:
+        raw = await _synthesis_call(system_prompt, user_prompt, max_tokens=1200)
+        content = raw.strip()
+    except Exception as e:
+        logger.warning(f"[KnowledgeGen] Synthesis failed ({e}) — using topic as fallback")
+        content = (
+            f"**{request.topic}**\n\n"
+            f"Adeline is preparing this lesson. Check back shortly — "
+            f"she's gathering what she knows about this topic."
+        )
+
+    # Main lesson block — always present
+    blocks.append({
+        "block_type":  BlockType.NARRATIVE.value,
+        "content":     content,
+        "evidence":    [],
+        "is_silenced": False,
+        "homestead_content": (
+            _homestead_adapt(content) if request.is_homestead else None
+        ),
+    })
+
+    # Research mission as OPTIONAL enrichment (not the main lesson)
+    sources_text = "\n".join(f"- {s}" for s in silent_sources[:3]) if silent_sources else ""
+    enrichment = (
+        f"**Dig Deeper (Optional Research Mission):**\n"
+        f"Adeline taught this from her own knowledge. Want to go further? "
+        f"Find a primary source document on this topic and bring it back — "
+        f"she'll verify it and add it to the archive so future students benefit too."
+    )
+    if sources_text:
+        enrichment += f"\n\nStart by looking for:\n{sources_text}"
+
+    blocks.append({
+        "block_type":  BlockType.RESEARCH_MISSION.value,
+        "content":     enrichment,
+        "evidence":    [],
+        "is_silenced": False,
+    })
+    state["has_research_missions"] = True
+
+    return blocks
+
+
 # ── Historian Agent (TRUTH_HISTORY) ───────────────────────────────────
 
 async def historian_agent(state: AdelineState) -> AdelineState:
@@ -579,27 +665,12 @@ async def historian_agent(state: AdelineState) -> AdelineState:
         if block:
             blocks.append(block)
         else:
-            # Researcher also failed — Claude provides orientation + single research mission
-            orientation = await _state_synthesize(
-                state,
-                block_type=BlockType.NARRATIVE.value,
-                source_chunks=[],
-                raw_content=request.topic,
+            # Researcher also failed — Adeline teaches from knowledge (Gemini)
+            logger.info(
+                f"[HistorianAgent] Researcher empty for '{request.topic}' — "
+                "generating lesson from knowledge"
             )
-            blocks.append({
-                "block_type":  BlockType.NARRATIVE.value,
-                "content":     orientation,
-                "evidence":    [],
-                "is_silenced": False,
-                "homestead_content": None,
-            })
-            mission = build_research_mission_block(request.topic, silent_sources[:3])
-            blocks.append({
-                **mission,
-                "block_type": BlockType.RESEARCH_MISSION.value,
-                "evidence":   [],
-            })
-            state["has_research_missions"] = True
+            blocks = await _generate_from_knowledge(state, silent_sources[:3])
 
     # ── Multimodal synthesis ─────────────────────────────────────────────────
     await _run_multimodal_synthesis(state, blocks, allow_timeline=True)
@@ -770,13 +841,11 @@ RESEARCH_MISSION:
         state["has_research_missions"] = True
 
     if not blocks:
-        mission = build_research_mission_block(request.topic, [])
-        blocks.append({
-            **mission,
-            "block_type": BlockType.RESEARCH_MISSION.value,
-            "evidence":   [],
-        })
-        state["has_research_missions"] = True
+        logger.info(
+            f"[JusticeAgent] No blocks generated for '{request.topic}' — "
+            "generating lesson from knowledge"
+        )
+        blocks = await _generate_from_knowledge(state, [])
 
     # ── Multimodal synthesis ─────────────────────────────────────────────────
     await _run_multimodal_synthesis(state, blocks, allow_timeline=True)
