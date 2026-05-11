@@ -7,6 +7,7 @@ import {
   Swanky_and_Moo_Moo,
 } from "next/font/google";
 import localFont from 'next/font/local';
+import Script from "next/script";
 import "./globals.css";
 
 const inter = Inter({
@@ -71,6 +72,22 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      {/*
+        Patch customElements.define to be idempotent before any third-party
+        scripts (e.g. Vercel toolbar) load. Without this guard, scripts that
+        call define() more than once — or that are injected by both the app
+        and the Vercel platform — throw "already been defined" errors.
+      */}
+      <Script id="custom-elements-guard" strategy="beforeInteractive">{`
+        (function () {
+          var _define = window.customElements.define.bind(window.customElements);
+          window.customElements.define = function (name, constructor, options) {
+            if (!window.customElements.get(name)) {
+              _define(name, constructor, options);
+            }
+          };
+        })();
+      `}</Script>
       <body
         className={`${inter.variable} ${emilysCandy.variable} ${kalam.variable} ${kranky.variable} ${permanentMarker.variable} ${swankyAndMooMoo.variable} antialiased`}
       >
