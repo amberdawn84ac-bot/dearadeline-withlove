@@ -3,16 +3,21 @@
  *
  * Next.js → FastAPI SSE translation bridge.
  *
- * Receives a POST from useChat({ transport: new DefaultChatTransport({ api: '/api/lesson' }) }),
- * calls FastAPI POST /brain/lesson/stream, and translates the SSE events into the
- * Vercel AI SDK Data Stream Protocol.
+ * Translates FastAPI SSE events into the ai@6 UI Message Stream format
+ * (newline-delimited JSON objects) consumed by DefaultChatTransport.
  *
- * Data Stream Protocol format:
- *   0:"text chunk"\n        — text content
- *   2:[{"key":"value"}]\n    — data annotation (arbitrary JSON array)
- *   9:[{"toolCallId":"..."}]\n — tool call  (SDK v3: must be a JSON array)
- *   a:[{"toolCallId":"..."}]\n — tool result (SDK v3: must be a JSON array)
- *   d:{"finishReason":"stop"}\n — finish marker
+ * Chunk types emitted:
+ *   {"type":"start"}
+ *   {"type":"text-start","id":"t0"}
+ *   {"type":"text-delta","id":"t0","delta":"..."}
+ *   {"type":"text-end","id":"t0"}
+ *   {"type":"data-status","data":{"message":"..."}}
+ *   {"type":"data-block","data":{"block":{...}}}
+ *   {"type":"data-done","data":{"title":"..."}}
+ *   {"type":"data-error","data":{"message":"..."}}
+ *   {"type":"tool-input-available","toolCallId":"...","toolName":"...","input":{...},"dynamic":true}
+ *   {"type":"tool-output-available","toolCallId":"...","output":{...}}
+ *   {"type":"finish","finishReason":"stop"}
  */
 
 import { NextRequest } from "next/server";
@@ -27,25 +32,24 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+function chunk(obj: unknown): string {
+  return JSON.stringify(obj) + "\n";
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
-
-  // useChat sends { messages: [...] }. The last user message contains our request payload.
-  // We pass the raw body through as lesson_request fields.
   const lessonRequest = body.lesson_request ?? body;
 
-  // Supabase stores tokens in localStorage (not HttpOnly cookies), so we
-  // require the client to forward the Bearer token in the Authorization header.
   const resolvedAuth = req.headers.get("authorization") ?? "";
   if (!resolvedAuth) {
     return new Response(
-      `2:[{"type":"error","message":"Missing Authorization header — please log in again"}]\n` +
-      `d:{"finishReason":"error"}\n`,
+      chunk({ type: "data-error", data: { message: "Missing Authorization header — please log in again" } }) +
+      chunk({ type: "finish", finishReason: "error" }),
       {
         status: 200,
         headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-          "x-vercel-ai-data-stream": "v1",
+          "Content-Type": "application/x-ndjson",
+          "x-vercel-ai-ui-message-stream": "v1",
         },
       }
     );
@@ -57,19 +61,19 @@ export async function POST(req: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(resolvedAuth ? { Authorization: resolvedAuth } : {}),
+        Authorization: resolvedAuth,
       },
       body: JSON.stringify(lessonRequest),
     });
   } catch (err) {
     return new Response(
-      `2:[{"type":"error","message":"Cannot reach adeline-brain: ${err}"}]\n` +
-      `d:{"finishReason":"error"}\n`,
+      chunk({ type: "data-error", data: { message: `Cannot reach adeline-brain: ${err}` } }) +
+      chunk({ type: "finish", finishReason: "error" }),
       {
         status: 200,
         headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-          "x-vercel-ai-data-stream": "v1",
+          "Content-Type": "application/x-ndjson",
+          "x-vercel-ai-ui-message-stream": "v1",
         },
       }
     );
@@ -78,19 +82,18 @@ export async function POST(req: NextRequest) {
   if (!upstream.ok || !upstream.body) {
     const detail = await upstream.text().catch(() => "");
     return new Response(
-      `2:[{"type":"error","message":"Backend error ${upstream.status}: ${detail}"}]\n` +
-      `d:{"finishReason":"error"}\n`,
+      chunk({ type: "data-error", data: { message: `Backend error ${upstream.status}: ${detail}` } }) +
+      chunk({ type: "finish", finishReason: "error" }),
       {
         status: 200,
         headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-          "x-vercel-ai-data-stream": "v1",
+          "Content-Type": "application/x-ndjson",
+          "x-vercel-ai-ui-message-stream": "v1",
         },
       }
     );
   }
 
-  // Stream-transform: FastAPI SSE → Vercel AI SDK Data Stream Protocol
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
 
@@ -98,9 +101,28 @@ export async function POST(req: NextRequest) {
     async start(controller) {
       const reader = upstream.body!.getReader();
       let buffer = "";
+      let textStarted = false;
+      let finished = false;
 
       const enqueue = (line: string) =>
         controller.enqueue(encoder.encode(line));
+
+      const ensureTextStarted = () => {
+        if (!textStarted) {
+          enqueue(chunk({ type: "text-start", id: "t0" }));
+          textStarted = true;
+        }
+      };
+
+      const closeStream = (finishReason: string) => {
+        if (finished) return;
+        finished = true;
+        if (textStarted) enqueue(chunk({ type: "text-end", id: "t0" }));
+        enqueue(chunk({ type: "finish", finishReason }));
+      };
+
+      // Signal stream start
+      enqueue(chunk({ type: "start" }));
 
       let firstChunk = true;
 
@@ -131,74 +153,60 @@ export async function POST(req: NextRequest) {
 
             switch (event.type) {
               case "status": {
-                const statusMsg = String(event.message ?? "");
-                // 0: — text chunk so useChat registers content and activates
-                enqueue(`0:${JSON.stringify(statusMsg)}\n`);
-                // 2: — data annotation for UI status display
-                enqueue(
-                  `2:[${JSON.stringify({ type: "status", message: statusMsg })}]\n`
-                );
+                const msg = String(event.message ?? "");
+                ensureTextStarted();
+                enqueue(chunk({ type: "text-delta", id: "t0", delta: msg }));
+                enqueue(chunk({ type: "data-status", data: { message: msg } }));
                 break;
               }
 
               case "block": {
                 const blockContent = (event.block as Record<string, unknown>)?.content as string | undefined;
-                // 0: — text chunk: emit the block's text content so useChat stays active
                 if (blockContent) {
-                  enqueue(`0:${JSON.stringify(blockContent + "\n\n")}\n`);
+                  ensureTextStarted();
+                  enqueue(chunk({ type: "text-delta", id: "t0", delta: blockContent + "\n\n" }));
                 }
-                // 2: — data annotation carries the full structured block
-                enqueue(
-                  `2:[${JSON.stringify({ type: "block", block: event.block })}]\n`
-                );
+                enqueue(chunk({ type: "data-block", data: { block: event.block } }));
                 break;
               }
 
               case "tool_call": {
                 const toolCallId = crypto.randomUUID();
-                // 9: — tool call part (SDK v3 requires a JSON ARRAY)
-                enqueue(
-                  `9:[${JSON.stringify({
-                    toolCallId,
-                    toolName: event.name,
-                    args: event.props,
-                  })}]\n`
-                );
-                // a: — tool result array (immediately resolve so toolInvocation.state === "result")
-                enqueue(
-                  `a:[${JSON.stringify({
-                    toolCallId,
-                    result: event.props,
-                  })}]\n`
-                );
+                enqueue(chunk({
+                  type: "tool-input-available",
+                  toolCallId,
+                  toolName: String(event.name ?? "unknown"),
+                  input: event.props,
+                  dynamic: true,
+                }));
+                enqueue(chunk({
+                  type: "tool-output-available",
+                  toolCallId,
+                  output: event.props,
+                }));
                 break;
               }
 
-              case "done":
-                // 2: — data annotation for done event
-                enqueue(
-                  `2:[${JSON.stringify({ type: "done", ...event })}]\n`
-                );
-                // d: — finish marker
-                enqueue(`d:${JSON.stringify({ finishReason: "stop" })}\n`);
+              case "done": {
+                enqueue(chunk({ type: "data-done", data: { title: event.title } }));
+                closeStream("stop");
                 break;
+              }
 
-              case "error":
-                enqueue(
-                  `2:[${JSON.stringify({ type: "error", message: event.message })}]\n`
-                );
-                enqueue(`d:${JSON.stringify({ finishReason: "error" })}\n`);
+              case "error": {
+                enqueue(chunk({ type: "data-error", data: { message: String(event.message ?? "") } }));
+                closeStream("error");
                 break;
+              }
             }
           }
         }
       } catch (err) {
-        enqueue(
-          `2:[${JSON.stringify({ type: "error", message: String(err) })}]\n`
-        );
-        enqueue(`d:${JSON.stringify({ finishReason: "error" })}\n`);
+        enqueue(chunk({ type: "data-error", data: { message: String(err) } }));
+        closeStream("error");
       } finally {
         reader.releaseLock();
+        closeStream("stop");
         controller.close();
       }
     },
@@ -207,8 +215,8 @@ export async function POST(req: NextRequest) {
   return new Response(readable, {
     status: 200,
     headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "x-vercel-ai-data-stream": "v1",
+      "Content-Type": "application/x-ndjson",
+      "x-vercel-ai-ui-message-stream": "v1",
       "Cache-Control": "no-cache",
       "X-Accel-Buffering": "no",
     },
