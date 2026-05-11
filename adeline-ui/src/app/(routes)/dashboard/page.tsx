@@ -302,10 +302,10 @@ function DashboardContent() {
                 .filter((m) => m.role === 'assistant')
                 .slice(-1)
                 .map((m) => {
-                  const text = m.parts
-                    ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+                  const text = (m.parts ?? [])
+                    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
                     .map((p) => p.text)
-                    .join('') ?? m.content ?? '';
+                    .join('');
                   return text ? (
                     <div
                       key={m.id}
