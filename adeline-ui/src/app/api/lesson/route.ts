@@ -21,6 +21,7 @@
  */
 
 import { NextRequest } from "next/server";
+import { logger } from "@/lib/logger";
 
 const BRAIN_URL = (
   process.env.NEXT_PUBLIC_BRAIN_URL ||
@@ -148,7 +149,7 @@ export async function POST(req: NextRequest) {
             }
 
             if (firstChunk) {
-              console.log("[lesson/route] First SSE event from brain:", JSON.stringify(event).slice(0, 200));
+              logger.debug("[lesson/route] First SSE event from brain:", JSON.stringify(event).slice(0, 200));
               firstChunk = false;
             }
 

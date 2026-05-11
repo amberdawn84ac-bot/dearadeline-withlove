@@ -19,6 +19,23 @@ import { useState, useEffect } from "react";
 import { clsx } from "clsx";
 import { motion } from "framer-motion";
 import type { LessonBlockResponse, Evidence, MindMapData, TimelineData, MnemonicData, NarratedSlideData, QuizData, FlashcardData } from "@/lib/brain-client";
+
+export interface ExtendedEvidence extends Evidence {
+  source_type?: "PRIMARY_SOURCE" | "CROSS_TRACK";
+}
+
+export interface ExtendedBlockResponse extends LessonBlockResponse {
+  interactive_sim_data?: {
+    title?: string;
+    instructions?: string;
+  };
+  book_id?: string;
+  book_title?: string;
+  book_author?: string;
+  epub_url?: string;
+  cover_url?: string;
+  lexile_level?: string;
+}
 import { MindMap } from "@/components/gen-ui/patterns/MindMap";
 import { Timeline } from "@/components/gen-ui/patterns/Timeline";
 import { QuizCard } from "@/components/gen-ui/patterns/QuizCard";
@@ -259,7 +276,7 @@ function EvidenceFooter({ evidence }: { evidence: Evidence[] }) {
           {evidence.map((ev, i) => (
             <SourceBadge
               key={ev.source_id || i}
-              sourceType={(ev as any).source_type ?? "PRIMARY_SOURCE"}
+              sourceType={(ev as ExtendedEvidence).source_type ?? "PRIMARY_SOURCE"}
               sourceTitle={ev.source_title}
               sourceUrl={ev.source_url}
               citationYear={ev.witness_citation?.year ?? undefined}
@@ -572,7 +589,7 @@ function FlashcardBlock({ block }: { block: LessonBlockResponse }) {
 // ── INTERACTIVE_SIM block (placeholder) ──────────────────────────────────────
 
 function InteractiveSimBlock({ block }: { block: LessonBlockResponse }) {
-  const sim = (block as any).interactive_sim_data;
+  const sim = (block as ExtendedBlockResponse).interactive_sim_data;
   return (
     <div
       className="rounded-xl p-5 space-y-3"
@@ -673,12 +690,13 @@ function NarratedSlideBlock({ block }: { block: LessonBlockResponse }) {
 // ── BOOK_SUGGESTION block ──────────────────────────────────────────────────────
 
 function BookSuggestionBlock({ block }: { block: LessonBlockResponse }) {
-  const bookId = (block as any).book_id || "";
-  const bookTitle = (block as any).book_title || "Suggested Book";
-  const bookAuthor = (block as any).book_author || "";
-  const epubUrl = (block as any).epub_url || "";
-  const coverUrl = (block as any).cover_url || "";
-  const lexileLevel = (block as any).lexile_level;
+  const extBlock = block as ExtendedBlockResponse;
+  const bookId = extBlock.book_id || "";
+  const bookTitle = extBlock.book_title || "Suggested Book";
+  const bookAuthor = extBlock.book_author || "";
+  const epubUrl = extBlock.epub_url || "";
+  const coverUrl = extBlock.cover_url || "";
+  const lexileLevel = extBlock.lexile_level;
 
   return (
     <div

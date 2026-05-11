@@ -387,18 +387,16 @@ async def stream_lesson(
                 except Exception as e:
                     logger.warning(f"[stream_lesson] Failed to parse done event for background tasks: {e}")
 
-        # Schedule registrar after stream is fully consumed
-        background_tasks.add_task(
-            _run_registrar_background,
+        # Run registrar synchronously after stream is fully consumed
+        await _run_registrar_background(
             registrar_snapshot,
             lesson_request,
             lesson_id,
         )
 
-        # Schedule canonical save after stream is fully consumed (only if not from cache)
+        # Run canonical save synchronously after stream is fully consumed (only if not from cache)
         if canonical_snapshot and not canonical_snapshot.get("from_canonical"):
-            background_tasks.add_task(
-                _save_canonical_background,
+            await _save_canonical_background(
                 canonical_snapshot,
             )
 
