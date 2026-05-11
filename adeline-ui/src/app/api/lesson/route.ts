@@ -33,7 +33,7 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 function chunk(obj: unknown): string {
-  return JSON.stringify(obj) + "\n";
+  return `data: ${JSON.stringify(obj)}\n\n`;
 }
 
 export async function POST(req: NextRequest) {
@@ -119,6 +119,7 @@ export async function POST(req: NextRequest) {
         finished = true;
         if (textStarted) enqueue(chunk({ type: "text-end", id: "t0" }));
         enqueue(chunk({ type: "finish", finishReason }));
+        enqueue("data: [DONE]\n\n");
       };
 
       // Signal stream start
