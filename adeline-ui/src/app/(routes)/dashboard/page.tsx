@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useCallback, useEffect } from 'react';
+import { Suspense, useState, useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Loader2, ArrowLeft, RefreshCw, Award, Hammer, Clock } from 'lucide-react';
 import { useChat } from '@ai-sdk/react';
@@ -72,22 +72,27 @@ function DashboardContent() {
   const [currentLessonMeta, setCurrentLessonMeta] = useState<{ topic: string; track: Track } | null>(null);
   const router = useRouter();
 
+  // Stable transport reference — must not be recreated on every render or useChat
+  // will re-initialize its internal reducer and cause an infinite update loop.
+  const chatTransport = useMemo(() => new DefaultChatTransport({
+    api: '/api/lesson',
+    fetch: async (url, options) => {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      return fetch(url, {
+        ...options,
+        headers: {
+          ...(options?.headers as Record<string, string> | undefined),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), []);
+
   // useChat drives lesson streaming via /api/lesson translation bridge
   const { messages, setMessages, sendMessage: append, status: chatStatus } = useChat({
-    transport: new DefaultChatTransport({
-      api: '/api/lesson',
-      fetch: async (url, options) => {
-        const { data } = await supabase.auth.getSession();
-        const token = data.session?.access_token;
-        return fetch(url, {
-          ...options,
-          headers: {
-            ...(options?.headers as Record<string, string> | undefined),
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        });
-      },
-    }),
+    transport: chatTransport,
     onError: (err: Error) => {
       console.error('[Dashboard] Lesson stream error:', err);
     },

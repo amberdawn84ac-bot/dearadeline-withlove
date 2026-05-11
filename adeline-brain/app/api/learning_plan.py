@@ -864,6 +864,7 @@ async def get_learning_plan(
             percentage_complete=0.0,
             credits_remaining=TOTAL_REQUIRED,
             on_track=False,
+            is_high_school=False,
         )
         credit_gaps = _calculate_credit_gaps(credits_by_bucket, grade_level)
 
