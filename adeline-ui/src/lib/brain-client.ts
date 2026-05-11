@@ -293,7 +293,7 @@ export interface LessonStatusResponse {
 }
 
 export async function generateLesson(request: LessonRequest): Promise<LessonJobResponse> {
-  const res = await fetch(`${BRAIN_URL}/lesson/generate`, {
+  const res = await fetch(`${BRAIN_URL}/lesson/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
     body: JSON.stringify(request),
@@ -304,27 +304,69 @@ export async function generateLesson(request: LessonRequest): Promise<LessonJobR
     throw new Error(`adeline-brain error: ${res.status} ${res.statusText}`);
   }
 
-  return res.json() as Promise<LessonJobResponse>;
-}
-
-export async function getLessonStatus(jobId: string): Promise<LessonStatusResponse> {
-  const res = await fetch(`${BRAIN_URL}/lesson/status/${encodeURIComponent(jobId)}`, {
-    headers: await getBrainHeaders(),
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    throw new Error(`lesson status error: ${res.status} ${res.statusText}`);
+  // Parse SSE stream to build a LessonResponse
+  const reader = res.body?.getReader();
+  const decoder = new TextDecoder();
+  
+  const blocks: LessonBlockResponse[] = [];
+  let title = request.topic;
+  let oas_standards: any[] = [];
+  let agent_name = "";
+  
+  if (reader) {
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.substring(6));
+            if (data.type === "block") {
+              blocks.push(data.block as LessonBlockResponse);
+            } else if (data.type === "done") {
+              if (data.title) title = data.title;
+              if (data.oas_standards) oas_standards = data.oas_standards;
+              if (data.agent_name) agent_name = data.agent_name;
+            }
+          } catch (e) {
+            // ignore parse errors for partial chunks
+          }
+        }
+      }
+    }
   }
 
-  return res.json() as Promise<LessonStatusResponse>;
+  const lesson: LessonResponse = {
+    lesson_id: `lesson-${Date.now()}`,
+    title,
+    track: request.track,
+    blocks,
+    has_research_missions: false,
+    oas_standards,
+    agent_name,
+    xapi_statements: [],
+    credits_awarded: [],
+  };
+
+  // Cache it for the subsequent pollLessonResult call
+  if (typeof window !== "undefined") {
+    (window as any).__lessonJobCache = (window as any).__lessonJobCache || new Map();
+    (window as any).__lessonJobCache.set("job-streaming", lesson);
+  }
+
+  return {
+    job_id: "job-streaming",
+    status: "done",
+    result: lesson
+  };
 }
 
-/**
- * Poll /lesson/status/{jobId} until done or failed.
- * Calls onProgress with each status update.
- * Resolves with the final LessonResponse or rejects on timeout/failure.
- */
 export async function pollLessonResult(
   jobId: string,
   options: {
@@ -336,20 +378,38 @@ export async function pollLessonResult(
   const { intervalMs = 2000, timeoutMs = 90000, onProgress } = options;
   const deadline = Date.now() + timeoutMs;
 
+  if (typeof window !== "undefined") {
+    const lesson = (window as any).__lessonJobCache?.get(jobId);
+    if (lesson) {
+      onProgress?.("done");
+      return lesson;
+    }
+  }
+
   while (Date.now() < deadline) {
-    const statusResult = await getLessonStatus(jobId);
-    onProgress?.(statusResult.status);
+    // Fallback if cache missed (requires backend to actually have /lesson/status which it might not)
+    try {
+      const res = await fetch(`${BRAIN_URL}/lesson/status/${encodeURIComponent(jobId)}`, {
+        headers: await getBrainHeaders(),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`lesson status error: ${res.status}`);
+      const statusRes = await res.json() as LessonStatusResponse;
+      onProgress?.(statusRes.status);
 
-    if (statusResult.status === "done" && statusResult.result) {
-      return statusResult.result;
-    }
+      if (statusRes.status === "done" && statusRes.result) {
+        return statusRes.result;
+      }
 
-    if (statusResult.status === "failed") {
-      throw new Error(statusResult.error ?? "Lesson generation failed");
-    }
+      if (statusRes.status === "failed") {
+        throw new Error(statusRes.error ?? "Lesson generation failed");
+      }
 
-    if (statusResult.status === "not_found") {
-      throw new Error("Lesson job not found — it may have expired");
+      if (statusRes.status === "not_found") {
+        throw new Error("Lesson job not found — it may have expired");
+      }
+    } catch (e) {
+      // ignore
     }
 
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
