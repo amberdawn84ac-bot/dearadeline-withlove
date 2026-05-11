@@ -348,6 +348,7 @@ export async function generateLesson(request: LessonRequest): Promise<LessonJobR
     track: request.track,
     blocks,
     has_research_missions: false,
+    researcher_activated: false,
     oas_standards,
     agent_name,
     xapi_statements: [],
