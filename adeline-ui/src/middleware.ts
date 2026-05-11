@@ -27,8 +27,15 @@ const PUBLIC_PATHS = ['/', '/login', '/signup', '/pricing', '/style-guide']
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Next.js internals and static files always pass through
-  if (pathname.startsWith('/_next') || pathname.startsWith('/api')) {
+  // Next.js internals, static files, and brain auth endpoints always pass through.
+  // /brain/auth/* must be reachable before a Next.js session exists (e.g. immediately
+  // after Supabase signUp, when the cookie-set POST fires before the session cookie
+  // propagates to the middleware).
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/brain/auth/')
+  ) {
     return NextResponse.next()
   }
 
