@@ -18,7 +18,7 @@
  * - Clean message bubbles with clear user/assistant distinction
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { MessageCircle, X, ChevronLeft, Send } from 'lucide-react';
@@ -52,14 +52,18 @@ export function ReaderChatSidebar({ studentId, isOpen, onToggle }: ReaderChatSid
   // Local input state (since this version of useChat doesn't provide it)
   const [inputValue, setInputValue] = useState('');
 
+  // Stable transport reference — recreating this inline on every render causes
+  // useChat to re-initialize its reducer and triggers an infinite update loop.
+  const chatTransport = useMemo(() => new DefaultChatTransport({
+    api: '/api/reader-chat',
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), []);
+
   // Initialize useChat with transport for SDK v3
   // Auth is handled via HttpOnly cookies, automatically sent by browser
   const chat = useChat({
     id: `reader-${studentId}-${currentBook?.id || 'unknown'}`,
-    transport: new DefaultChatTransport({
-      api: '/api/reader-chat',
-      // No Authorization header needed - cookie auth is automatic
-    }),
+    transport: chatTransport,
   });
   
   const { messages, sendMessage, status, setMessages } = chat;
