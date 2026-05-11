@@ -30,7 +30,7 @@ const BRAIN_URL = (
   process.env.BRAIN_INTERNAL_URL ||
   process.env.BRAIN_URL ||
   process.env.NEXT_PUBLIC_BRAIN_URL ||
-  'http://localhost:8000'
+  'https://dearadeline-withlove-production.up.railway.app'
 ).replace(/\/$/, '')
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {

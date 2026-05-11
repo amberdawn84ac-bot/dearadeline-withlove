@@ -18,9 +18,10 @@
 import { NextRequest } from "next/server";
 
 const BRAIN_URL = (
-  process.env.NEXT_PUBLIC_BRAIN_URL ||
   process.env.BRAIN_INTERNAL_URL ||
-  "http://localhost:8000"
+  process.env.BRAIN_URL ||
+  process.env.NEXT_PUBLIC_BRAIN_URL ||
+  "https://dearadeline-withlove-production.up.railway.app"
 ).replace(/\/$/, "");
 
 export const runtime = "nodejs";

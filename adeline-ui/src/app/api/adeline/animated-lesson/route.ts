@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const brainUrl = process.env.NEXT_PUBLIC_BRAIN_URL ?? "http://localhost:8000";
+  const brainUrl = process.env.NEXT_PUBLIC_BRAIN_URL ?? "https://dearadeline-withlove-production.up.railway.app";
 
   const upstream = await fetch(`${brainUrl}/lesson/animated`, {
     method: "POST",
