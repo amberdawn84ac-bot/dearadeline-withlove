@@ -34,7 +34,6 @@ export interface ExtendedBlockResponse extends LessonBlockResponse {
   book_author?: string;
   epub_url?: string;
   cover_url?: string;
-  lexile_level?: string;
 }
 import { MindMap } from "@/components/gen-ui/patterns/MindMap";
 import { Timeline } from "@/components/gen-ui/patterns/Timeline";
