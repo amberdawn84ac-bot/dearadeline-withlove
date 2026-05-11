@@ -230,6 +230,7 @@ app.include_router(realtime_router, prefix="/brain")
 app.include_router(conversation_router, prefix="/brain")
 app.include_router(animated_lessons_router, prefix="/brain")
 app.include_router(learning_path_router, prefix="/brain")
+app.include_router(daily_bread_router, prefix="/brain")
 
 
 @app.get("/health")
