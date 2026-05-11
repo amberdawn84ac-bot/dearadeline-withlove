@@ -283,7 +283,8 @@ export interface LessonResponse {
 
 export interface LessonJobResponse {
   job_id: string;
-  status: "queued";
+  status: "queued" | "done";
+  result?: LessonResponse;
 }
 
 export interface LessonStatusResponse {
