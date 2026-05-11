@@ -4,7 +4,9 @@ import { Suspense, useState, useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Loader2, ArrowLeft, RefreshCw, Award, Hammer, Clock } from 'lucide-react';
 import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport, isDataUIPart, isToolUIPart, getToolName } from 'ai';
+import { DefaultChatTransport, isToolUIPart, getToolName } from 'ai';
+import { parseLessonDataParts, extractTextParts } from '@/types/lesson-stream';
+import type { LessonAnnotation } from '@/types/lesson-stream';
 import { StudentStatusBar } from '@/components/StudentStatusBar';
 import { AdelineChatPanel } from '@/components/AdelineChatPanel';
 import { SpacedRepWidget } from '@/components/dashboard/SpacedRepWidget';
@@ -14,18 +16,13 @@ import { MasteryCheckWidget } from '@/components/gen-ui/widgets/MasteryCheckWidg
 import { LabMissionWidget } from '@/components/gen-ui/widgets/LabMissionWidget';
 import { getLearningPlan } from '@/lib/brain-client';
 import { supabase } from '@/lib/supabase';
-import type { LessonResponse, LessonBlockResponse, Track, LessonSuggestion, ProjectSuggestion, BookRecommendation } from '@/lib/brain-client';
+import type { LessonResponse, Track, LessonSuggestion, ProjectSuggestion, BookRecommendation } from '@/lib/brain-client';
 import { RecommendedBooks } from '@/components/dashboard/RecommendedBooks';
 import GenUIRendererWithHighlightAsk from '@/components/GenUIRenderer';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-// Discriminated union matching what /api/lesson sends as 2: data stream annotations
-type LessonAnnotation =
-  | { type: 'block'; block: LessonBlockResponse }
-  | { type: 'done'; title?: string }
-  | { type: 'status'; message: string }
-  | { type: 'error'; message: string };
+// LessonAnnotation is imported from @/types/lesson-stream (see above).
 
 // Structural type for a resolved tool call — matches ai@6 ToolUIPart output-available state.
 interface ResultInvocation {
@@ -101,22 +98,15 @@ function DashboardContent() {
 
   const isStreaming = chatStatus === 'streaming' || chatStatus === 'submitted';
 
-  // Derive everything from the last assistant message parts — ai@6 stores data as DataUIPart
-  // and tool invocations as ToolUIPart in m.parts; there is no m.annotations or m.toolInvocations.
+  // Derive everything from the last assistant message parts.
+  // ai@6 stores structured data as DataUIPart and tool calls as ToolUIPart inside m.parts.
+  // There is no m.annotations or m.toolInvocations on UIMessage.
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+  // Keep inferred UIPart[] so AI SDK helpers (isToolUIPart etc.) remain typed.
   const msgParts = lastAssistant?.parts ?? [];
 
-  // Reconstruct LessonAnnotation union from data-* parts so downstream filtering is unchanged.
-  const lessonAnnotations: LessonAnnotation[] = msgParts
-    .filter(isDataUIPart)
-    .map((p): LessonAnnotation | null => {
-      if (p.type === 'data-block') return { type: 'block', ...(p.data as { block: LessonBlockResponse }) };
-      if (p.type === 'data-done') return { type: 'done', ...(p.data as { title?: string }) };
-      if (p.type === 'data-status') return { type: 'status', ...(p.data as { message: string }) };
-      if (p.type === 'data-error') return { type: 'error', ...(p.data as { message: string }) };
-      return null;
-    })
-    .filter((a): a is LessonAnnotation => a !== null);
+  // parseLessonDataParts accepts unknown[] and uses runtime guards — no `as` casts.
+  const lessonAnnotations: LessonAnnotation[] = parseLessonDataParts(msgParts);
 
   const lessonBlocks = lessonAnnotations
     .filter((a): a is Extract<LessonAnnotation, { type: 'block' }> => a.type === 'block')
@@ -296,10 +286,7 @@ function DashboardContent() {
                 .filter((m) => m.role === 'assistant')
                 .slice(-1)
                 .map((m) => {
-                  const text = (m.parts ?? [])
-                    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
-                    .map((p) => p.text)
-                    .join('');
+                  const text = extractTextParts(m.parts ?? []);
                   return text ? (
                     <div
                       key={m.id}
