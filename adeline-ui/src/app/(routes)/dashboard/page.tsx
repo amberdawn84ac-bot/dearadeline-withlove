@@ -35,6 +35,17 @@ interface ResultInvocation {
   result: Record<string, unknown>;
 }
 
+// ai@6 UIMessage uses parts for structured content; extend locally to surface the
+// annotation and toolInvocation data that /api/lesson streams via 2:/9:/a: events.
+type DashboardMessage = {
+  id: string;
+  role: string;
+  content: string;
+  parts?: Array<{ type: string; text?: string }>;
+  annotations?: unknown[];
+  toolInvocations?: unknown[];
+};
+
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const SOURCE_BADGES: Record<string, { bg: string; text: string; label: string }> = {
@@ -101,7 +112,7 @@ function DashboardContent() {
 
   // Derive everything from the last assistant message — no manual state parsing.
   // If blocks are absent here, the fix is in /api/lesson stream format, not this file.
-  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+  const lastAssistant = ([...messages] as DashboardMessage[]).reverse().find((m) => m.role === 'assistant');
   const lessonAnnotations = (lastAssistant?.annotations ?? []) as LessonAnnotation[];
   const lessonBlocks = lessonAnnotations
     .filter((a): a is Extract<LessonAnnotation, { type: 'block' }> => a.type === 'block')
