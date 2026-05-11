@@ -16,6 +16,7 @@ import { getLearningPlan } from '@/lib/brain-client';
 import { supabase } from '@/lib/supabase';
 import type { LessonResponse, LessonBlockResponse, Track, LessonSuggestion, ProjectSuggestion, BookRecommendation } from '@/lib/brain-client';
 import { RecommendedBooks } from '@/components/dashboard/RecommendedBooks';
+import GenUIRendererWithHighlightAsk from '@/components/GenUIRenderer';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -281,46 +282,14 @@ function DashboardContent() {
 
             {/* Standard toolInvocations render — no manual state, no data-part parsing */}
             {lessonBlocks.length > 0 ? (
-              lessonBlocks.map((block, idx) => {
-                const widget = lessonToolInvocations.find(
-                  (t) =>
-                    (t.toolName === 'render_quiz_widget' || t.toolName === 'render_lab_widget') &&
-                    (t.result as Record<string, unknown>)?.blockId === block.block_id,
-                );
-                return (
-                  <div key={idx} className="mb-4">
-                    <div className="rounded-2xl border border-[#E7DAC3] bg-white p-4">
-                      <p className="text-xs font-bold uppercase tracking-widest text-[#BD6809] mb-1">
-                        {block.block_type?.replace(/_/g, ' ')}
-                      </p>
-                      <p className="text-sm text-[#2F4731]/80 leading-relaxed whitespace-pre-wrap">
-                        {block.content}
-                      </p>
-                    </div>
-
-                    {widget?.toolName === 'render_quiz_widget' && (
-                      <MasteryCheckWidget
-                        blockId={widget.result.blockId as string}
-                        lessonId={widget.result.lessonId as string}
-                        track={widget.result.track as string}
-                        title={widget.result.title as string}
-                        content={widget.result.content as string}
-                        tags={widget.result.tags as string[] | undefined}
-                      />
-                    )}
-                    {widget?.toolName === 'render_lab_widget' && (
-                      <LabMissionWidget
-                        blockId={widget.result.blockId as string}
-                        lessonId={widget.result.lessonId as string}
-                        track={widget.result.track as string}
-                        title={widget.result.title as string}
-                        content={widget.result.content as string}
-                        isHomestead={widget.result.isHomestead as boolean | undefined}
-                      />
-                    )}
-                  </div>
-                );
-              })
+              <GenUIRendererWithHighlightAsk
+                lessonId={doneEvent?.title ?? `lesson-${Date.now()}`}
+                blocks={lessonBlocks}
+                isHomestead={false}
+                oasStandards={[]}
+                agentName=""
+                studentId={studentId}
+              />
             ) : (
               // While streaming and no blocks yet, show the raw text content
               messages
