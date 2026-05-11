@@ -4,7 +4,7 @@ import { Suspense, useState, useCallback, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Loader2, ArrowLeft, RefreshCw, Award, Hammer, Clock } from 'lucide-react';
 import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport } from 'ai';
+import { DefaultChatTransport, isDataUIPart, isToolUIPart, getToolName } from 'ai';
 import { StudentStatusBar } from '@/components/StudentStatusBar';
 import { AdelineChatPanel } from '@/components/AdelineChatPanel';
 import { SpacedRepWidget } from '@/components/dashboard/SpacedRepWidget';
@@ -26,12 +26,12 @@ type LessonAnnotation =
   | { type: 'status'; message: string }
   | { type: 'error'; message: string };
 
-// Structural type for a resolved tool call — no SDK generic dependency.
+// Structural type for a resolved tool call — matches ai@6 ToolUIPart output-available state.
 interface ResultInvocation {
-  state: 'result';
+  state: 'output-available';
   toolCallId: string;
   toolName: string;
-  args: unknown;
+  input: unknown;
   result: Record<string, unknown>;
 }
 
@@ -52,10 +52,6 @@ const DIFFICULTY_BADGES: Record<string, { bg: string; text: string }> = {
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-function isResultInvocation(t: unknown): t is ResultInvocation {
-  return typeof t === 'object' && t !== null && (t as ResultInvocation).state === 'result';
-}
 
 // ── DashboardContent ───────────────────────────────────────────────────────────
 
@@ -99,10 +95,23 @@ function DashboardContent() {
 
   const isStreaming = chatStatus === 'streaming' || chatStatus === 'submitted';
 
-  // Derive everything from the last assistant message — no manual state parsing.
-  // If blocks are absent here, the fix is in /api/lesson stream format, not this file.
+  // Derive everything from the last assistant message parts — ai@6 stores data as DataUIPart
+  // and tool invocations as ToolUIPart in m.parts; there is no m.annotations or m.toolInvocations.
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
-  const lessonAnnotations = (lastAssistant?.annotations ?? []) as LessonAnnotation[];
+  const msgParts = lastAssistant?.parts ?? [];
+
+  // Reconstruct LessonAnnotation union from data-* parts so downstream filtering is unchanged.
+  const lessonAnnotations: LessonAnnotation[] = msgParts
+    .filter(isDataUIPart)
+    .map((p): LessonAnnotation | null => {
+      if (p.type === 'data-block') return { type: 'block', ...(p.data as { block: LessonBlockResponse }) };
+      if (p.type === 'data-done') return { type: 'done', ...(p.data as { title?: string }) };
+      if (p.type === 'data-status') return { type: 'status', ...(p.data as { message: string }) };
+      if (p.type === 'data-error') return { type: 'error', ...(p.data as { message: string }) };
+      return null;
+    })
+    .filter((a): a is LessonAnnotation => a !== null);
+
   const lessonBlocks = lessonAnnotations
     .filter((a): a is Extract<LessonAnnotation, { type: 'block' }> => a.type === 'block')
     .map((a) => a.block);
@@ -116,7 +125,18 @@ function DashboardContent() {
   const lessonStatus = isStreaming
     ? (statusEvent?.message ?? 'Adeline is preparing your lesson…')
     : '';
-  const lessonToolInvocations = (lastAssistant?.toolInvocations ?? []).filter(isResultInvocation);
+
+  // Tool invocations are ToolUIPart/DynamicToolUIPart in m.parts with state 'output-available'.
+  const lessonToolInvocations: ResultInvocation[] = msgParts
+    .filter(isToolUIPart)
+    .filter((p) => p.state === 'output-available')
+    .map((p) => ({
+      state: 'output-available' as const,
+      toolCallId: p.toolCallId,
+      toolName: getToolName(p),
+      input: p.input,
+      result: p.output as Record<string, unknown>,
+    }));
 
   // Fetch dynamic learning plan suggestions
   const fetchSuggestions = useCallback(async () => {
