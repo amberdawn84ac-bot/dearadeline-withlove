@@ -21,7 +21,7 @@ import { motion } from "framer-motion";
 import type { LessonBlockResponse, Evidence, MindMapData, TimelineData, MnemonicData, NarratedSlideData, QuizData, FlashcardData } from "@/lib/brain-client";
 
 export interface ExtendedEvidence extends Evidence {
-  source_type?: "PRIMARY_SOURCE" | "CROSS_TRACK";
+  source_type?: "PRIMARY_SOURCE" | "DECLASSIFIED_GOV" | "ARCHIVE_ORG" | "ACADEMIC_JOURNAL" | "PERSONAL_COLLECTION";
 }
 
 export interface ExtendedBlockResponse extends LessonBlockResponse {
