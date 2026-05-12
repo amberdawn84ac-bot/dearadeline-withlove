@@ -3,11 +3,149 @@
   "meta": {
     "source": "Oklahoma Academic Standards (OAS)",
     "version": "2016-rev2021",
-    "purpose": "GraphRAG seed — maps OAS standards to the 8-Track Constitution for curriculum routing in adeline-brain",
+    "purpose": "GraphRAG seed — maps OAS standards to the 10-Track Constitution for curriculum routing in adeline-brain",
     "witness_threshold": 0.85,
     "maintainer": "adeline-core/src/types.ts → Track enum is the authority"
   },
   "mappings": [
+
+    {
+      "grade": 0,
+      "subject": "English Language Arts",
+      "standard_id": "OAS.ELA.K.R.F.1",
+      "standard_text": "Demonstrate understanding of the organization and basic features of print: follow words from left to right, top to bottom, and page by page; recognize that spoken words are represented in written language; understand that words are separated by spaces in print.",
+      "track": "ENGLISH_LITERATURE",
+      "track_label": "English Language & Literature",
+      "rationale": "Print awareness is the foundation of literacy — the entry point for all truth-seeking and primary source work in Adeline.",
+      "adeline_lesson_hook": "When you look at a page, where do you start reading? Why does that matter?",
+      "homestead_adaptation": "Practice reading seed packet labels and farm sign lettering from left to right, top to bottom.",
+      "block_types_suggested": ["TEXT", "QUIZ"],
+      "difficulty": "EMERGING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.ELA.K.R.F.1",
+          "grade": 0,
+          "subject": "ELA",
+          "strand": "Reading: Foundational Skills"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "ENGLISH_LITERATURE" },
+        { "type": "FEEDS_INTO",       "target": "OAS.ELA.1.R.I.1" }
+      ]
+    },
+
+    {
+      "grade": 0,
+      "subject": "Mathematics",
+      "standard_id": "OAS.MATH.K.CC.1",
+      "standard_text": "Count to 100 by ones and by tens. Count forward beginning from a given number within the known sequence.",
+      "track": "APPLIED_MATHEMATICS",
+      "track_label": "Applied Mathematics",
+      "rationale": "Counting is the first act of mathematics — the foundation of measurement, commerce, and creation order.",
+      "adeline_lesson_hook": "Can you count the eggs in the basket? Now count by tens — how many groups of ten is that?",
+      "homestead_adaptation": "Count eggs, seeds, or fence posts on the farm. Group them by tens to practice skip counting in a real context.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "QUIZ"],
+      "difficulty": "EMERGING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.MATH.K.CC.1",
+          "grade": 0,
+          "subject": "Math",
+          "strand": "Counting & Cardinality"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "APPLIED_MATHEMATICS" },
+        { "type": "CROSS_TRACK_LINK", "target": "HOMESTEADING",
+          "reason": "Counting animals, plants, and produce is applied arithmetic" }
+      ]
+    },
+
+    {
+      "grade": 0,
+      "subject": "Science",
+      "standard_id": "OAS.SCI.K.LS.1",
+      "standard_text": "Observe, describe, and compare the basic needs of living things — plants and animals need food, water, air, and space to survive.",
+      "track": "CREATION_SCIENCE",
+      "track_label": "God's Creation & Science",
+      "rationale": "The kindergarten creation entry point — all life shares basic needs because one Creator designed the system.",
+      "adeline_lesson_hook": "What does every living thing need? Did God design that on purpose?",
+      "homestead_adaptation": "Water the garden with your child and discuss what each plant needs. Observe animals and compare their needs to ours.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION"],
+      "difficulty": "EMERGING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SCI.K.LS.1",
+          "grade": 0,
+          "subject": "Science",
+          "strand": "Life Science"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "CREATION_SCIENCE" },
+        { "type": "FEEDS_INTO",       "target": "OAS.SCI.1.LS.1" },
+        { "type": "CROSS_TRACK_LINK", "target": "HOMESTEADING",
+          "reason": "Farm stewardship depends on understanding living things' needs" }
+      ]
+    },
+
+    {
+      "grade": 0,
+      "subject": "Social Studies",
+      "standard_id": "OAS.SS.K.H.1.1",
+      "standard_text": "Distinguish between past and present; describe how things change over time using words like before, after, yesterday, today, and tomorrow.",
+      "track": "TRUTH_HISTORY",
+      "track_label": "Truth-Based History",
+      "rationale": "Time vocabulary is the kindergarten foundation for all historical reasoning — you can't read primary sources without knowing what 'long ago' means.",
+      "adeline_lesson_hook": "What happened yesterday? What is happening today? History is just the story of what happened before now.",
+      "homestead_adaptation": "Look at old and new photos of the farm. What changed? What stayed the same?",
+      "block_types_suggested": ["TEXT", "QUIZ"],
+      "difficulty": "EMERGING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SS.K.H.1.1",
+          "grade": 0,
+          "subject": "Social Studies",
+          "strand": "History"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "TRUTH_HISTORY" }
+      ]
+    },
+
+    {
+      "grade": 0,
+      "subject": "Health",
+      "standard_id": "OAS.HLT.K.HB.1",
+      "standard_text": "Identify basic healthy behaviors that affect personal health, including eating a variety of foods, drinking water, getting enough sleep, and washing hands.",
+      "track": "HEALTH_NATUROPATHY",
+      "track_label": "Health & Naturopathy",
+      "rationale": "The body as a created gift — kindergartners learn that caring for it is an act of gratitude and stewardship.",
+      "adeline_lesson_hook": "God made your body — how do we take care of something that belongs to God?",
+      "homestead_adaptation": "Make a healthy snack from the garden together and talk about where the food came from and why it's good for your body.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION"],
+      "difficulty": "EMERGING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.HLT.K.HB.1",
+          "grade": 0,
+          "subject": "Health",
+          "strand": "Health Behaviors"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "HEALTH_NATUROPATHY" },
+        { "type": "CROSS_TRACK_LINK", "target": "HOMESTEADING",
+          "reason": "Growing your own food is a foundational health practice" }
+      ]
+    },
 
     {
       "grade": 1,
@@ -16,7 +154,7 @@
       "standard_text": "Locate and use text features (e.g., title, headings, captions, bold print, glossaries, indexes, table of contents) to understand informational texts.",
       "track": "ENGLISH_LITERATURE",
       "track_label": "English Language & Literature",
-      "rationale": "Builds foundational literacy skills — navigating informational structure is the gateway to all truth-seeking in Adeline 2.0.",
+      "rationale": "Builds foundational literacy skills — navigating informational structure is the gateway to all truth-seeking in Adeline.",
       "adeline_lesson_hook": "How do titles and headings help us know what a book is really about?",
       "homestead_adaptation": "Read seed packet labels, canning jar lids, and farm almanac headings as real informational texts.",
       "block_types_suggested": ["TEXT", "QUIZ"],
@@ -33,7 +171,7 @@
       "neo4j_relationships": [
         { "type": "MAPS_TO_TRACK",    "target": "ENGLISH_LITERATURE" },
         { "type": "FEEDS_INTO",       "target": "OAS.ELA.8.R.I.3" },
-        { "type": "PREREQUISITE_FOR", "target": "OAS.ELA.1.R.I.2" }
+        { "type": "PREREQUISITE_FOR", "target": "OAS.ELA.1.R.I.3" }
       ]
     },
 
@@ -152,6 +290,863 @@
     },
 
     {
+      "grade": 2,
+      "subject": "English Language Arts",
+      "standard_id": "OAS.ELA.2.R.L.1",
+      "standard_text": "Ask and answer questions (who, what, where, when, why, and how) to demonstrate understanding of key details in a literary text.",
+      "track": "ENGLISH_LITERATURE",
+      "track_label": "English Language & Literature",
+      "rationale": "The six journalist questions are the foundation of all inquiry — Grade 2 students practice them on stories before applying them to primary sources.",
+      "adeline_lesson_hook": "When you read a story, who is in it? What happens? Where and when does it take place? Why does it matter?",
+      "homestead_adaptation": "Read a chapter from a classic farm or pioneer story (Little House on the Prairie) and ask the six questions together.",
+      "block_types_suggested": ["TEXT", "QUIZ"],
+      "difficulty": "EMERGING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.ELA.2.R.L.1",
+          "grade": 2,
+          "subject": "ELA",
+          "strand": "Reading: Literature"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "ENGLISH_LITERATURE" },
+        { "type": "BUILDS_FROM",      "target": "OAS.ELA.1.R.I.1" },
+        { "type": "FEEDS_INTO",       "target": "OAS.ELA.8.R.I.3" }
+      ]
+    },
+
+    {
+      "grade": 2,
+      "subject": "Mathematics",
+      "standard_id": "OAS.MATH.2.NBT.1",
+      "standard_text": "Understand that the three digits of a three-digit number represent amounts of hundreds, tens, and ones; use place value understanding to read, write, and compare three-digit numbers.",
+      "track": "APPLIED_MATHEMATICS",
+      "track_label": "Applied Mathematics",
+      "rationale": "Place value is the architecture of our number system — understanding it is understanding how creation counts order at scale.",
+      "adeline_lesson_hook": "If you have 3 hundreds, 2 tens, and 5 ones — what number is that? Why does position matter in math?",
+      "homestead_adaptation": "Count and bundle dried beans or corn kernels into groups of ones, tens, and hundreds — place value with real produce.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "QUIZ"],
+      "difficulty": "EMERGING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.MATH.2.NBT.1",
+          "grade": 2,
+          "subject": "Math",
+          "strand": "Number & Operations in Base Ten"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "APPLIED_MATHEMATICS" },
+        { "type": "BUILDS_FROM",      "target": "OAS.MATH.K.CC.1" }
+      ]
+    },
+
+    {
+      "grade": 2,
+      "subject": "Science",
+      "standard_id": "OAS.SCI.2.PS.1",
+      "standard_text": "Plan and conduct an investigation to describe and classify different kinds of materials by their observable properties, including color, texture, hardness, and flexibility.",
+      "track": "CREATION_SCIENCE",
+      "track_label": "God's Creation & Science",
+      "rationale": "Material properties are the language of creation — God made matter with observable, classifiable, reliable characteristics.",
+      "adeline_lesson_hook": "Pick up five things from outside. How are they alike? How are they different? What can you find out just by looking and touching?",
+      "homestead_adaptation": "Classify soil samples, wood, metal tools, and fiber from the farm — real materials science without a lab.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "QUIZ"],
+      "difficulty": "EMERGING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SCI.2.PS.1",
+          "grade": 2,
+          "subject": "Science",
+          "strand": "Physical Science"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "CREATION_SCIENCE" },
+        { "type": "CROSS_TRACK_LINK", "target": "HOMESTEADING",
+          "reason": "Knowing material properties guides tool selection and building" }
+      ]
+    },
+
+    {
+      "grade": 2,
+      "subject": "Social Studies",
+      "standard_id": "OAS.SS.2.H.1.1",
+      "standard_text": "Compare family and community life in the past and present, using photographs, artifacts, and interviews as historical sources.",
+      "track": "TRUTH_HISTORY",
+      "track_label": "Truth-Based History",
+      "rationale": "Grade 2 primary source introduction — photographs, artifacts, and interviews as evidence of how things were.",
+      "adeline_lesson_hook": "What did your grandparents' kitchen look like? How do you know? What source could you use to find out?",
+      "homestead_adaptation": "Interview a grandparent or older neighbor about how they farmed or cooked when they were young. Compare it to how you do it today.",
+      "block_types_suggested": ["PRIMARY_SOURCE", "TEXT", "RESEARCH_MISSION"],
+      "difficulty": "EMERGING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SS.2.H.1.1",
+          "grade": 2,
+          "subject": "Social Studies",
+          "strand": "History"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "TRUTH_HISTORY" },
+        { "type": "BUILDS_FROM",      "target": "OAS.SS.K.H.1.1" }
+      ]
+    },
+
+    {
+      "grade": 2,
+      "subject": "Health",
+      "standard_id": "OAS.HLT.2.NPA.1",
+      "standard_text": "Identify the benefits of eating a variety of foods from all food groups and explain how food choices affect energy levels and overall health.",
+      "track": "HEALTH_NATUROPATHY",
+      "track_label": "Health & Naturopathy",
+      "rationale": "Nutritional literacy as stewardship — understanding that food variety reflects creation's provision for whole-body health.",
+      "adeline_lesson_hook": "Why did God make so many different kinds of food? What does each one do for your body?",
+      "homestead_adaptation": "Plan a meal using only foods you grew or could grow. What's missing? What would you need to trade for?",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "QUIZ"],
+      "difficulty": "EMERGING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.HLT.2.NPA.1",
+          "grade": 2,
+          "subject": "Health",
+          "strand": "Nutrition & Physical Activity"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "HEALTH_NATUROPATHY" },
+        { "type": "BUILDS_FROM",      "target": "OAS.HLT.1.HB.1" },
+        { "type": "CROSS_TRACK_LINK", "target": "HOMESTEADING",
+          "reason": "Growing food is the most direct form of nutritional control" }
+      ]
+    },
+
+    {
+      "grade": 3,
+      "subject": "English Language Arts",
+      "standard_id": "OAS.ELA.3.R.I.1",
+      "standard_text": "Ask and answer questions to demonstrate understanding of a text, referring explicitly to the text as the basis for the answers.",
+      "track": "ENGLISH_LITERATURE",
+      "track_label": "English Language & Literature",
+      "rationale": "Text-based evidence at Grade 3 — the academic form of the Witness Protocol's requirement to show your source.",
+      "adeline_lesson_hook": "Don't just say what you think the text means — show me the exact words that prove it.",
+      "homestead_adaptation": "Read a passage from a farming almanac or heritage seed catalog and answer questions using only what the text actually says.",
+      "block_types_suggested": ["TEXT", "QUIZ", "PRIMARY_SOURCE"],
+      "difficulty": "DEVELOPING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.ELA.3.R.I.1",
+          "grade": 3,
+          "subject": "ELA",
+          "strand": "Reading: Informational"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "ENGLISH_LITERATURE" },
+        { "type": "BUILDS_FROM",      "target": "OAS.ELA.2.R.L.1" },
+        { "type": "FEEDS_INTO",       "target": "OAS.ELA.8.R.I.3" }
+      ]
+    },
+
+    {
+      "grade": 3,
+      "subject": "Mathematics",
+      "standard_id": "OAS.MATH.3.OA.1",
+      "standard_text": "Interpret products of whole numbers as the total number of objects in equal groups; use multiplication and division within 100 to solve word problems involving equal groups, arrays, and measurement quantities.",
+      "track": "APPLIED_MATHEMATICS",
+      "track_label": "Applied Mathematics",
+      "rationale": "Multiplication as pattern — God's creation operates in repeatable, predictable structures that multiplication models.",
+      "adeline_lesson_hook": "If you plant 6 rows of corn with 8 seeds in each row, how many seeds did you plant? What pattern are you using?",
+      "homestead_adaptation": "Calculate how many seeds, fence posts, or animals you need using multiplication — real farm planning with real math.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "QUIZ"],
+      "difficulty": "DEVELOPING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.MATH.3.OA.1",
+          "grade": 3,
+          "subject": "Math",
+          "strand": "Operations & Algebraic Thinking"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "APPLIED_MATHEMATICS" },
+        { "type": "BUILDS_FROM",      "target": "OAS.MATH.2.NBT.1" },
+        { "type": "CROSS_TRACK_LINK", "target": "HOMESTEADING",
+          "reason": "Planting, harvesting, and selling require multiplication" }
+      ]
+    },
+
+    {
+      "grade": 3,
+      "subject": "Science",
+      "standard_id": "OAS.SCI.3.LS.1",
+      "standard_text": "Construct an argument that plants and animals have internal and external structures that function to support survival, growth, behavior, and reproduction.",
+      "track": "CREATION_SCIENCE",
+      "track_label": "God's Creation & Science",
+      "rationale": "Structure and function reflect intentional design — the argument for creation science begins with the observation that structures serve purposes.",
+      "adeline_lesson_hook": "Why does a plant have roots? Why does a bird have hollow bones? Could something that useful happen by accident?",
+      "homestead_adaptation": "Dissect a flower or examine a chicken's wing — identify each part and discuss what it was designed to do.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "QUIZ"],
+      "difficulty": "DEVELOPING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SCI.3.LS.1",
+          "grade": 3,
+          "subject": "Science",
+          "strand": "Life Science"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "CREATION_SCIENCE" },
+        { "type": "BUILDS_FROM",      "target": "OAS.SCI.2.PS.1" },
+        { "type": "CROSS_TRACK_LINK", "target": "HOMESTEADING",
+          "reason": "Understanding plant/animal structures guides better farm practices" }
+      ]
+    },
+
+    {
+      "grade": 3,
+      "subject": "Social Studies",
+      "standard_id": "OAS.SS.3.H.1.1",
+      "standard_text": "Use primary and secondary sources to describe the contributions of historical figures and communities; distinguish between fact and opinion in historical accounts.",
+      "track": "TRUTH_HISTORY",
+      "track_label": "Truth-Based History",
+      "rationale": "Fact vs. opinion in historical sources — the explicit Grade 3 introduction to what the Witness Protocol does at a technical level.",
+      "adeline_lesson_hook": "Is this sentence a fact or an opinion? How do you know? What source would you need to prove it's true?",
+      "homestead_adaptation": "Find two different accounts of the same local historical event (land settlement, drought, or town founding) and compare them.",
+      "block_types_suggested": ["PRIMARY_SOURCE", "TEXT", "RESEARCH_MISSION"],
+      "difficulty": "DEVELOPING",
+      "witness_protocol_note": "Any PRIMARY_SOURCE block must have evidence with similarityScore >= 0.85. Fact/opinion distinctions are central to this standard.",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SS.3.H.1.1",
+          "grade": 3,
+          "subject": "Social Studies",
+          "strand": "History"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "TRUTH_HISTORY" },
+        { "type": "BUILDS_FROM",      "target": "OAS.SS.2.H.1.1" },
+        { "type": "FEEDS_INTO",       "target": "OAS.ELA.8.R.I.3" }
+      ]
+    },
+
+    {
+      "grade": 3,
+      "subject": "Social Studies",
+      "standard_id": "OAS.SS.3.E.1.1",
+      "standard_text": "Identify ways people earn, save, spend, and donate money; explain how making choices about money involves trade-offs.",
+      "track": "GOVERNMENT_ECONOMICS",
+      "track_label": "Government & Economics",
+      "rationale": "Economic stewardship at Grade 3 — earning, saving, giving, and spending are four dimensions of Biblical faithfulness with money.",
+      "adeline_lesson_hook": "When you earn money for chores, what do you do with it? What if you could only pick one thing?",
+      "homestead_adaptation": "Set up a simple farm stand. Track what you earned, what you saved, what you spent on seeds, and what you gave away.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "QUIZ"],
+      "difficulty": "DEVELOPING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SS.3.E.1.1",
+          "grade": 3,
+          "subject": "Social Studies",
+          "strand": "Economics"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "GOVERNMENT_ECONOMICS" },
+        { "type": "CROSS_TRACK_LINK", "target": "CREATIVE_ECONOMY",
+          "reason": "Selling handmade or homegrown goods is entrepreneurship" },
+        { "type": "CROSS_TRACK_LINK", "target": "DISCIPLESHIP",
+          "reason": "Biblical generosity (tithing, giving) starts with understanding money" }
+      ]
+    },
+
+    {
+      "grade": 4,
+      "subject": "English Language Arts",
+      "standard_id": "OAS.ELA.4.R.I.1",
+      "standard_text": "Refer to details and examples in a text when explaining what the text says explicitly and when drawing inferences from the text.",
+      "track": "ENGLISH_LITERATURE",
+      "track_label": "English Language & Literature",
+      "rationale": "Inference from evidence — Grade 4 students learn to go beyond what is stated to what is implied, the foundation of interpretive reading.",
+      "adeline_lesson_hook": "The author didn't say it directly, but what do you think they meant? What in the text makes you think that?",
+      "homestead_adaptation": "Read a heritage seed catalog or an old agricultural journal entry. What can you infer about the writer's world that they didn't state outright?",
+      "block_types_suggested": ["TEXT", "QUIZ", "PRIMARY_SOURCE"],
+      "difficulty": "DEVELOPING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.ELA.4.R.I.1",
+          "grade": 4,
+          "subject": "ELA",
+          "strand": "Reading: Informational"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "ENGLISH_LITERATURE" },
+        { "type": "BUILDS_FROM",      "target": "OAS.ELA.3.R.I.1" },
+        { "type": "FEEDS_INTO",       "target": "OAS.ELA.8.R.I.3" }
+      ]
+    },
+
+    {
+      "grade": 4,
+      "subject": "Mathematics",
+      "standard_id": "OAS.MATH.4.NBT.1",
+      "standard_text": "Recognize that in a multi-digit number, a digit in one place represents ten times what it represents in the place to its right; read and write multi-digit whole numbers using standard form, word form, and expanded form.",
+      "track": "APPLIED_MATHEMATICS",
+      "track_label": "Applied Mathematics",
+      "rationale": "The structure of large numbers — understanding that land acreage, harvest weights, and business income all require multi-digit fluency.",
+      "adeline_lesson_hook": "If your farm produced 2,450 pounds of corn, how would you write that in words? In expanded form? Why does each digit matter?",
+      "homestead_adaptation": "Look up the price of neighboring farmland, livestock at auction, or grain storage fees. Read and interpret multi-digit numbers in context.",
+      "block_types_suggested": ["TEXT", "QUIZ", "LAB_MISSION"],
+      "difficulty": "DEVELOPING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.MATH.4.NBT.1",
+          "grade": 4,
+          "subject": "Math",
+          "strand": "Number & Operations in Base Ten"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "APPLIED_MATHEMATICS" },
+        { "type": "BUILDS_FROM",      "target": "OAS.MATH.3.OA.1" }
+      ]
+    },
+
+    {
+      "grade": 4,
+      "subject": "Science",
+      "standard_id": "OAS.SCI.4.LS.1",
+      "standard_text": "Construct an explanation that explains how energy and matter cycle through ecosystems, and how organisms in an ecosystem are interdependent.",
+      "track": "CREATION_SCIENCE",
+      "track_label": "God's Creation & Science",
+      "rationale": "Ecosystems as designed systems — the cycling of matter and energy demonstrates the elegance and intentionality of creation's economy.",
+      "adeline_lesson_hook": "Nothing in God's creation is wasted — how does the same nitrogen that was in a leaf end up back in the soil and then in your food?",
+      "homestead_adaptation": "Start a compost pile and track what goes in and what comes out. Trace the cycle of nutrients from kitchen scraps back to the garden.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "QUIZ"],
+      "difficulty": "DEVELOPING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SCI.4.LS.1",
+          "grade": 4,
+          "subject": "Science",
+          "strand": "Life Science"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "CREATION_SCIENCE" },
+        { "type": "BUILDS_FROM",      "target": "OAS.SCI.3.LS.1" },
+        { "type": "CROSS_TRACK_LINK", "target": "HOMESTEADING",
+          "reason": "Composting, crop rotation, and soil building are applied ecosystem science" }
+      ]
+    },
+
+    {
+      "grade": 4,
+      "subject": "Social Studies",
+      "standard_id": "OAS.SS.4.H.1.1",
+      "standard_text": "Examine primary and secondary sources to describe the causes and effects of significant events in Oklahoma and American history, including territorial expansion, Native American displacement, and statehood.",
+      "track": "TRUTH_HISTORY",
+      "track_label": "Truth-Based History",
+      "rationale": "Oklahoma history through primary sources — territorial expansion, the Land Run, and Native displacement are examined with actual documents, not textbook summaries.",
+      "adeline_lesson_hook": "What happened to the people who already lived on the Oklahoma land before the Land Run? How do we know? What documents exist?",
+      "homestead_adaptation": "Research the original land grant or deed for your family's land — who owned it before? What do the records show?",
+      "block_types_suggested": ["PRIMARY_SOURCE", "TEXT", "RESEARCH_MISSION"],
+      "difficulty": "DEVELOPING",
+      "witness_protocol_note": "Claims about Native displacement and territorial history require verified primary source evidence. HistorianAgent must enforce TRUTH_THRESHOLD = 0.85.",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SS.4.H.1.1",
+          "grade": 4,
+          "subject": "Social Studies",
+          "strand": "History"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "TRUTH_HISTORY" },
+        { "type": "BUILDS_FROM",      "target": "OAS.SS.3.H.1.1" },
+        { "type": "CROSS_TRACK_LINK", "target": "JUSTICE_CHANGEMAKING",
+          "reason": "Understanding historical injustice is prerequisite to just action today" }
+      ]
+    },
+
+    {
+      "grade": 4,
+      "subject": "Health",
+      "standard_id": "OAS.HLT.4.HB.1",
+      "standard_text": "Describe how sleep, nutrition, physical activity, and stress management affect the body's ability to function, and identify strategies for maintaining balance in each area.",
+      "track": "HEALTH_NATUROPATHY",
+      "track_label": "Health & Naturopathy",
+      "rationale": "Whole-body stewardship at Grade 4 — the four pillars of natural health connect directly to the body as God's temple.",
+      "adeline_lesson_hook": "When you didn't sleep enough, how did your body feel? How does God's design for sleep help you think and grow?",
+      "homestead_adaptation": "Track sleep, outdoor activity, and fresh food intake for one week. What patterns do you notice in your energy and mood?",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "QUIZ"],
+      "difficulty": "DEVELOPING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.HLT.4.HB.1",
+          "grade": 4,
+          "subject": "Health",
+          "strand": "Health Behaviors"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "HEALTH_NATUROPATHY" },
+        { "type": "BUILDS_FROM",      "target": "OAS.HLT.2.NPA.1" }
+      ]
+    },
+
+    {
+      "grade": 5,
+      "subject": "English Language Arts",
+      "standard_id": "OAS.ELA.5.R.I.1",
+      "standard_text": "Quote accurately from a text and explain what the text says explicitly and what is inferred; summarize the text distinct from personal opinion or judgment.",
+      "track": "ENGLISH_LITERATURE",
+      "track_label": "English Language & Literature",
+      "rationale": "Quoting accurately is the Grade 5 equivalent of the Witness Protocol — you must cite your source exactly, not paraphrase or add opinion.",
+      "adeline_lesson_hook": "What exactly did the author say? Not what you think they meant — the actual words. Now quote them.",
+      "homestead_adaptation": "Summarize a chapter of a pioneer memoir (like Willa Cather's O Pioneers!) without adding your own opinion. What did the author actually say?",
+      "block_types_suggested": ["TEXT", "QUIZ", "PRIMARY_SOURCE"],
+      "difficulty": "DEVELOPING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.ELA.5.R.I.1",
+          "grade": 5,
+          "subject": "ELA",
+          "strand": "Reading: Informational"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "ENGLISH_LITERATURE" },
+        { "type": "BUILDS_FROM",      "target": "OAS.ELA.4.R.I.1" },
+        { "type": "FEEDS_INTO",       "target": "OAS.ELA.8.R.I.3" }
+      ]
+    },
+
+    {
+      "grade": 5,
+      "subject": "Mathematics",
+      "standard_id": "OAS.MATH.5.NBT.1",
+      "standard_text": "Explain patterns in the number of zeros of the product when multiplying a number by powers of ten; explain patterns in the placement of the decimal point when a decimal is multiplied or divided by a power of ten.",
+      "track": "APPLIED_MATHEMATICS",
+      "track_label": "Applied Mathematics",
+      "rationale": "Decimal precision matters in commerce — pricing crops per pound, calculating yields per acre, and managing accounts all require decimal fluency.",
+      "adeline_lesson_hook": "If wheat sells for $4.75 per bushel, how much do you earn for 100 bushels? For 1,000? What pattern do you see?",
+      "homestead_adaptation": "Calculate the cost of animal feed, fertilizer, or produce per unit. Practice moving the decimal as quantities scale up and down.",
+      "block_types_suggested": ["TEXT", "QUIZ", "LAB_MISSION"],
+      "difficulty": "DEVELOPING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.MATH.5.NBT.1",
+          "grade": 5,
+          "subject": "Math",
+          "strand": "Number & Operations in Base Ten"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "APPLIED_MATHEMATICS" },
+        { "type": "BUILDS_FROM",      "target": "OAS.MATH.4.NBT.1" },
+        { "type": "CROSS_TRACK_LINK", "target": "GOVERNMENT_ECONOMICS",
+          "reason": "Decimal arithmetic underpins all commerce and budgeting" }
+      ]
+    },
+
+    {
+      "grade": 5,
+      "subject": "Science",
+      "standard_id": "OAS.SCI.5.ESS.1",
+      "standard_text": "Represent data in graphical displays to reveal patterns of daily changes in the length and direction of shadows, day and night, and the seasonal appearance of some stars in the night sky.",
+      "track": "CREATION_SCIENCE",
+      "track_label": "God's Creation & Science",
+      "rationale": "The heavens declare the glory of God — daily and seasonal patterns in the sky are observable evidence of creation's order.",
+      "adeline_lesson_hook": "Why does your shadow change length throughout the day? What is moving — you or the sun? What does the pattern tell you about how God ordered the heavens?",
+      "homestead_adaptation": "Track shadow length at the same spot every hour for one day. Graph it. Do the same at different seasons and compare.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "QUIZ"],
+      "difficulty": "DEVELOPING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SCI.5.ESS.1",
+          "grade": 5,
+          "subject": "Science",
+          "strand": "Earth & Space Science"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "CREATION_SCIENCE" },
+        { "type": "CROSS_TRACK_LINK", "target": "HOMESTEADING",
+          "reason": "Planting calendars, harvest timing, and animal cycles follow celestial patterns" }
+      ]
+    },
+
+    {
+      "grade": 5,
+      "subject": "Social Studies",
+      "standard_id": "OAS.SS.5.H.1.1",
+      "standard_text": "Analyze multiple primary and secondary sources to explain how major events in American history (exploration, colonization, revolution) were caused, experienced, and interpreted differently by various groups.",
+      "track": "TRUTH_HISTORY",
+      "track_label": "Truth-Based History",
+      "rationale": "Multiple perspectives on the same event — the advanced form of the Witness Protocol at Grade 5, where different witnesses tell different stories.",
+      "adeline_lesson_hook": "The colonists said it was a revolution for freedom. The Loyalists said it was illegal rebellion. The enslaved said it changed nothing for them. Which account is true? Can all three be?",
+      "homestead_adaptation": "Find a historical account of westward expansion written by a settler and one written by a Native American from the same era. Compare what each witnessed.",
+      "block_types_suggested": ["PRIMARY_SOURCE", "TEXT", "RESEARCH_MISSION"],
+      "difficulty": "DEVELOPING",
+      "witness_protocol_note": "Multi-perspective history requires PRIMARY_SOURCE evidence from each group represented. HistorianAgent must seek verified sources for each viewpoint.",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SS.5.H.1.1",
+          "grade": 5,
+          "subject": "Social Studies",
+          "strand": "History"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "TRUTH_HISTORY" },
+        { "type": "BUILDS_FROM",      "target": "OAS.SS.4.H.1.1" },
+        { "type": "CROSS_TRACK_LINK", "target": "JUSTICE_CHANGEMAKING",
+          "reason": "Understanding who was left out of 'freedom' is prerequisite to justice work" }
+      ]
+    },
+
+    {
+      "grade": 5,
+      "subject": "Social Studies",
+      "standard_id": "OAS.SS.5.E.1.1",
+      "standard_text": "Explain the concepts of supply and demand, identify how they interact to determine prices, and describe how entrepreneurs respond to market signals.",
+      "track": "CREATIVE_ECONOMY",
+      "track_label": "Creative Economy",
+      "rationale": "Supply, demand, and entrepreneurship at Grade 5 — the student as a maker and seller, not just a consumer.",
+      "adeline_lesson_hook": "If everyone in town is selling the same thing, what happens to the price? What if you're the only one selling it? How does a maker use that knowledge?",
+      "homestead_adaptation": "Plan what to plant next season based on what sold well at your farm stand and what your neighbors are growing. That's responding to market signals.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "QUIZ"],
+      "difficulty": "DEVELOPING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SS.5.E.1.1",
+          "grade": 5,
+          "subject": "Social Studies",
+          "strand": "Economics"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "CREATIVE_ECONOMY" },
+        { "type": "CROSS_TRACK_LINK", "target": "GOVERNMENT_ECONOMICS",
+          "reason": "Markets and pricing connect to government policy and regulation" },
+        { "type": "CROSS_TRACK_LINK", "target": "HOMESTEADING",
+          "reason": "Farm economics is applied supply and demand" }
+      ]
+    },
+
+    {
+      "grade": 6,
+      "subject": "English Language Arts",
+      "standard_id": "OAS.ELA.6.R.I.1",
+      "standard_text": "Cite textual evidence to support analysis of what a text says explicitly as well as inferences drawn from the text; determine the central idea of a text and how it is conveyed through particular details.",
+      "track": "ENGLISH_LITERATURE",
+      "track_label": "English Language & Literature",
+      "rationale": "Formal citation of textual evidence at Grade 6 — the academic equivalent of the Witness Protocol's evidence citation requirement.",
+      "adeline_lesson_hook": "You have an argument. Now prove it from the text. Quote the exact passage, cite where it is, and explain why it supports your claim.",
+      "homestead_adaptation": "Read a chapter of a historical agricultural report or government land survey and identify the central claim. What evidence does the author use?",
+      "block_types_suggested": ["TEXT", "QUIZ", "PRIMARY_SOURCE"],
+      "difficulty": "EXPANDING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.ELA.6.R.I.1",
+          "grade": 6,
+          "subject": "ELA",
+          "strand": "Reading: Informational"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "ENGLISH_LITERATURE" },
+        { "type": "BUILDS_FROM",      "target": "OAS.ELA.5.R.I.1" },
+        { "type": "FEEDS_INTO",       "target": "OAS.ELA.8.R.I.3" }
+      ]
+    },
+
+    {
+      "grade": 6,
+      "subject": "Mathematics",
+      "standard_id": "OAS.MATH.6.RP.1",
+      "standard_text": "Understand the concept of a ratio and use ratio language to describe the ratio relationship between two quantities; compute unit rates associated with ratios of fractions.",
+      "track": "APPLIED_MATHEMATICS",
+      "track_label": "Applied Mathematics",
+      "rationale": "Ratios are the mathematics of proportion — soil amendments, feed rations, recipe scaling, and business margins all require ratio reasoning.",
+      "adeline_lesson_hook": "If you mix 2 parts compost to 5 parts soil, what ratio is that? If you have 35 pounds of soil, how much compost do you need?",
+      "homestead_adaptation": "Mix a potting soil blend, make a fermented feed ratio, or calculate a soap recipe using exact ratios. Real proportional reasoning.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "QUIZ"],
+      "difficulty": "EXPANDING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.MATH.6.RP.1",
+          "grade": 6,
+          "subject": "Math",
+          "strand": "Ratios & Proportional Relationships"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "APPLIED_MATHEMATICS" },
+        { "type": "BUILDS_FROM",      "target": "OAS.MATH.5.NBT.1" },
+        { "type": "CROSS_TRACK_LINK", "target": "HOMESTEADING",
+          "reason": "Feed rations, fertilizer mixing, and recipe scaling all use ratios" }
+      ]
+    },
+
+    {
+      "grade": 6,
+      "subject": "Science",
+      "standard_id": "OAS.SCI.6.LS.1",
+      "standard_text": "Analyze and interpret data to provide evidence that living things are made of cells; distinguish between plant and animal cells and describe the function of major cell organelles.",
+      "track": "CREATION_SCIENCE",
+      "track_label": "God's Creation & Science",
+      "rationale": "The cell as the fundamental unit of created life — the microscopic reveals the same design principles as the macroscopic.",
+      "adeline_lesson_hook": "Every living thing — from an ant to a whale to you — is made of cells following the same basic plan. What does that tell you about who designed life?",
+      "homestead_adaptation": "Examine onion skin cells under a microscope (or magnifying glass). Compare a plant cell to an animal cell and identify the parts you can see.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "QUIZ"],
+      "difficulty": "EXPANDING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SCI.6.LS.1",
+          "grade": 6,
+          "subject": "Science",
+          "strand": "Life Science"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "CREATION_SCIENCE" },
+        { "type": "BUILDS_FROM",      "target": "OAS.SCI.4.LS.1" }
+      ]
+    },
+
+    {
+      "grade": 6,
+      "subject": "Social Studies",
+      "standard_id": "OAS.SS.6.H.1.1",
+      "standard_text": "Analyze primary and secondary sources from ancient and medieval civilizations to explain how geography, religion, and economics shaped the development of societies.",
+      "track": "TRUTH_HISTORY",
+      "track_label": "Truth-Based History",
+      "rationale": "World history through primary sources — how geography and faith shaped the ancient world is examined with actual documents, maps, and records.",
+      "adeline_lesson_hook": "Why did great civilizations always develop near rivers? What primary sources tell us about how they organized themselves?",
+      "homestead_adaptation": "Map how your region's geography (rivers, soil type, climate) shaped what families farmed and how they traded historically.",
+      "block_types_suggested": ["PRIMARY_SOURCE", "TEXT", "RESEARCH_MISSION"],
+      "difficulty": "EXPANDING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SS.6.H.1.1",
+          "grade": 6,
+          "subject": "Social Studies",
+          "strand": "History"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "TRUTH_HISTORY" },
+        { "type": "BUILDS_FROM",      "target": "OAS.SS.5.H.1.1" }
+      ]
+    },
+
+    {
+      "grade": 6,
+      "subject": "Health",
+      "standard_id": "OAS.HLT.6.MEH.1",
+      "standard_text": "Analyze the relationship between mental and emotional health and physical health; identify healthy coping strategies for managing stress, anxiety, and difficult emotions.",
+      "track": "HEALTH_NATUROPATHY",
+      "track_label": "Health & Naturopathy",
+      "rationale": "Mental and emotional health as whole-person stewardship — the mind-body connection reflects the integrated design of the imago Dei.",
+      "adeline_lesson_hook": "When you're anxious, how does your body feel? What does Scripture say about peace, and how does that connect to physical health?",
+      "homestead_adaptation": "Identify which farm activities help you feel calm or focused. How does outdoor work, tending animals, or quiet tasks affect your mood and stress?",
+      "block_types_suggested": ["TEXT", "QUIZ"],
+      "difficulty": "EXPANDING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.HLT.6.MEH.1",
+          "grade": 6,
+          "subject": "Health",
+          "strand": "Mental & Emotional Health"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "HEALTH_NATUROPATHY" },
+        { "type": "BUILDS_FROM",      "target": "OAS.HLT.4.HB.1" },
+        { "type": "CROSS_TRACK_LINK", "target": "DISCIPLESHIP",
+          "reason": "Biblical peace (Philippians 4:6-7) is both a spiritual and physiological reality" }
+      ]
+    },
+
+    {
+      "grade": 7,
+      "subject": "English Language Arts",
+      "standard_id": "OAS.ELA.7.R.I.1",
+      "standard_text": "Cite several pieces of textual evidence to support analysis of what a text says explicitly as well as inferences drawn from the text; trace and evaluate the argument and specific claims in a text.",
+      "track": "ENGLISH_LITERATURE",
+      "track_label": "English Language & Literature",
+      "rationale": "Multiple citation and argument tracing at Grade 7 — one source is no longer enough. Claims must be corroborated by several pieces of evidence.",
+      "adeline_lesson_hook": "One source says it. Two sources say it. Three sources say it. Now you're building a case — not just an opinion.",
+      "homestead_adaptation": "Find three historical sources that describe the same farming practice from different eras. Trace how the argument about best practices changed over time.",
+      "block_types_suggested": ["TEXT", "QUIZ", "PRIMARY_SOURCE"],
+      "difficulty": "EXPANDING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.ELA.7.R.I.1",
+          "grade": 7,
+          "subject": "ELA",
+          "strand": "Reading: Informational"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "ENGLISH_LITERATURE" },
+        { "type": "BUILDS_FROM",      "target": "OAS.ELA.6.R.I.1" },
+        { "type": "FEEDS_INTO",       "target": "OAS.ELA.8.R.I.3" }
+      ]
+    },
+
+    {
+      "grade": 7,
+      "subject": "Mathematics",
+      "standard_id": "OAS.MATH.7.RP.1",
+      "standard_text": "Compute unit rates associated with ratios of fractions; recognize and represent proportional relationships between quantities; decide whether two quantities are in a proportional relationship.",
+      "track": "APPLIED_MATHEMATICS",
+      "track_label": "Applied Mathematics",
+      "rationale": "Proportional reasoning is the mathematics of justice and commerce — fair pricing, equitable exchange, and accurate measurement all depend on it.",
+      "adeline_lesson_hook": "Is this a fair trade? If I give you 3 jars of honey for 2 pounds of beef, is that proportional to last week's deal? How do you check?",
+      "homestead_adaptation": "Calculate whether a bulk seed purchase is proportionally cheaper than buying small packets. Use unit rates to compare prices per ounce.",
+      "block_types_suggested": ["TEXT", "QUIZ", "LAB_MISSION"],
+      "difficulty": "EXPANDING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.MATH.7.RP.1",
+          "grade": 7,
+          "subject": "Math",
+          "strand": "Ratios & Proportional Relationships"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "APPLIED_MATHEMATICS" },
+        { "type": "BUILDS_FROM",      "target": "OAS.MATH.6.RP.1" },
+        { "type": "CROSS_TRACK_LINK", "target": "GOVERNMENT_ECONOMICS",
+          "reason": "Fair pricing and proportional taxation both require ratio reasoning" }
+      ]
+    },
+
+    {
+      "grade": 7,
+      "subject": "Science",
+      "standard_id": "OAS.SCI.7.ESS.1",
+      "standard_text": "Develop a model to describe the cycling of water through Earth's systems (hydrosphere, atmosphere, biosphere, geosphere); explain how human activities affect the water cycle.",
+      "track": "HOMESTEADING",
+      "track_label": "Homesteading & Stewardship",
+      "rationale": "The water cycle as a designed system — understanding it is prerequisite to water harvesting, drought preparation, and faithful land stewardship.",
+      "adeline_lesson_hook": "Where does your well water come from? Where does rainwater go after it hits your land? How does your land management affect that cycle?",
+      "homestead_adaptation": "Map the water flow on your property — where rain lands, where it runs off, where it soaks in. Design a rainwater harvesting or greywater reuse system.",
+      "block_types_suggested": ["TEXT", "LAB_MISSION", "QUIZ"],
+      "difficulty": "EXPANDING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SCI.7.ESS.1",
+          "grade": 7,
+          "subject": "Science",
+          "strand": "Earth & Space Science"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "HOMESTEADING" },
+        { "type": "BUILDS_FROM",      "target": "OAS.SCI.5.ESS.1" },
+        { "type": "CROSS_TRACK_LINK", "target": "CREATION_SCIENCE",
+          "reason": "The water cycle is a designed global system maintained by God (Job 38:25-27)" }
+      ]
+    },
+
+    {
+      "grade": 7,
+      "subject": "Social Studies",
+      "standard_id": "OAS.SS.7.H.1.1",
+      "standard_text": "Analyze primary and secondary sources to explain patterns of global trade, colonialism, and cultural exchange from 1400–1800, including the Atlantic slave trade and its impact on Africa, Europe, and the Americas.",
+      "track": "TRUTH_HISTORY",
+      "track_label": "Truth-Based History",
+      "rationale": "Global history through primary sources — the Atlantic trade network, including the slave trade, is examined through actual ship logs, letters, and government records.",
+      "adeline_lesson_hook": "The slave trade was legal, organized, and profitable. What documents exist that show exactly how it worked? What did the people running it write down?",
+      "homestead_adaptation": "Research what crops your region produced that were connected to enslaved labor — cotton, tobacco, indigo. Trace the economic chain from your soil to the global market.",
+      "block_types_suggested": ["PRIMARY_SOURCE", "TEXT", "RESEARCH_MISSION"],
+      "difficulty": "EXPANDING",
+      "witness_protocol_note": "Claims about the Atlantic slave trade must be grounded in verified primary sources (ship manifests, abolition tracts, legal records). HistorianAgent enforces TRUTH_THRESHOLD = 0.85.",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.SS.7.H.1.1",
+          "grade": 7,
+          "subject": "Social Studies",
+          "strand": "History"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "TRUTH_HISTORY" },
+        { "type": "BUILDS_FROM",      "target": "OAS.SS.6.H.1.1" },
+        { "type": "CROSS_TRACK_LINK", "target": "JUSTICE_CHANGEMAKING",
+          "reason": "Understanding how the slave trade was constructed is prerequisite to understanding abolitionist strategy" }
+      ]
+    },
+
+    {
+      "grade": 7,
+      "subject": "Health",
+      "standard_id": "OAS.HLT.7.NPA.1",
+      "standard_text": "Analyze the influence of food marketing, food deserts, and food systems on individual and community health; develop strategies for making informed, health-supporting food choices within real-world constraints.",
+      "track": "HEALTH_NATUROPATHY",
+      "track_label": "Health & Naturopathy",
+      "rationale": "Food systems literacy at Grade 7 — understanding who controls the food supply is prerequisite to genuine food sovereignty.",
+      "adeline_lesson_hook": "Why do the cheapest foods at the grocery store tend to be the least nutritious? Who benefits from that arrangement?",
+      "homestead_adaptation": "Calculate the true cost of a processed meal vs. a homegrown meal. Include time, seeds, and labor. Which is actually cheaper? Which is actually healthier?",
+      "block_types_suggested": ["TEXT", "RESEARCH_MISSION", "QUIZ"],
+      "difficulty": "EXPANDING",
+      "neo4j_node": {
+        "label": "OASStandard",
+        "properties": {
+          "id": "OAS.HLT.7.NPA.1",
+          "grade": 7,
+          "subject": "Health",
+          "strand": "Nutrition & Physical Activity"
+        }
+      },
+      "neo4j_relationships": [
+        { "type": "MAPS_TO_TRACK",    "target": "HEALTH_NATUROPATHY" },
+        { "type": "BUILDS_FROM",      "target": "OAS.HLT.6.MEH.1" },
+        { "type": "CROSS_TRACK_LINK", "target": "GOVERNMENT_ECONOMICS",
+          "reason": "Agricultural subsidies and food policy directly shape what's cheap and available" },
+        { "type": "CROSS_TRACK_LINK", "target": "HOMESTEADING",
+          "reason": "Growing your own food is the most direct response to food system problems" }
+      ]
+    },
+
+    {
       "grade": 8,
       "subject": "English Language Arts",
       "standard_id": "OAS.ELA.8.R.I.3",
@@ -163,7 +1158,7 @@
       "homestead_adaptation": "Compare a government agricultural report to a homesteader's journal from the same era — whose account has more to lose by lying?",
       "block_types_suggested": ["PRIMARY_SOURCE", "TEXT", "RESEARCH_MISSION"],
       "difficulty": "EXPANDING",
-      "witness_protocol_note": "Historian agent MUST enforce TRUTH_THRESHOLD = 0.85 on all PRIMARY_SOURCE blocks at this standard. ARCHIVE_SILENT triggers a RESEARCH_MISSION.",
+      "witness_protocol_note": "HistorianAgent MUST enforce TRUTH_THRESHOLD = 0.85 on all PRIMARY_SOURCE blocks at this standard. ARCHIVE_SILENT triggers a RESEARCH_MISSION.",
       "neo4j_node": {
         "label": "OASStandard",
         "properties": {
@@ -308,6 +1303,6 @@
   "graphrag_loading_instructions": {
     "neo4j_cypher_hint": "MERGE (s:OASStandard {id: $standard_id}) SET s += $properties MERGE (t:Track {name: $track}) MERGE (s)-[:MAPS_TO_TRACK]->(t)",
     "pgvector_embedding_target": "standard_text + adeline_lesson_hook",
-    "seed_order": "Load Grade 1 nodes first (they are PREREQUISITE_FOR Grade 8 nodes via FEEDS_INTO relationships)"
+    "seed_order": "Load Kindergarten (grade=0) nodes first; Grade 8 nodes last — progression edges require lower grades to exist first"
   }
 }
