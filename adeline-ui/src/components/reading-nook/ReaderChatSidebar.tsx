@@ -21,6 +21,7 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
+import { extractTextParts } from '@/types/lesson-stream';
 import { MessageCircle, X, ChevronLeft, Send } from 'lucide-react';
 import { useReader } from '@/lib/reader-context';
 
@@ -270,10 +271,7 @@ export function ReaderChatSidebar({ studentId, isOpen, onToggle }: ReaderChatSid
               >
                 {/* Message Content - extract text from parts array */}
                 <div className="text-sm leading-relaxed whitespace-pre-wrap">
-                  {message.parts
-                    ?.filter((part: unknown) => (part as { type?: string }).type === 'text')
-                    .map((part: unknown) => (part as { text?: string }).text)
-                    .join('') || ''}
+                  {extractTextParts(message.parts ?? [])}
                 </div>
 
                 {/* Streaming indicator for assistant */}
