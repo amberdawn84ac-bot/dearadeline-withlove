@@ -45,6 +45,194 @@ def _sse(payload: dict) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
 
+# ── AdaptationRequest builder — fetches all personalization signals in parallel ──
+
+async def _fetch_stream_student_profile(student_id: str) -> dict:
+    """Fetch interests and learningStyle from the User table."""
+    from app.config import get_db_conn
+    try:
+        conn = await get_db_conn()
+        row = await conn.fetchrow(
+            'SELECT "interests", "learningStyle" FROM "User" WHERE "id" = $1',
+            student_id,
+        )
+        await conn.close()
+        if row:
+            return {
+                "interests": list(row["interests"]) if row["interests"] else [],
+                "learning_style": row["learningStyle"] or "text",
+            }
+    except Exception as e:
+        logger.warning(f"[LessonStream] Profile fetch failed (non-fatal): {e}")
+    return {"interests": [], "learning_style": "text"}
+
+
+async def _fetch_sm2_quality_scores(student_id: str, track: str, limit: int = 10) -> list[float]:
+    """Fetch the most recent SM-2 lastQuality values for a student's track."""
+    from app.config import get_db_conn
+    try:
+        conn = await get_db_conn()
+        rows = await conn.fetch(
+            """
+            SELECT "lastQuality"
+            FROM "SpacedRepetitionCard"
+            WHERE "studentId" = $1 AND "track" = $2 AND "lastQuality" IS NOT NULL
+            ORDER BY "lastReviewedAt" DESC
+            LIMIT $3
+            """,
+            student_id, track, limit,
+        )
+        await conn.close()
+        return [float(r["lastQuality"]) for r in rows]
+    except Exception as e:
+        logger.warning(f"[LessonStream] SM-2 scores fetch failed (non-fatal): {e}")
+    return []
+
+
+async def _fetch_last_lesson_date(student_id: str, track: str):
+    """Fetch the most recent completedAt for decay calculation."""
+    from app.config import get_db_conn
+    from datetime import timezone as _tz
+    try:
+        conn = await get_db_conn()
+        val = await conn.fetchval(
+            'SELECT MAX("completedAt") FROM "TranscriptEntry" WHERE "studentId" = $1 AND "track" = $2',
+            student_id, track,
+        )
+        await conn.close()
+        if val:
+            return val if val.tzinfo else val.replace(tzinfo=_tz.utc)
+    except Exception as e:
+        logger.warning(f"[LessonStream] Last-lesson-date fetch failed (non-fatal): {e}")
+    return None
+
+
+async def _fetch_concept_proficiency_map(student_id: str, track: str) -> dict[str, float]:
+    """Fetch per-concept masteryLevel from SpacedRepetitionCard for the track."""
+    from app.config import get_db_conn
+    try:
+        conn = await get_db_conn()
+        rows = await conn.fetch(
+            """
+            SELECT "conceptId", "conceptName", "masteryLevel"
+            FROM "SpacedRepetitionCard"
+            WHERE "studentId" = $1 AND "track" = $2
+            """,
+            student_id, track,
+        )
+        await conn.close()
+        result: dict[str, float] = {}
+        for r in rows:
+            key = r["conceptId"] or r["conceptName"]
+            result[key] = float(r["masteryLevel"] or 0.0)
+        return result
+    except Exception as e:
+        logger.warning(f"[LessonStream] Proficiency map fetch failed (non-fatal): {e}")
+    return {}
+
+
+async def _build_adaptation_request(
+    student_id: str,
+    request: LessonRequest,
+    mastery_score: float,
+    interaction_count: int,
+) -> "AdaptationRequest":
+    """
+    Build a fully-populated AdaptationRequest from all personalization signals.
+
+    Fetches in parallel: student profile (interests + modality), SM-2 quality
+    history, last lesson date (for decay), per-concept proficiency map,
+    cross-track knowledge bias, and ZPD priority for the specific topic.
+
+    Every fetch is non-fatal — defaults keep the adapter functional if any
+    individual source is unavailable.
+    """
+    import asyncio as _asyncio
+    from app.agents.adapter import AdaptationRequest
+    from app.algorithms.zpd_engine import apply_decay
+    from app.connections.knowledge_graph import get_cross_track_bias
+    from app.tools.graph_query import tool_get_zpd_candidates
+
+    (
+        profile,
+        sm2_scores,
+        last_date,
+        proficiency_map,
+        cross_bias_result,
+        zpd_candidates,
+    ) = await _asyncio.gather(
+        _fetch_stream_student_profile(student_id),
+        _fetch_sm2_quality_scores(student_id, request.track.value),
+        _fetch_last_lesson_date(student_id, request.track.value),
+        _fetch_concept_proficiency_map(student_id, request.track.value),
+        get_cross_track_bias(student_id, request.track.value),
+        tool_get_zpd_candidates(student_id, request.track.value, limit=5),
+        return_exceptions=True,
+    )
+
+    # Interests + preferred modality
+    interests: list[str] = []
+    ls_raw = "text"
+    if isinstance(profile, dict):
+        interests = profile.get("interests", [])
+        ls_raw = (profile.get("learning_style") or "text").lower()
+    preferred_modality = (
+        "visual" if ls_raw == "visual"
+        else "kinesthetic" if ls_raw == "kinesthetic"
+        else "text"
+    )
+
+    # Recent SM-2 quality history
+    recent_quiz_scores = sm2_scores if isinstance(sm2_scores, list) else []
+
+    # Decay-adjusted mastery
+    last_practiced = last_date if not isinstance(last_date, Exception) else None
+    decay_adjusted = apply_decay(mastery_score, last_practiced) if last_practiced else mastery_score
+
+    # Cross-track bias
+    cross_track_bias = 0.0
+    if isinstance(cross_bias_result, tuple) and len(cross_bias_result) == 2:
+        raw_bias = cross_bias_result[0]
+        cross_track_bias = float(raw_bias) if raw_bias is not None else 0.0
+
+    # ZPD priority for this specific topic (match by title substring; fall back to top candidate)
+    priority_score = 0.5
+    if isinstance(zpd_candidates, list) and zpd_candidates:
+        topic_lower = request.topic.lower()
+        for c in zpd_candidates:
+            if topic_lower in c.title.lower() or c.title.lower() in topic_lower:
+                priority_score = c.priority
+                break
+        else:
+            priority_score = zpd_candidates[0].priority
+
+    # Per-concept proficiency map
+    proficiency = proficiency_map if isinstance(proficiency_map, dict) else {}
+
+    logger.info(
+        f"[LessonStream] AdaptationRequest built — "
+        f"grade={request.grade_level} track={request.track.value} "
+        f"bkt_pL={mastery_score:.3f} decay={decay_adjusted:.3f} "
+        f"priority={priority_score:.3f} cross_bias={cross_track_bias:.3f} "
+        f"modality={preferred_modality} interests={interests[:2]} "
+        f"sm2_scores={len(recent_quiz_scores)} concepts={len(proficiency)}"
+    )
+
+    return AdaptationRequest(
+        grade_level=request.grade_level,
+        track=request.track.value,
+        interests=interests,
+        interaction_count=interaction_count,
+        recent_quiz_scores=recent_quiz_scores,
+        preferred_modality=preferred_modality,
+        bkt_pL=mastery_score,
+        priority_score=priority_score,
+        decay_adjusted_mastery=decay_adjusted,
+        cross_track_bias=cross_track_bias,
+        proficiency_map=proficiency,
+    )
+
+
 async def _stream_lesson(
     request: LessonRequest,
     student_id: str,
@@ -65,7 +253,7 @@ async def _stream_lesson(
         practical_agent, discipleship_agent, _fetch_graph_context, _route,
         AdelineState,
     )
-    from app.agents.adapter import adapt_canonical_for_student, AdaptationRequest
+    from app.agents.adapter import adapt_canonical_for_student
 
     yield _sse({"type": "status", "message": "Searching knowledge archive..."})
 
@@ -94,15 +282,15 @@ async def _stream_lesson(
         if track_mastery:
             mastery_score = track_mastery.mastery_score
             mastery_band = track_mastery.mastery_band
-        interaction_count = student_state.total_interactions or 10
+        # Sum lesson counts across all tracks — StudentState has no total_interactions attr
+        interaction_count = sum(tm.lesson_count for tm in student_state.tracks.values()) or 10
     except Exception as e:
         logger.warning(f"[LessonStream] Student state load failed (non-fatal): {e}")
 
-    adaptation_req = AdaptationRequest(
-        grade_level=request.grade_level,
-        track=request.track.value,
-        interaction_count=interaction_count,
-        bkt_pL=mastery_score,
+    # Build a fully-populated AdaptationRequest from all personalization signals
+    # (interests, SM-2 scores, decay, cross-track bias, ZPD priority, proficiency map)
+    adaptation_req = await _build_adaptation_request(
+        student_id, request, mastery_score, interaction_count
     )
 
     # ── Phase 1: Canonical check ──────────────────────────────────────────────
