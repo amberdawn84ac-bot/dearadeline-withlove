@@ -1,5 +1,5 @@
 """
-LangGraph Multi-Agent Orchestrator
+Multi-Agent Orchestrator
 Routes lesson requests to the appropriate specialist agent based on Track.
 Enforces the Witness Protocol before any content reaches the student.
 
