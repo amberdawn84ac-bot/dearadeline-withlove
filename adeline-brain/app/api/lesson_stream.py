@@ -65,6 +65,7 @@ async def _stream_lesson(
         practical_agent, discipleship_agent, _fetch_graph_context, _route,
         AdelineState,
     )
+    from app.agents.adapter import adapt_canonical_for_student, AdaptationRequest
 
     yield _sse({"type": "status", "message": "Searching knowledge archive..."})
 
@@ -80,6 +81,29 @@ async def _stream_lesson(
         logger.error(f"[LessonStream] Embed failed: {e}")
         yield _sse({"type": "error", "message": "Failed to process topic embedding."})
         return
+
+    # ── Phase 1: Student state ────────────────────────────────────────────────
+    interaction_count = 10
+    mastery_score = 0.0
+    mastery_band = "NOVICE"
+    cross_track_ack = None
+
+    try:
+        student_state = await load_student_state(student_id)
+        track_mastery = student_state.tracks.get(request.track.value)
+        if track_mastery:
+            mastery_score = track_mastery.mastery_score
+            mastery_band = track_mastery.mastery_band
+        interaction_count = student_state.total_interactions or 10
+    except Exception as e:
+        logger.warning(f"[LessonStream] Student state load failed (non-fatal): {e}")
+
+    adaptation_req = AdaptationRequest(
+        grade_level=request.grade_level,
+        track=request.track.value,
+        interaction_count=interaction_count,
+        bkt_pL=mastery_score,
+    )
 
     # ── Phase 1: Canonical check ──────────────────────────────────────────────
     yield _sse({"type": "status", "message": "Checking curated lesson library..."})
@@ -103,6 +127,11 @@ async def _stream_lesson(
             blocks_data = canonical.get("blocks") or []
             if isinstance(blocks_data, str):
                 blocks_data = json.loads(blocks_data)
+            
+            yield _sse({"type": "status", "message": "Personalizing lesson for you..."})
+            canonical_dummy = {"topic": request.topic, "blocks": blocks_data}
+            blocks_data = await adapt_canonical_for_student(canonical_dummy, adaptation_req)
+            
             for block in blocks_data:
                 yield _sse({"type": "block", "block": block})
                 tool_event = _from_block_tool_call(block, lesson_id, request.track.value)
@@ -117,22 +146,6 @@ async def _stream_lesson(
             return
     except Exception as e:
         logger.warning(f"[LessonStream] Canonical check failed (non-fatal): {e}")
-
-    # ── Phase 1: Student state ────────────────────────────────────────────────
-    interaction_count = 10
-    mastery_score = 0.0
-    mastery_band = "NOVICE"
-    cross_track_ack = None
-
-    try:
-        student_state = await load_student_state(student_id)
-        track_mastery = student_state.tracks.get(request.track.value)
-        if track_mastery:
-            mastery_score = track_mastery.mastery_score
-            mastery_band = track_mastery.mastery_band
-        interaction_count = student_state.total_interactions or 10
-    except Exception as e:
-        logger.warning(f"[LessonStream] Student state load failed (non-fatal): {e}")
 
     # ── Phase 2: Build initial state ──────────────────────────────────────────
     state: AdelineState = {
@@ -191,6 +204,12 @@ async def _stream_lesson(
         )
 
     # ── Phase 2: Emit blocks ──────────────────────────────────────────────────
+    # ── Phase 2: Personalize via Adapter ──────────────────────────────────────
+    if state["blocks"]:
+        yield _sse({"type": "status", "message": "Personalizing lesson for you..."})
+        canonical_dummy = {"topic": request.topic, "blocks": state["blocks"]}
+        state["blocks"] = await adapt_canonical_for_student(canonical_dummy, adaptation_req)
+
     yield _sse({"type": "status", "message": "Streaming lesson blocks..."})
     for block in state["blocks"]:
         yield _sse({"type": "block", "block": block})
