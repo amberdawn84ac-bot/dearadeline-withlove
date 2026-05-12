@@ -20,12 +20,13 @@ This is the heart of Adeline's adaptive curriculum — connecting:
   - DiscipleshipAgent (all other tracks)
   - RegistrarAgent (credits, xAPI, transcript)
 """
+import json
 import logging
 import random
 from typing import Optional
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Query, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Header
 from pydantic import BaseModel
 
 from app.schemas.api_models import Track
@@ -34,6 +35,7 @@ from app.models.student import load_student_state, MasteryBand
 from app.connections.journal_store import journal_store
 from app.connections.neo4j_client import neo4j_client
 from app.connections.pgvector_client import hippocampus
+from app.connections.redis_client import redis_client
 from app.tools.graph_query import tool_get_zpd_candidates, ZPDCandidate
 
 # Graduation requirements (Oklahoma public school standards - 23 credits)
@@ -69,7 +71,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/learning-plan", tags=["learning-plan"])
 
 
-# ── Response Models ────────────────────────────────────────────────────────────
+# ── Response Models ──────────────────────────────────────────────────────────────────────────────
 
 class LessonSuggestion(BaseModel):
     id: str
@@ -146,7 +148,7 @@ class LearningPlanResponse(BaseModel):
     generated_at: str
 
 
-# ── Track metadata ─────────────────────────────────────────────────────────────
+# ── Track metadata ──────────────────────────────────────────────────────────────────────────────
 
 # Which agent handles each track (from CLAUDE.md architecture)
 TRACK_AGENT_MAP = {
@@ -163,7 +165,7 @@ TRACK_AGENT_MAP = {
 }
 
 TRACK_EMOJI = {
-    "TRUTH_HISTORY": "🏛️",
+    "TRUTH_HISTORY": "🏗️",
     "CREATION_SCIENCE": "🔬",
     "HOMESTEADING": "🌾",
     "DISCIPLESHIP": "📖",
@@ -267,59 +269,241 @@ INTEREST_TRACK_MAP = {
     ]),
 }
 
-# Starter topics for tracks with no ZPD data yet
-STARTER_TOPICS = {
-    "TRUTH_HISTORY": [
-        ("The Declaration of Independence", "What the founders actually wrote — and what they left out"),
-        ("The Trail of Tears", "Primary sources from those who survived forced removal"),
-        ("The American Revolution", "Letters and documents from the founding era"),
-    ],
-    "CREATION_SCIENCE": [
-        ("Butterfly Life Cycles", "Metamorphosis and adaptation in nature"),
-        ("The Water Cycle", "Hands-on experiments with evaporation"),
-        ("Soil Biology", "The living world beneath your feet"),
-    ],
-    "HOMESTEADING": [
-        ("Starting a Garden", "Planning and planting your first beds"),
-        ("Raising Chickens", "From chicks to eggs — the basics"),
-        ("Food Preservation", "Canning, drying, and storing the harvest"),
-    ],
-    "DISCIPLESHIP": [
-        ("The Psalms", "Hebrew poetry and original meanings"),
-        ("The Sermon on the Mount", "What Jesus actually said — and meant"),
-        ("Genesis Creation Account", "Reading the text in its original context"),
-    ],
-    "JUSTICE_CHANGEMAKING": [
-        ("Corporate Accountability", "Following the money to find the truth"),
-        ("Environmental Justice", "Who profits when communities are poisoned"),
-        ("Media Literacy", "How to spot propaganda and manipulation"),
-    ],
-    "HEALTH_NATUROPATHY": [
-        ("How the Body Heals", "Understanding your immune system"),
-        ("Herbal Medicine Basics", "Plants that actually work"),
-        ("Nutrition Truth", "What the food industry doesn't want you to know"),
-    ],
-    "GOVERNMENT_ECONOMICS": [
-        ("How Laws Really Get Made", "Lobbying, money, and power"),
-        ("The Federal Reserve", "Who controls the money supply"),
-        ("Local Government", "Where your voice actually matters"),
-    ],
-    "ENGLISH_LITERATURE": [
-        ("Reading Critically", "What is the author asking you to believe?"),
-        ("Narrative Voice", "Who is telling the story — and why"),
-        ("Poetry as Resistance", "Words that changed movements"),
-    ],
-    "APPLIED_MATHEMATICS": [
-        ("Budgeting Basics", "Managing money in the real world"),
-        ("Measuring and Building", "Math for construction and crafts"),
-        ("Understanding Interest", "How loans and savings really work"),
-    ],
-    "CREATIVE_ECONOMY": [
-        ("Pricing Your Work", "What your time and skill are worth"),
-        ("Building a Brand", "Standing out in the marketplace"),
-        ("From Idea to Product", "Taking a project from concept to sale"),
-    ],
+# Starter topics differentiated by grade band so every student sees age-appropriate content.
+# Used as a fallback when the ZPD knowledge graph has no candidates yet (new students).
+STARTER_TOPICS_BY_GRADE: dict[str, dict[str, list[tuple[str, str]]]] = {
+    "K-2": {
+        "TRUTH_HISTORY": [
+            ("My Family's Story", "Interviewing grandparents to record your family's history"),
+            ("Community Helpers Then and Now", "How towns and neighborhoods have changed"),
+            ("Holidays and Their Meaning", "Why we celebrate and what history is behind each one"),
+        ],
+        "CREATION_SCIENCE": [
+            ("Butterfly Life Cycles", "Watching caterpillars turn into butterflies — step by step"),
+            ("Seeds and Growing Things", "Planting seeds and recording what you observe"),
+            ("Weather Watch", "Keeping a daily weather journal for one month"),
+        ],
+        "HOMESTEADING": [
+            ("Garden Helpers", "Learning which bugs help the garden and which don't"),
+            ("Where Food Comes From", "Tracing your meals back to the farm"),
+            ("Baby Animals on the Farm", "How animals are born, fed, and cared for"),
+        ],
+        "DISCIPLESHIP": [
+            ("The Lord's Prayer", "Learning each line and what it means"),
+            ("Creation Week", "What God made on each of the seven days"),
+            ("Fruit of the Spirit", "What love, joy, peace, and patience look like in real life"),
+        ],
+        "JUSTICE_CHANGEMAKING": [
+            ("Fair and Unfair", "Recognizing when rules help everyone — or only some people"),
+            ("Community Problem Solvers", "People who helped make their neighborhood better"),
+            ("My Voice Matters", "Learning to speak up kindly for what is right"),
+        ],
+        "HEALTH_NATUROPATHY": [
+            ("How My Body Works", "Learning about bones, muscles, and the heart"),
+            ("Foods That Help Us Grow", "Which foods give us energy, strength, and clear thinking"),
+            ("Rest and Movement", "Why we need sleep and why we need to play outside"),
+        ],
+        "GOVERNMENT_ECONOMICS": [
+            ("Needs vs. Wants", "Understanding why we cannot have everything at once"),
+            ("Earning and Spending", "Setting up a simple lemonade stand and counting the money"),
+            ("Leaders in Our Community", "Who makes decisions in our town — and how"),
+        ],
+        "ENGLISH_LITERATURE": [
+            ("My Favorite Story", "Retelling a book in your own words"),
+            ("Rhymes and Reasons", "Poetry is just talking with a beat"),
+            ("Letter Writing", "Writing a real letter to someone you love"),
+        ],
+        "APPLIED_MATHEMATICS": [
+            ("Counting Money", "Using real coins and dollars to buy and make change"),
+            ("Measuring with Rulers", "Hands-on measurement in the kitchen and garden"),
+            ("Patterns Everywhere", "Spotting patterns in nature, fabric, and buildings"),
+        ],
+        "CREATIVE_ECONOMY": [
+            ("My First Art Show", "Making artwork and sharing it with the family"),
+            ("Simple Crafts to Sell", "Making something by hand and deciding on a fair price"),
+            ("Telling Stories with Pictures", "Drawing a comic strip about your day"),
+        ],
+    },
+    "3-5": {
+        "TRUTH_HISTORY": [
+            ("The Declaration of Independence", "What the founders wrote — and what they meant"),
+            ("The Trail of Tears", "Primary sources from those who survived forced removal"),
+            ("The American Revolution", "Letters from colonists and loyalists — two different stories"),
+        ],
+        "CREATION_SCIENCE": [
+            ("The Water Cycle", "Hands-on experiments with evaporation, clouds, and rain"),
+            ("Ecosystems in Your Backyard", "What lives in the soil, air, and plants right outside"),
+            ("Animal Adaptations", "How creatures are designed to thrive in their environment"),
+        ],
+        "HOMESTEADING": [
+            ("Starting a Garden", "Planning beds, choosing varieties, and reading a seed packet"),
+            ("Composting Basics", "Turning kitchen scraps into rich garden soil"),
+            ("Raising Chickens", "From chicks to eggs — flock health and daily care"),
+        ],
+        "DISCIPLESHIP": [
+            ("The Psalms", "Hebrew poetry and what the words meant in their original context"),
+            ("The Sermon on the Mount", "What Jesus taught — and what the crowd would have heard"),
+            ("God's Design in Creation", "Seeing the Creator's fingerprints in living things"),
+        ],
+        "JUSTICE_CHANGEMAKING": [
+            ("Children Who Changed History", "Young activists and the lasting impact they made"),
+            ("Media Literacy Basics", "Is everything you read online really true?"),
+            ("Environmental Stewardship", "Taking care of the land and water God entrusted to us"),
+        ],
+        "HEALTH_NATUROPATHY": [
+            ("Herbal Garden Basics", "Growing and using plants that support everyday health"),
+            ("The Immune System", "How your body fights off sickness — without drugs"),
+            ("Sleep, Stress, and Health", "Why rest is one of the most powerful medicines"),
+        ],
+        "GOVERNMENT_ECONOMICS": [
+            ("How Local Government Works", "City council, mayors, and where your family has a voice"),
+            ("Supply and Demand", "Why some things cost more than others — and who decides"),
+            ("Making a Budget", "Dividing money into needs, wants, and savings"),
+        ],
+        "ENGLISH_LITERATURE": [
+            ("Reading Critically", "What is the author asking you to believe?"),
+            ("Narrative Voice", "Who is telling the story — and why does it matter?"),
+            ("Persuasive Writing", "Making an argument and backing it up with evidence"),
+        ],
+        "APPLIED_MATHEMATICS": [
+            ("Fractions in Real Life", "Cooking, building, and dividing things up fairly"),
+            ("Measuring and Building", "Using math to plan and build a real project"),
+            ("Budgeting a Project", "Adding up costs before you spend — and adjusting when needed"),
+        ],
+        "CREATIVE_ECONOMY": [
+            ("Pricing Your Work", "What is your time, skill, and materials worth?"),
+            ("Making and Selling", "From idea to finished product — and making a profit"),
+            ("Design Thinking", "How to solve real problems with creativity"),
+        ],
+    },
+    "6-8": {
+        "TRUTH_HISTORY": [
+            ("Primary Sources Workshop", "Evaluating documents for bias, context, and reliability"),
+            ("The Civil War in Letters", "What soldiers and civilians actually wrote home about"),
+            ("Constitutional Amendments", "How and why the founding document has changed over time"),
+        ],
+        "CREATION_SCIENCE": [
+            ("Scientific Method in Action", "Designing and running your own controlled experiment"),
+            ("Genetics and Heredity", "Why living things look like their parents — and sometimes don't"),
+            ("Earth's Systems", "How geology, the water cycle, and the atmosphere interact"),
+        ],
+        "HOMESTEADING": [
+            ("Soil Science", "Testing and amending your soil for a better harvest"),
+            ("Food Preservation", "Canning, fermenting, and dehydrating the harvest"),
+            ("Small-Scale Animal Husbandry", "Managing a flock or small herd sustainably"),
+        ],
+        "DISCIPLESHIP": [
+            ("Apologetics Foundations", "Knowing what you believe — and being able to explain why"),
+            ("Biblical Worldview", "How Scripture speaks to every area of modern life"),
+            ("Church History", "How the faith was tested, preserved, and passed down"),
+        ],
+        "JUSTICE_CHANGEMAKING": [
+            ("Regulatory Capture Explained", "How corporations influence the laws that govern them"),
+            ("Civil Rights Documentation", "Reading primary sources from the movement — not the textbook"),
+            ("Local Advocacy Project", "Identifying a real problem and taking documented action"),
+        ],
+        "HEALTH_NATUROPATHY": [
+            ("Nutrition Science", "What the food industry funds — and what the research actually shows"),
+            ("Herbal Medicine Research", "Evaluating traditional plant remedies with modern evidence"),
+            ("Mental Health and Faith", "Anxiety, depression, and a biblical framework for care"),
+        ],
+        "GOVERNMENT_ECONOMICS": [
+            ("How Laws Really Get Made", "Lobbying, campaign money, and the legislative process"),
+            ("The Federal Reserve", "Who controls the money supply — and what that means for you"),
+            ("Economics of the Household", "Running your family's finances like a business"),
+        ],
+        "ENGLISH_LITERATURE": [
+            ("Literary Analysis", "Finding theme, symbolism, and authorial intent in a real text"),
+            ("Research and Citation", "Building an argument from primary sources"),
+            ("Rhetoric and Persuasion", "How language is used to shape what people believe"),
+        ],
+        "APPLIED_MATHEMATICS": [
+            ("Algebra in Real Life", "Using equations to solve actual problems around the house"),
+            ("Geometry and Design", "Angles, measurements, and building a real structure"),
+            ("Statistics and Data", "Reading graphs, polls, and probability with a critical eye"),
+        ],
+        "CREATIVE_ECONOMY": [
+            ("Building a Brand", "What makes a business stand out — and why people trust it"),
+            ("Portfolio Development", "Documenting your creative work professionally"),
+            ("Entrepreneurship Basics", "Starting something from nothing — the first steps"),
+        ],
+    },
+    "9-12": {
+        "TRUTH_HISTORY": [
+            ("The Declaration — A Close Read", "Annotating the founding document line by line"),
+            ("Reconstruction and Its Collapse", "What primary sources reveal about post-war America"),
+            ("20th Century Foreign Policy", "Declassified documents and geopolitical strategy"),
+        ],
+        "CREATION_SCIENCE": [
+            ("Origins Debate", "Evaluating evolutionary and creation science arguments from primary literature"),
+            ("Advanced Biology", "Cell biology, genetics, and biochemistry for the serious student"),
+            ("Environmental Chemistry", "How pollutants move through ecosystems — and who regulates them"),
+        ],
+        "HOMESTEADING": [
+            ("Farm Business Planning", "From acreage to income — building a sustainable homestead"),
+            ("Advanced Food Preservation", "Fermentation science, lacto-fermentation, and shelf-life chemistry"),
+            ("Permaculture Design", "Designing land for maximum yield and long-term sustainability"),
+        ],
+        "DISCIPLESHIP": [
+            ("Systematic Theology", "Core doctrines and their biblical foundations — in your own words"),
+            ("Cultural Apologetics", "Engaging the secular world with grace, truth, and evidence"),
+            ("Vocational Calling", "How faith shapes career, family, and life purpose"),
+        ],
+        "JUSTICE_CHANGEMAKING": [
+            ("Power-Capture Tactics", "Regulatory, legislative, and narrative capture — and how changemakers respond"),
+            ("Investigative Research Methods", "FOIA requests, lobbying records, and follow-the-money analysis"),
+            ("Changemaker Portfolio", "Documenting actions taken, not essays written — for a real audience"),
+        ],
+        "HEALTH_NATUROPATHY": [
+            ("Clinical Nutrition", "Evidence-based natural health — reading the actual studies"),
+            ("Functional Medicine Overview", "Root causes vs. symptom management — a framework for health"),
+            ("Community Health Advocacy", "Applying health knowledge to serve and educate others"),
+        ],
+        "GOVERNMENT_ECONOMICS": [
+            ("Austrian Economics", "Sound money, free markets, and individual liberty — the theoretical foundation"),
+            ("Constitutional Law", "How the courts have interpreted — and sometimes ignored — the founding document"),
+            ("Entrepreneurship and the Market", "Building a business within a real economic framework"),
+        ],
+        "ENGLISH_LITERATURE": [
+            ("Advanced Rhetoric", "The art of persuasion from Aristotle to modern political speech"),
+            ("American Literature Survey", "Primary texts from the founding era to the 20th century"),
+            ("Senior Thesis Writing", "Research, argument structure, and academic writing for publication"),
+        ],
+        "APPLIED_MATHEMATICS": [
+            ("Pre-Calculus Concepts", "Functions, limits, and the language of higher mathematics"),
+            ("Financial Mathematics", "Interest, compound growth, investment, and real-world money management"),
+            ("Statistics for Research", "Using data to answer real questions — and spotting manipulation"),
+        ],
+        "CREATIVE_ECONOMY": [
+            ("Business Plan Development", "Turning a creative idea into a viable enterprise — with numbers"),
+            ("Visual Communication", "Design principles for marketing, branding, and public communication"),
+            ("Creative Portfolio for College", "Documenting work for admissions, employment, or clients"),
+        ],
+    },
 }
+
+
+def _get_grade_band(grade_level: str) -> str:
+    """Return the grade band string for a given grade level."""
+    if grade_level == "K" or grade_level.upper().startswith("K"):
+        grade_num = 0
+    else:
+        import re
+        match = re.match(r"(\d+)", grade_level)
+        grade_num = int(match.group(1)) if match else 5
+    if grade_num <= 2:
+        return "K-2"
+    elif grade_num <= 5:
+        return "3-5"
+    elif grade_num <= 8:
+        return "6-8"
+    return "9-12"
+
+
+def _get_grade_appropriate_starters(track: str, grade_level: str) -> list[tuple[str, str]]:
+    """Return grade-band-filtered starter topics for a track."""
+    band = _get_grade_band(grade_level)
+    return STARTER_TOPICS_BY_GRADE.get(band, {}).get(track, [])
 
 
 def _zpd_to_suggestion(candidate: ZPDCandidate, priority_boost: float = 0.0) -> LessonSuggestion:
@@ -567,62 +751,51 @@ def _calculate_graduation_progress(credits_by_bucket: dict[str, float], grade_le
 
 
 async def _get_grade_level_standards(student_id: str, grade_level: str) -> list[GradeLevelStandard]:
-    """Get grade-level OAS standards for K-8 students."""
-    from app.config import get_db_conn
-    
-    # Parse grade level to numeric
-    if grade_level == "K":
-        grade_num = 0
-    elif grade_level.startswith("K"):
+    """Fetch live OAS standards from Neo4j for this grade, with per-standard mastery status."""
+    import re
+
+    if grade_level == "K" or grade_level.startswith("K"):
         grade_num = 0
     else:
-        import re
-        match = re.match(r'(\d+)', grade_level)
-        grade_num = int(match.group(1)) if match else 0
-    
-    # Only return standards for K-8
+        m = re.match(r"(\d+)", grade_level)
+        grade_num = int(m.group(1)) if m else 0
+
+    # Standards only tracked for K-8
     if grade_num > 8:
         return []
-    
-    standards = []
-    
+
     try:
-        conn = await get_db_conn()
-        # Get mastered standards from Neo4j (simplified - would need actual Neo4j query)
-        # For now, return sample standards based on grade
-        sample_standards = {
-            0: ["K.ELA.1", "K.MATH.1", "K.SCIENCE.1"],  # Kindergarten
-            1: ["OAS.ELA.1.R.I.1", "OAS.MATH.1.OA.1", "OAS.SCI.1.LS.1"],  # 1st grade
-            2: ["OAS.ELA.2.R.L.1", "OAS.MATH.2.NBT.1", "OAS.SCI.2.PS.1"],  # 2nd grade
-            3: ["OAS.ELA.3.R.I.1", "OAS.MATH.3.OA.1", "OAS.SCI.3.ESS.1"],  # 3rd grade
-            4: ["OAS.ELA.4.R.L.1", "OAS.MATH.4.NBT.1", "OAS.SCI.4.LS.1"],  # 4th grade
-            5: ["OAS.ELA.5.R.I.1", "OAS.MATH.5.NBT.1", "OAS.SCI.5.ESS.1"],  # 5th grade
-            6: ["OAS.ELA.6.R.I.1", "OAS.MATH.6.RP.1", "OAS.SCI.6.LS.1"],  # 6th grade
-            7: ["OAS.ELA.7.R.I.1", "OAS.MATH.7.RP.1", "OAS.SCI.7.ESS.1"],  # 7th grade
-            8: ["OAS.ELA.8.R.I.3", "OAS.MATH.8.EE.1", "OAS.SCI.8.ESS.3.1"],  # 8th grade
-        }
-        
-        grade_standards = sample_standards.get(grade_num, [])
-        
-        for i, standard_id in enumerate(grade_standards[:5], 1):  # Top 5 standards
-            # Parse subject from standard ID
-            subject = "ELA" if "ELA" in standard_id else "Math" if "MATH" in standard_id else "Science"
-            
-            standards.append(GradeLevelStandard(
-                standard_id=standard_id,
-                subject=subject,
-                grade=grade_num,
-                description=f"Grade {grade_num} {subject} standard",
-                mastered=False,  # Would check Neo4j for actual mastery
-                priority=i,
-            ))
-        
-        await conn.close()
-        
+        rows = await neo4j_client.run(
+            """
+            MATCH (s:OASStandard)
+            WHERE s.grade = $grade
+            OPTIONAL MATCH (st:Student {id: $student_id})-[:MASTERED]->(c:Concept)
+                           -[:MAPS_TO_STANDARD]->(s)
+            WITH s, count(c) > 0 AS mastered
+            RETURN s.id            AS id,
+                   s.standard_text AS description,
+                   s.grade         AS grade,
+                   coalesce(s.subject, 'General') AS subject,
+                   mastered
+            ORDER BY s.id
+            LIMIT 10
+            """,
+            {"grade": grade_num, "student_id": student_id},
+        )
+        return [
+            GradeLevelStandard(
+                standard_id=r["id"],
+                subject=r["subject"] or "General",
+                grade=int(r["grade"] or grade_num),
+                description=r["description"] or "",
+                mastered=bool(r["mastered"]),
+                priority=i + 1,
+            )
+            for i, r in enumerate(rows)
+        ]
     except Exception as e:
-        logger.warning(f"[LearningPlan] Failed to get grade standards: {e}")
-    
-    return standards
+        logger.warning(f"[LearningPlan] Neo4j grade standards query failed: {e}")
+        return []
 
 
 async def _get_available_projects(track: str = None, limit: int = 3) -> list[ProjectSuggestion]:
@@ -648,11 +821,135 @@ async def _get_available_projects(track: str = None, limit: int = 3) -> list[Pro
     return projects
 
 
+# ── Redis sliding-window helpers ───────────────────────────────────────────────────────────────────────
+
+def _plan_cache_key(student_id: str) -> str:
+    return f"learning_plan:{student_id}"
+
+
+async def pop_completed_lesson(student_id: str, lesson_title: str) -> None:
+    """
+    Remove a completed lesson from the Redis queue by title.
+    Called synchronously before the background replenishment fires.
+    """
+    cache_key = _plan_cache_key(student_id)
+    try:
+        raw = await redis_client.get(cache_key)
+        if not raw:
+            return
+        plan = json.loads(raw)
+        original_count = len(plan.get("suggestions", []))
+        plan["suggestions"] = [
+            s for s in plan.get("suggestions", [])
+            if s.get("title") != lesson_title
+        ]
+        if len(plan["suggestions"]) < original_count:
+            await redis_client.set(cache_key, json.dumps(plan), ex=3600)
+            logger.info(
+                f"[LearningPlan] Popped '{lesson_title}' from queue for student={student_id}. "
+                f"Queue: {original_count} → {len(plan['suggestions'])}"
+            )
+    except Exception as e:
+        logger.warning(f"[LearningPlan] Failed to pop completed lesson (non-fatal): {e}")
+
+
+async def _replenish_learning_plan_queue(student_id: str) -> None:
+    """
+    Background task: read credit gaps, generate 1-2 targeted new suggestions,
+    and append them to the Redis queue so the dashboard always has fresh cards.
+    """
+    cache_key = _plan_cache_key(student_id)
+    try:
+        # 1. Load current queue
+        raw = await redis_client.get(cache_key)
+        plan = json.loads(raw) if raw else {}
+        current_suggestions: list[dict] = plan.get("suggestions", [])
+        current_titles = {s.get("title") for s in current_suggestions}
+
+        # 2. Load what's needed to generate a gap-targeted suggestion
+        profile = {}
+        try:
+            profile = await _get_student_profile(student_id)
+        except Exception:
+            pass
+        grade_level = profile.get("grade_level", "8")
+
+        credits_by_bucket = await _get_credits_by_bucket(student_id)
+        credit_gaps = _calculate_credit_gaps(credits_by_bucket, grade_level)
+
+        student_state = None
+        try:
+            student_state = await load_student_state(student_id)
+        except Exception:
+            pass
+
+        track_scores: dict[str, float] = {}
+        if student_state and student_state.tracks:
+            for track_name, mastery in student_state.tracks.items():
+                track_scores[track_name] = mastery.mastery_score
+
+        weakest_track = min(track_scores, key=track_scores.get) if track_scores else None
+
+        # 3. Build up to 2 new suggestions, prioritised by graduation gaps
+        new_suggestions: list[LessonSuggestion] = []
+
+        # Priority 1: ZPD candidates in the highest-priority gap track
+        for gap in sorted(credit_gaps, key=lambda g: g.priority):
+            if gap.remaining <= 0:
+                continue
+            for track, bucket in TRACK_TO_BUCKET.items():
+                effective_bucket = bucket[0] if isinstance(bucket, list) else bucket
+                if effective_bucket != gap.bucket:
+                    continue
+                try:
+                    candidates = await tool_get_zpd_candidates(student_id, track, limit=2)
+                    for c in candidates:
+                        s = _zpd_to_suggestion(c, priority_boost=0.3)
+                        if s.title not in current_titles:
+                            new_suggestions.append(s)
+                            current_titles.add(s.title)
+                        if len(new_suggestions) >= 2:
+                            break
+                except Exception:
+                    pass
+            if len(new_suggestions) >= 2:
+                break
+
+        # Priority 2: Grade-appropriate starter for the weakest track if still short
+        if len(new_suggestions) < 2 and weakest_track:
+            starters = _get_grade_appropriate_starters(weakest_track, grade_level)
+            for idx, topic in enumerate(starters):
+                s = _starter_suggestion(weakest_track, topic, idx)
+                if s.title not in current_titles:
+                    new_suggestions.append(s)
+                    current_titles.add(s.title)
+                if len(new_suggestions) >= 2:
+                    break
+
+        if not new_suggestions:
+            logger.info(f"[LearningPlan/Replenish] No new suggestions generated for student={student_id}")
+            return
+
+        # 4. Append and write back to Redis (1-hour TTL keeps queue fresh)
+        for s in new_suggestions:
+            current_suggestions.append(s.model_dump())
+        plan["suggestions"] = current_suggestions
+        plan["generated_at"] = datetime.now(timezone.utc).isoformat()
+        await redis_client.set(cache_key, json.dumps(plan), ex=3600)
+        logger.info(
+            f"[LearningPlan/Replenish] Appended {len(new_suggestions)} new suggestion(s) "
+            f"for student={student_id}. Queue now has {len(current_suggestions)} items."
+        )
+    except Exception as e:
+        logger.warning(f"[LearningPlan/Replenish] Background replenishment failed (non-fatal): {e}")
+
+
 @router.get("/{student_id}", response_model=LearningPlanResponse)
 async def get_learning_plan(
     student_id: str,
     limit: int = Query(6, ge=1, le=12),
     include_all_tracks: bool = Query(False),
+    refresh: bool = Query(False, description="Force regeneration, bypassing cache"),
     _user_id: str = Depends(verify_student_access),
 ):
     """
@@ -665,6 +962,11 @@ async def get_learning_plan(
     - Portfolio projects (real-world accomplishments, not assignments)
     - Registrar credits (what the student has earned, what they still need)
     - Agent routing (HistorianAgent, ScienceAgent, DiscipleshipAgent)
+
+    Caching:
+    - Learning plans are cached in Redis for 5 minutes to avoid expensive
+      regeneration on every dashboard load.
+    - Pass ?refresh=true to force regeneration.
 
     The algorithm:
     1. Load student profile (interests, grade, learning style)
@@ -682,6 +984,17 @@ async def get_learning_plan(
     - Tracks with lower mastery → boosted (help balance progress)
     - Starter/exploration topics → lower priority
     """
+    # ── Redis sliding-window cache check ─────────────────────────────────────────────────────────────────────
+    cache_key = _plan_cache_key(student_id)
+    if not refresh:
+        try:
+            cached = await redis_client.get(cache_key)
+            if cached:
+                logger.info(f"[LearningPlan] Cache HIT for student={student_id}")
+                return LearningPlanResponse(**json.loads(cached))
+        except Exception as e:
+            logger.warning(f"[LearningPlan] Redis cache read failed (non-fatal): {e}")
+
     suggestions: list[LessonSuggestion] = []
 
     # 1. Load student profile (interests, grade, learning style)
@@ -722,6 +1035,7 @@ async def get_learning_plan(
             percentage_complete=0.0,
             credits_remaining=TOTAL_REQUIRED,
             on_track=False,
+            is_high_school=False,
         )
         credit_gaps = _calculate_credit_gaps(credits_by_bucket, grade_level)
 
@@ -759,9 +1073,14 @@ async def get_learning_plan(
     gap_priorities = {}
     for gap in credit_gaps:
         if gap.remaining > 0:
-            # Find tracks that fulfill this bucket
+            # Find tracks that fulfill this bucket (bucket may be a string or a list)
             for track, bucket in TRACK_TO_BUCKET.items():
-                if bucket == gap.bucket and track in active_tracks:
+                bucket_matches = (
+                    bucket == gap.bucket
+                    if isinstance(bucket, str)
+                    else gap.bucket in bucket
+                )
+                if bucket_matches and track in active_tracks:
                     gap_priorities[track] = gap.priority
                     break
     
@@ -779,33 +1098,33 @@ async def get_learning_plan(
                 if not any(s.title == suggestion.title for s in suggestions):
                     suggestions.append(suggestion)
                     
-            # If no ZPD candidates, add starter topics for gaps
-            if not candidates and track in STARTER_TOPICS:
-                starters = STARTER_TOPICS[track][:1]  # Just 1 starter for gaps
-                for topic in starters:
+            # If no ZPD candidates, use a grade-appropriate starter for this gap track
+            if not candidates:
+                grade_starters = _get_grade_appropriate_starters(track, grade_level)
+                for topic in grade_starters[:1]:
                     suggestion = _starter_suggestion(track, topic, 0)
                     suggestion.priority = 0.8  # High priority for gaps
                     if not any(s.title == suggestion.title for s in suggestions):
                         suggestions.append(suggestion)
-                        
+
         except Exception as e:
             logger.warning(f"[LearningPlan] Gap-based suggestions failed for track={track}: {e}")
 
-    # 8. Generate interest-based suggestions (medium priority)
-    for interest in interests[:2]:  # Top 2 interests (reduced to make room for gaps)
+    # 8. Generate interest-based suggestions (high priority — student engagement drives completion)
+    # Interests surface early so every student sees personalized cards, even without ZPD graph data.
+    for interest in interests[:3]:  # Top 3 interests
         if interest in INTEREST_TRACK_MAP:
             track, topics = INTEREST_TRACK_MAP[interest]
-            # Lower priority if this track isn't a gap
-            priority = 0.6 if track not in gap_priorities else 0.75
-            
-            for idx, topic in enumerate(topics[:1]):  # 1 topic per interest
+            for idx, topic in enumerate(topics[:2]):  # 2 topics per interest for variety
                 suggestion = _interest_suggestion(interest, topic, track, idx)
-                suggestion.priority = priority
+                # Boost slightly if this interest aligns with a graduation gap
+                if track in gap_priorities:
+                    suggestion.priority = min(1.0, suggestion.priority + 0.1)
                 # Don't add duplicates
                 if not any(s.title == suggestion.title for s in suggestions):
                     suggestions.append(suggestion)
 
-    # 7. Fetch ZPD candidates for each track
+    # 9. Fetch ZPD candidates for each track
     for track in active_tracks:
         try:
             candidates = await tool_get_zpd_candidates(student_id, track, limit=2)
@@ -822,7 +1141,7 @@ async def get_learning_plan(
         except Exception as e:
             logger.warning(f"[LearningPlan] ZPD query failed for track={track}: {e}")
 
-    # 8. If we don't have enough suggestions, add starter topics
+    # 10. If we don't have enough suggestions, add grade-appropriate starter topics
     if len(suggestions) < limit:
         # Prioritize tracks with no ZPD suggestions
         tracks_with_suggestions = {s.track for s in suggestions}
@@ -833,7 +1152,7 @@ async def get_learning_plan(
             tracks_needing_starters = active_tracks
 
         for track in tracks_needing_starters:
-            starters = STARTER_TOPICS.get(track, [])
+            starters = _get_grade_appropriate_starters(track, grade_level)
             for idx, topic in enumerate(starters[:2]):  # Max 2 starters per track
                 suggestion = _starter_suggestion(track, topic, idx)
                 # Don't add duplicates
@@ -869,9 +1188,22 @@ async def get_learning_plan(
     except Exception as e:
         logger.warning(f"[LearningPlan] Failed to get grade standards: {e}")
 
-    # 12. Fetch available portfolio projects
+    # 12. Fetch available portfolio projects — prefer tracks matching interests or weakest track
     try:
-        projects = await _get_available_projects(limit=3)
+        preferred_track = None
+        if interests:
+            # Map the first interest to a track for project filtering
+            first_interest = interests[0]
+            if first_interest in INTEREST_TRACK_MAP:
+                preferred_track = INTEREST_TRACK_MAP[first_interest][0]
+        if not preferred_track and weakest_track:
+            preferred_track = weakest_track
+        projects = await _get_available_projects(track=preferred_track, limit=3)
+        if len(projects) < 3:
+            # Backfill with projects from any track if the preferred track doesn't have enough
+            extra = await _get_available_projects(limit=3 - len(projects))
+            existing_ids = {p.id for p in projects}
+            projects += [p for p in extra if p.id not in existing_ids]
     except Exception as e:
         logger.warning(f"[LearningPlan] Failed to get projects: {e}")
         projects = []
@@ -912,7 +1244,7 @@ async def get_learning_plan(
         f"{len(grade_standards)} standards for student={student_id}"
     )
 
-    return LearningPlanResponse(
+    response = LearningPlanResponse(
         student_id=student_id,
         suggestions=final_suggestions,
         projects=projects,
@@ -927,3 +1259,12 @@ async def get_learning_plan(
         grade_standards=grade_standards,  # Only populated for K-8
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
+
+    # ── Cache the response (1 hour TTL — replenishment extends as lessons complete) ──
+    try:
+        await redis_client.set(cache_key, response.model_dump_json(), ex=3600)
+        logger.info(f"[LearningPlan] Cached response for student={student_id} (1 hr TTL)")
+    except Exception as e:
+        logger.warning(f"[LearningPlan] Redis cache write failed (non-fatal): {e}")
+
+    return response
