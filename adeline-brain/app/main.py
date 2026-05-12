@@ -88,6 +88,49 @@ if _SENTRY_DSN:
     logger.info("[adeline-brain] Sentry initialized")
 
 
+async def _auto_seed_neo4j():
+    """Seed OASStandard nodes into Neo4j on startup if the graph is empty."""
+    import json
+    from pathlib import Path
+    await asyncio.sleep(5)  # wait for neo4j_client.connect() to finish
+    try:
+        rows = await neo4j_client.run("MATCH (s:OASStandard) RETURN count(s) AS n", {})
+        count = int(rows[0]["n"]) if rows else 0
+        if count >= 10:
+            logger.info(f"[AutoSeed] Neo4j already has {count} OASStandard nodes — skipping")
+            return
+        logger.info("[AutoSeed] Neo4j has no OASStandard nodes — seeding now...")
+        seed_path = Path(__file__).resolve().parents[2] / "data" / "seeds" / "oas_to_8track.json"
+        with open(seed_path) as f:
+            seed_data = json.load(f)
+        mappings = seed_data["mappings"]
+        tracks = {m["track"] for m in mappings}
+        for track in sorted(tracks):
+            await neo4j_client.run(
+                "MERGE (t:Track {name: $name}) SET t.label = $label",
+                {"name": track, "label": track.replace("_", " ").title()},
+            )
+        for m in mappings:
+            props = {
+                **m["neo4j_node"]["properties"],
+                "standard_text": m["standard_text"],
+                "lesson_hook":   m.get("adeline_lesson_hook", ""),
+                "difficulty":    m.get("difficulty", ""),
+            }
+            await neo4j_client.run(
+                """
+                MERGE (s:OASStandard {id: $id})
+                SET s += $props
+                MERGE (t:Track {name: $track})
+                MERGE (s)-[:MAPS_TO_TRACK]->(t)
+                """,
+                {"id": m["standard_id"], "props": props, "track": m["track"]},
+            )
+        logger.info(f"[AutoSeed] Seeded {len(mappings)} OASStandard nodes into Neo4j")
+    except Exception as e:
+        logger.warning(f"[AutoSeed] Neo4j auto-seed failed (non-fatal): {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("[adeline-brain] Starting up...")
@@ -108,6 +151,7 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(_connect_services())
     await startup_seed_scheduler()
+    asyncio.create_task(_auto_seed_neo4j())
     yield
     logger.info("[adeline-brain] Shutting down...")
     await shutdown_seed_scheduler()
