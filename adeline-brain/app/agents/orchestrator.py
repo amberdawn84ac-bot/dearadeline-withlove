@@ -42,7 +42,7 @@ from app.protocols.witness import evaluate_evidence, build_research_mission_bloc
 from app.connections.pgvector_client import hippocampus
 from app.connections.neo4j_client import neo4j_client
 from app.tools.researcher import search_witnesses
-from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL, GOOGLE_API_KEY, ADELINE_MODEL
+from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL, GOOGLE_API_KEY, ADELINE_MODEL, LEARNLM_MODEL
 from app.algorithms.pedagogical_directives import generate_pedagogical_directives, get_quick_directives
 from app.agents.pedagogy import ZPDZone
 from app.models.student import MasteryBand
@@ -82,6 +82,33 @@ def _synthesis_client():
         _ANTHROPIC_MODEL,
         False,
     )
+
+
+async def _pedagogical_call(system: str, user: str, max_tokens: int = 1000) -> str:
+    """
+    Pedagogical synthesis via LearnLM (Google's educationally fine-tuned model).
+    Routes narrative voice, Socratic scaffolding, and ZPD-adapted content through
+    LearnLM for higher pedagogical quality. Falls back to Gemini Flash on any error.
+    """
+    api_key = GEMINI_API_KEY or GOOGLE_API_KEY
+    if api_key:
+        import openai as _oai
+        for model in (LEARNLM_MODEL, GEMINI_MODEL):  # LearnLM → Flash fallback
+            try:
+                client = _oai.AsyncOpenAI(api_key=api_key, base_url=GEMINI_BASE_URL)
+                response = await client.chat.completions.create(
+                    model=model,
+                    max_tokens=max_tokens,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user",   "content": user},
+                    ],
+                )
+                return response.choices[0].message.content or ""
+            except Exception as e:
+                logger.warning(f"[Pedagogical] {model} failed ({e}) — trying fallback")
+    # Final fallback: Claude
+    return await _synthesis_call(system, user, max_tokens)
 
 
 async def _synthesis_call(system: str, user: str, max_tokens: int = 1000) -> str:
@@ -347,7 +374,9 @@ async def _synthesize_content(
     )
 
     try:
-        return (await _synthesis_call(system_prompt, user_prompt, max_tokens=800)).strip()
+        # Pedagogical content routes through LearnLM (educationally fine-tuned)
+        # with automatic fallback to Gemini Flash → Claude
+        return (await _pedagogical_call(system_prompt, user_prompt, max_tokens=800)).strip()
     except Exception as e:
         logger.warning(
             f"[Synthesis] Content synthesis failed ({type(e).__name__}: {e}) "
