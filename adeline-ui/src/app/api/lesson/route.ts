@@ -4,7 +4,7 @@
  * Next.js → FastAPI SSE translation bridge.
  *
  * Translates FastAPI SSE events into the ai@6 UI Message Stream format
- * (newline-delimited JSON objects) consumed by DefaultChatTransport.
+ * (SSE frames: `data: JSON\n\n`) consumed by DefaultChatTransport.
  *
  * Chunk types emitted:
  *   {"type":"start"}
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
       {
         status: 200,
         headers: {
-          "Content-Type": "application/x-ndjson",
+          "Content-Type": "text/event-stream",
           "x-vercel-ai-ui-message-stream": "v1",
         },
       }
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
       {
         status: 200,
         headers: {
-          "Content-Type": "application/x-ndjson",
+          "Content-Type": "text/event-stream",
           "x-vercel-ai-ui-message-stream": "v1",
         },
       }
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
       {
         status: 200,
         headers: {
-          "Content-Type": "application/x-ndjson",
+          "Content-Type": "text/event-stream",
           "x-vercel-ai-ui-message-stream": "v1",
         },
       }
@@ -218,7 +218,7 @@ export async function POST(req: NextRequest) {
   return new Response(readable, {
     status: 200,
     headers: {
-      "Content-Type": "application/x-ndjson",
+      "Content-Type": "text/event-stream",
       "x-vercel-ai-ui-message-stream": "v1",
       "Cache-Control": "no-cache",
       "X-Accel-Buffering": "no",
