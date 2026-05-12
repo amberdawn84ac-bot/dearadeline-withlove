@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/journal", tags=["journal"])
 
 
-# ── Request / Response models ─────────────────────────────────────────────────
+# ── Request / Response models ─────────────────────────────────────────────
 
 class SealRequest(BaseModel):
     lesson_id:        str
@@ -27,6 +27,10 @@ class SealRequest(BaseModel):
     completed_blocks: int = Field(default=0, ge=0)
     oas_standards:    list[dict[str, Any]] = Field(default_factory=list)
     evidence_sources: list[dict[str, Any]] = Field(default_factory=list)
+    # Optional adaptive learning signals — sent by UI after lesson/quiz completion
+    concept_id:   str | None = None   # ZPD concept_id if known
+    concept_name: str | None = None   # Human-readable concept title
+    quiz_results: list[dict[str, Any]] = Field(default_factory=list)  # [{correct: bool}, ...]
 
 
 class SealResponse(BaseModel):
@@ -51,7 +55,7 @@ class RecentResponse(BaseModel):
     entries:    list[RecentEntry]
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# ── Routes ───────────────────────────────────────────────
 
 @router.post("/seal", response_model=SealResponse)
 async def seal_journal(
@@ -91,6 +95,11 @@ async def seal_journal(
             _record_mastery_safe(student_id, body.track.value, body.oas_standards)
         )
 
+    # Fire-and-forget BKT + SM-2 card update with quiz-derived quality signal
+    asyncio.create_task(
+        _update_card_safe(student_id, body)
+    )
+
     return SealResponse(
         sealed=True,
         lesson_id=body.lesson_id,
@@ -105,6 +114,50 @@ async def _record_mastery_safe(student_id: str, track: str, oas_standards: list[
         logger.info(f"[Neo4j] Mastery recorded for {student_id} — {len(oas_standards)} standards")
     except Exception as exc:
         logger.warning(f"[Neo4j] Mastery write failed (non-fatal): {exc}")
+
+
+def _quiz_quality(quiz_results: list[dict]) -> int:
+    """Map quiz results to SM-2 quality (0–5). Defaults to 3 (lesson-only experience)."""
+    if not quiz_results:
+        return 3
+    correct = sum(1 for q in quiz_results if q.get("correct"))
+    ratio = correct / len(quiz_results)
+    if ratio >= 0.9:  return 5
+    if ratio >= 0.75: return 4
+    if ratio >= 0.5:  return 3
+    if ratio >= 0.25: return 2
+    return 1
+
+
+async def _update_card_safe(student_id: str, body: SealRequest) -> None:
+    """Fire-and-forget: update BKT pL + SM-2 schedule after lesson seal."""
+    try:
+        from app.algorithms.bkt_tracker import update_card_after_lesson
+        from app.tools.graph_query import tool_get_zpd_candidates
+
+        quality = _quiz_quality(body.quiz_results)
+
+        concept_id   = body.concept_id
+        concept_name = body.concept_name or ""
+
+        # If no concept_id was sent, resolve from ZPD candidates
+        if not concept_id:
+            zpd = await tool_get_zpd_candidates(student_id, body.track.value, limit=1)
+            if zpd:
+                concept_id   = zpd[0].concept_id
+                concept_name = concept_name or zpd[0].title
+            else:
+                concept_id = f"{body.track.value.lower()}-seal"
+
+        await update_card_after_lesson(
+            student_id=student_id,
+            concept_id=concept_id,
+            concept_name=concept_name,
+            track=body.track.value,
+            quality=quality,
+        )
+    except Exception as exc:
+        logger.warning(f"[Journal] BKT/SM-2 update failed (non-fatal): {exc}")
 
 
 @router.get("/progress/{student_id}", response_model=ProgressResponse)
