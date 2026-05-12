@@ -751,62 +751,51 @@ def _calculate_graduation_progress(credits_by_bucket: dict[str, float], grade_le
 
 
 async def _get_grade_level_standards(student_id: str, grade_level: str) -> list[GradeLevelStandard]:
-    """Get grade-level OAS standards for K-8 students."""
-    from app.config import get_db_conn
-    
-    # Parse grade level to numeric
-    if grade_level == "K":
-        grade_num = 0
-    elif grade_level.startswith("K"):
+    """Fetch live OAS standards from Neo4j for this grade, with per-standard mastery status."""
+    import re
+
+    if grade_level == "K" or grade_level.startswith("K"):
         grade_num = 0
     else:
-        import re
-        match = re.match(r'(\d+)', grade_level)
-        grade_num = int(match.group(1)) if match else 0
-    
-    # Only return standards for K-8
+        m = re.match(r"(\d+)", grade_level)
+        grade_num = int(m.group(1)) if m else 0
+
+    # Standards only tracked for K-8
     if grade_num > 8:
         return []
-    
-    standards = []
-    
+
     try:
-        conn = await get_db_conn()
-        # Get mastered standards from Neo4j (simplified - would need actual Neo4j query)
-        # For now, return sample standards based on grade
-        sample_standards = {
-            0: ["K.ELA.1", "K.MATH.1", "K.SCIENCE.1"],  # Kindergarten
-            1: ["OAS.ELA.1.R.I.1", "OAS.MATH.1.OA.1", "OAS.SCI.1.LS.1"],  # 1st grade
-            2: ["OAS.ELA.2.R.L.1", "OAS.MATH.2.NBT.1", "OAS.SCI.2.PS.1"],  # 2nd grade
-            3: ["OAS.ELA.3.R.I.1", "OAS.MATH.3.OA.1", "OAS.SCI.3.ESS.1"],  # 3rd grade
-            4: ["OAS.ELA.4.R.L.1", "OAS.MATH.4.NBT.1", "OAS.SCI.4.LS.1"],  # 4th grade
-            5: ["OAS.ELA.5.R.I.1", "OAS.MATH.5.NBT.1", "OAS.SCI.5.ESS.1"],  # 5th grade
-            6: ["OAS.ELA.6.R.I.1", "OAS.MATH.6.RP.1", "OAS.SCI.6.LS.1"],  # 6th grade
-            7: ["OAS.ELA.7.R.I.1", "OAS.MATH.7.RP.1", "OAS.SCI.7.ESS.1"],  # 7th grade
-            8: ["OAS.ELA.8.R.I.3", "OAS.MATH.8.EE.1", "OAS.SCI.8.ESS.3.1"],  # 8th grade
-        }
-        
-        grade_standards = sample_standards.get(grade_num, [])
-        
-        for i, standard_id in enumerate(grade_standards[:5], 1):  # Top 5 standards
-            # Parse subject from standard ID
-            subject = "ELA" if "ELA" in standard_id else "Math" if "MATH" in standard_id else "Science"
-            
-            standards.append(GradeLevelStandard(
-                standard_id=standard_id,
-                subject=subject,
-                grade=grade_num,
-                description=f"Grade {grade_num} {subject} standard",
-                mastered=False,  # Would check Neo4j for actual mastery
-                priority=i,
-            ))
-        
-        await conn.close()
-        
+        rows = await neo4j_client.run(
+            """
+            MATCH (s:OASStandard)
+            WHERE s.grade = $grade
+            OPTIONAL MATCH (st:Student {id: $student_id})-[:MASTERED]->(c:Concept)
+                           -[:MAPS_TO_STANDARD]->(s)
+            WITH s, count(c) > 0 AS mastered
+            RETURN s.id            AS id,
+                   s.standard_text AS description,
+                   s.grade         AS grade,
+                   coalesce(s.subject, 'General') AS subject,
+                   mastered
+            ORDER BY s.id
+            LIMIT 10
+            """,
+            {"grade": grade_num, "student_id": student_id},
+        )
+        return [
+            GradeLevelStandard(
+                standard_id=r["id"],
+                subject=r["subject"] or "General",
+                grade=int(r["grade"] or grade_num),
+                description=r["description"] or "",
+                mastered=bool(r["mastered"]),
+                priority=i + 1,
+            )
+            for i, r in enumerate(rows)
+        ]
     except Exception as e:
-        logger.warning(f"[LearningPlan] Failed to get grade standards: {e}")
-    
-    return standards
+        logger.warning(f"[LearningPlan] Neo4j grade standards query failed: {e}")
+        return []
 
 
 async def _get_available_projects(track: str = None, limit: int = 3) -> list[ProjectSuggestion]:

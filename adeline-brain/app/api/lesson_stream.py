@@ -520,6 +520,48 @@ async def _run_registrar_background(
             credits_awarded=final_state.get("credits_awarded", []),
         )
         await _persist_learning_records(lesson)
+
+        # BKT + SM-2: update SpacedRepetitionCard for the primary concept studied
+        try:
+            from app.algorithms.bkt_tracker import update_card_after_lesson
+            from app.tools.graph_query import tool_get_zpd_candidates
+            zpd_candidates = await tool_get_zpd_candidates(
+                student_id=request.student_id,
+                track=request.track.value,
+                limit=1,
+            )
+            if zpd_candidates:
+                top = zpd_candidates[0]
+                await update_card_after_lesson(
+                    student_id=request.student_id,
+                    concept_id=top.concept_id,
+                    concept_name=top.title,
+                    track=request.track.value,
+                    quality=3,
+                )
+            else:
+                # Fallback: derive concept_id from track + topic
+                slug = (
+                    f"{request.track.value.lower()}-"
+                    f"{request.topic.lower().replace(' ', '-')[:50]}"
+                )
+                await update_card_after_lesson(
+                    student_id=request.student_id,
+                    concept_id=slug,
+                    concept_name=request.topic,
+                    track=request.track.value,
+                    quality=3,
+                )
+        except Exception as bkt_err:
+            logger.warning(f"[LessonStream] BKT/SM-2 update failed (non-fatal): {bkt_err}")
+
+        # Invalidate student state cache so next plan/lesson sees fresh mastery
+        try:
+            from app.models.student import invalidate_student_state_cache
+            await invalidate_student_state_cache(request.student_id)
+        except Exception:
+            pass
+
         logger.info(f"[LessonStream] Registrar background task complete — lesson_id={lesson_id}")
     except Exception as e:
         logger.warning(f"[LessonStream] Registrar background task failed (non-fatal): {e}")
