@@ -1,5 +1,5 @@
 """
-GraphRAG Query Tool — LangGraph-compatible tool for agent graph queries.
+GraphRAG Query Tool — structured access to the Neo4j knowledge graph for agents.
 
 Gives agents structured access to the Neo4j knowledge graph to:
   - Get ZPD concept recommendations per student/track (BKT-aware)
@@ -78,7 +78,7 @@ async def tool_get_zpd_candidates(
     """
     from app.algorithms.bkt_tracker import get_mastery_map_with_timestamps, build_mastery_snapshots
 
-    # ── Try BKT-aware path first ──────────────────────────────────────────────
+    # ── Try BKT-aware path first ───────────────────────────────────────────────
     try:
         mastery_map_ts = await get_mastery_map_with_timestamps(student_id, track)
         # Need concept graph rows to build snapshots — get_zpd_candidates_with_bkt handles this
@@ -117,7 +117,7 @@ async def tool_get_zpd_candidates(
     except Exception as e:
         logger.warning(f"[GraphQuery] BKT ZPD path failed, using graph fallback: {e}")
 
-    # ── Graph-only fallback (binary MASTERED edges) ───────────────────────────
+    # ── Graph-only fallback (binary MASTERED edges) ──────────────────────────────────
     raw = await get_zpd_candidates(student_id, track, limit)
     candidates = [
         ZPDCandidate(
