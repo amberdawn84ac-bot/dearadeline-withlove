@@ -103,23 +103,14 @@ export async function POST(req: NextRequest) {
     async start(controller) {
       const reader = upstream.body!.getReader();
       let buffer = "";
-      let textStarted = false;
       let finished = false;
 
       const enqueue = (line: string) =>
         controller.enqueue(encoder.encode(line));
 
-      const ensureTextStarted = () => {
-        if (!textStarted) {
-          enqueue(chunk({ type: "text-start", id: "t0" }));
-          textStarted = true;
-        }
-      };
-
       const closeStream = (finishReason: string) => {
         if (finished) return;
         finished = true;
-        if (textStarted) enqueue(chunk({ type: "text-end", id: "t0" }));
         enqueue(chunk({ type: "finish", finishReason }));
         enqueue("data: [DONE]\n\n");
       };
@@ -157,18 +148,11 @@ export async function POST(req: NextRequest) {
             switch (event.type) {
               case "status": {
                 const msg = String(event.message ?? "");
-                ensureTextStarted();
-                enqueue(chunk({ type: "text-delta", id: "t0", delta: msg }));
                 enqueue(chunk({ type: "data-status", data: { message: msg } }));
                 break;
               }
 
               case "block": {
-                const blockContent = (event.block as Record<string, unknown>)?.content as string | undefined;
-                if (blockContent) {
-                  ensureTextStarted();
-                  enqueue(chunk({ type: "text-delta", id: "t0", delta: blockContent + "\n\n" }));
-                }
                 enqueue(chunk({ type: "data-block", data: { block: event.block } }));
                 break;
               }
