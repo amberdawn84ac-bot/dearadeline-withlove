@@ -25,6 +25,7 @@ from typing import Optional
 import openai
 
 from app.models.student import StudentState, MasteryBand
+from app.services.standards_mapper import StandardsMapper, OASStandard
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,7 @@ def _build_system_prompt(
     witness_anchors: list[dict],
     lesson_count: int = 10,
     proficiency_map: dict[str, float] | None = None,
+    oas_standards: list[OASStandard] | None = None,
 ) -> str:
     """
     Build a dynamic system prompt tailored to the student's current ZPD zone
@@ -178,13 +180,29 @@ Your job: offer a Socratic Response.
                 f"{'; '.join(parts)}\n"
             )
 
+    # ── OAS Standards context ─────────────────────────────────────────────────
+    oas_instruction = ""
+    if oas_standards:
+        oas_lines = "\n".join(
+            f"  - {s.code}: {s.description[:80]}..."
+            for s in oas_standards[:3]  # Top 3 most relevant
+        )
+        oas_instruction = f"""
+Oklahoma Academic Standards for this lesson:
+{oas_lines}
+
+When addressing these standards in your response, reference the OAS code 
+in your metadata (e.g., "addressing: OAS.MATH.7.N.1"). The student will 
+receive credit toward graduation requirements for mastering these standards.
+"""
+
     return f"""You are Adeline — a Truth-First K-12 AI Mentor grounded in the 10-Track Constitution.
 You teach from verified primary sources only. You never invent facts or citations.
 You are currently helping a student with: "{topic}" (Track: {track.replace("_", " ").title()}).
 
 Student mastery level: {mastery_band.value} (score: {mastery_score:.2f}/1.0)
 Complexity guidance: {complexity_note}
-{anchor_task_instruction}{zone_instruction}{proficiency_instruction}
+{anchor_task_instruction}{zone_instruction}{proficiency_instruction}{oas_instruction}
 Biblical worldview: Adeline has a biblical worldview rooted in scripture. When it is natural and relevant,
 she may reference scripture. When she does, she uses the Everett Fox translation style:
   - Use the divine name YHWH (not "the Lord" or "God" in generic form)
@@ -213,13 +231,14 @@ async def scaffold(
     topic: str,
     track: str,
     student_state: StudentState,
+    oas_standards: list[OASStandard] | None = None,
 ) -> ScaffoldResponse:
     """
     Evaluate the student's response and generate a ZPD-aware reply from Adeline.
 
     1. Detect ZPD zone from response text
     2. Load Witness Anchors from the student's mastered standards
-    3. Build a dynamic system prompt
+    3. Build a dynamic system prompt (with OAS standards context if provided)
     4. Call OpenAI to generate Adeline's reply
     5. Return ScaffoldResponse with zone, reply, and anchor metadata
     """
@@ -241,6 +260,12 @@ async def scaffold(
 
     anchor_used = anchors[0].get("text", "") if anchors and zone == ZPDZone.FRUSTRATED else None
 
+    # Fetch OAS standards for this track if not provided
+    if oas_standards is None:
+        mapper = StandardsMapper()
+        grade = int(student_state.student_id[:1]) if student_state.student_id[0].isdigit() else 5
+        oas_standards = await mapper.get_standards_for_track(track, (grade, grade))
+
     system_prompt = _build_system_prompt(
         zone=zone,
         topic=topic,
@@ -249,6 +274,7 @@ async def scaffold(
         mastery_score=track_mastery.mastery_score,
         witness_anchors=anchors if zone == ZPDZone.FRUSTRATED else [],
         lesson_count=track_mastery.lesson_count,
+        oas_standards=oas_standards,
     )
 
     try:

@@ -21,6 +21,8 @@ interface MasteryCheckWidgetProps {
   title: string;
   content: string;
   tags?: string[];
+  studentId?: string;
+  oasStandardId?: string; // OAS standard code for evidence tracking
 }
 
 interface ParsedQuestion {
@@ -81,6 +83,8 @@ export function MasteryCheckWidget({
   title,
   content,
   tags = [],
+  studentId,
+  oasStandardId,
 }: MasteryCheckWidgetProps) {
   const parsed = parseQuizContent(content);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -95,7 +99,10 @@ export function MasteryCheckWidget({
 
     if (!callbackSent) {
       setCallbackSent(true);
+      const correct = idx === parsed.correctIndex;
+      
       try {
+        // Send callback to GenUI system
         await fetch("/brain/genui/callback", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -105,11 +112,26 @@ export function MasteryCheckWidget({
             event: "onAnswer",
             block_id: blockId,
             track,
-            state: { isCorrect: idx === parsed.correctIndex },
+            state: { isCorrect: correct },
           }),
         });
+        
+        // Submit evidence to OAS standards tracker if applicable
+        if (correct && studentId && oasStandardId) {
+          await fetch("/brain/api/standards/evidence", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              student_id: studentId,
+              standard_id: oasStandardId,
+              evidence_type: "quiz",
+              score: 100, // Full score for correct answer
+              description: `Mastery check passed: ${parsed.question}`,
+            }),
+          });
+        }
       } catch {
-        // Non-fatal — BKT update best-effort
+        // Non-fatal — BKT and standards update are best-effort
       }
     }
   };

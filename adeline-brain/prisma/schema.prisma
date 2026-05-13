@@ -120,6 +120,13 @@ enum DifficultyLevel {
   MASTERING
 }
 
+enum OASProficiencyLevel {
+  DEVELOPING    // 0-49% mastery
+  APPROACHING   // 50-74% mastery
+  UNDERSTANDING // 75-89% mastery
+  EXTENDING     // 90-100% mastery
+}
+
 // ── Models ────────────────────────────────────────────────────────────────────
 
 model User {
@@ -500,6 +507,24 @@ model EvidenceLedgerEntry {
   @@index([studentId])
   @@index([studentId, bucket])
   @@index([isApproved])
+}
+
+model StandardMastery {
+  id             String            @id @default(uuid())
+  studentId      String
+  student        User              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  standardId     String            // OAS code (e.g., "OAS.MATH.7.N.1")
+  subject        String            // "MATH", "ELA", "SCIENCE", "SOCIAL_STUDIES"
+  grade          Int               // 1-12
+  proficiency    OASProficiencyLevel @default(DEVELOPING)
+  evidenceCount  Int               @default(0)
+  lastEvidenceAt DateTime?
+  lastAssessedAt DateTime          @default(now())
+
+  @@unique([studentId, standardId])
+  @@index([studentId])
+  @@index([standardId])
+  @@index([subject, grade])
 }
 
 // ── Hippocampus (pgvector) ────────────────────────────────────────────────────

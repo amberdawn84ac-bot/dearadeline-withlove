@@ -198,9 +198,18 @@ async def insert_document(session_factory, embedding: list[float], **meta) -> st
 
 
 async def seed_oas_vectors(session_factory, mappings: list[dict]) -> int:
-    """Embed each OAS standard (standard_text + lesson_hook) and store."""
+    """
+    Embed each OAS standard and store in Hippocampus.
+    
+    Creates TWO embeddings per standard:
+    1. standard_text + lesson_hook — for general lesson matching
+    2. standard_text + homestead_adaptation — for homestead-specific search
+    
+    This enables the StandardsMapper to find "7th-grade math in a garden context".
+    """
     count = 0
     for m in mappings:
+        # Primary embedding: standard + lesson hook
         embed_input = f"{m['standard_text']} {m.get('adeline_lesson_hook', '')}"
         vector = await embed(embed_input)
         if vector is None:
@@ -219,6 +228,27 @@ async def seed_oas_vectors(session_factory, mappings: list[dict]) -> int:
         )
         log.info(f"  [pgvector] Stored {m['standard_id']} → {m['track']}")
         count += 1
+        
+        # Secondary embedding: standard + homestead adaptation (if exists)
+        homestead_adaptation = m.get("homestead_adaptation", "")
+        if homestead_adaptation and len(homestead_adaptation) > 10:
+            homestead_input = f"{m['standard_text']} Homestead application: {homestead_adaptation}"
+            homestead_vector = await embed(homestead_input)
+            if homestead_vector:
+                # Store as separate document with track-specific homestead tag
+                homestead_track = f"{m['track']}_HOMESTEAD"
+                await insert_document(
+                    session_factory,
+                    embedding=homestead_vector,
+                    source_title=f"OAS Standard {m['standard_id']} (Homestead)",
+                    source_url="https://sde.ok.gov/oklahoma-academic-standards",
+                    track=homestead_track,  # Enables homestead-specific search
+                    chunk=homestead_input,
+                    citation_author="Oklahoma State Department of Education",
+                    citation_year=2021,
+                    citation_archive_name="Oklahoma Academic Standards 2016 rev. 2021 - Homestead Edition",
+                )
+                log.info(f"  [pgvector] Stored {m['standard_id']} homestead variant → {homestead_track}")
     return count
 
 

@@ -15,11 +15,14 @@ GET /learning-path/{student_id}/nodes?track=TRUTH_HISTORY
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.connections.knowledge_graph import get_concept_graph_for_track, TRACKS_METADATA
 from app.connections.neo4j_client import neo4j_client
+from app.connections.postgres import get_db_session
+from app.services.standards_mapper import StandardsMapper
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/learning-path", tags=["learning-path"])
@@ -172,3 +175,155 @@ async def get_learning_path_nodes(
         available_count=available_count,
         locked_count=locked_count,
     )
+
+
+# ── Gap Detection ("Gap Filler Loop") ───────────────────────────────────────
+
+class GapStandard(BaseModel):
+    """A learning gap with reason for priority."""
+    standard_id: str
+    reason: str
+
+
+class LearningGapsResponse(BaseModel):
+    """Response identifying student's priority learning gaps."""
+    student_id: str
+    priority_subject: str
+    saturation: float
+    gap_standards: list[GapStandard]
+    suggested_daily_bread: str
+
+
+@router.get("/{student_id}/gaps", response_model=LearningGapsResponse)
+async def identify_learning_gaps(
+    student_id: str,
+    use_prerequisite_chain: bool = Query(True, description="Use Neo4j prerequisite chains for smarter gaps"),
+    db: AsyncSession = Depends(get_db_session),
+    current_user_id: str = Depends(get_current_user_id),
+):
+    """
+    Identify learning gaps using prerequisite chain logic.
+    
+    **Wire 1: Prerequisite Chain (Neo4j FEEDS_INTO)**
+    
+    When use_prerequisite_chain=True:
+    - Finds the student's most recently mastered standard
+    - Queries Neo4j for FEEDS_INTO relationships
+    - Returns the next logical standard (not just random unmastered)
+    - Example: "Multiplication" → "Division" → "Fractions"
+    
+    Called by: Daily Bread generator for personalized prompts
+    """
+    # Security check
+    if student_id != current_user_id:
+        raise HTTPException(status_code=403, detail="Cannot view other student's gaps")
+    
+    mapper = StandardsMapper(db)
+    
+    try:
+        # Get overall progress first
+        report = await mapper.get_student_standards_progress(
+            student_id=student_id,
+            pg_session=db,
+        )
+        
+        if not report.by_subject:
+            return LearningGapsResponse(
+                student_id=student_id,
+                priority_subject="MATH",
+                saturation=0.0,
+                gap_standards=[],
+                suggested_daily_bread="Start with foundational math concepts.",
+            )
+        
+        # Find lowest saturation subject
+        lowest_subject = min(
+            report.by_subject.values(),
+            key=lambda s: s.saturation_percentage,
+        )
+        
+        gap_standards: list[GapStandard] = []
+        
+        if use_prerequisite_chain:
+            # **Wire 1: Use Neo4j prerequisite chains**
+            # Find the most recently mastered standard in the lowest subject
+            # Query Neo4j for what it feeds into (the next logical step)
+            
+            # First, find a recently mastered standard to build from
+            # In production, this would query the actual most recent
+            masteries = await db.execute(
+                text("""
+                    SELECT "standardId", proficiency, "lastAssessedAt"
+                    FROM "StandardMastery"
+                    WHERE "studentId" = :student_id
+                      AND subject = :subject
+                      AND proficiency IN ('UNDERSTANDING', 'EXTENDING')
+                    ORDER BY "lastAssessedAt" DESC
+                    LIMIT 1
+                """),
+                {"student_id": student_id, "subject": lowest_subject.subject},
+            )
+            recent = masteries.mappings().first()
+            
+            if recent:
+                last_standard_id = recent["standardId"]
+                
+                # Query Neo4j for next logical standards
+                next_standards = await mapper.get_next_logical_standards(
+                    standard_id=last_standard_id,
+                    student_id=student_id,
+                )
+                
+                if next_standards:
+                    # Use the prerequisite chain
+                    for std in next_standards[:3]:
+                        gap_standards.append(GapStandard(
+                            standard_id=std.code,
+                            reason=f"Follows from your mastery of {last_standard_id}",
+                        ))
+                else:
+                    # No chain found, use generic gaps
+                    for std_id in lowest_subject.gap_standards[:3]:
+                        gap_standards.append(GapStandard(
+                            standard_id=std_id,
+                            reason=f"Prerequisite for {lowest_subject.subject} mastery",
+                        ))
+            else:
+                # No recent mastery, suggest foundational standards
+                for std_id in lowest_subject.gap_standards[:3]:
+                    gap_standards.append(GapStandard(
+                        standard_id=std_id,
+                        reason=f"Foundation for {lowest_subject.subject}",
+                    ))
+        else:
+            # Simple gap detection without prerequisite chain
+            for std_id in lowest_subject.gap_standards[:5]:
+                gap_standards.append(GapStandard(
+                    standard_id=std_id,
+                    reason=f"Prerequisite for {lowest_subject.subject} mastery",
+                ))
+        
+        # Generate Daily Bread suggestion based on gaps
+        if gap_standards:
+            next_standard = gap_standards[0].standard_id
+            daily_bread = (
+                f"Let's continue your {lowest_subject.subject} journey. "
+                f"Next up: {next_standard.split('.')[-1]}. "
+                f"This builds directly on what you mastered. Ready?"
+            )
+        else:
+            daily_bread = (
+                f"Great progress in {lowest_subject.subject}! "
+                f"Time to explore advanced applications."
+            )
+        
+        return LearningGapsResponse(
+            student_id=student_id,
+            priority_subject=lowest_subject.subject,
+            saturation=lowest_subject.saturation_percentage,
+            gap_standards=gap_standards,
+            suggested_daily_bread=daily_bread,
+        )
+    except Exception as e:
+        logger.error(f"[LearningPath] Gap detection failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to identify gaps: {str(e)}")

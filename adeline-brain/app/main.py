@@ -55,8 +55,10 @@ from app.api.conversation import router as conversation_router
 from app.api.animated_lessons import router as animated_lessons_router
 from app.api.learning_path import router as learning_path_router
 from app.api.lesson_stream import router as lesson_stream_router
+from app.api.standards import router as standards_router
 from app.connections.journal_store import journal_store
 from app.connections.conversation_store import conversation_store
+from app.connections.postgres import init_postgres
 from app.jobs.seed_scheduler import startup_seed_scheduler, shutdown_seed_scheduler
 
 from pythonjsonlogger import jsonlogger
@@ -99,6 +101,7 @@ async def lifespan(app: FastAPI):
             ("Bookshelf", bookshelf_search.connect()),
             ("JournalStore", journal_store.connect()),
             ("ConversationStore", conversation_store.connect()),
+            ("Postgres", init_postgres()),
         ]:
             try:
                 await asyncio.wait_for(coro, timeout=15.0)
@@ -200,6 +203,7 @@ app.include_router(parent_router)
 app.include_router(admin_router)
 app.include_router(learning_plan_router)
 app.include_router(genui_router)
+app.include_router(standards_router)
 # ── /brain/* prefix mounts (Vercel proxy: /brain/:path* → Railway /:path*) ──
 # Auth endpoints (for cookie-based auth)
 app.include_router(auth_router, prefix="/brain")
@@ -231,6 +235,7 @@ app.include_router(conversation_router, prefix="/brain")
 app.include_router(animated_lessons_router, prefix="/brain")
 app.include_router(learning_path_router, prefix="/brain")
 app.include_router(daily_bread_router, prefix="/brain")
+app.include_router(standards_router, prefix="/brain")
 
 
 @app.get("/health")
