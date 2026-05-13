@@ -1,9 +1,4 @@
-import { config } from 'dotenv';
-import { resolve } from 'path';
-
-// Load environment variables
-config({ path: resolve(__dirname, '..', '.env') });
-
+// Prisma 7 config - relies on env vars being set in shell or .env loaded by Prisma CLI
 const databaseUrl = process.env.DIRECT_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!databaseUrl) {
