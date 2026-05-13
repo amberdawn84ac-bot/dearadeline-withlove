@@ -57,7 +57,7 @@ function LoginContent() {
         await setAuthCookie(token)
         // Send returning users directly to dashboard if they already completed onboarding
         try {
-          const profileRes = await fetch(`/brain?_=${Date.now()}`, {
+          const profileRes = await fetch(`/brain/api/onboarding?_=${Date.now()}`, {
             headers: { 'Authorization': `Bearer ${token}`, 'Cache-Control': 'no-cache' },
           })
           if (profileRes.ok) {
