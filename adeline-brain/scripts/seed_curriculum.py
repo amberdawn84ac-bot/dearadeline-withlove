@@ -248,7 +248,7 @@ async def seed_douglass(session_factory) -> int:
 
 async def seed_neo4j(driver, mappings: list[dict]):
     async with driver.session() as session:
-        # Ensure Track nodes exist for all 8 tracks
+        # Ensure Track nodes exist for all 10 tracks
         tracks = {m["track"] for m in mappings}
         for track in sorted(tracks):
             await session.run(

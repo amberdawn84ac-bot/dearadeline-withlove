@@ -121,7 +121,7 @@ async def scaffold_response(body: ScaffoldRequest, student_id: str = Depends(get
 )
 async def get_student_state(student_id: str, _user_id: str = Depends(verify_student_access)):
     """
-    Return the student's full mastery profile across all 8 tracks.
+    Return the student's full mastery profile across all 10 tracks.
     Used by the parent dashboard and the ZPD Engine.
     """
     try:
