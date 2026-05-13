@@ -1,17 +1,213 @@
-// adeline-brain/prisma/schema.prisma
-// Mirrors adeline-core/src/types.ts — source of truth for all models.
-
 generator client {
-  provider             = "prisma-client-py"
-  interface            = "asyncio"
-  recursive_type_depth = 5
+  provider = "prisma-client-py"
+  interface = "asyncio"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-// ── Enums ─────────────────────────────────────────────────────────────────────
+model User {
+  id                   String            @id @default(uuid())
+  name                 String
+  email                String
+  role                 UserRole
+  isHomestead          Boolean           @default(false)
+  gradeLevel           String?
+  mathLevel            Int?
+  elaLevel             Int?
+  scienceLevel         Int?
+  historyLevel         Int?
+  interests            String[]
+  learningStyle        String?
+  pacingMultiplier     Float?
+  state                String?
+  targetGraduationYear Int?
+  onboardingComplete   Boolean           @default(false)
+  parentId             String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  standardMastery      StandardMastery[]
+}
+
+model Lesson {
+  id               String   @id @default(uuid())
+  title            String
+  estimatedMinutes Int
+  targetGrades     String[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model LessonTrack {
+  lessonId String
+  track    Track
+
+  @@id([lessonId, track])
+}
+
+model LessonBlock {
+  id                 String          @id @default(uuid())
+  lessonId           String
+  track              Track
+  blockType          BlockType
+  difficulty         DifficultyLevel
+  order              Int
+  title              String
+  content            String
+  isSilenced         Boolean         @default(false)
+  tags               String[]
+  homesteadEnabled   Boolean         @default(false)
+  homesteadContent   String?
+  homesteadPractical String?
+  createdAt          DateTime        @default(now())
+}
+
+model Evidence {
+  id                  String          @id @default(uuid())
+  blockId             String
+  sourceTitle         String
+  sourceUrl           String
+  similarityScore     Float
+  verdict             EvidenceVerdict
+  chunk               String
+  retrievedAt         DateTime
+  citationAuthor      String
+  citationYear        Int
+  citationArchiveName String
+}
+
+model StudentLesson {
+  studentId   String
+  lessonId    String
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@id([studentId, lessonId])
+}
+
+model CanonicalLesson {
+  id                  String   @id @default(uuid())
+  topicSlug           String
+  topic               String
+  track               Track
+  title               String
+  blocksJson          Json
+  oasStandards        Json     @default("[]")
+  researcherActivated Boolean  @default(false)
+  agentName           String   @default("")
+  generatedAt         DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model InviteCode {
+  id             String   @id @default(uuid())
+  code           String
+  isUsed         Boolean  @default(false)
+  claimedByEmail String?
+  createdAt      DateTime @default(now())
+}
+
+model LearningRecord {
+  id            String     @id @default(uuid())
+  studentId     String
+  lessonId      String
+  blockId       String?
+  verb          XAPIVerb
+  objectId      String
+  objectName    String
+  track         Track
+  oasStandard   String     @default("")
+  gradeLevel    String     @default("")
+  isHomestead   Boolean    @default(false)
+  agentName     AgentName?
+  blockType     String     @default("")
+  durationMs    Int?
+  completion    Boolean    @default(false)
+  response      String?
+  scoreRaw      Float?
+  scoreMin      Float?
+  scoreMax      Float?
+  statementJson Json       @default("{}")
+  timestamp     DateTime   @default(now())
+  createdAt     DateTime   @default(now())
+}
+
+model TranscriptEntry {
+  id                  String       @id @default(uuid())
+  studentId           String
+  lessonId            String
+  courseTitle         String
+  track               Track
+  oasStandards        String[]     @default([])
+  activityDescription String       @default("")
+  creditHours         Float        @default(0.0)
+  creditType          CreditType   @default(ELECTIVE)
+  gradeLetter         GradeLetter?
+  percentScore        Float?
+  isHomesteadCredit   Boolean      @default(false)
+  agentName           AgentName?
+  researcherActivated Boolean      @default(false)
+  completedAt         DateTime     @default(now())
+  sealedAt            DateTime?
+  xapiStatementId     String?
+  createdAt           DateTime     @default(now())
+}
+
+model SpacedRepetitionCard {
+  id             String    @id @default(uuid())
+  studentId      String
+  conceptId      String
+  conceptName    String
+  track          Track
+  interval       Int       @default(1)
+  easeFactor     Float     @default(2.5)
+  repetitions    Int       @default(0)
+  lastQuality    Int?
+  masteryLevel   Float     @default(0.0)
+  dueAt          DateTime  @default(now())
+  lastReviewedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model StandardMastery {
+  id             String              @id @default(dbgenerated("gen_random_uuid()"))
+  studentId      String
+  standardId     String
+  subject        String
+  grade          Int
+  proficiency    OASProficiencyLevel @default(DEVELOPING)
+  evidenceCount  Int                 @default(0)
+  lastEvidenceAt DateTime?
+  lastAssessedAt DateTime            @default(now())
+  student        User                @relation(fields: [studentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([studentId, standardId], map: "StandardMastery_unique_student_standard")
+  @@index([studentId])
+  @@index([standardId])
+  @@index([subject, grade])
+  @@index([proficiency])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model OASStandard {
+  id                  String   @default(dbgenerated("gen_random_uuid()"))
+  code                String   @unique
+  subject             String
+  grade               Int
+  gradeBand           String
+  strand              String
+  description         String
+  track               String
+  lessonHook          String?
+  homesteadAdaptation String?
+  difficulty          String   @default("EMERGING")
+  createdAt           DateTime @default(now())
+
+  @@index([subject, grade])
+  @@index([track])
+}
 
 enum UserRole {
   STUDENT
@@ -70,14 +266,14 @@ enum CreditType {
 }
 
 enum CreditBucket {
-  ENGLISH_CORE      // Language Arts - 4 credits required
-  MATH_CORE         // Math (Algebra 1+) - 3 credits required
-  SCIENCE_CORE      // Lab Science (Physical Science + Biology + above) - 3 credits required
-  SOCIAL_STUDIES    // US History + Oklahoma History + Government - 3 credits required
-  WORLD_LANGUAGE    // Technology or 2 units same language - 2 credits required
-  PERSONAL_FINANCE  // Personal Financial Literacy - 0.5 credits required
-  FINE_ARTS         // Art or Speech - 1 credit required
-  ELECTIVES         // Additional electives - 6.5 credits required
+  ENGLISH_CORE
+  MATH_CORE
+  SCIENCE_CORE
+  SOCIAL_STUDIES
+  WORLD_LANGUAGE
+  PERSONAL_FINANCE
+  FINE_ARTS
+  ELECTIVES
 }
 
 enum GradeLetter {
@@ -120,430 +316,8 @@ enum DifficultyLevel {
 }
 
 enum OASProficiencyLevel {
-  DEVELOPING    // 0-49% mastery
-  APPROACHING   // 50-74% mastery
-  UNDERSTANDING // 75-89% mastery
-  EXTENDING     // 90-100% mastery
-}
-
-// ── Models ────────────────────────────────────────────────────────────────────
-
-model User {
-  id                   String   @id @default(uuid())
-  name                 String
-  email                String   @unique
-  role                 UserRole
-  isHomestead          Boolean  @default(false)
-  gradeLevel           String?  // Required when role = STUDENT (enforced in app layer)
-  mathLevel            Int?     // Subject-specific mastery override (0-100)
-  elaLevel             Int?     // Subject-specific mastery override (0-100)
-  scienceLevel         Int?     // Subject-specific mastery override (0-100)
-  historyLevel         Int?     // Subject-specific mastery override (0-100)
-  interests            String[] // e.g., ["farm", "robotics", "art"]
-  learningStyle        String?  // e.g., "visual", "kinesthetic", "auditory"
-  pacingMultiplier     Float?   // Lesson pacing adjustment (0.5 = slower, 2.0 = faster)
-  state                String?  // Student's state for context/standards (e.g., "Oklahoma")
-  targetGraduationYear Int?     // Expected graduation year
-  onboardingComplete   Boolean  @default(false)
-
-  // Parent-child relationship for multi-student families
-  parentId     String?
-  parent       User?   @relation("ParentChildren", fields: [parentId], references: [id])
-  children     User[]  @relation("ParentChildren")
-
-  lessons         StudentLesson[]
-  readingSessions ReadingSession[]
-  learningRecords           LearningRecord[]
-  standardsLedger          StandardsLedgerEntry[]
-  creditLedger              CreditLedgerEntry[]
-  evidenceLedger            EvidenceLedgerEntry[]
-  readingRecommendationsLog ReadingRecommendationsLog[]
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([role])
-  @@index([email])
-  @@index([onboardingComplete])
-  @@index([parentId])
-}
-
-model Lesson {
-  id               String   @id @default(uuid())
-  title            String
-  estimatedMinutes Int
-  targetGrades     String[]
-
-  tracks  LessonTrack[]
-  blocks  LessonBlock[]
-  students StudentLesson[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model LessonTrack {
-  lessonId String
-  track    Track
-
-  lesson   Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-
-  @@id([lessonId, track])
-}
-
-model LessonBlock {
-  id         String          @id @default(uuid())
-  lessonId   String
-  track      Track
-  blockType  BlockType
-  difficulty DifficultyLevel
-  order      Int
-  title      String
-  content    String
-  isSilenced Boolean         @default(false)
-  tags       String[]
-
-  homesteadEnabled     Boolean @default(false)
-  homesteadContent     String?
-  homesteadPractical   String?
-
-  evidence  Evidence[]
-  lesson    Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-
-  @@index([lessonId, order])
-  @@index([blockType])
-}
-
-model Evidence {
-  id              String          @id @default(uuid())
-  blockId         String
-  sourceTitle     String
-  sourceUrl       String
-  similarityScore Float
-  verdict         EvidenceVerdict
-  chunk           String
-  retrievedAt     DateTime
-
-  // WitnessCitation fields (flattened from the nested Zod object)
-  citationAuthor      String
-  citationYear        Int
-  citationArchiveName String
-
-  block LessonBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
-
-  @@index([blockId])
-  @@index([verdict])
-  @@index([similarityScore])
-}
-
-model StudentLesson {
-  studentId  String
-  lessonId   String
-  startedAt  DateTime @default(now())
-  completedAt DateTime?
-
-  student User   @relation(fields: [studentId], references: [id])
-  lesson  Lesson @relation(fields: [lessonId], references: [id])
-
-  @@id([studentId, lessonId])
-}
-
-// ── Canonical Lessons ───────────────────────────────────────────────────────
-// One master lesson per (topic, track). Generated at full depth once,
-// adapted cheaply per student at serve time.
-
-model CanonicalLesson {
-  id                  String   @id @default(uuid())
-  topicSlug           String   @unique   // sha256(topic+track)
-  topic               String
-  track               Track
-  title               String
-  blocksJson          Json                // list[LessonBlockResponse] at full depth
-  oasStandards        Json     @default("[]")
-  researcherActivated Boolean  @default(false)
-  agentName           String   @default("")
-  generatedAt         DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  @@index([track])
-}
-
-model InviteCode {
-  id             String   @id @default(uuid())
-  code           String   @unique
-  isUsed         Boolean  @default(false)
-  claimedByEmail String?
-  createdAt      DateTime @default(now())
-
-  @@index([code])
-}
-
-// ── Phase 6: Learning Records, Transcript, Spaced Repetition ─────────────────
-
-model LearningRecord {
-  id           String    @id @default(uuid())
-  studentId    String
-  student      User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  lessonId     String
-  blockId      String?
-  verb         XAPIVerb
-  objectId     String
-  objectName   String
-  track        Track
-  oasStandard  String    @default("")
-  gradeLevel   String    @default("")
-  isHomestead  Boolean   @default(false)
-  agentName    AgentName?
-  blockType    String    @default("")
-  durationMs   Int?
-  completion   Boolean   @default(false)
-  response     String?
-  scoreRaw     Float?
-  scoreMin     Float?
-  scoreMax     Float?
-  statementJson Json     @default("{}")
-  timestamp    DateTime  @default(now())
-  createdAt    DateTime  @default(now())
-
-  @@index([studentId])
-  @@index([lessonId])
-  @@index([track])
-  @@index([verb])
-  @@index([timestamp])
-}
-
-model TranscriptEntry {
-  id                  String      @id @default(uuid())
-  studentId           String
-  lessonId            String
-  courseTitle         String
-  track               Track
-  oasStandards        String[]    @default([])
-  activityDescription String      @default("")
-  creditHours         Float       @default(0.0)
-  creditType          CreditType  @default(ELECTIVE)
-  gradeLetter         GradeLetter?
-  percentScore        Float?
-  isHomesteadCredit   Boolean     @default(false)
-  agentName           AgentName?
-  researcherActivated Boolean     @default(false)
-  completedAt         DateTime    @default(now())
-  sealedAt            DateTime?
-  xapiStatementId     String?
-  createdAt           DateTime    @default(now())
-
-  @@unique([studentId, lessonId])
-  @@index([studentId])
-  @@index([track])
-  @@index([creditType])
-  @@index([completedAt])
-}
-
-model SpacedRepetitionCard {
-  id             String   @id @default(uuid())
-  studentId      String
-  conceptId      String
-  conceptName    String
-  track          Track
-  interval       Int      @default(1)
-  easeFactor     Float    @default(2.5)
-  repetitions    Int      @default(0)
-  lastQuality    Int?
-  masteryLevel   Float    @default(0.0)
-  dueAt          DateTime @default(now())
-  lastReviewedAt DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@unique([studentId, conceptId])
-  @@index([studentId])
-  @@index([dueAt])
-  @@index([track])
-  @@index([masteryLevel])
-}
-
-// ── Reading Nook ──────────────────────────────────────────────────────────────
-
-model Book {
-  id            String   @id @default(uuid())
-  title         String
-  author        String
-  gutenbergId   String?  @unique
-  sourceLibrary String?  // "Standard Ebooks" | "Project Gutenberg"
-  downloadUrl   String?
-  storageKey    String?  // Supabase Storage object path
-  isDownloaded  Boolean  @default(false)
-  format        String   @default("epub")
-  coverUrl      String?
-
-  // Bookshelf v1: semantic metadata + pgvector embedding
-  source_url    String?  @unique // Full URL from source (Standard Ebooks, Project Gutenberg, etc.)
-  lexile_level  Int?     // e.g., 600, 800, 1000 for guided reading levels
-  grade_band    String?  // e.g., "3-4", "5-6", "7-8", "9-10", "11-12"
-  description   String?  // Book summary or blurb
-  track         String   // One of 10 curriculum tracks — assigned by seed script, must not be NULL
-  embedding     Unsupported("vector(1536)")? // pgvector: OpenAI text-embedding-3-small
-
-  studentBooks    StudentBook[]
-  readingSessions ReadingSession[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([author])
-  @@index([isDownloaded])
-  @@index([track])
-  @@index([lexile_level])
-  @@index([sourceLibrary])
-}
-
-model StudentBook {
-  studentId   String
-  bookId      String
-  startedAt   DateTime  @default(now())
-  finishedAt  DateTime?
-  currentPage Int?
-
-  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
-
-  @@id([studentId, bookId])
-  @@index([studentId])
-}
-
-model ReadingSession {
-  id                  String   @id @default(uuid())
-  studentId           String
-  bookId              String
-  status              String   // 'reading', 'finished', 'wishlist'
-  startedAt           DateTime @default(now())
-  completedAt         DateTime?
-  pagesRead           Int      @default(0)
-  totalPages          Int?
-  currentLocation     String?  // EPUB CFI for resume point
-  studentReflection   String?  // Optional note/rating from student
-  readingMinutes      Int      @default(0) // Total time spent reading
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  student User  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  book    Book  @relation(fields: [bookId], references: [id], onDelete: Cascade)
-
-  @@unique([studentId, bookId])
-  @@index([studentId])
-  @@index([bookId])
-  @@index([status])
-}
-
-model ReadingRecommendationsLog {
-  id                   String   @id @default(uuid())
-  studentId            String
-  recommendedBookIds   String[] // Array of recommended book UUIDs
-  adaptiveLexileMin    Int      // Minimum reading level based on actual performance
-  adaptiveLexileMax    Int      // Maximum reading level based on actual performance
-  confidenceScore      Float    // Confidence level in adaptive assessment (0.0-1.0)
-  recommendationDate   DateTime @default(now())
-  gradeLevel           String?  // Grade level at time of recommendation
-  interests            String[] // Student interests at time of recommendation
-
-  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
-  @@index([studentId])
-  @@index([recommendationDate])
-  @@index([adaptiveLexileMin])
-  @@index([adaptiveLexileMax])
-}
-
-// ── Student Ledgers (Standards / Credit / Evidence) ───────────────────────────
-
-model StandardsLedgerEntry {
-  id          String   @id @default(uuid())
-  studentId   String
-  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  framework   String   // StandardsFramework enum value
-  subject     String   // StandardsSubject enum value
-  code        String?  // e.g. "OK-ELA-8.R.1"
-  confidence  Float    @default(0.0)
-  lessonId    String?
-  addressedAt DateTime @default(now())
-  createdAt   DateTime @default(now())
-
-  @@index([studentId])
-  @@index([framework, subject])
-  @@index([studentId, code])
-}
-
-model CreditLedgerEntry {
-  id          String   @id @default(uuid())
-  studentId   String
-  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  bucket      String   // CreditBucket enum value
-  hoursEarned Float
-  source      String   // "lesson" | "project" | "activity"
-  sourceId    String
-  createdAt   DateTime @default(now())
-
-  @@index([studentId])
-  @@index([studentId, bucket])
-}
-
-model EvidenceLedgerEntry {
-  id             String    @id @default(uuid())
-  studentId      String
-  student        User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  artifactType   String    // "essay" | "quiz" | "lab" | "project" | "discussion" | "fieldwork" | "presentation"
-  title          String
-  masteryScore   Float
-  hours          Float
-  activityDate   DateTime
-  evaluatorNotes String?
-  bucket         String    // CreditBucket value
-  proposedCourse String?
-  isApproved     Boolean   @default(false)
-
-  createdAt DateTime @default(now())
-
-  @@index([studentId])
-  @@index([studentId, bucket])
-  @@index([isApproved])
-}
-
-model StandardMastery {
-  id             String            @id @default(uuid())
-  studentId      String
-  student        User              @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  standardId     String            // OAS code (e.g., "OAS.MATH.7.N.1")
-  subject        String            // "MATH", "ELA", "SCIENCE", "SOCIAL_STUDIES"
-  grade          Int               // 1-12
-  proficiency    OASProficiencyLevel @default(DEVELOPING)
-  evidenceCount  Int               @default(0)
-  lastEvidenceAt DateTime?
-  lastAssessedAt DateTime          @default(now())
-
-  @@unique([studentId, standardId])
-  @@index([studentId])
-  @@index([standardId])
-  @@index([subject, grade])
-}
-
-// ── Hippocampus (pgvector) ────────────────────────────────────────────────────
-
-model HippocampusDocument {
-  id                   String   @id @default(cuid())
-  source_title         String
-  source_url           String
-  source_type          String   @default("PRIMARY_SOURCE")
-  chunk                String   @db.Text
-  embedding            Float[]  // pgvector type
-  citation_author      String   @default("")
-  citation_year        Int?
-  citation_archive_name String  @default("")
-  track                String
-  created_at           DateTime @default(now())
-  updated_at           DateTime @updatedAt
-
-  // Prevent duplicate (source_url, track) combinations
-  @@unique([source_url, track])
-  @@index([track])
-  @@index([source_url])
+  DEVELOPING
+  APPROACHING
+  UNDERSTANDING
+  EXTENDING
 }
