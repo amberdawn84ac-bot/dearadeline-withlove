@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronRight, ChevronLeft } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
 import { INTERESTS_OPTIONS, US_STATES } from './constants';
 
 interface WelcomeFlowProps {
@@ -15,13 +15,14 @@ interface WelcomeFlowProps {
     coppaConsent: boolean;
   }) => void;
   // learningStyle kept in interface for backend compat — always defaults to 'EXPEDITION'
+  isSubmitting?: boolean;
 }
 
 const GRADE_OPTIONS = ['K', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_RANGE = Array.from({ length: 21 }, (_, i) => CURRENT_YEAR + i);
 
-export function WelcomeFlow({ onComplete }: WelcomeFlowProps) {
+export function WelcomeFlow({ onComplete, isSubmitting = false }: WelcomeFlowProps) {
   const [step, setStep] = useState(0);
   const [coppaConsent, setCoppaConsent] = useState(false);
   const [name, setName] = useState('');
@@ -293,10 +294,20 @@ export function WelcomeFlow({ onComplete }: WelcomeFlowProps) {
 
           <button
             onClick={handleNext}
-            className="flex items-center gap-2 px-6 py-2 bg-[#BD6809] text-white rounded-lg font-semibold hover:bg-[#A55708] transition-colors"
+            disabled={isSubmitting}
+            className="flex items-center gap-2 px-6 py-2 bg-[#BD6809] text-white rounded-lg font-semibold hover:bg-[#A55708] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {step === 3 ? 'Complete Setup' : 'Next'}
-            <ChevronRight className="w-5 h-5" />
+            {isSubmitting && step === 3 ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              <>
+                {step === 3 ? 'Complete Setup' : 'Next'}
+                <ChevronRight className="w-5 h-5" />
+              </>
+            )}
           </button>
         </div>
       </div>

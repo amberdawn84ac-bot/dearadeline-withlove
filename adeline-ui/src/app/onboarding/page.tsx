@@ -187,8 +187,8 @@ export default function OnboardingPage() {
     }
   };
 
-  // Loading state
-  if (status === 'checking' || status === 'redirecting' || status === 'submitting') {
+  // Full-page spinner only during initial auth check or final redirect
+  if (status === 'checking' || status === 'redirecting') {
     return (
       <div className="flex items-center justify-center h-screen bg-[#FFFEF7]">
         <div className="flex flex-col items-center gap-4">
@@ -199,11 +199,13 @@ export default function OnboardingPage() {
     );
   }
 
-  // Onboarding form (with optional inline error banner)
+  // Render form for both 'onboarding' and 'submitting' — keeping WelcomeFlow
+  // mounted through the submission cycle preserves the user's step progress
+  // so a transient network error never resets them to step 0.
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-[#FFFEF7]">
       {error && (
-        <div className="w-full max-w-2xl px-4 mb-4">
+        <div className="w-full max-w-2xl px-4 mb-4 relative z-[200]">
           <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
@@ -215,7 +217,7 @@ export default function OnboardingPage() {
           </div>
         </div>
       )}
-      <WelcomeFlow onComplete={handleOnboardingComplete} />
+      <WelcomeFlow onComplete={handleOnboardingComplete} isSubmitting={status === 'submitting'} />
     </div>
   );
 }
