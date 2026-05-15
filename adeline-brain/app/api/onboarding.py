@@ -335,9 +335,9 @@ async def post_onboarding(
                 """
                 INSERT INTO "User" (
                     "id", "name", "email", "role", "gradeLevel", "interests", "learningStyle",
-                    "state", "targetGraduationYear", "onboardingComplete"
+                    "state", "targetGraduationYear", "onboardingComplete", "updatedAt"
                 )
-                VALUES ($1, $2, $3, 'STUDENT', $4, $5::text[], $6, $7, $8, true)
+                VALUES ($1, $2, $3, 'STUDENT', $4, $5::text[], $6, $7, $8, true, NOW())
                 ON CONFLICT ("id") DO UPDATE SET
                     "name" = EXCLUDED."name",
                     "gradeLevel" = EXCLUDED."gradeLevel",
