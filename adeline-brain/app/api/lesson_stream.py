@@ -286,6 +286,44 @@ async def _stream_lesson(
     except Exception as e:
         logger.warning(f"[LessonStream] Student state load failed (non-fatal): {e}")
 
+    # ── Phase 1: Cognitive load budget ───────────────────────────────────────
+    # Compute load from recent durationMs data and apply token ceilings to
+    # _synthesis_call / _pedagogical_call for HIGH/CRITICAL load students.
+    try:
+        from app.config import get_db_conn
+        from app.algorithms.cognitive_load import calculate_cognitive_load, compute_baseline
+        from app.agents.orchestrator import apply_cognitive_load_budget
+
+        conn = await get_db_conn()
+        try:
+            recent_rows = await conn.fetch(
+                'SELECT "durationMs" FROM "LearningRecord" '
+                'WHERE "studentId" = $1 ORDER BY "createdAt" DESC LIMIT 20',
+                student_id,
+            )
+        finally:
+            await conn.close()
+
+        interactions = [
+            {"response_time_ms": int(r["durationMs"] or 3000), "edit_distance": 0}
+            for r in recent_rows
+        ]
+        baseline = compute_baseline(interactions)
+        if recent_rows:
+            load_result = calculate_cognitive_load(
+                response_time_ms=int(recent_rows[0]["durationMs"] or 3000),
+                edit_distance=0,
+                sentiment_score=0.0,
+                baseline=baseline,
+            )
+            logger.info(
+                f"[LessonStream] Cognitive load: {load_result.level} "
+                f"(score={load_result.score:.2f}, n={len(recent_rows)})"
+            )
+            apply_cognitive_load_budget(load_result)
+    except Exception as e:
+        logger.warning(f"[LessonStream] Cognitive load budget (non-fatal): {e}")
+
     # Build a fully-populated AdaptationRequest from all personalization signals
     # (interests, SM-2 scores, decay, cross-track bias, ZPD priority, proficiency map)
     adaptation_req = await _build_adaptation_request(
