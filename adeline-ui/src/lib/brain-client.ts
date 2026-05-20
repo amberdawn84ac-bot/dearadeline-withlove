@@ -2,6 +2,7 @@
  * Type-safe REST client for adeline-brain.
  * All types align with @adeline/core Zod schemas.
  */
+import { supabase } from '@/lib/supabase';
 
 /**
  * All brain calls go through the Next.js rewrite proxy at /brain/*.
@@ -12,17 +13,18 @@ const BRAIN_URL = "/brain";
 
 /**
  * Get auth headers for brain API calls.
- * Sends the Supabase JWT from localStorage (set by useAuth hook).
+ * Fetches the live Supabase JWT and returns it as a Bearer token.
+ * Falls back to an empty object if no session is available (caller should handle).
  */
-function getAuthHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {};
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("auth_token");
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
+async function getBrainHeaders(): Promise<Record<string, string>> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return {};
+    return { 'Authorization': `Bearer ${token}` };
+  } catch {
+    return {};
   }
-  return headers;
 }
 
 // ── Request / Response Types (mirrors adeline-core) ───────────────────────────
@@ -52,6 +54,7 @@ export interface LessonRequest {
   is_homestead: boolean;
   grade_level: string;
   render_mode?: LessonRenderMode;
+  force_regenerate?: boolean;
 }
 
 export interface AnimatedLessonRequest {
@@ -61,6 +64,73 @@ export interface AnimatedLessonRequest {
   target_ages?: string;
   track?: Track;
   student_id?: string;
+}
+
+// ── Animated Sketchnote Lesson types (mirrors adeline-core) ───────────────────
+
+export interface StyledText {
+  text: string;
+  style: "bold_marker" | "block_caps" | "script_hand" | "sketch_print" | "tiny_notes" | "label" | "caption";
+  layout: "title_banner" | "section_header" | "callout_bubble" | "flow_step" | "side_note" | "diagram_label" | "closing_quote";
+  decoration?: string[];
+  emphasis?: "low" | "medium" | "high";
+}
+
+export interface VisualElement {
+  id: string;
+  type: "handwritten_text" | "doodle" | "diagram" | "arrow" | "bubble" | "label" | "icon" | "character" | "background" | "timeline" | "split_screen";
+  content: string;
+  position: { x: number; y: number };
+  size?: { width: number; height: number };
+  style?: string;
+  color?: string;
+}
+
+export interface AnimationInstruction {
+  elementId: string;
+  animation: "draw_in" | "write_on" | "fade_in" | "pop_in" | "slide_in" | "zoom_in" | "pulse" | "wiggle" | "pan" | "morph" | "highlight";
+  startTime: number;
+  duration: number;
+  easing?: "linear" | "ease_in" | "ease_out" | "ease_in_out";
+}
+
+export interface AnimatedScene {
+  sceneNumber: number;
+  sceneTitle: StyledText;
+  durationSeconds: number;
+  narration: string;
+  visualBuild: VisualElement[];
+  animationPlan: AnimationInstruction[];
+  teachingLayer: {
+    visualSummary: StyledText[];
+    deepExplanation: StyledText;
+    whyItMatters: StyledText;
+    activity?: StyledText;
+  };
+  soundDesign?: { musicMood?: string; soundEffects?: string[] };
+  narrationAudioUrl?: string;
+}
+
+export interface AnimatedSketchnoteLesson {
+  lessonType: "animated_sketchnote_lesson";
+  title: StyledText;
+  subtitle: StyledText;
+  targetAges: string;
+  totalDurationSeconds: number;
+  learningGoals: string[];
+  colorPalette: string[];
+  visualStyle: {
+    format: "animated_sketchnote";
+    artDirection: string;
+    typography: string[];
+    illustrationRules: string[];
+    layoutRules: string[];
+  };
+  scenes: AnimatedScene[];
+  fullNarrationScript: string;
+  vocabulary: { word: string; definition: string; visualCue: string }[];
+  assessment: { question: string; answer: string; type: "short_answer" | "discussion" | "draw_and_explain" }[];
+  extensionActivities: { title: string; instructions: string; materials?: string[] }[];
 }
 
 export interface WitnessCitation {
@@ -157,6 +227,8 @@ export interface LessonBlockResponse {
   epub_url?:            string;
   cover_url?:           string;
   lexile_level?:        number;
+  // Animated Sketchnote Lesson — full lesson payload for ANIMATED_SKETCHNOTE_LESSON blocks
+  animated_sketchnote_data?: AnimatedSketchnoteLesson;
 }
 
 export interface XAPIStatement {
@@ -209,10 +281,22 @@ export interface LessonResponse {
 
 // ── Client Functions ───────────────────────────────────────────────────────────
 
-export async function generateLesson(request: LessonRequest): Promise<LessonResponse> {
-  const res = await fetch(`${BRAIN_URL}/lesson/generate`, {
+export interface LessonJobResponse {
+  job_id: string;
+  status: "queued" | "done";
+  result?: LessonResponse;
+}
+
+export interface LessonStatusResponse {
+  status: "queued" | "running" | "done" | "failed" | "not_found";
+  result?: LessonResponse;
+  error?: string;
+}
+
+export async function generateLesson(request: LessonRequest): Promise<LessonJobResponse> {
+  const res = await fetch(`${BRAIN_URL}/lesson/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
     body: JSON.stringify(request),
     cache: "no-store",
   });
@@ -221,11 +305,123 @@ export async function generateLesson(request: LessonRequest): Promise<LessonResp
     throw new Error(`adeline-brain error: ${res.status} ${res.statusText}`);
   }
 
-  return res.json() as Promise<LessonResponse>;
+  // Parse SSE stream to build a LessonResponse
+  const reader = res.body?.getReader();
+  const decoder = new TextDecoder();
+  
+  const blocks: LessonBlockResponse[] = [];
+  let title = request.topic;
+  let oas_standards: any[] = [];
+  let agent_name = "";
+  
+  if (reader) {
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.substring(6));
+            if (data.type === "block") {
+              blocks.push(data.block as LessonBlockResponse);
+            } else if (data.type === "done") {
+              if (data.title) title = data.title;
+              if (data.oas_standards) oas_standards = data.oas_standards;
+              if (data.agent_name) agent_name = data.agent_name;
+            }
+          } catch (e) {
+            // ignore parse errors for partial chunks
+          }
+        }
+      }
+    }
+  }
+
+  const lesson: LessonResponse = {
+    lesson_id: `lesson-${Date.now()}`,
+    title,
+    track: request.track,
+    blocks,
+    has_research_missions: false,
+    researcher_activated: false,
+    oas_standards,
+    agent_name,
+    xapi_statements: [],
+    credits_awarded: [],
+  };
+
+  // Cache it for the subsequent pollLessonResult call
+  if (typeof window !== "undefined") {
+    (window as any).__lessonJobCache = (window as any).__lessonJobCache || new Map();
+    (window as any).__lessonJobCache.set("job-streaming", lesson);
+  }
+
+  return {
+    job_id: "job-streaming",
+    status: "done",
+    result: lesson
+  };
+}
+
+export async function pollLessonResult(
+  jobId: string,
+  options: {
+    intervalMs?: number;
+    timeoutMs?: number;
+    onProgress?: (status: string) => void;
+  } = {}
+): Promise<LessonResponse> {
+  const { intervalMs = 2000, timeoutMs = 90000, onProgress } = options;
+  const deadline = Date.now() + timeoutMs;
+
+  if (typeof window !== "undefined") {
+    const lesson = (window as any).__lessonJobCache?.get(jobId);
+    if (lesson) {
+      onProgress?.("done");
+      return lesson;
+    }
+  }
+
+  while (Date.now() < deadline) {
+    // Fallback if cache missed (requires backend to actually have /lesson/status which it might not)
+    try {
+      const res = await fetch(`${BRAIN_URL}/lesson/status/${encodeURIComponent(jobId)}`, {
+        headers: await getBrainHeaders(),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`lesson status error: ${res.status}`);
+      const statusRes = await res.json() as LessonStatusResponse;
+      onProgress?.(statusRes.status);
+
+      if (statusRes.status === "done" && statusRes.result) {
+        return statusRes.result;
+      }
+
+      if (statusRes.status === "failed") {
+        throw new Error(statusRes.error ?? "Lesson generation failed");
+      }
+
+      if (statusRes.status === "not_found") {
+        throw new Error("Lesson job not found — it may have expired");
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error("Lesson generation timed out after 90 seconds");
 }
 
 export async function listTracks(): Promise<{ tracks: { id: Track; label: string }[] }> {
-  const res = await fetch(`${BRAIN_URL}/tracks`, { headers: getAuthHeaders() });
+  const res = await fetch(`${BRAIN_URL}/tracks`, { headers: await getBrainHeaders() });
   if (!res.ok) throw new Error(`Failed to fetch tracks: ${res.status}`);
   return res.json();
 }
@@ -255,7 +451,7 @@ export async function sealJournal(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...getAuthHeaders(),
+      ...(await getBrainHeaders()),
     },
     body: JSON.stringify(payload),
     cache: "no-store",
@@ -269,7 +465,7 @@ export async function fetchTrackProgress(
   role: "STUDENT" | "ADMIN" = "STUDENT",
 ): Promise<Record<string, number>> {
   const res = await fetch(`${BRAIN_URL}/journal/progress/${encodeURIComponent(student_id)}`, {
-    headers: getAuthHeaders(),
+    headers: await getBrainHeaders(),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`progress fetch failed: ${res.status}`);
@@ -306,7 +502,7 @@ export async function scaffold(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...getAuthHeaders(),
+      ...(await getBrainHeaders()),
     },
     body: JSON.stringify(request),
     cache: "no-store",
@@ -343,7 +539,7 @@ export async function askContext(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...getAuthHeaders(),
+      ...(await getBrainHeaders()),
     },
     body: JSON.stringify(request),
     cache: "no-store",
@@ -371,14 +567,21 @@ export async function fetchStudentState(
   student_id: string,
   role: "STUDENT" | "PARENT" | "ADMIN" = "STUDENT",
 ): Promise<StudentState> {
+  const headers = await getBrainHeaders();
+  console.log('[brain-client] fetchStudentState:', { student_id, hasAuth: !!headers.Authorization });
+
   const res = await fetch(
     `${BRAIN_URL}/students/${encodeURIComponent(student_id)}/state`,
     {
-      headers: getAuthHeaders(),
+      headers,
       cache: "no-store",
     },
   );
-  if (!res.ok) throw new Error(`student state fetch failed: ${res.status}`);
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => 'Unknown error');
+    console.error('[brain-client] fetchStudentState failed:', res.status, errorText);
+    throw new Error(`student state fetch failed: ${res.status} - ${errorText}`);
+  }
   return res.json() as Promise<StudentState>;
 }
 
@@ -417,7 +620,7 @@ export async function registerStudent(profile: {
 }): Promise<StudentProfile> {
   const res = await fetch(`${BRAIN_URL}/students/register`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
     body: JSON.stringify(profile),
     cache: "no-store",
   });
@@ -448,7 +651,7 @@ export async function postJournalEntry(
 ): Promise<JournalEntryResponse> {
   const res = await fetch(`${BRAIN_URL}/journal/entries`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
     body: JSON.stringify(payload),
     cache: "no-store",
   });
@@ -470,7 +673,7 @@ export async function fetchOpportunities(role = "ADMIN"): Promise<{
   total: number;
 }> {
   const res = await fetch(`${BRAIN_URL}/api/opportunities`, {
-    headers: getAuthHeaders(),
+    headers: await getBrainHeaders(),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Opportunities fetch failed: ${res.status}`);
@@ -529,7 +732,7 @@ export async function listProjects(filters: {
   if (filters.grade_band) params.set("grade_band", filters.grade_band);
 
   const res = await fetch(`${BRAIN_URL}/projects?${params}`, {
-    headers: getAuthHeaders(),
+    headers: await getBrainHeaders(),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`listProjects failed: ${res.status}`);
@@ -541,7 +744,7 @@ export async function getProject(
   role: "STUDENT" | "ADMIN" = "STUDENT",
 ): Promise<ProjectDetail> {
   const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}`, {
-    headers: getAuthHeaders(),
+    headers: await getBrainHeaders(),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`getProject failed: ${res.status}`);
@@ -555,7 +758,7 @@ export async function sealProject(
 ): Promise<ProjectSealResponse> {
   const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}/seal`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
     body: JSON.stringify({ student_id: studentId, project_id: projectId }),
     cache: "no-store",
   });
@@ -583,7 +786,7 @@ export async function startProject(
 ): Promise<StartProjectResponse> {
   const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}/start`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
     body: JSON.stringify({ student_id: studentId, project_id: projectId }),
     cache: "no-store",
   });
@@ -641,7 +844,7 @@ export async function reportActivity(
 ): Promise<ActivityReportResponse> {
   const res = await fetch(`${BRAIN_URL}/activities/report`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
     body: JSON.stringify(payload),
     cache: "no-store",
   });
@@ -654,7 +857,7 @@ export async function listActivities(
   role: "STUDENT" | "ADMIN" = "STUDENT",
 ): Promise<ActivityListResponse> {
   const res = await fetch(`${BRAIN_URL}/activities/${encodeURIComponent(studentId)}`, {
-    headers: getAuthHeaders(),
+    headers: await getBrainHeaders(),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`listActivities failed: ${res.status}`);
@@ -703,7 +906,7 @@ export interface OklahomaProfile {
 
 export async function listAvailableProfiles(): Promise<OklahomaProfile[]> {
   const res = await fetch(`${BRAIN_URL}/credits/available-profiles`, {
-    headers: getAuthHeaders(),
+    headers: await getBrainHeaders(),
   });
   if (!res.ok) throw new Error(`Failed to fetch profiles: ${res.status}`);
   return res.json();
@@ -713,7 +916,7 @@ export async function getStudentProfile(
   studentId: string,
 ): Promise<{ studentId: string; profileKey: string; profile: Record<string, unknown> }> {
   const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}/profile`, {
-    headers: getAuthHeaders(),
+    headers: await getBrainHeaders(),
   });
   if (!res.ok) throw new Error(`Failed to fetch profile: ${res.status}`);
   return res.json();
@@ -725,7 +928,7 @@ export async function setStudentProfile(
 ): Promise<{ studentId: string; profileKey: string; message: string }> {
   const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}/profile?profile_key=${encodeURIComponent(profileKey)}`, {
     method: "PUT",
-    headers: getAuthHeaders(),
+    headers: await getBrainHeaders(),
   });
   if (!res.ok) throw new Error(`Failed to set profile: ${res.status}`);
   return res.json();
@@ -735,7 +938,7 @@ export async function getCreditDashboard(
   studentId: string,
 ): Promise<CreditDashboard> {
   const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}`, {
-    headers: getAuthHeaders(),
+    headers: await getBrainHeaders(),
   });
   if (!res.ok) throw new Error(`Failed to fetch credit dashboard: ${res.status}`);
   return res.json();
@@ -747,7 +950,7 @@ export async function approveCourseProposal(
 ): Promise<{ proposalId: string; isApproved: boolean; message: string }> {
   const res = await fetch(
     `${BRAIN_URL}/credits/${encodeURIComponent(studentId)}/approve/${encodeURIComponent(proposalId)}`,
-    { method: "POST", headers: getAuthHeaders() },
+    { method: "POST", headers: await getBrainHeaders() },
   );
   if (!res.ok) throw new Error(`Failed to approve proposal: ${res.status}`);
   return res.json();
@@ -775,7 +978,7 @@ export interface OSRHEProgress {
 export async function getOSRHEProgress(studentId: string): Promise<OSRHEProgress> {
   const res = await fetch(
     `${BRAIN_URL}/transcripts/${encodeURIComponent(studentId)}/osrhe-progress`,
-    { headers: getAuthHeaders() },
+    { headers: await getBrainHeaders() },
   );
   if (!res.ok) throw new Error(`Failed to fetch OSRHE progress: ${res.status}`);
   return res.json();
@@ -784,7 +987,7 @@ export async function getOSRHEProgress(studentId: string): Promise<OSRHEProgress
 export async function downloadOfficialTranscript(studentId: string): Promise<Blob> {
   const res = await fetch(
     `${BRAIN_URL}/transcripts/${encodeURIComponent(studentId)}/official/download`,
-    { headers: getAuthHeaders() },
+    { headers: await getBrainHeaders() },
   );
   if (!res.ok) throw new Error(`Failed to download official transcript: ${res.status}`);
   return res.blob();
@@ -793,7 +996,7 @@ export async function downloadOfficialTranscript(studentId: string): Promise<Blo
 export async function downloadMasteryPortfolio(studentId: string): Promise<Blob> {
   const res = await fetch(
     `${BRAIN_URL}/transcripts/${encodeURIComponent(studentId)}/portfolio/download`,
-    { headers: getAuthHeaders() },
+    { headers: await getBrainHeaders() },
   );
   if (!res.ok) throw new Error(`Failed to download mastery portfolio: ${res.status}`);
   return res.blob();
@@ -826,14 +1029,14 @@ export interface AddBookResult {
 // ── Bookshelf Functions ───────────────────────────────────────────────────────
 
 export async function listBooks(): Promise<BookSummary[]> {
-  const res = await fetch(`${BRAIN_URL}/bookshelf`, { headers: getAuthHeaders() });
+  const res = await fetch(`${BRAIN_URL}/bookshelf`, { headers: await getBrainHeaders() });
   if (!res.ok) throw new Error(`Failed to list books: ${res.status}`);
   return res.json();
 }
 
 export async function getBook(bookId: string): Promise<BookSummary> {
   const res = await fetch(`${BRAIN_URL}/bookshelf/${encodeURIComponent(bookId)}`, {
-    headers: getAuthHeaders(),
+    headers: await getBrainHeaders(),
   });
   if (!res.ok) throw new Error(`Failed to get book: ${res.status}`);
   return res.json();
@@ -842,7 +1045,7 @@ export async function getBook(bookId: string): Promise<BookSummary> {
 export async function addBook(title: string, author: string): Promise<AddBookResult> {
   const res = await fetch(`${BRAIN_URL}/bookshelf/add`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
     body: JSON.stringify({ title, author }),
   });
   if (!res.ok) throw new Error(`Failed to add book: ${res.status}`);
@@ -851,7 +1054,7 @@ export async function addBook(title: string, author: string): Promise<AddBookRes
 
 export async function downloadBook(bookId: string): Promise<Blob> {
   const res = await fetch(`${BRAIN_URL}/bookshelf/${encodeURIComponent(bookId)}/download`, {
-    headers: getAuthHeaders(),
+    headers: await getBrainHeaders(),
   });
   if (!res.ok) throw new Error(`Failed to download book: ${res.status}`);
   return res.blob();
@@ -914,7 +1117,7 @@ export async function getLearningPlan(
 ): Promise<LearningPlanResponse> {
   const res = await fetch(
     `${BRAIN_URL}/learning-plan/${encodeURIComponent(studentId)}?limit=${limit}&include_all_tracks=true`,
-    { headers: getAuthHeaders(), cache: "no-store" },
+    { headers: await getBrainHeaders(), cache: "no-store" },
   );
   if (!res.ok) throw new Error(`Failed to fetch learning plan: ${res.status}`);
   return res.json();
@@ -943,7 +1146,7 @@ export async function getCognitiveTwinSnapshot(
 ): Promise<CognitiveTwinSnapshot> {
   const res = await fetch(
     `${BRAIN_URL}/monitor/${encodeURIComponent(studentId)}/snapshot`,
-    { headers: getAuthHeaders(), cache: "no-store" },
+    { headers: await getBrainHeaders(), cache: "no-store" },
   );
   if (!res.ok) throw new Error(`Failed to fetch twin snapshot: ${res.status}`);
   return res.json();
@@ -1004,7 +1207,7 @@ export async function* streamConversation(params: {
 }): AsyncGenerator<ConversationEvent> {
   const resp = await fetch(`${BRAIN_URL}/conversation/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
     body: JSON.stringify({
       student_id: params.studentId,
       message: params.message,
@@ -1064,9 +1267,57 @@ export async function generateAnimatedLesson(
 ): Promise<unknown> {
   const res = await fetch("/api/adeline/animated-lesson", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
     body: JSON.stringify(req),
   });
   if (!res.ok) throw new Error(`Animated lesson generation failed: ${res.status}`);
   return res.json();
+}
+
+// ── Learning Path ─────────────────────────────────────────────────────────────
+
+export interface LearningPathNode {
+  id: string;
+  title: string;
+  description: string;
+  track: Track;
+  difficulty: string;
+  grade_band: string;
+  standard_code: string;
+  prerequisite_ids: string[];
+  state: "mastered" | "available" | "locked";
+  mastery_score: number | null;
+  track_color: string;
+}
+
+export interface LearningPathEdge {
+  from: string;
+  to: string;
+}
+
+export interface LearningPathResponse {
+  student_id: string;
+  nodes: LearningPathNode[];
+  edges: LearningPathEdge[];
+  mastered_count: number;
+  available_count: number;
+  locked_count: number;
+}
+
+export async function fetchLearningPath(
+  studentId: string,
+  track?: Track,
+): Promise<LearningPathResponse> {
+  const url = new URL(
+    `${BRAIN_URL}/learning-path/${encodeURIComponent(studentId)}/nodes`,
+    typeof window !== "undefined" ? window.location.origin : "http://localhost:3000",
+  );
+  if (track) url.searchParams.set("track", track);
+
+  const res = await fetch(url.toString(), {
+    headers: await getBrainHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Learning path fetch failed: ${res.status}`);
+  return res.json() as Promise<LearningPathResponse>;
 }

@@ -25,6 +25,7 @@ calls SearchWitnesses (Tavily → scrape → cosine) before falling back to a
 RESEARCH_MISSION block. If a verified source is found, the lesson continues
 with a PRIMARY_SOURCE block from the auto-found archive.
 """
+import asyncio
 import uuid
 import os
 import logging
@@ -41,12 +42,12 @@ from app.protocols.witness import evaluate_evidence, build_research_mission_bloc
 from app.connections.pgvector_client import hippocampus
 from app.connections.neo4j_client import neo4j_client
 from app.tools.researcher import search_witnesses
-from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL
+from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL, GOOGLE_API_KEY, ADELINE_MODEL, LEARNLM_MODEL
 from app.algorithms.pedagogical_directives import generate_pedagogical_directives, get_quick_directives
 from app.agents.pedagogy import ZPDZone
 from app.models.student import MasteryBand
 
-_ANTHROPIC_MODEL = os.getenv("ADELINE_MODEL", "claude-sonnet-4-6")
+_ANTHROPIC_MODEL = ADELINE_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -54,10 +55,21 @@ logger = logging.getLogger(__name__)
 def _synthesis_client():
     """
     Returns an async OpenAI-compatible client for multimodal synthesis.
-    Uses Gemini Flash when GEMINI_API_KEY is set (30x cheaper than Claude
-    for mechanical JSON extraction tasks). Falls back to Claude otherwise.
+    Priority order:
+      1. ADELINE_MODEL starts with "gemini" + GOOGLE_API_KEY set
+         → ChatGoogleGenerativeAI via OpenAI-compat endpoint
+      2. GEMINI_API_KEY set (legacy cheap synthesis key)
+         → Gemini Flash via OpenAI-compat endpoint
+      3. Fallback → Claude via ANTHROPIC_API_KEY
     Returns (client, model_name, is_gemini).
     """
+    if _ANTHROPIC_MODEL.lower().startswith("gemini") and GOOGLE_API_KEY:
+        import openai as _oai
+        return (
+            _oai.AsyncOpenAI(api_key=GOOGLE_API_KEY, base_url=GEMINI_BASE_URL),
+            _ANTHROPIC_MODEL,
+            True,
+        )
     if GEMINI_API_KEY:
         import openai as _oai
         return (
@@ -70,6 +82,33 @@ def _synthesis_client():
         _ANTHROPIC_MODEL,
         False,
     )
+
+
+async def _pedagogical_call(system: str, user: str, max_tokens: int = 1000) -> str:
+    """
+    Pedagogical synthesis via LearnLM (Google's educationally fine-tuned model).
+    Routes narrative voice, Socratic scaffolding, and ZPD-adapted content through
+    LearnLM for higher pedagogical quality. Falls back to Gemini Flash on any error.
+    """
+    api_key = GEMINI_API_KEY or GOOGLE_API_KEY
+    if api_key:
+        import openai as _oai
+        for model in (LEARNLM_MODEL, GEMINI_MODEL):  # LearnLM → Flash fallback
+            try:
+                client = _oai.AsyncOpenAI(api_key=api_key, base_url=GEMINI_BASE_URL)
+                response = await client.chat.completions.create(
+                    model=model,
+                    max_tokens=max_tokens,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user",   "content": user},
+                    ],
+                )
+                return response.choices[0].message.content or ""
+            except Exception as e:
+                logger.warning(f"[Pedagogical] {model} failed ({e}) — trying fallback")
+    # Final fallback: Claude
+    return await _synthesis_call(system, user, max_tokens)
 
 
 async def _synthesis_call(system: str, user: str, max_tokens: int = 1000) -> str:
@@ -286,7 +325,7 @@ async def _synthesize_content(
         mastery_score: Student's current mastery score (0.0-1.0)
         mastery_band: Student's current mastery band
     """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return raw_content
 
     grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
@@ -335,7 +374,9 @@ async def _synthesize_content(
     )
 
     try:
-        return (await _synthesis_call(system_prompt, user_prompt, max_tokens=800)).strip()
+        # Pedagogical content routes through LearnLM (educationally fine-tuned)
+        # with automatic fallback to Gemini Flash → Claude
+        return (await _pedagogical_call(system_prompt, user_prompt, max_tokens=800)).strip()
     except Exception as e:
         logger.warning(
             f"[Synthesis] Content synthesis failed ({type(e).__name__}: {e}) "
@@ -498,6 +539,92 @@ async def _researcher_fallback(
     return None
 
 
+async def _generate_from_knowledge(
+    state: AdelineState,
+    silent_sources: list[str],
+) -> list[dict]:
+    """
+    Knowledge-generation fallback — Adeline ALWAYS teaches.
+
+    Called when both Hippocampus and the Researcher return empty.
+    Uses Gemini (via _synthesis_call) to generate a real lesson from training
+    knowledge, then appends a RESEARCH_MISSION as optional enrichment.
+
+    The student gets a full lesson. The research mission is a bonus "dig deeper"
+    activity — never the main content.
+    """
+    request = state["request"]
+    track_name = request.track.value.replace("_", " ").title()
+    grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
+    persona = _TRACK_PERSONA.get(request.track, "a knowledgeable mentor")
+
+    system_prompt = (
+        f"You are Adeline — {persona}\n\n"
+        f"You are teaching a {grade_desc} student.\n\n"
+        f"{_ADELINE_VOICE}\n"
+        "IMPORTANT: You are teaching from your own knowledge because the primary source "
+        "archive does not yet have verified documents on this topic. That is fine — teach "
+        "the lesson anyway. Be specific: name real people, real dates, real places, real events. "
+        "Do NOT say 'I don't have sources' or 'research this yourself.' TEACH.\n\n"
+        "Structure your response as THREE sections, separated by ---:\n"
+        "SECTION 1: Opening hook — one vivid paragraph that drops the student into the moment.\n"
+        "SECTION 2: The lesson — 2-3 paragraphs with specific facts, names, dates. "
+        "Ground every claim in real history. End with a direct question or challenge.\n"
+        "SECTION 3: A single sentence connecting this topic to why it matters RIGHT NOW.\n"
+    )
+
+    user_prompt = (
+        f"Topic: {request.topic}\n"
+        f"Track: {track_name}\n\n"
+        f"Teach this lesson. Be specific. Make it land."
+    )
+
+    blocks: list[dict] = []
+
+    try:
+        raw = await _synthesis_call(system_prompt, user_prompt, max_tokens=1200)
+        content = raw.strip()
+    except Exception as e:
+        logger.warning(f"[KnowledgeGen] Synthesis failed ({e}) — using topic as fallback")
+        content = (
+            f"**{request.topic}**\n\n"
+            f"Adeline is preparing this lesson. Check back shortly — "
+            f"she's gathering what she knows about this topic."
+        )
+
+    # Main lesson block — always present
+    blocks.append({
+        "block_type":  BlockType.NARRATIVE.value,
+        "content":     content,
+        "evidence":    [],
+        "is_silenced": False,
+        "homestead_content": (
+            _homestead_adapt(content) if request.is_homestead else None
+        ),
+    })
+
+    # Research mission as OPTIONAL enrichment (not the main lesson)
+    sources_text = "\n".join(f"- {s}" for s in silent_sources[:3]) if silent_sources else ""
+    enrichment = (
+        f"**Dig Deeper (Optional Research Mission):**\n"
+        f"Adeline taught this from her own knowledge. Want to go further? "
+        f"Find a primary source document on this topic and bring it back — "
+        f"she'll verify it and add it to the archive so future students benefit too."
+    )
+    if sources_text:
+        enrichment += f"\n\nStart by looking for:\n{sources_text}"
+
+    blocks.append({
+        "block_type":  BlockType.RESEARCH_MISSION.value,
+        "content":     enrichment,
+        "evidence":    [],
+        "is_silenced": False,
+    })
+    state["has_research_missions"] = True
+
+    return blocks
+
+
 # ── Historian Agent (TRUTH_HISTORY) ───────────────────────────────────
 
 async def historian_agent(state: AdelineState) -> AdelineState:
@@ -567,27 +694,12 @@ async def historian_agent(state: AdelineState) -> AdelineState:
         if block:
             blocks.append(block)
         else:
-            # Researcher also failed — Claude provides orientation + single research mission
-            orientation = await _state_synthesize(
-                state,
-                block_type=BlockType.NARRATIVE.value,
-                source_chunks=[],
-                raw_content=request.topic,
+            # Researcher also failed — Adeline teaches from knowledge (Gemini)
+            logger.info(
+                f"[HistorianAgent] Researcher empty for '{request.topic}' — "
+                "generating lesson from knowledge"
             )
-            blocks.append({
-                "block_type":  BlockType.NARRATIVE.value,
-                "content":     orientation,
-                "evidence":    [],
-                "is_silenced": False,
-                "homestead_content": None,
-            })
-            mission = build_research_mission_block(request.topic, silent_sources[:3])
-            blocks.append({
-                **mission,
-                "block_type": BlockType.RESEARCH_MISSION.value,
-                "evidence":   [],
-            })
-            state["has_research_missions"] = True
+            blocks = await _generate_from_knowledge(state, silent_sources[:3])
 
     # ── Multimodal synthesis ─────────────────────────────────────────────────
     await _run_multimodal_synthesis(state, blocks, allow_timeline=True)
@@ -705,7 +817,7 @@ RESEARCH_MISSION:
 {_ADELINE_VOICE}
 """
 
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         blocks.append({
             "block_type":  BlockType.NARRATIVE.value,
             "content":     f"Justice investigation: {request.topic}",
@@ -717,16 +829,10 @@ RESEARCH_MISSION:
 
     raw_output = ""
     try:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        client = anthropic.AsyncAnthropic(api_key=api_key)
-        message = await client.messages.create(
-            model=_ANTHROPIC_MODEL,
-            max_tokens=1200,
-            messages=[{"role": "user", "content": investigation_prompt}],
-        )
-        raw_output = message.content[0].text.strip()
+        raw_output = await _synthesis_call("", investigation_prompt, max_tokens=1200)
+        raw_output = raw_output.strip()
     except Exception as e:
-        logger.warning(f"[JusticeAgent] Claude call failed ({e}) — using fallback NARRATIVE")
+        logger.warning(f"[JusticeAgent] LLM call failed ({e}) — using fallback NARRATIVE")
         blocks.append({
             "block_type":  BlockType.NARRATIVE.value,
             "content":     f"Justice investigation: {request.topic}",
@@ -764,13 +870,11 @@ RESEARCH_MISSION:
         state["has_research_missions"] = True
 
     if not blocks:
-        mission = build_research_mission_block(request.topic, [])
-        blocks.append({
-            **mission,
-            "block_type": BlockType.RESEARCH_MISSION.value,
-            "evidence":   [],
-        })
-        state["has_research_missions"] = True
+        logger.info(
+            f"[JusticeAgent] No blocks generated for '{request.topic}' — "
+            "generating lesson from knowledge"
+        )
+        blocks = await _generate_from_knowledge(state, [])
 
     # ── Multimodal synthesis ─────────────────────────────────────────────────
     await _run_multimodal_synthesis(state, blocks, allow_timeline=True)
@@ -1068,7 +1172,6 @@ async def literature_agent(state: AdelineState) -> AdelineState:
                     "archive_name": "Student's Reading Nook",
                 },
                 "similarity_score": 1.0,
-                "verdict":          "VERIFIED",
                 "chunk":            f"Literary analysis of {active_book['title']}",
             }],
             "is_silenced":      False,
@@ -1109,7 +1212,6 @@ async def literature_agent(state: AdelineState) -> AdelineState:
                         "archive_name": r.get("citation_archive_name", ""),
                     },
                     "similarity_score": float(r["similarity_score"]),
-                    "verdict":          "VERIFIED",
                     "chunk":            r["chunk"],
                 } for r in reference_chunks],
                 "is_silenced":      False,
@@ -1148,7 +1250,7 @@ async def _synthesize_literature(
     Claude generates literary analysis content.
     If a specific book is provided, the analysis is grounded in that text.
     """
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         if book_title:
             return f"Literary analysis of '{topic}' in the context of *{book_title}* by {book_author}."
         return f"Literary analysis: {topic}"
@@ -1184,17 +1286,9 @@ async def _synthesize_literature(
     )
 
     try:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        client = anthropic.AsyncAnthropic(api_key=api_key)
-        message = await client.messages.create(
-            model=_ANTHROPIC_MODEL,
-            max_tokens=800,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return message.content[0].text
+        return await _synthesis_call(system_prompt, user_prompt, max_tokens=800)
     except Exception as e:
-        logger.error(f"[LiteratureAgent] Claude synthesis failed: {e}")
+        logger.error(f"[LiteratureAgent] LLM synthesis failed: {e}")
         if book_title:
             return f"Literary analysis of '{topic}' in the context of *{book_title}* by {book_author}."
         return f"Literary analysis: {topic}"
@@ -1273,8 +1367,8 @@ async def practical_agent(state: AdelineState) -> AdelineState:
 
 
 async def _synthesize_practical(request: LessonRequest) -> str:
-    """Claude generates practical/applied content for math and creative economy."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
+    """LLM generates practical/applied content for math and creative economy."""
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return f"Practical lesson: {request.topic}"
 
     grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
@@ -1301,17 +1395,9 @@ async def _synthesize_practical(request: LessonRequest) -> str:
     )
 
     try:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        client = anthropic.AsyncAnthropic(api_key=api_key)
-        message = await client.messages.create(
-            model=_ANTHROPIC_MODEL,
-            max_tokens=800,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return message.content[0].text
+        return await _synthesis_call(system_prompt, user_prompt, max_tokens=800)
     except Exception as e:
-        logger.error(f"[PracticalAgent] Claude synthesis failed: {e}")
+        logger.error(f"[PracticalAgent] LLM synthesis failed: {e}")
         return f"Practical lesson: {request.topic}"
 
 
@@ -1336,7 +1422,7 @@ async def _decide_formats(
     """
     import json as _json
 
-    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         defaults = ["MIND_MAP", "NARRATED_SLIDE"]
         if allow_timeline:
             defaults.insert(1, "TIMELINE")
@@ -1393,6 +1479,10 @@ async def _run_multimodal_synthesis(
     """
     Decide which formats add value, then run only those synthesis functions.
     Appends new blocks to the blocks list in-place.
+
+    When render_mode == 'animated_sketchnote_lesson' the standard format
+    decision is skipped and a single AnimatedSketchnoteLesson block is
+    generated instead via Gemini.
     """
     if not blocks:
         return
@@ -1400,6 +1490,26 @@ async def _run_multimodal_synthesis(
     request = state["request"]
     primary_content = blocks[0].get("content", "")
     parent_evidence = blocks[0].get("evidence", [])
+
+    # ── Animated sketchnote mode — bypass standard multimodal pipeline ─────────
+    render_mode = getattr(request, "render_mode", None)
+    if render_mode == "animated_sketchnote_lesson":
+        asl = await _synthesize_animated_sketchnote(
+            topic=request.topic,
+            content=primary_content,
+            track=request.track,
+            grade_level=request.grade_level,
+        )
+        if asl:
+            blocks.append({
+                "block_type": BlockType.ANIMATED_SKETCHNOTE_LESSON.value,
+                "content": f"Living Sketchnote: {request.topic} · {len(asl.scenes)} scenes",
+                "evidence": [],
+                "is_silenced": False,
+                "homestead_content": None,
+                "animated_sketchnote_data": asl.model_dump(),
+            })
+        return  # skip remaining multimodal formats
 
     formats = await _decide_formats(
         topic=request.topic,
@@ -1475,7 +1585,7 @@ async def _synthesize_mind_map(
     Extract a concept hierarchy from lesson content.
     Returns None on any failure — never surfaces errors to the student.
     """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return None
     from app.schemas.api_models import MindMapData
     import json
@@ -1514,7 +1624,7 @@ async def _synthesize_timeline(
     For homesteading: generates a seasonal calendar.
     Returns None on any failure.
     """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return None
     from app.schemas.api_models import TimelineData
     import json
@@ -1560,7 +1670,7 @@ async def _synthesize_mnemonic(
     Generate a mnemonic device when ≥3 concepts are present in the content.
     Returns None if fewer than 3 concepts detected or on any failure.
     """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return None
     from app.schemas.api_models import MnemonicData
     import json
@@ -1600,7 +1710,7 @@ async def _synthesize_narrated_slide(
     Convert lesson content into a 3-5 slide narrated presentation.
     Returns None on any failure.
     """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GEMINI_API_KEY:
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return None
     from app.schemas.api_models import NarratedSlideData
     import json
@@ -1623,6 +1733,67 @@ async def _synthesize_narrated_slide(
         return NarratedSlideData.model_validate(json.loads(text.strip()))
     except Exception as e:
         logger.warning(f"[NarratedSlide] synthesis failed: {e}")
+        return None
+
+
+async def _synthesize_animated_sketchnote(
+    topic: str,
+    content: str,
+    track: "Track",
+    grade_level: str,
+    duration_seconds: int = 180,
+) -> "AnimatedSketchnoteLessonData | None":
+    """
+    Generate a full AnimatedSketchnoteLesson JSON via Gemini.
+    Uses the same master prompt as /lesson/animated — runs as an optional
+    multimodal block appended when render_mode='animated_sketchnote_lesson'.
+    Returns None on any failure — never surfaces errors to the student.
+    """
+    if not GEMINI_API_KEY:
+        logger.warning("[AnimatedSketchnote] GEMINI_API_KEY not set — skipping")
+        return None
+
+    from app.schemas.api_models import AnimatedSketchnoteLessonData
+    from app.prompts.animated_sketchnote import (
+        ANIMATED_SKETCHNOTE_SYSTEM_PROMPT,
+        ANIMATED_SKETCHNOTE_USER_PROMPT,
+    )
+    import json
+    import re
+
+    grade_desc = _GRADE_DESC.get(grade_level, f"grade {grade_level}")
+    target_ages = {
+        "K": "5-6", "1": "6-7", "2": "7-8", "3": "8-9", "4": "9-10",
+        "5": "10-11", "6": "11-12", "7": "12-13", "8": "13-14",
+        "9": "14-15", "10": "15-16", "11": "16-17", "12": "17-18",
+    }.get(grade_level, "10-15")
+
+    user_prompt = ANIMATED_SKETCHNOTE_USER_PROMPT.format(
+        topic=topic,
+        focus=content[:400],
+        duration_seconds=duration_seconds,
+        target_ages=target_ages,
+    )
+
+    try:
+        import google.generativeai as genai  # type: ignore
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel(
+            model_name=GEMINI_MODEL or "gemini-1.5-pro",
+            generation_config={"temperature": 0.7, "max_output_tokens": 8192,
+                               "response_mime_type": "application/json"},
+            system_instruction=ANIMATED_SKETCHNOTE_SYSTEM_PROMPT,
+        )
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, lambda: model.generate_content(user_prompt))
+        raw_text = response.text.strip()
+        raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
+        raw_text = re.sub(r"\s*```$", "", raw_text)
+        data = AnimatedSketchnoteLessonData(**json.loads(raw_text))
+        logger.info(f"[AnimatedSketchnote] Generated {len(data.scenes)} scenes for '{topic}'")
+        return data
+    except Exception as e:
+        logger.warning(f"[AnimatedSketchnote] synthesis failed: {e}")
         return None
 
 

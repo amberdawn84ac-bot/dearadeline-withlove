@@ -18,10 +18,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-import anthropic
 from fastapi import APIRouter, Depends, HTTPException, Query
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
+from app.config import create_llm, GOOGLE_API_KEY, ANTHROPIC_API_KEY
 from app.schemas.api_models import Track, UserRole
 from app.api.middleware import require_role, get_current_user_id, verify_student_access
 from app.connections.journal_store import journal_store
@@ -216,32 +217,25 @@ Respond with JSON only:
 
 async def _map_activity_with_claude(description: str, grade_level: str) -> dict:
     """
-    Use Claude to map a free-text activity description to academic credit categories.
-    Falls back to a generic mapping if Claude is unavailable.
+    Use the active LLM to map a free-text activity description to academic credit categories.
+    Falls back to a generic mapping if no LLM key is available.
     """
-    api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("ADELINE_API_KEY")
-    if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY not set — cannot map activity")
+    if not ANTHROPIC_API_KEY and not GOOGLE_API_KEY and not os.getenv("GEMINI_API_KEY"):
+        raise RuntimeError("No LLM API key set — cannot map activity")
 
-    client = anthropic.AsyncAnthropic(api_key=api_key)
+    llm = create_llm(max_tokens=512)
+    lc_messages = [
+        SystemMessage(content=_SYSTEM_PROMPT),
+        HumanMessage(content=(
+            f"Grade level: {grade_level}\n\n"
+            f"Student says: \"{description}\"\n\n"
+            "Map this to credit categories."
+        )),
+    ]
 
     try:
-        response = await client.messages.create(
-            model=os.getenv("ADELINE_MODEL", "claude-sonnet-4-6"),
-            max_tokens=512,
-            system=_SYSTEM_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        f"Grade level: {grade_level}\n\n"
-                        f"Student says: \"{description}\"\n\n"
-                        "Map this to credit categories."
-                    ),
-                }
-            ],
-        )
-        text = response.content[0].text.strip()
+        response = await llm.ainvoke(lc_messages)
+        text = response.content.strip()
         # Strip markdown code fences if present
         if text.startswith("```"):
             text = text.split("```")[1]
@@ -249,10 +243,10 @@ async def _map_activity_with_claude(description: str, grade_level: str) -> dict:
                 text = text[4:]
         return json.loads(text)
     except json.JSONDecodeError as e:
-        logger.warning(f"[activities] Claude returned non-JSON: {e}")
+        logger.warning(f"[activities] LLM returned non-JSON: {e}")
         raise HTTPException(status_code=500, detail="Credit mapping failed — invalid response from AI")
-    except anthropic.APIError as e:
-        logger.warning(f"[activities] Claude API error: {e}")
+    except Exception as e:
+        logger.warning(f"[activities] LLM API error: {e}")
         raise HTTPException(status_code=503, detail=f"AI unavailable: {e}")
 
 

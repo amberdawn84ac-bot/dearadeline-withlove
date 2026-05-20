@@ -1,22 +1,27 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { setAuthCookie } from '@/lib/auth-cookies'
 
 type Mode = 'login' | 'signup'
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter()
-  const [mode, setMode] = useState<Mode>('login')
+  const searchParams = useSearchParams()
+  const [mode, setMode] = useState<Mode>(
+    searchParams.get('mode') === 'signup' ? 'signup' : 'login'
+  )
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const inviteCode = searchParams.get('invite')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,9 +41,11 @@ export default function LoginPage() {
           setLoading(false)
           return
         }
-        // Auto-confirmed — store token and go to onboarding
-        localStorage.setItem('auth_token', data.session.access_token)
-        router.push('/onboarding')
+        // Auto-confirmed — new signup always needs onboarding
+        await setAuthCookie(data.session.access_token)
+        // Pass invite code to onboarding if present
+        const onboardingUrl = inviteCode ? `/onboarding?invite=${inviteCode}` : '/onboarding'
+        router.push(onboardingUrl)
       } else {
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
           email,
@@ -46,7 +53,23 @@ export default function LoginPage() {
         })
         if (signInError) throw signInError
         if (!data.session) throw new Error('No session returned')
-        localStorage.setItem('auth_token', data.session.access_token)
+        const token = data.session.access_token
+        await setAuthCookie(token)
+        // Send returning users directly to dashboard if they already completed onboarding
+        try {
+          const profileRes = await fetch(`/brain?_=${Date.now()}`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Cache-Control': 'no-cache' },
+          })
+          if (profileRes.ok) {
+            const profileData = await profileRes.json()
+            if (profileData?.user?.onboardingComplete) {
+              router.push('/dashboard')
+              return
+            }
+          }
+        } catch {
+          // Profile check failed — fall through to onboarding; gate will sort it out
+        }
         router.push('/onboarding')
       }
     } catch (err: unknown) {
@@ -98,6 +121,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
+              autoComplete="email"
               className="w-full px-4 py-2.5 rounded-xl border border-[#E7DAC3] text-sm text-[#2F4731] bg-white focus:outline-none focus:border-[#BD6809] transition-colors"
             />
           </div>
@@ -115,6 +139,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="At least 6 characters"
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 className="w-full px-4 py-2.5 rounded-xl border border-[#E7DAC3] text-sm text-[#2F4731] bg-white focus:outline-none focus:border-[#BD6809] transition-colors pr-10"
               />
               <button
@@ -171,5 +196,13 @@ export default function LoginPage() {
         </Link>
       </p>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#FFFEF7]" />}>
+      <LoginContent />
+    </Suspense>
   )
 }

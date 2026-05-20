@@ -13,13 +13,21 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, AlertTriangle, Brain, Zap, Shield, ChevronDown, ChevronUp, Wifi, WifiOff } from "lucide-react";
+import { Activity, AlertTriangle, Brain, Zap, Shield, ChevronDown, ChevronUp, Wifi, WifiOff, type LucideIcon } from "lucide-react";
 import {
   useStudentMonitor,
   type CognitiveTwinSnapshot,
   type SafetyFlagEvent,
   type MonitorEvent,
 } from "@/hooks/useStudentMonitor";
+
+export interface EventPayload {
+  block_type?: string;
+  working_memory_load?: number;
+  zpd_zone?: string;
+  message?: string;
+  zone?: string;
+}
 
 interface CognitiveDashboardProps {
   studentId: string;
@@ -48,7 +56,7 @@ function GaugeMeter({
   value: number;
   label: string;
   color: string;
-  icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
+  icon: LucideIcon;
 }) {
   const pct = Math.round(value * 100);
   const strokeDashoffset = 157 - (157 * value);
@@ -190,10 +198,10 @@ function EventTicker({ events }: { events: MonitorEvent[] }) {
             {e.event.replace("_", " ")}
           </span>
           <span className="truncate">
-            {e.event === "block_generated" && `Block: ${(e.payload as any)?.block_type}`}
-            {e.event === "cognitive_update" && `Load: ${Math.round(((e.payload as any)?.working_memory_load ?? 0) * 100)}% · Zone: ${(e.payload as any)?.zpd_zone}`}
-            {e.event === "agent_thinking" && (e.payload as any)?.message}
-            {e.event === "zpd_shift" && `→ ${(e.payload as any)?.zone}`}
+            {e.event === "block_generated" && `Block: ${(e.payload as EventPayload)?.block_type}`}
+            {e.event === "cognitive_update" && `Load: ${Math.round(((e.payload as EventPayload)?.working_memory_load ?? 0) * 100)}% · Zone: ${(e.payload as EventPayload)?.zpd_zone}`}
+            {e.event === "agent_thinking" && (e.payload as EventPayload)?.message}
+            {e.event === "zpd_shift" && `→ ${(e.payload as EventPayload)?.zone}`}
             {e.event === "session_start" && "Session started"}
             {e.event === "session_end" && "Session ended"}
           </span>

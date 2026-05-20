@@ -12,16 +12,21 @@ const nextConfig = {
    * Docker: BRAIN_INTERNAL_URL=http://adeline-brain:8000
    */
   async rewrites() {
-    const target =
+    // Strictly use environment variable for backend URL
+    // Docker: BRAIN_INTERNAL_URL (internal hostname)
+    // Vercel production: NEXT_PUBLIC_BRAIN_URL (Railway backend URL)
+    // Local dev: localhost:8000
+    const backendUrl = (
       process.env.BRAIN_INTERNAL_URL ||
-      (process.env.NODE_ENV === "production"
-        ? "http://adeline-brain:8000"
-        : "http://localhost:8000");
+      process.env.BRAIN_URL ||
+      process.env.NEXT_PUBLIC_BRAIN_URL ||
+      "https://dearadeline-withlove-production.up.railway.app"
+    ).replace(/\/$/, "");
 
     return [
       {
         source: "/brain/:path*",
-        destination: `${target}/:path*`,
+        destination: `${backendUrl}/brain/:path*`,
       },
     ];
   },

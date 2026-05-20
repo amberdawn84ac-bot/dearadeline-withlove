@@ -19,6 +19,22 @@ import { useState, useEffect } from "react";
 import { clsx } from "clsx";
 import { motion } from "framer-motion";
 import type { LessonBlockResponse, Evidence, MindMapData, TimelineData, MnemonicData, NarratedSlideData, QuizData, FlashcardData } from "@/lib/brain-client";
+
+export interface ExtendedEvidence extends Evidence {
+  source_type?: "PRIMARY_SOURCE" | "DECLASSIFIED_GOV" | "ARCHIVE_ORG" | "ACADEMIC_JOURNAL" | "PERSONAL_COLLECTION";
+}
+
+export interface ExtendedBlockResponse extends LessonBlockResponse {
+  interactive_sim_data?: {
+    title?: string;
+    instructions?: string;
+  };
+  book_id?: string;
+  book_title?: string;
+  book_author?: string;
+  epub_url?: string;
+  cover_url?: string;
+}
 import { MindMap } from "@/components/gen-ui/patterns/MindMap";
 import { Timeline } from "@/components/gen-ui/patterns/Timeline";
 import { QuizCard } from "@/components/gen-ui/patterns/QuizCard";
@@ -179,7 +195,8 @@ type BrainBlockType =
   | "BOOK_SUGGESTION"
   | "INTERACTIVE_SIM"
   | "HIGHLIGHT_ASK"
-  | "GENUI_ASSEMBLY";
+  | "GENUI_ASSEMBLY"
+  | "ANIMATED_SKETCHNOTE_LESSON";
 
 // ── OAS Standard entry ────────────────────────────────────────────────────────
 
@@ -258,7 +275,7 @@ function EvidenceFooter({ evidence }: { evidence: Evidence[] }) {
           {evidence.map((ev, i) => (
             <SourceBadge
               key={ev.source_id || i}
-              sourceType={(ev as any).source_type ?? "PRIMARY_SOURCE"}
+              sourceType={(ev as ExtendedEvidence).source_type ?? "PRIMARY_SOURCE"}
               sourceTitle={ev.source_title}
               sourceUrl={ev.source_url}
               citationYear={ev.witness_citation?.year ?? undefined}
@@ -286,9 +303,10 @@ const LABEL_STYLES: Record<BrainBlockType, string> = {
   MNEMONIC:         "bg-[#6B21A8] text-white",
   NARRATED_SLIDE:   "bg-[#1D4ED8] text-white",
   BOOK_SUGGESTION:  "bg-[#78350F] text-white",
-  INTERACTIVE_SIM:  "bg-[#065F46] text-white",
-  HIGHLIGHT_ASK:    "bg-[#374151] text-white",
-  GENUI_ASSEMBLY:   "bg-[#7C3AED] text-white",
+  INTERACTIVE_SIM:           "bg-[#065F46] text-white",
+  HIGHLIGHT_ASK:             "bg-[#374151] text-white",
+  GENUI_ASSEMBLY:            "bg-[#7C3AED] text-white",
+  ANIMATED_SKETCHNOTE_LESSON: "bg-[#3D1419] text-[#FFFEF7]",
 };
 
 const LABEL_NAMES: Record<BrainBlockType, string> = {
@@ -305,9 +323,10 @@ const LABEL_NAMES: Record<BrainBlockType, string> = {
   MNEMONIC:         "Mnemonic",
   NARRATED_SLIDE:   "Lesson Slides",
   BOOK_SUGGESTION:  "Suggested Reading",
-  INTERACTIVE_SIM:  "Interactive",
-  HIGHLIGHT_ASK:    "Highlight & Ask",
-  GENUI_ASSEMBLY:   "Dynamic Component",
+  INTERACTIVE_SIM:           "Interactive",
+  HIGHLIGHT_ASK:             "Highlight & Ask",
+  GENUI_ASSEMBLY:            "Dynamic Component",
+  ANIMATED_SKETCHNOTE_LESSON: "Living Sketchnote",
 };
 
 function BlockLabel({ type }: { type: string }) {
@@ -569,7 +588,7 @@ function FlashcardBlock({ block }: { block: LessonBlockResponse }) {
 // ── INTERACTIVE_SIM block (placeholder) ──────────────────────────────────────
 
 function InteractiveSimBlock({ block }: { block: LessonBlockResponse }) {
-  const sim = (block as any).interactive_sim_data;
+  const sim = (block as ExtendedBlockResponse).interactive_sim_data;
   return (
     <div
       className="rounded-xl p-5 space-y-3"
@@ -670,12 +689,13 @@ function NarratedSlideBlock({ block }: { block: LessonBlockResponse }) {
 // ── BOOK_SUGGESTION block ──────────────────────────────────────────────────────
 
 function BookSuggestionBlock({ block }: { block: LessonBlockResponse }) {
-  const bookId = (block as any).book_id || "";
-  const bookTitle = (block as any).book_title || "Suggested Book";
-  const bookAuthor = (block as any).book_author || "";
-  const epubUrl = (block as any).epub_url || "";
-  const coverUrl = (block as any).cover_url || "";
-  const lexileLevel = (block as any).lexile_level;
+  const extBlock = block as ExtendedBlockResponse;
+  const bookId = extBlock.book_id || "";
+  const bookTitle = extBlock.book_title || "Suggested Book";
+  const bookAuthor = extBlock.book_author || "";
+  const epubUrl = extBlock.epub_url || "";
+  const coverUrl = extBlock.cover_url || "";
+  const lexileLevel = extBlock.lexile_level;
 
   return (
     <div
@@ -911,7 +931,7 @@ function GenUIRenderer({
               break;
             case "ANIMATED_SKETCHNOTE_LESSON":
               blockContent = block.animated_sketchnote_data
-                ? <AnimatedSketchnoteRenderer lesson={block.animated_sketchnote_data as any} />
+                ? <AnimatedSketchnoteRenderer lesson={block.animated_sketchnote_data} />
                 : <TextBlock block={block} />;
               break;
             case "BOOK_SUGGESTION":

@@ -37,10 +37,7 @@ from sqlalchemy import text
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
 
-POSTGRES_DSN = os.getenv(
-    "POSTGRES_DSN",
-    "postgresql://adeline:adeline_local_dev@localhost:5432/hippocampus",
-).replace("postgresql://", "postgresql+asyncpg://")
+POSTGRES_DSN = os.getenv("POSTGRES_DSN", "").replace("postgresql://", "postgresql+asyncpg://")
 
 EMBED_MODEL = "text-embedding-3-small"
 

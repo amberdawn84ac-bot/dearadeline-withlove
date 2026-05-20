@@ -15,7 +15,7 @@ from typing import Optional
 
 import jwt
 from jwt import PyJWKClient
-from fastapi import Header, HTTPException, Depends
+from fastapi import Header, HTTPException, Depends, Cookie
 from app.schemas.api_models import UserRole
 from app.config import SUPABASE_JWT_SECRET, SUPABASE_JWKS_URL
 
@@ -160,6 +160,52 @@ def get_current_user_id(
     token = _extract_bearer_token(authorization)
     payload = _decode_jwt(token)
     return _extract_user_id(payload)
+
+
+def get_current_user_id_from_auth_or_cookie(
+    authorization: Optional[str] = Header(default=None),
+    auth_token: Optional[str] = Cookie(default=None),
+) -> str:
+    """
+    FastAPI dependency with cookie fallback.
+    
+    Tries Authorization header first (for backward compatibility),
+    then falls back to auth_token cookie (for production cookie-based auth).
+    
+    Usage:
+        @router.get("/me")
+        async def get_me(user_id: str = Depends(get_current_user_id_from_auth_or_cookie)):
+    """
+    token = None
+    source = "unknown"
+    
+    # Try Authorization header first
+    if authorization:
+        try:
+            token = _extract_bearer_token(authorization)
+            source = "header"
+        except HTTPException:
+            # Invalid header, will try cookie
+            pass
+    
+    # Fall back to cookie
+    if not token and auth_token:
+        token = auth_token
+        source = "cookie"
+    
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing Authorization header or auth_token cookie"
+        )
+    
+    payload = _decode_jwt(token)
+    user_id = _extract_user_id(payload)
+    
+    # Log auth source for debugging (remove in production if too noisy)
+    logger.debug(f"[Auth] Authenticated via {source}: user {user_id}")
+    
+    return user_id
 
 
 def get_auth_claims(authorization: Optional[str]) -> tuple[str, str]:

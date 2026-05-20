@@ -98,11 +98,9 @@ export default function PricingPage() {
 
   const handlePromoRedeem = () => {
     if (FOUNDER_CODES.has(promoCode.trim().toUpperCase())) {
-      // Store tier in localStorage so the app knows the user has full access
-      localStorage.setItem('adeline_tier', 'FAMILY')
-      localStorage.setItem('adeline_founder_code', promoCode.trim().toUpperCase())
-      // Send to login/signup — they need an account before onboarding
-      router.push('/login')
+      // Send to login/signup with invite code — they need an account before onboarding
+      const code = promoCode.trim().toUpperCase()
+      router.push(`/login?mode=signup&invite=${code}`)
     } else {
       setPromoError('Invalid code. Check your spelling and try again.')
     }
@@ -204,7 +202,7 @@ export default function PricingPage() {
               </ul>
 
               <button
-                onClick={() => tier.id === 'FREE' ? router.push('/login') : setCheckout(tier.id)}
+                onClick={() => tier.id === 'FREE' ? router.push('/login?mode=signup') : setCheckout(tier.id)}
                 className={`w-full py-3 rounded-xl font-bold text-sm transition-colors ${
                   tier.popular
                     ? 'bg-[#BD6809] text-white hover:bg-[#a05a08]'

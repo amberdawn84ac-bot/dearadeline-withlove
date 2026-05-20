@@ -5,15 +5,15 @@
 
 const BRAIN_URL = "/brain";
 
+/**
+ * Authentication is handled via HttpOnly cookies which are
+ * automatically sent by the browser with credentials: 'include'.
+ * This function now just returns empty headers for backward compatibility.
+ */
 function getAuthHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {};
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("auth_token");
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
-  }
-  return headers;
+  // Cookies are sent automatically by the browser
+  // No need for Authorization header with localStorage token
+  return {};
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -71,6 +71,7 @@ export interface FamilyDashboard {
 export async function listStudents(): Promise<StudentSummary[]> {
   const res = await fetch(`${BRAIN_URL}/api/parent/students`, {
     headers: getAuthHeaders(),
+    credentials: 'include', // Important: sends auth cookies
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`listStudents failed: ${res.status}`);
@@ -81,6 +82,7 @@ export async function addStudent(payload: AddStudentRequest): Promise<StudentSum
   const res = await fetch(`${BRAIN_URL}/api/parent/students`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    credentials: 'include', // Important: sends auth cookies
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
@@ -93,6 +95,7 @@ export async function addStudent(payload: AddStudentRequest): Promise<StudentSum
 export async function getFamilyDashboard(): Promise<FamilyDashboard> {
   const res = await fetch(`${BRAIN_URL}/api/parent/dashboard`, {
     headers: getAuthHeaders(),
+    credentials: 'include', // Important: sends auth cookies
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`getFamilyDashboard failed: ${res.status}`);
@@ -106,6 +109,7 @@ export async function updateStudent(
   const res = await fetch(`${BRAIN_URL}/api/parent/students/${encodeURIComponent(studentId)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    credentials: 'include', // Important: sends auth cookies
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`updateStudent failed: ${res.status}`);
@@ -116,6 +120,7 @@ export async function removeStudent(studentId: string): Promise<{ message: strin
   const res = await fetch(`${BRAIN_URL}/api/parent/students/${encodeURIComponent(studentId)}`, {
     method: "DELETE",
     headers: getAuthHeaders(),
+    credentials: 'include', // Important: sends auth cookies
   });
   if (!res.ok) throw new Error(`removeStudent failed: ${res.status}`);
   return res.json();

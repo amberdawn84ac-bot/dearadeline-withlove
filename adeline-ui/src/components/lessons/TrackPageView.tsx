@@ -19,7 +19,7 @@ import { useTrackPage, useLessonStubs, useResourceLinks } from "@/lib/hygraph/us
 import { BlockRenderer } from "./BlockRenderer";
 import type { Track } from "@/lib/hygraph/client";
 import type { LessonResponse } from "@/lib/brain-client";
-import { generateLesson } from "@/lib/brain-client";
+import { generateLesson, pollLessonResult } from "@/lib/brain-client";
 
 const GRADE_BAND_LABELS: Record<string, string> = {
   K2:  "K–2",
@@ -73,13 +73,14 @@ export function TrackPageView({
   const startLesson = async (title: string, slug: string) => {
     setLoadingSlug(slug);
     try {
-      const lesson = await generateLesson({
+      const job = await generateLesson({
         student_id:  studentId,
         track,
         topic:       title,
         is_homestead: isHomestead,
         grade_level: gradeLevel,
       });
+      const lesson = await pollLessonResult(job.job_id, { intervalMs: 2000, timeoutMs: 90000 });
       onLessonGenerated?.(lesson);
     } catch (e) {
       console.error("[TrackPageView] Lesson generation failed:", e);

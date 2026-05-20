@@ -257,7 +257,7 @@ async def _stream_lesson(
 
     yield _sse({"type": "status", "message": "Searching knowledge archive..."})
 
-    # ── Phase 1: Embed ────────────────────────────────────────────
+    # ── Phase 1: Embed ────────────────────────────────────────────────────────
     try:
         oai = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         resp = await oai.embeddings.create(
@@ -270,7 +270,7 @@ async def _stream_lesson(
         yield _sse({"type": "error", "message": "Failed to process topic embedding."})
         return
 
-    # ── Phase 1: Student state ──────────────────────────────────────────
+    # ── Phase 1: Student state ────────────────────────────────────────────────
     interaction_count = 10
     mastery_score = 0.0
     mastery_band = "NOVICE"
@@ -293,7 +293,7 @@ async def _stream_lesson(
         student_id, request, mastery_score, interaction_count
     )
 
-    # ── Phase 1: Canonical check ───────────────────────────────────────────────
+    # ── Phase 1: Canonical check ──────────────────────────────────────────────
     yield _sse({"type": "status", "message": "Checking curated lesson library..."})
     slug = canonical_slug(request.topic, request.track.value)
     logger.info(f"[LessonStream] topic='{request.topic}' track={request.track.value} force_regenerate={request.force_regenerate} slug={slug}")
@@ -335,7 +335,7 @@ async def _stream_lesson(
     except Exception as e:
         logger.warning(f"[LessonStream] Canonical check failed (non-fatal): {e}")
 
-    # ── Phase 2: Build initial state ───────────────────────────────────────────────
+    # ── Phase 2: Build initial state ──────────────────────────────────────────
     state: AdelineState = {
         "request":               request,
         "lesson_id":             lesson_id,
@@ -385,14 +385,14 @@ async def _stream_lesson(
         yield _sse({"type": "error", "message": f"Lesson generation failed: {e}"})
         return
 
-    # ── Phase 2: Cross-track acknowledgment ───────────────────────────────────────
+    # ── Phase 2: Cross-track acknowledgment ───────────────────────────────────
     if state.get("cross_track_acknowledgment") and state["blocks"]:
         state["blocks"][0]["content"] = (
             state["cross_track_acknowledgment"] + "\n\n" + state["blocks"][0]["content"]
         )
 
-    # ── Phase 2: Emit blocks ────────────────────────────────────────────────
-    # ── Phase 2: Personalize via Adapter ─────────────────────────────────────────
+    # ── Phase 2: Emit blocks ──────────────────────────────────────────────────
+    # ── Phase 2: Personalize via Adapter ──────────────────────────────────────
     if state["blocks"]:
         yield _sse({"type": "status", "message": "Personalizing lesson for you..."})
         canonical_dummy = {"topic": request.topic, "blocks": state["blocks"]}
@@ -405,7 +405,7 @@ async def _stream_lesson(
         if tool_event:
             yield tool_event
 
-    # ── Phase 2: Neo4j graph context ────────────────────────────────────────────
+    # ── Phase 2: Neo4j graph context ──────────────────────────────────────────
     try:
         yield _sse({"type": "status", "message": "Linking OAS standards..."})
         state["oas_standards"] = await _fetch_graph_context(request.track.value)

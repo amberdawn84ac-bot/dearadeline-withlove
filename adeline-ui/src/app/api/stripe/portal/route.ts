@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
 
-const BRAIN_URL = process.env.NEXT_PUBLIC_BRAIN_URL ?? 'http://localhost:8000'
+const BRAIN_URL = process.env.NEXT_PUBLIC_BRAIN_URL ?? 'https://dearadeline-withlove-production.up.railway.app'
 
 export async function POST(req: NextRequest) {
   const { userId } = await req.json()

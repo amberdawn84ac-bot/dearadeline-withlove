@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { ArrowLeft, AlertCircle } from "lucide-react";
-import { generateLesson } from "@/lib/brain-client";
+import { generateLesson, pollLessonResult } from "@/lib/brain-client";
 import type { LessonResponse, Track } from "@/lib/brain-client";
 import LessonRenderer from "@/components/lessons/LessonRenderer";
 import { AdelineChatPanel } from "@/components/AdelineChatPanel";
@@ -84,13 +84,14 @@ export default function JourneyPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const lesson = await generateLesson({
+      const job = await generateLesson({
         student_id: STUDENT_ID,
         track,
         topic,
         is_homestead: false,
         grade_level: GRADE_LEVEL_VAL,
       });
+      const lesson = await pollLessonResult(job.job_id, { intervalMs: 2000, timeoutMs: 90000 });
       setActiveLesson(lesson);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate lesson");

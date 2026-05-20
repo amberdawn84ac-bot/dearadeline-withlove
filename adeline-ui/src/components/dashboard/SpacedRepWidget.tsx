@@ -11,6 +11,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Brain, CheckCircle, RefreshCw, ChevronRight } from "lucide-react";
 import { useStudent } from "@/lib/useStudent";
+import { supabase } from "@/lib/supabase";
 
 interface DueReview {
   review_id: string;
@@ -47,11 +48,13 @@ export function SpacedRepWidget() {
   const fetchDue = useCallback(async () => {
     if (!studentId) return;
     setLoading(true);
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
     try {
-      const res = await fetch(`/brain/learning/reviews/${encodeURIComponent(studentId)}`, { headers });
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const res = await fetch(`/brain/learning/reviews/${encodeURIComponent(studentId)}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        credentials: 'include',
+      });
       if (!res.ok) return;
       const data: ReviewsApiResponse = await res.json();
       setDueReviews(data.reviews ?? []);
@@ -78,12 +81,15 @@ export function SpacedRepWidget() {
   const submitRating = async (quality: number) => {
     if (!current) return;
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
     await fetch("/brain/learning/reviews", {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+      credentials: 'include',
       body: JSON.stringify({
         concept_id: current.concept_id,
         quality,

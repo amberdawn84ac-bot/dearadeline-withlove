@@ -240,3 +240,111 @@ def zpd_zone_to_correctness(zpd_zone: str) -> Optional[bool]:
         "BORED":      True,
     }
     return mapping.get(zpd_zone)
+
+
+async def update_card_after_lesson(
+    student_id: str,
+    concept_id: str,
+    concept_name: str,
+    track: str,
+    quality: int = 3,
+) -> float:
+    """
+    Combined BKT pL update + SM-2 scheduling after lesson completion or journal seal.
+
+    quality (SM-2 scale, 0–5):
+      5 = perfect recall, 4 = correct after hesitation, 3 = correct with difficulty (lesson default),
+      2 = incorrect but easy to recall, 1 = incorrect, 0 = complete blackout
+
+    Updates SpacedRepetitionCard with new mastery level + review schedule (interval, dueAt, easeFactor).
+    Writes MASTERED edge to Neo4j if pL crosses threshold.
+    Returns the new pL value.
+    """
+    from app.algorithms.spaced_repetition import sm2
+
+    try:
+        conn = await get_db_conn()
+        try:
+            row = await conn.fetchrow(
+                """
+                SELECT "masteryLevel", "easeFactor", "repetitions", "interval"
+                FROM "SpacedRepetitionCard"
+                WHERE "studentId" = $1 AND "conceptId" = $2
+                """,
+                student_id, concept_id,
+            )
+        finally:
+            await conn.close()
+
+        current_pL    = float(row["masteryLevel"]) if row else _DEFAULT_BKT.pL
+        prev_ease     = float(row["easeFactor"])    if row else 2.5
+        prev_reps     = int(row["repetitions"])     if row else 0
+        prev_interval = int(row["interval"])        if row else 1
+
+        # BKT update — quality >= 3 counts as correct evidence
+        correct = quality >= 3
+        params  = AdaptiveBKTParams(
+            pL=current_pL,
+            pT=_DEFAULT_BKT.pT,
+            pS=_DEFAULT_BKT.pS,
+            pG=_DEFAULT_BKT.pG,
+        )
+        updated = adaptive_bkt_update(params, correct)
+        new_pL  = updated.pL
+
+        # SM-2 scheduling
+        sm2_result = sm2(quality, prev_interval, prev_ease, prev_reps)
+
+        # Full UPSERT — all card fields updated
+        conn = await get_db_conn()
+        try:
+            await conn.execute(
+                """
+                INSERT INTO "SpacedRepetitionCard"
+                    ("studentId","conceptId","conceptName","track","masteryLevel",
+                     "easeFactor","repetitions","interval","dueAt","lastQuality","lastReviewedAt")
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now())
+                ON CONFLICT ("studentId","conceptId") DO UPDATE SET
+                    "masteryLevel"   = EXCLUDED."masteryLevel",
+                    "easeFactor"     = EXCLUDED."easeFactor",
+                    "repetitions"    = EXCLUDED."repetitions",
+                    "interval"       = EXCLUDED."interval",
+                    "dueAt"          = EXCLUDED."dueAt",
+                    "lastQuality"    = EXCLUDED."lastQuality",
+                    "lastReviewedAt" = now(),
+                    "updatedAt"      = now()
+                """,
+                student_id, concept_id, concept_name, track, new_pL,
+                sm2_result.ease_factor, sm2_result.repetitions, sm2_result.interval,
+                sm2_result.next_due_at, quality,
+            )
+        finally:
+            await conn.close()
+
+        logger.info(
+            f"[BKTTracker] card updated: student={student_id[:8]} concept={concept_id} "
+            f"pL={current_pL:.3f}→{new_pL:.3f} interval={sm2_result.interval}d "
+            f"dueAt={sm2_result.next_due_at.date()} quality={quality}"
+        )
+
+        # Write MASTERED edge to Neo4j when pL crosses threshold
+        if new_pL >= MASTERY_THRESHOLD and current_pL < MASTERY_THRESHOLD:
+            logger.info(
+                f"[BKTTracker] MASTERY THRESHOLD CROSSED for {concept_id} "
+                f"(pL={new_pL:.3f}) — writing MASTERED edge to Neo4j"
+            )
+            try:
+                await record_concept_mastery(
+                    student_id=student_id,
+                    concept_id=concept_id,
+                    score=new_pL,
+                    sealed_at=datetime.now(timezone.utc).isoformat(),
+                )
+            except Exception as e:
+                logger.warning(f"[BKTTracker] Neo4j MASTERED edge write failed (non-fatal): {e}")
+
+        return new_pL
+
+    except Exception as e:
+        logger.warning(f"[BKTTracker] update_card_after_lesson failed for {concept_id}: {e}")
+        return _DEFAULT_BKT.pL

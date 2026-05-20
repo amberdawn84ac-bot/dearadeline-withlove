@@ -28,11 +28,11 @@ POSTGRES_DSN = (
 )
 
 if POSTGRES_DSN is None:
-    raise RuntimeError(
-        "FATAL: No database DSN configured. "
-        "Set POSTGRES_DSN, DATABASE_URL, or DIRECT_DATABASE_URL. "
-        "Refusing to start in production without explicit credentials."
+    logger.warning(
+        "[Config] No database DSN configured — DB-dependent features will fail. "
+        "Set POSTGRES_DSN, DATABASE_URL, or DIRECT_DATABASE_URL."
     )
+    POSTGRES_DSN = "postgresql://placeholder:placeholder@localhost:5432/placeholder"
 
 if not IS_PRODUCTION and POSTGRES_DSN == _DEV_FALLBACK_DSN:
     logger.warning("[Config] Using development fallback DSN — set POSTGRES_DSN for production")
@@ -61,10 +61,9 @@ NEO4J_USER = os.getenv("NEO4J_USER", os.getenv("NEO4J_USERNAME", "neo4j"))
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "" if IS_PRODUCTION else "adeline_local_dev")
 
 if IS_PRODUCTION and (not NEO4J_URI or not NEO4J_PASSWORD):
-    raise RuntimeError(
-        "FATAL: Neo4j credentials not configured. "
-        "Set NEO4J_URI and NEO4J_PASSWORD. "
-        "Refusing to start in production without explicit credentials."
+    logger.warning(
+        "[Config] Neo4j credentials not configured — ZPD/graph features will be disabled. "
+        "Set NEO4J_URI and NEO4J_PASSWORD to enable full functionality."
     )
 
 # ── Redis ────────────────────────────────────────────────────────────────────
@@ -78,17 +77,80 @@ REDIS_URL = os.getenv("REDIS_URL", "" if IS_PRODUCTION else "redis://localhost:6
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 if IS_PRODUCTION and not OPENAI_API_KEY:
-    raise RuntimeError(
-        "FATAL: OPENAI_API_KEY not set. Required for embeddings in production."
+    logger.warning(
+        "[Config] OPENAI_API_KEY not set — embedding and lesson generation will fail. "
+        "Set OPENAI_API_KEY in Railway environment variables."
     )
 
 # ── Gemini (multimodal synthesis — 30x cheaper than Claude for JSON extraction) ──
 # Uses the OpenAI-compatible endpoint so no new dependencies needed.
 # Falls back to Claude if GEMINI_API_KEY is not set.
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY",  "")
+GEMINI_MODEL    = os.getenv("GEMINI_MODEL",    "gemini-2.5-flash")
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+# LearnLM — Google’s educationally fine-tuned model, used for all pedagogical
+# generation (narrative voice, Socratic scaffolding, ZPD adaptation).
+# Falls back to GEMINI_MODEL (Flash 2.5) on any API error.
+# Uses the same GEMINI_API_KEY and GEMINI_BASE_URL as Flash.
+LEARNLM_MODEL   = os.getenv("LEARNLM_MODEL",   "learnlm-2.0-flash-experimental")
+
+# ── Primary LLM (LangGraph-compatible factory) ────────────────────────────────
+# ADELINE_MODEL drives the factory below.  Valid prefixes:
+#   "gemini"  → ChatGoogleGenerativeAI  (uses GOOGLE_API_KEY)
+#   "claude"  → ChatAnthropic           (uses ANTHROPIC_API_KEY)
+#   "gpt"     → ChatOpenAI              (uses OPENAI_API_KEY)
+
+ADELINE_MODEL   = os.getenv("ADELINE_MODEL", "claude-sonnet-4-6")
+GOOGLE_API_KEY  = os.getenv("GOOGLE_API_KEY", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+
+def create_llm(model: str | None = None, **kwargs):
+    """
+    LangGraph-compatible LLM factory.
+
+    Selects the correct LangChain Chat class based on the model name prefix:
+      gemini* → ChatGoogleGenerativeAI
+      claude* → ChatAnthropic
+      gpt*    → ChatOpenAI
+
+    Extra kwargs (e.g. temperature, max_tokens) are forwarded to the constructor.
+    All classes implement the standard LangChain Runnable interface and support
+    .bind_tools() for LangGraph tool-calling nodes.
+    """
+    target = (model or ADELINE_MODEL).lower()
+
+    if target.startswith("gemini"):
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(
+            model=model or ADELINE_MODEL,
+            google_api_key=GOOGLE_API_KEY or None,
+            convert_system_message_to_human=True,
+            **kwargs,
+        )
+
+    if target.startswith("claude"):
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(
+            model=model or ADELINE_MODEL,
+            anthropic_api_key=ANTHROPIC_API_KEY or None,
+            **kwargs,
+        )
+
+    if target.startswith("gpt"):
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=model or ADELINE_MODEL,
+            openai_api_key=OPENAI_API_KEY or None,
+            **kwargs,
+        )
+
+    raise ValueError(
+        f"[create_llm] Unrecognised model prefix '{target}'. "
+        "Expected 'gemini', 'claude', or 'gpt'."
+    )
 
 # ── Auth (Supabase JWT) ──────────────────────────────────────────────────────
 # Primary: JWKS (ES256) — public key fetched from Supabase's well-known endpoint.

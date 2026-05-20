@@ -35,6 +35,8 @@ export interface BookInSession {
   totalPages?: number;
   studentReflection?: string;
   completedAt?: string;
+  isExternal?: boolean;
+  sourceUrl?: string;
 }
 
 export interface ShelfData {
@@ -154,12 +156,9 @@ export default function Bookshelf({
   const [error, setError] = useState<string | null>(null);
   const [addingToList, setAddingToList] = useState<string | null>(null);
 
-  // Get auth headers for brain API calls — JWT Bearer token from Supabase
+  // Auth is handled via HttpOnly cookies, automatically sent by browser
+  // No need to manually set Authorization header from localStorage
   const getAuthHeaders = useCallback((): Record<string, string> => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
-    if (token) {
-      return { "Authorization": `Bearer ${token}` };
-    }
     return {};
   }, []);
 
@@ -172,6 +171,7 @@ export default function Bookshelf({
       // Fetch shelf from GET /api/reading-session
       const shelfRes = await fetch("/brain/api/reading-session", {
         headers: getAuthHeaders(),
+        credentials: 'include', // Important: sends auth cookies
       });
 
       if (!shelfRes.ok) {
@@ -238,15 +238,17 @@ export default function Bookshelf({
           id: book.id,
           title: book.title,
           author: book.author,
-          sourceLibrary: null,
+          sourceLibrary: book.source_library || null,
           isDownloaded: false,
           format: "epub",
-          coverUrl: null,
+          coverUrl: book.cover_url || null,
           track: book.track || "",
           lexile_level: book.lexile_level || 0,
           grade_band: book.grade_band || "",
           sessionId: "",
           pagesRead: 0,
+          isExternal: book.is_external || false,
+          sourceUrl: book.source_url || undefined,
         })
       );
 
@@ -267,7 +269,7 @@ export default function Bookshelf({
     load();
   }, [studentId, fetchShelf, fetchRecommendations]);
 
-  // Handle book click — navigate to reader
+  // Handle book click — navigate to reader or open external link
   const handleBookClick = async (bookId: string) => {
     try {
       // Check if book is already in a session (reading, finished, or wishlist)
@@ -278,6 +280,14 @@ export default function Bookshelf({
       ];
       const existingSession = allBooks.find((b) => b.id === bookId);
 
+      // Check if this is an external book from Discover
+      const discoverBook = recommendations.find((b) => b.id === bookId);
+      if (discoverBook?.isExternal && discoverBook?.sourceUrl) {
+        // External books: open source URL in new tab
+        window.open(discoverBook.sourceUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+
       if (!existingSession) {
         // Book is from Discover — create a session first
         const createRes = await fetch("/brain/api/reading-session", {
@@ -286,6 +296,7 @@ export default function Bookshelf({
             "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
+          credentials: 'include', // Important: sends auth cookies
           body: JSON.stringify({
             book_id: bookId,
             status: "reading",
@@ -311,6 +322,13 @@ export default function Bookshelf({
   // Handle add to reading list — from Discover section
   const handleAddToReadingList = async (bookId: string) => {
     try {
+      // Check if external book — skip for now (future: sync to wishlist)
+      const book = recommendations.find((b) => b.id === bookId);
+      if (book?.isExternal) {
+        alert(`"${book.title}" is available on Open Library. Click the book to view it there.`);
+        return;
+      }
+
       setAddingToList(bookId);
 
       const createRes = await fetch("/brain/api/reading-session", {
@@ -319,6 +337,7 @@ export default function Bookshelf({
           "Content-Type": "application/json",
           ...getAuthHeaders(),
         },
+        credentials: 'include', // Important: sends auth cookies
         body: JSON.stringify({
           book_id: bookId,
           status: "reading",
@@ -333,7 +352,6 @@ export default function Bookshelf({
       await fetchShelf();
 
       // Show success notification
-      const book = recommendations.find((b) => b.id === bookId);
       if (book) {
         alert(`Added "${book.title}" to your reading list!`);
       }

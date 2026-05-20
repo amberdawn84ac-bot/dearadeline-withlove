@@ -78,7 +78,7 @@ export interface UseStudentMonitorReturn {
   disconnect: () => void;
 }
 
-const BRAIN_URL = process.env.NEXT_PUBLIC_BRAIN_URL ?? "http://localhost:8000";
+const BRAIN_URL = process.env.NEXT_PUBLIC_BRAIN_URL ?? "https://dearadeline-withlove-production.up.railway.app";
 const WS_URL = BRAIN_URL.replace(/^https?/, (m) => (m === "https" ? "wss" : "ws"));
 
 export function useStudentMonitor({

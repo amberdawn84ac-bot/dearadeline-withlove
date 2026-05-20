@@ -89,6 +89,7 @@ class OnboardingRequest(BaseModel):
     state: str
     targetGraduationYear: int
     coppaConsent: bool
+    inviteCode: Optional[str] = None  # required in Founder Alpha; optional once open
 
     @validator("name")
     def validate_name(cls, v):
@@ -232,7 +233,11 @@ async def get_onboarding(authorization: Optional[str] = Header(None)):
     """
     user_id = _get_user_id_from_auth(authorization)
 
-    conn = await _get_conn()
+    try:
+        conn = await _get_conn()
+    except Exception as e:
+        logger.exception("[GET /api/onboarding] DB connection failed")
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {e}")
     try:
         row = await conn.fetchrow(
             """
@@ -306,34 +311,60 @@ async def post_onboarding(
     - 500: Database error
     """
     user_id, email = _get_auth_claims(authorization)
-    conn = await _get_conn()
     try:
+        conn = await _get_conn()
+    except Exception as e:
+        logger.exception("[POST /api/onboarding] DB connection failed")
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {e}")
+    try:
+        async with conn.transaction():
+            # TEMPORARY BYPASS: Invite code validation disabled for testing
+            # TODO: Re-enable before production launch
+            # if request.inviteCode:
+            #     code_row = await conn.fetchrow(
+            #         'SELECT id, "isUsed" FROM "InviteCode" WHERE code = $1 FOR UPDATE',
+            #         request.inviteCode,
+            #     )
+            #     if not code_row:
+            #         raise HTTPException(status_code=400, detail="Invalid invite code.")
+            #     if code_row["isUsed"]:
+            #         raise HTTPException(status_code=403, detail="This invite code has already been used.")
+            # NOTE: Invite code marking also skipped during bypass
 
-        row = await conn.fetchrow(
-            """
-            INSERT INTO "User" (
-                "id", "name", "email", "role", "gradeLevel", "interests", "learningStyle",
-                "state", "targetGraduationYear", "onboardingComplete"
+            row = await conn.fetchrow(
+                """
+                INSERT INTO "User" (
+                    "id", "name", "email", "role", "gradeLevel", "interests", "learningStyle",
+                    "state", "targetGraduationYear", "onboardingComplete"
+                )
+                VALUES ($1, $2, $3, 'STUDENT', $4, $5::text[], $6, $7, $8, true)
+                ON CONFLICT ("id") DO UPDATE SET
+                    "name" = EXCLUDED."name",
+                    "gradeLevel" = EXCLUDED."gradeLevel",
+                    "interests" = EXCLUDED."interests",
+                    "learningStyle" = EXCLUDED."learningStyle",
+                    "state" = EXCLUDED."state",
+                    "targetGraduationYear" = EXCLUDED."targetGraduationYear",
+                    "onboardingComplete" = true,
+                    "updatedAt" = NOW()
+                RETURNING
+                    "id", "name", "gradeLevel",
+                    "mathLevel", "elaLevel", "scienceLevel", "historyLevel",
+                    "interests", "learningStyle", "pacingMultiplier",
+                    "state", "targetGraduationYear", "onboardingComplete"
+                """,
+                user_id, request.name, email, request.gradeLevel, request.interests,
+                request.learningStyle, request.state, request.targetGraduationYear,
             )
-            VALUES ($1, $2, $3, 'STUDENT', $4, $5, $6, $7, $8, true)
-            ON CONFLICT ("id") DO UPDATE SET
-                "name" = EXCLUDED."name",
-                "gradeLevel" = EXCLUDED."gradeLevel",
-                "interests" = EXCLUDED."interests",
-                "learningStyle" = EXCLUDED."learningStyle",
-                "state" = EXCLUDED."state",
-                "targetGraduationYear" = EXCLUDED."targetGraduationYear",
-                "onboardingComplete" = true,
-                "updatedAt" = NOW()
-            RETURNING
-                "id", "name", "gradeLevel",
-                "mathLevel", "elaLevel", "scienceLevel", "historyLevel",
-                "interests", "learningStyle", "pacingMultiplier",
-                "state", "targetGraduationYear", "onboardingComplete"
-            """,
-            user_id, request.name, email, request.gradeLevel, request.interests,
-            request.learningStyle, request.state, request.targetGraduationYear,
-        )
+
+            # TEMPORARY BYPASS: Invite code marking disabled
+            # if request.inviteCode:
+            #     await conn.execute(
+            #         'UPDATE "InviteCode" SET "isUsed" = true, "claimedByEmail" = $1 WHERE code = $2',
+            #         email, request.inviteCode,
+            #     )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("[POST /api/onboarding] DB error")
         raise HTTPException(status_code=500, detail=str(e))
@@ -431,7 +462,7 @@ async def patch_onboarding(
             param_index += 1
 
         if request.interests is not None:
-            updates.append(f'"interests" = ${param_index}')
+            updates.append(f'"interests" = ${param_index}::text[]')
             params.append(request.interests)
             param_index += 1
 

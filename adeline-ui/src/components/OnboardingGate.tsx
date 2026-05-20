@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 /**
  * OnboardingGate: Ensures user completes onboarding before accessing protected routes.
@@ -47,48 +48,49 @@ export function OnboardingGate() {
     // Check onboarding status
     const checkOnboarding = async () => {
       try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : '';
-
-        // Unauthenticated users should go to login
-        if (!token) {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !sessionData.session?.access_token) {
           if (pathname !== '/login') {
             window.location.href = '/login';
           }
           return;
         }
+        const token = sessionData.session.access_token;
 
-        const response = await fetch('/brain/api/onboarding', {
+        // Only gate-check protected routes — /onboarding handles its own redirect to /dashboard
+        if (!isProtectedRoute) {
+          return;
+        }
+
+        const response = await fetch(`/brain/api/onboarding?_=${Date.now()}`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
           },
         });
 
         if (response.status === 401) {
-          // Not authenticated, go to login
           window.location.href = '/login';
           return;
         }
 
+        if (response.status === 404) {
+          // No profile yet — user needs onboarding
+          window.location.href = '/onboarding';
+          return;
+        }
+
         if (!response.ok) {
-          // Error fetching profile, log but don't block (user can retry)
-          console.error('Error checking onboarding status:', response.statusText);
           return;
         }
 
         const data = await response.json();
-        const userProfile = data.user;
-        const onboardingComplete = userProfile.onboardingComplete;
-
-        // If on /onboarding and already complete, go to dashboard
-        if (pathname === '/onboarding' && onboardingComplete) {
-          window.location.href = '/dashboard';
-          return;
-        }
+        const onboardingComplete = data.user?.onboardingComplete ?? false;
 
         // If on protected route and not complete, go to onboarding
-        if (isProtectedRoute && !onboardingComplete) {
+        if (!onboardingComplete) {
           window.location.href = '/onboarding';
           return;
         }

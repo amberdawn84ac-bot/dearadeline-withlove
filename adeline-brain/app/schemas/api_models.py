@@ -241,7 +241,7 @@ class Evidence(BaseModel):
     source_type:      str = "PRIMARY_SOURCE"
     witness_citation: WitnessCitation = Field(default_factory=WitnessCitation)
     similarity_score: float = Field(ge=0.0, le=1.0)
-    verdict:          EvidenceVerdict
+    verdict:          Optional[EvidenceVerdict] = None
     chunk:            str
 
     @field_validator("similarity_score")
@@ -278,6 +278,8 @@ class LessonRequest(BaseModel):
     topic:       str
     is_homestead: bool = False
     grade_level: str
+    render_mode: Optional[str] = None  # "animated_sketchnote_lesson" triggers sketchnote synthesis
+    force_regenerate: bool = False  # Bypass canonical cache and regenerate fresh lesson content
 
 class LessonBlockResponse(BaseModel):
     block_id:         str = Field(default_factory=lambda: str(uuid.uuid4()))

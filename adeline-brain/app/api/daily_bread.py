@@ -13,10 +13,12 @@ import os
 from datetime import date
 from typing import Optional
 
-import anthropic
 import openai
 from fastapi import APIRouter
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
+
+from app.config import create_llm, GOOGLE_API_KEY, ANTHROPIC_API_KEY
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["daily-bread"])
@@ -224,8 +226,7 @@ Return ONLY this JSON (no other text):
   ]
 }}"""
 
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
+    if not ANTHROPIC_API_KEY and not GOOGLE_API_KEY and not os.getenv("GEMINI_API_KEY"):
         # Fallback sections when no API key
         return [
             DeepDiveSection(
@@ -246,20 +247,18 @@ Return ONLY this JSON (no other text):
             ),
         ]
 
-    client = anthropic.AsyncAnthropic(api_key=api_key)
-    model = os.getenv("ADELINE_MODEL", "claude-sonnet-4-6")
+    llm = create_llm(max_tokens=1200)
+    lc_messages = [
+        SystemMessage(content=_DEEP_DIVE_SYSTEM),
+        HumanMessage(content=user_prompt),
+    ]
 
     try:
-        message = await client.messages.create(
-            model=model,
-            max_tokens=1200,
-            system=_DEEP_DIVE_SYSTEM,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        raw = json.loads(message.content[0].text)
+        response = await llm.ainvoke(lc_messages)
+        raw = json.loads(response.content)
         return [DeepDiveSection(**s) for s in raw["sections"]]
     except Exception as e:
-        logger.error(f"[DeepDive] Claude synthesis failed: {e}")
+        logger.error(f"[DeepDive] LLM synthesis failed: {e}")
         return [
             DeepDiveSection(
                 heading="Scripture Study",

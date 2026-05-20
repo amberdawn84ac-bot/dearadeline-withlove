@@ -7,7 +7,6 @@ import {
   Swanky_and_Moo_Moo,
 } from "next/font/google";
 import localFont from 'next/font/local';
-import { OnboardingGate } from "@/components/OnboardingGate";
 import "./globals.css";
 
 const inter = Inter({
@@ -72,10 +71,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Guard against duplicate custom element registration from third-party scripts (e.g. Vercel toolbar, polyfill bundles). */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){if(typeof customElements==='undefined')return;var _d=customElements.define.bind(customElements);customElements.define=function(n,c,o){if(!customElements.get(n))_d(n,c,o);};})();` }} />
+      </head>
       <body
         className={`${inter.variable} ${emilysCandy.variable} ${kalam.variable} ${kranky.variable} ${permanentMarker.variable} ${swankyAndMooMoo.variable} antialiased`}
       >
-        <OnboardingGate />
         {children}
       </body>
     </html>
