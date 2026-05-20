@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Lint
-        run: uvx ruff==0.4.4 check adeline-brain/app/ adeline-brain/tests/
+        run: uvx ruff@0.4.4 check adeline-brain/app/ adeline-brain/tests/
 
   test-brain:
     name: Tests (adeline-brain)
