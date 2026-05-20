@@ -275,7 +275,7 @@ async def deep_dive(body: DeepDiveRequest):
     2. Synthesize study sections via Claude
     No auth required — same as the daily verse endpoint.
     """
-    from app.services.sefaria import fetch_biblical_text, normalize_reference
+    from app.services.sefaria import fetch_biblical_text
 
     # ── 1. Fetch from Sefaria ─────────────────────────────────────────────────
     fox_text = None

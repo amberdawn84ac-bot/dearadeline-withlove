@@ -6,14 +6,13 @@ Tests the full student workflow:
 
 Also tests error scenarios (404, validation) and the waterfall fetch service.
 """
-import os
 import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
 from httpx import AsyncClient, ASGITransport
 from fastapi import FastAPI
 
-from app.api.bookshelf import router as bookshelf_router, ensure_table
+from app.api.bookshelf import router as bookshelf_router
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────

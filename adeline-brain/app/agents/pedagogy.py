@@ -75,7 +75,7 @@ def detect_zpd_zone(student_response: str) -> ZPDZone:
     if _FRUSTRATION_PATTERNS.search(stripped):
         return ZPDZone.FRUSTRATED
 
-    if len(stripped) < _SHORT_RESPONSE_THRESHOLD and not stripped.endswith("?") is False:
+    if len(stripped) < _SHORT_RESPONSE_THRESHOLD and stripped.endswith("?") is not False:
         # Very short non-question responses often signal disengagement or confusion
         if len(stripped) < _SHORT_RESPONSE_THRESHOLD:
             return ZPDZone.FRUSTRATED
@@ -440,7 +440,7 @@ async def explain_snippet(
             follow_up = parts[1].strip() if len(parts) > 1 else ""
         else:
             explanation = full_response
-            follow_up = f"What do you think is the most important idea in this passage?"
+            follow_up = "What do you think is the most important idea in this passage?"
             
     except Exception as e:
         logger.error(f"[Pedagogy] explain_snippet OpenAI call failed: {e}")

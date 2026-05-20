@@ -1,5 +1,4 @@
 """Tests for grade-adaptive content configuration."""
-import pytest
 
 from app.algorithms.adaptive_content import (
     get_grade_band,
@@ -7,7 +6,6 @@ from app.algorithms.adaptive_content import (
     get_attention_span_minutes,
     get_track_vocabulary,
     build_lesson_prompt_context,
-    GRADE_CONFIGS,
     TRACK_VOCABULARY,
 )
 

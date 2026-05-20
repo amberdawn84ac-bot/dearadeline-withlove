@@ -1,5 +1,4 @@
 """Tests for cognitive load estimation algorithm."""
-import pytest
 
 from app.algorithms.cognitive_load import (
     Baseline,

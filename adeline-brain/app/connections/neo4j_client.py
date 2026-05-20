@@ -18,7 +18,7 @@ from neo4j import AsyncGraphDatabase
 
 logger = logging.getLogger(__name__)
 
-from app.config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
+from app.config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD  # noqa: E402
 NEO4J_DATABASE = os.getenv("NEO4J_DATABASE")  # optional — required for Neo4j Aura
 
 

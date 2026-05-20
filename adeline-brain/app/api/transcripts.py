@@ -14,8 +14,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.schemas.api_models import UserRole
-from app.api.middleware import require_role, verify_student_access
+from app.api.middleware import verify_student_access
 from app.connections.neo4j_client import neo4j_client
 from app.connections.journal_store import journal_store
 
@@ -50,7 +49,7 @@ def _build_pdf(
     Returns the PDF as bytes.
     """
     from reportlab.lib.pagesizes import LETTER
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import inch
     from reportlab.lib import colors
     from reportlab.platypus import (
@@ -73,7 +72,6 @@ def _build_pdf(
         bottomMargin=1.0 * inch,
     )
 
-    styles = getSampleStyleSheet()
     INK    = colors.HexColor("#2C2318")
     PARA   = colors.HexColor("#9A3F4A")  # Paradise
     ACCENT = colors.HexColor("#BD6809")  # Papaya
@@ -129,7 +127,7 @@ def _build_pdf(
     story.append(Paragraph("10-TRACK CREDIT SUMMARY", section_style))
 
     total_lessons = sum(track_progress.values())
-    total_blocks = 0  # aggregated below
+    _total_blocks = 0
 
     rows_data: list[list] = []
     rows_data.append([

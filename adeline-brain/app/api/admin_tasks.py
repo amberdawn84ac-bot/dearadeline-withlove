@@ -299,7 +299,7 @@ async def run_bookshelf_setup(task_id: str, user_id: str):
         # Step 1: Run migrations
         task_status[task_id]["progress"] = "Running database migrations..."
         
-        migration_path = Path(__file__).resolve().parents[2] / "prisma" / "migrations"
+        _migration_path = Path(__file__).resolve().parents[2] / "prisma" / "migrations"
         migrate_result = subprocess.run(
             [sys.executable, "-m", "prisma", "db", "push"],
             cwd=Path(__file__).resolve().parents[2],

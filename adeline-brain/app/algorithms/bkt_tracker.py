@@ -22,9 +22,7 @@ from typing import Optional
 
 from app.config import get_db_conn
 from app.algorithms.zpd_engine import (
-    BKTParams,
     AdaptiveBKTParams,
-    bkt_update,
     adaptive_bkt_update,
     apply_decay,
     MasterySnapshot,

@@ -21,7 +21,6 @@ export type { LessonResponse, LessonBlockResponse, Evidence };
  * Uses `title` and `blocks` fields accessed by formatMLA.
  */
 export interface Lesson {
-  id: string;
   title: string;
   blocks: LessonBlock[];
 }
@@ -32,7 +31,6 @@ export interface Lesson {
  * Evidence array carries the Witness Protocol verdict + source metadata.
  */
 export interface LessonBlock {
-  id: string;
   evidence: Evidence[];
 }
 

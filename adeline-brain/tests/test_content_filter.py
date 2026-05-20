@@ -1,4 +1,3 @@
-import pytest
 from app.protocols.content_filter import should_return_document
 
 
@@ -10,7 +9,7 @@ def test_child_cannot_see_cointelpro():
         "chunk": "FBI Director authorized COINTELPRO to disrupt civil rights organizations...",
     }
 
-    assert should_return_document(document, student_age=10) == False
+    assert not should_return_document(document, student_age=10)
 
 
 def test_teen_can_see_cointelpro():
@@ -21,7 +20,7 @@ def test_teen_can_see_cointelpro():
         "chunk": "FBI Director authorized COINTELPRO to disrupt civil rights organizations...",
     }
 
-    assert should_return_document(document, student_age=16) == True
+    assert should_return_document(document, student_age=16)
 
 
 def test_adult_can_see_all_documents():
@@ -42,7 +41,7 @@ def test_adult_can_see_all_documents():
     ]
 
     for doc in sensitive_docs:
-        assert should_return_document(doc, student_age=18) == True
+        assert should_return_document(doc, student_age=18)
 
 
 def test_none_age_means_no_filtering():
@@ -52,4 +51,4 @@ def test_none_age_means_no_filtering():
         "chunk": "CIA operations included assassination attempts...",
     }
 
-    assert should_return_document(document, student_age=None) == True
+    assert should_return_document(document, student_age=None)

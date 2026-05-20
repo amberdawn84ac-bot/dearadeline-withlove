@@ -12,13 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install ruff
-        run: pip install ruff==0.4.4
       - name: Lint
-        run: ruff check adeline-brain/app/ adeline-brain/tests/
+        run: uvx ruff@0.4.4 check adeline-brain/app/ adeline-brain/tests/
 
   test-brain:
     name: Tests (adeline-brain)
@@ -91,9 +86,9 @@ jobs:
           node-version: "20"
       - uses: pnpm/action-setup@v3
         with:
-          version: 9
+          version: "10"
       - name: Install dependencies
-        run: cd adeline-ui && pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Type check
         run: cd adeline-ui && pnpm exec tsc --noEmit
 

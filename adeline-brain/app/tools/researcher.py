@@ -43,7 +43,7 @@ import numpy as np
 import openai
 
 from app.schemas.api_models import (
-    Evidence, EvidenceVerdict, WitnessCitation, TRUTH_THRESHOLD, SourceType,
+    SourceType,
 )
 from app.connections.pgvector_client import hippocampus
 from app.protocols.witness import get_witness_threshold
@@ -432,7 +432,7 @@ async def search_witnesses(
             )
 
         if not archive_results:
-            logger.info(f"[Researcher] No results from deep web search either. Student gets RESEARCH_MISSION.")
+            logger.info("[Researcher] No results from deep web search either. Student gets RESEARCH_MISSION.")
             return []
 
         # Step 5: Embed and score found documents
@@ -498,7 +498,7 @@ async def search_witnesses(
             return filtered_acquired
 
         # Step 7: Both empty → return empty
-        logger.info(f"[Researcher] No results from any source. Student gets RESEARCH_MISSION.")
+        logger.info("[Researcher] No results from any source. Student gets RESEARCH_MISSION.")
         return []
 
     except Exception as e:

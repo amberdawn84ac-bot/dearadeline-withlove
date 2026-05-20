@@ -7,8 +7,7 @@ into the Hippocampus, preventing seed script redundancy.
 These tests verify the duplicate detection implementation without relying
 on mocking the entire module (which conftest.py does).
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 import sys
 
 
@@ -69,7 +68,7 @@ def test_hippocampus_document_table_structure():
 
     try:
         spec.loader.exec_module(module)
-    except Exception as e:
+    except Exception:
         # If we can't load the module directly, check the source file instead
         client_path = (
             pathlib.Path(__file__).parent.parent

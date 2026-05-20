@@ -7,9 +7,8 @@ import logging
 import os
 from typing import List, Optional
 
-import asyncpg
 import openai
-from fastapi import APIRouter, HTTPException, Query, Depends, Header
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 
 from app.schemas.api_models import UserRole
@@ -22,7 +21,6 @@ router = APIRouter(prefix="/api/books", tags=["books"])
 
 # OpenAI configuration
 EMBED_MODEL = "text-embedding-3-small"
-from app.config import POSTGRES_DSN as _DSN
 
 # Grade to Lexile mapping for grade-appropriate filtering
 GRADE_TO_LEXILE = {
@@ -485,7 +483,7 @@ async def get_recommendations(
         )
 
         # Step 3: Create embedding via OpenAI (using HyDE document instead of raw query)
-        logger.info(f"[Books/Recommendations] Creating HyDE embedding")
+        logger.info("[Books/Recommendations] Creating HyDE embedding")
         embedding = await _embed(hyde_document)
         logger.debug(f"[Books/Recommendations] HyDE embedding created (dims: {len(embedding)})")
 

@@ -3,7 +3,6 @@ adeline-brain — FastAPI Entry Point
 The Intelligence Layer of Dear Adeline 2.0
 """
 import asyncio
-import json
 import logging
 import os
 
@@ -148,8 +147,8 @@ app.add_middleware(SlowAPIMiddleware)
 
 # Force HTTPS scheme when behind a TLS-terminating proxy (Railway, Vercel)
 # This prevents FastAPI's redirect_slashes from generating http:// URLs
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
+from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
+from starlette.requests import Request  # noqa: E402
 
 class ForceHTTPSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -162,7 +161,7 @@ class ForceHTTPSMiddleware(BaseHTTPMiddleware):
 app.add_middleware(ForceHTTPSMiddleware)
 
 
-from app.config import CORS_ORIGINS as _cors_env
+from app.config import CORS_ORIGINS as _cors_env  # noqa: E402
 _CORS_ORIGINS = [o.strip() for o in _cors_env.split(",") if o.strip()]
 # Always include Docker-internal UI hostname and production domain
 for _required_origin in [

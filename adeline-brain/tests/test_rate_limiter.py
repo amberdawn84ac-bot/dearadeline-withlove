@@ -9,10 +9,10 @@ async def test_token_bucket_allows_requests_within_limit():
 
     # Should allow 5 requests
     for i in range(5):
-        assert await bucket.acquire() == True
+        assert await bucket.acquire()
 
     # 6th request should fail
-    assert await bucket.acquire() == False
+    assert not await bucket.acquire()
 
 
 @pytest.mark.asyncio
@@ -25,10 +25,10 @@ async def test_token_bucket_refills_over_time():
     # Use both tokens
     await bucket.acquire()
     await bucket.acquire()
-    assert await bucket.acquire() == False
+    assert not await bucket.acquire()
 
     # Wait 1.1 seconds (refill_rate=1 token/sec)
     await asyncio.sleep(1.1)
 
     # Should have 1 token available
-    assert await bucket.acquire() == True
+    assert await bucket.acquire()

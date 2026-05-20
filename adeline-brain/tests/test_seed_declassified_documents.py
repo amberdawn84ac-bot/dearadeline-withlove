@@ -101,9 +101,9 @@ async def test_seed_cia_foia_documents_handles_empty_results():
     """seed_cia_foia_documents() should handle archives with no results gracefully."""
 
     with patch('app.scripts.seed_declassified_documents.tavily_client') as mock_tavily, \
-         patch('app.scripts.seed_declassified_documents.openai_client') as mock_openai, \
-         patch('app.scripts.seed_declassified_documents.fetch_document_text') as mock_fetch, \
-         patch('app.scripts.seed_declassified_documents.hippocampus') as mock_hippo:
+         patch('app.scripts.seed_declassified_documents.openai_client') as _mock_openai, \
+         patch('app.scripts.seed_declassified_documents.fetch_document_text') as _mock_fetch, \
+         patch('app.scripts.seed_declassified_documents.hippocampus') as _mock_hippo:
 
         # Mock empty search results
         mock_tavily.search.return_value = {'results': []}

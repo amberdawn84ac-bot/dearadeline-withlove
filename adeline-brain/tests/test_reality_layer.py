@@ -1,7 +1,7 @@
 from app.services.reality_layer import (
     parse_weight_tier, extract_json_from_response,
     parse_distortion_flags, parse_importance_filter,
-    WeightTier, ImportanceFilterResult,
+    WeightTier,
 )
 
 

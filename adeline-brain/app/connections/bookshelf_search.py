@@ -3,7 +3,6 @@ Bookshelf Search — pgvector semantic book search
 Semantic similarity search + filtering over the Book catalog using pgvector.
 Configure via DATABASE_URL / POSTGRES_DSN environment variable.
 """
-import os
 import logging
 from typing import Optional, List, Dict, Tuple
 import json
@@ -12,7 +11,7 @@ import asyncpg
 
 logger = logging.getLogger(__name__)
 
-from app.config import POSTGRES_DSN as DATABASE_URL
+from app.config import POSTGRES_DSN as DATABASE_URL  # noqa: E402
 
 EMBEDDING_DIM = 1536  # text-embedding-3-small
 

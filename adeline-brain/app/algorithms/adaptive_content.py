@@ -75,9 +75,12 @@ def get_grade_band(grade_level: str) -> GradeBand:
         g = int(s)
     except ValueError:
         return "35"
-    if g <= 2: return "k2"
-    if g <= 5: return "35"
-    if g <= 8: return "68"
+    if g <= 2:
+        return "k2"
+    if g <= 5:
+        return "35"
+    if g <= 8:
+        return "68"
     return "912"
 
 

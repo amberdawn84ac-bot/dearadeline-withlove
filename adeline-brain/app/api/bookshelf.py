@@ -8,10 +8,8 @@ Endpoints:
   GET    /bookshelf/{book_id}/download — Download the EPUB file
 """
 import logging
-import os
 import uuid
 
-import asyncpg
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from typing import Optional
@@ -23,9 +21,8 @@ from app.schemas.api_models import UserRole
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/bookshelf", tags=["bookshelf"])
 
-from app.config import POSTGRES_DSN as _DSN
 
-from app.services.storage import upload_epub, download_epub
+from app.services.storage import upload_epub, download_epub  # noqa: E402
 
 
 async def _get_conn():

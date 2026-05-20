@@ -8,18 +8,15 @@ POST /api/onboarding            — Complete initial onboarding (first-time setu
 PATCH /api/onboarding           — Update student profile from Settings page
 """
 import logging
-import os
 from datetime import datetime
 from typing import Optional
 
-import asyncpg
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel, validator
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
-from app.config import POSTGRES_DSN as _DSN
 
 # US States for validation (alphabetical)
 _VALID_STATES = {

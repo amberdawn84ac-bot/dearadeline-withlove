@@ -13,8 +13,7 @@ Heavy IO paths (Hippocampus, Neo4j, Researcher) are fully mocked so tests
 run without any external connections.
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
 
 from app.schemas.api_models import (
     LessonRequest, Track, BlockType, EvidenceVerdict, Evidence, WitnessCitation,
@@ -25,7 +24,6 @@ from app.agents.orchestrator import (
     _block_type_to_xapi_verb,
     _track_to_credit_type,
     _worldview_wrap,
-    _homestead_adapt,
     registrar_agent,
     run_orchestrator,
 )

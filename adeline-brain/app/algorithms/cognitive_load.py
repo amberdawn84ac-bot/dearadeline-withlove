@@ -56,9 +56,12 @@ def _sigmoid(z: float) -> float:
 
 
 def _level(score: float) -> str:
-    if score > 0.8: return "CRITICAL"
-    if score > 0.6: return "HIGH"
-    if score > 0.3: return "MEDIUM"
+    if score > 0.8:
+        return "CRITICAL"
+    if score > 0.6:
+        return "HIGH"
+    if score > 0.3:
+        return "MEDIUM"
     return "LOW"
 
 

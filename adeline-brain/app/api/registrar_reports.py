@@ -4,7 +4,7 @@ Provides reading progress analytics, OAS standards tracking, and graduation read
 """
 import logging
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import asyncpg
 from fastapi import APIRouter, HTTPException, Query, Depends
@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
 from app.schemas.api_models import UserRole
-from app.api.middleware import require_role, get_current_user_id
+from app.api.middleware import require_role
 from app.config import POSTGRES_DSN as _DSN
 from app.connections.postgres import get_db_session
 from app.services.standards_mapper import StandardsMapper, StandardsProgressReport

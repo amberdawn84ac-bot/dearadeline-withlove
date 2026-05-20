@@ -7,7 +7,7 @@ from app.tools.researcher import search_witnesses
 @pytest.mark.asyncio
 async def test_child_query_filters_sensitive():
     """10-year-old doesn't see COINTELPRO documents."""
-    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1]*1536) as mock_embed, \
+    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1]*1536) as _mock_embed, \
          patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo:
 
         mock_hippo.return_value = [
@@ -50,7 +50,7 @@ async def test_child_query_filters_sensitive():
 @pytest.mark.asyncio
 async def test_teen_query_sees_justice_docs():
     """16-year-old sees COINTELPRO documents in Justice track."""
-    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1]*1536) as mock_embed, \
+    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1]*1536) as _mock_embed, \
          patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo:
 
         mock_hippo.return_value = [
@@ -81,7 +81,7 @@ async def test_teen_query_sees_justice_docs():
 @pytest.mark.asyncio
 async def test_no_age_means_no_filtering():
     """If age=None, all documents returned (no filtering)."""
-    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1]*1536) as mock_embed, \
+    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1]*1536) as _mock_embed, \
          patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo:
 
         mock_hippo.return_value = [
@@ -112,7 +112,7 @@ async def test_no_age_means_no_filtering():
 @pytest.mark.asyncio
 async def test_multiple_docs_mixed_age_filtering():
     """Filter a mix of age-appropriate and sensitive documents for a 13-year-old."""
-    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1]*1536) as mock_embed, \
+    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1]*1536) as _mock_embed, \
          patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo:
 
         mock_hippo.return_value = [
@@ -154,10 +154,10 @@ async def test_multiple_docs_mixed_age_filtering():
 @pytest.mark.asyncio
 async def test_empty_hippocampus_filters_deep_web():
     """When Hippocampus is empty, deep web results are also filtered by age."""
-    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1]*1536) as mock_embed, \
+    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1]*1536) as _mock_embed, \
          patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo, \
          patch('app.tools.researcher.search_all_archives_parallel', new_callable=AsyncMock) as mock_archives, \
-         patch('app.tools.researcher.hippocampus.upsert_document', new_callable=AsyncMock, return_value='new-doc-id') as mock_upsert, \
+         patch('app.tools.researcher.hippocampus.upsert_document', new_callable=AsyncMock, return_value='new-doc-id') as _mock_upsert, \
          patch('app.tools.researcher._cosine_similarity', return_value=0.87):
 
         # Hippocampus returns nothing
@@ -186,7 +186,7 @@ async def test_empty_hippocampus_filters_deep_web():
 @pytest.mark.asyncio
 async def test_age_14_can_see_genocide():
     """14-year-old can see genocide documents (min age 14)."""
-    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1]*1536) as mock_embed, \
+    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1]*1536) as _mock_embed, \
          patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo:
 
         mock_hippo.return_value = [
@@ -217,7 +217,7 @@ async def test_age_14_can_see_genocide():
 @pytest.mark.asyncio
 async def test_age_13_blocked_from_genocide():
     """13-year-old cannot see genocide documents (min age 14)."""
-    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1]*1536) as mock_embed, \
+    with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1]*1536) as _mock_embed, \
          patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo:
 
         mock_hippo.return_value = [

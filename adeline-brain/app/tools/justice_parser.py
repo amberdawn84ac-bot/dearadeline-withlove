@@ -35,7 +35,7 @@ def parse_lobbying_disclosure(text: str, metadata: Dict) -> List[Dict]:
         chunk_text = section.strip()
         
         # Add context header
-        header = f"Lobbying Disclosure"
+        header = "Lobbying Disclosure"
         if registrant:
             header += f" - Registrant: {registrant}"
         if client:
@@ -168,7 +168,7 @@ def parse_legislative_history(text: str, metadata: Dict) -> List[Dict]:
                 statement = parts[i + 1].strip()
                 
                 if len(statement) > 100:
-                    header = f"Legislative Debate"
+                    header = "Legislative Debate"
                     if bill_number:
                         header += f" on {bill_number}"
                     header += f" - {speaker}"

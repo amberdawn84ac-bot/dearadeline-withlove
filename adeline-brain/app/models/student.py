@@ -19,7 +19,6 @@ from enum import Enum
 
 from app.connections.journal_store import journal_store
 from app.connections.neo4j_client import neo4j_client
-from app.schemas.api_models import Track
 
 logger = logging.getLogger(__name__)
 

@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Response, Request
 from pydantic import BaseModel
 
-from app.api.middleware import get_current_user_id, get_auth_claims
+from app.api.middleware import get_current_user_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])

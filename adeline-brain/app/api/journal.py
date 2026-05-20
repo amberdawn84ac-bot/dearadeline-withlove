@@ -10,8 +10,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import Any
 
-from app.schemas.api_models import Track, UserRole
-from app.api.middleware import require_role, get_current_user_id, verify_student_access
+from app.schemas.api_models import Track
+from app.api.middleware import get_current_user_id, verify_student_access
 from app.connections.journal_store import journal_store
 from app.connections.neo4j_client import neo4j_client
 
@@ -122,10 +122,14 @@ def _quiz_quality(quiz_results: list[dict]) -> int:
         return 3
     correct = sum(1 for q in quiz_results if q.get("correct"))
     ratio = correct / len(quiz_results)
-    if ratio >= 0.9:  return 5
-    if ratio >= 0.75: return 4
-    if ratio >= 0.5:  return 3
-    if ratio >= 0.25: return 2
+    if ratio >= 0.9:
+        return 5
+    if ratio >= 0.75:
+        return 4
+    if ratio >= 0.5:
+        return 3
+    if ratio >= 0.25:
+        return 2
     return 1
 
 

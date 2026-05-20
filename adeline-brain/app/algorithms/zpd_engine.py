@@ -157,7 +157,8 @@ def compute_zpd_from_snapshots(snapshots: dict, concept_graph: list) -> list:
         mastery = snap.decay_adjusted if snap else 0.0
 
         if mastery >= MASTERY_THRESHOLD:
-            if snap: snap.status = "mastered"
+            if snap:
+                snap.status = "mastered"
             continue
 
         prereq_ids = c.get("prerequisite_ids", [])
@@ -170,10 +171,12 @@ def compute_zpd_from_snapshots(snapshots: dict, concept_graph: list) -> list:
             ) / len(prereq_ids)
 
         if readiness < PREREQ_READINESS:
-            if snap: snap.status = "not_ready"
+            if snap:
+                snap.status = "not_ready"
             continue
 
-        if snap: snap.status = "in_zpd"
+        if snap:
+            snap.status = "in_zpd"
 
         result.append(ZPDConcept(
             concept_id=c["id"], name=c["name"], description=c["description"],

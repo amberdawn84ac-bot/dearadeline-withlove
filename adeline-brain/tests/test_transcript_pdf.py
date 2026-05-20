@@ -1,7 +1,6 @@
 """
 Tests for Official Transcript PDF Generator.
 """
-import pytest
 from datetime import datetime
 from app.services.transcript_pdf import build_official_transcript_pdf
 

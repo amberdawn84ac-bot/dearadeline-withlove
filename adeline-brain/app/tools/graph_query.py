@@ -16,7 +16,6 @@ ZPD selection hierarchy:
 from __future__ import annotations
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
 from app.connections.knowledge_graph import (
     get_zpd_candidates,

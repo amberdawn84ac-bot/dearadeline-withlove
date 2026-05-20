@@ -7,18 +7,17 @@ Tables:
 Track progress is derived dynamically: COUNT(*) GROUP BY track.
 """
 import json
-import os
 import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import text, Column, String, Integer, Text, DateTime, func
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy import text, Column, String, Integer, Text, DateTime
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
 logger = logging.getLogger(__name__)
 
-from app.config import ASYNC_POSTGRES_DSN as ASYNC_DSN
+from app.config import ASYNC_POSTGRES_DSN as ASYNC_DSN  # noqa: E402
 
 
 class JournalBase(DeclarativeBase):

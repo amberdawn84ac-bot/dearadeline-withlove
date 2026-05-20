@@ -21,7 +21,7 @@ Usage with Anthropic (tool use):
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional, Union, Literal
+from typing import List, Optional, Literal
 from pydantic import BaseModel, Field
 
 

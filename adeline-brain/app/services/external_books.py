@@ -6,7 +6,7 @@ returns insufficient high-confidence results.
 """
 
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict
 import httpx
 
 logger = logging.getLogger(__name__)

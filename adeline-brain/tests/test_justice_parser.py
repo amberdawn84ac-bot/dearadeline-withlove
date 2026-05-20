@@ -1,7 +1,6 @@
 """
 Tests for justice document parser.
 """
-import pytest
 from app.tools.justice_parser import (
     parse_lobbying_disclosure,
     parse_civil_rights_testimony,

@@ -15,11 +15,10 @@ from datetime import datetime, timezone
 from typing import Optional, List
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from app.api.middleware import get_current_user_id
-from app.schemas.api_models import Track, UserRole
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/parent", tags=["parent"])

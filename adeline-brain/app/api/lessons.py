@@ -3,25 +3,19 @@ Lesson Generation API — /lessons/*
 The primary delivery endpoint. Orchestrates retrieval, Witness Protocol
 verification, and Neo4j graph-linking into a structured LessonResponse.
 """
-import json
 import logging
 import os
-import asyncio
-import time
 from typing import Optional
 
 import openai
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.schemas.api_models import LessonRequest, LessonResponse, TRUTH_THRESHOLD, UserRole
+from app.schemas.api_models import LessonResponse
 from app.protocols.witness import get_witness_threshold
-from app.api.middleware import require_role, get_current_user_id
 from app.connections.pgvector_client import hippocampus
-from app.connections.knowledge_graph import get_cross_track_bias
-from app.models.student import load_student_state
-from app.connections.canonical_store import canonical_store, canonical_slug
+from app.connections.canonical_store import canonical_store
 from app.tools.graph_query import tool_get_zpd_candidates
 
 logger = logging.getLogger(__name__)

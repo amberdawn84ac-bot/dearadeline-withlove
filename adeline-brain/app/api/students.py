@@ -8,8 +8,6 @@ GET  /students/{student_id}          — Fetch profile (ownership verified)
 GET  /students/{student_id}/state    — Full StudentState (ownership verified)
 """
 import logging
-import os
-import uuid
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
@@ -21,7 +19,6 @@ from app.models.student import load_student_state
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/students", tags=["students"])
 
-from app.config import POSTGRES_DSN as _DSN
 
 
 async def _get_conn():

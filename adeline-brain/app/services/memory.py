@@ -24,11 +24,10 @@ Usage:
 """
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
 from app.connections.conversation_store import conversation_store
 from app.connections.journal_store import journal_store
-from app.models.student import StudentState, MasteryBand
+from app.models.student import MasteryBand
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +72,7 @@ class StudentMemoryContext:
                 lines.append(f"  • {lesson.get('track', 'Unknown')}: {lesson.get('lesson_id', 'Unknown')}")
         
         # ZPD trend
-        lines.append(f"\nPEDAGOGICAL STATE:")
+        lines.append("\nPEDAGOGICAL STATE:")
         lines.append(f"  • Dominant ZPD Zone: {self.dominant_zpd_zone}")
         lines.append(f"  • Mastery Band: {self.mastery_band.value}")
         lines.append(f"  • Mastery Score: {self.mastery_score*100:.0f}%")

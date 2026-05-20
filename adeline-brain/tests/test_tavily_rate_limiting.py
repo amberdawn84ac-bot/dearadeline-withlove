@@ -8,7 +8,6 @@ Tests that search_all_archives_parallel() respects the rate limiter:
 """
 import pytest
 import asyncio
-import os
 from unittest.mock import AsyncMock, patch, MagicMock
 from app.tools.researcher import search_all_archives_parallel, tavily_limiter, search_archive_async
 from app.utils.rate_limiter import TokenBucket
@@ -53,7 +52,7 @@ async def test_tavily_rate_limiter_enforces_limit():
 
         # Make 6 parallel calls (one per archive)
         # Each call to search_all_archives_parallel triggers 6 archive searches
-        result = await search_all_archives_parallel(query="test query")
+        _result = await search_all_archives_parallel(query="test query")
 
         # Should have made requests (rate limiter should allow them)
         assert call_count[0] > 0
@@ -62,7 +61,6 @@ async def test_tavily_rate_limiter_enforces_limit():
 @pytest.mark.asyncio
 async def test_tavily_rate_limiter_refills():
     """Tavily rate limiter refills tokens at 0.5 tokens/second."""
-    import time
 
     # Reset the limiter to a known state
     fresh_limiter = tavily_limiter
@@ -72,14 +70,14 @@ async def test_tavily_rate_limiter_refills():
 
     # Try to acquire tokens
     initial_acquire = await fresh_limiter.acquire(tokens=1.0)
-    assert initial_acquire == True
+    assert initial_acquire
 
     # After some time, tokens should refill
     await asyncio.sleep(2.1)  # At 0.5 tokens/sec, should get ~1 token in 2.1 seconds
 
     # Should be able to acquire more tokens after refill
     refill_acquire = await fresh_limiter.acquire(tokens=1.0)
-    assert refill_acquire == True
+    assert refill_acquire
 
 
 @pytest.mark.asyncio
@@ -151,19 +149,19 @@ async def test_rate_limiter_token_depletion_and_recovery():
 
     # Acquire 3 tokens
     for i in range(3):
-        assert await limiter.acquire(tokens=1.0) == True
+        assert await limiter.acquire(tokens=1.0)
 
     # Should be empty now
-    assert await limiter.acquire(tokens=1.0) == False
+    assert not await limiter.acquire(tokens=1.0)
 
     # Wait for 2.2 seconds (0.5 tokens/sec * 2.2 sec = 1.1 tokens)
     await asyncio.sleep(2.2)
 
     # Should have approximately 1 token
-    assert await limiter.acquire(tokens=1.0) == True
+    assert await limiter.acquire(tokens=1.0)
 
     # Should be depleted again
-    assert await limiter.acquire(tokens=0.5) == False
+    assert not await limiter.acquire(tokens=0.5)
 
 
 @pytest.mark.asyncio
@@ -172,7 +170,7 @@ async def test_wait_for_acquire_blocks_until_available():
     limiter = TokenBucket(max_tokens=1, refill_rate=0.5)
 
     # Acquire the single token
-    assert await limiter.acquire(tokens=1.0) == True
+    assert await limiter.acquire(tokens=1.0)
 
     # Start waiting for a token in the background
     acquired = [False]
@@ -190,13 +188,13 @@ async def test_wait_for_acquire_blocks_until_available():
     await asyncio.sleep(0.3)
 
     # Token should not have been acquired yet
-    assert acquired[0] == False
+    assert not acquired[0]
 
     # Wait for it to be acquired (should take ~2 seconds for refill)
     elapsed = await asyncio.wait_for(task, timeout=3.0)
 
     # Should have been acquired
-    assert acquired[0] == True
+    assert acquired[0]
     assert elapsed >= 2.0  # Should have waited ~2 seconds
 
 

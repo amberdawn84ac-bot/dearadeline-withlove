@@ -11,16 +11,6 @@ from pydantic import BaseModel, Field
 from app.api.middleware import verify_student_access
 from app.services.credit_engine import (
     ArtifactType,
-    CreditBucketAccumulation,
-    CourseProposal,
-    CreditHourWeighting,
-    Evidence,
-    apply_profile_weighting,
-    calculate_weighted_hours,
-    check_credit_threshold,
-    compute_bucket_accumulation,
-    mastery_score_to_grade_letter,
-    propose_course,
 )
 
 router = APIRouter(prefix="/api", tags=["credits"])

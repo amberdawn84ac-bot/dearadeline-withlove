@@ -7,7 +7,6 @@ Also used by lessons.py to record per-request timing.
 Counters reset on process restart (acceptable for Railway — use log aggregation
 for long-term trends; this endpoint serves real-time scraping + alerting).
 """
-import time
 import logging
 from collections import deque
 from fastapi import APIRouter

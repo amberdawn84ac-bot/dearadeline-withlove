@@ -195,7 +195,7 @@ def extract_metadata(text: str, archive_name: str, source_url: str) -> dict:
     if metadata['subject']:
         metadata['title'] = metadata['subject'][:100]
     else:
-        lines = [l.strip() for l in text.split('\n') if l.strip() and len(l.strip()) > 10]
+        lines = [ln.strip() for ln in text.split('\n') if ln.strip() and len(ln.strip()) > 10]
         if lines:
             metadata['title'] = lines[0][:100]
 

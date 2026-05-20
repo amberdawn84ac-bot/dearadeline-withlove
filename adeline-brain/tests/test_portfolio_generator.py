@@ -1,7 +1,6 @@
 """
 Unit tests for mastery portfolio PDF generator.
 """
-import pytest
 from datetime import datetime
 from app.services.portfolio_generator import build_mastery_portfolio_pdf
 

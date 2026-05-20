@@ -215,7 +215,7 @@ async def seed_nara_documents(track: str, limit: int = 10) -> int:
                             embedding = embedding_response.data[0].embedding
 
                             # Upsert to Hippocampus
-                            doc_id = await hippocampus.upsert_document(
+                            _doc_id = await hippocampus.upsert_document(
                                 source_title=title,
                                 track=track,
                                 chunk=chunk.chunk_text,
@@ -315,7 +315,7 @@ async def seed_cia_foia_documents(track: str, limit: int = 10) -> int:
                             )
                             embedding = embedding_response.data[0].embedding
 
-                            doc_id = await hippocampus.upsert_document(
+                            _doc_id = await hippocampus.upsert_document(
                                 source_title=title,
                                 track=track,
                                 chunk=chunk.chunk_text,
@@ -416,7 +416,7 @@ async def seed_fbi_vault_documents(track: str, limit: int = 10) -> int:
                             )
                             embedding = embedding_response.data[0].embedding
 
-                            doc_id = await hippocampus.upsert_document(
+                            _doc_id = await hippocampus.upsert_document(
                                 source_title=title,
                                 track=track,
                                 chunk=chunk.chunk_text,
