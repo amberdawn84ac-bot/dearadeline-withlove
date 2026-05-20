@@ -2,7 +2,6 @@
 import pytest
 import os
 import subprocess
-import asyncio
 from typing import Dict, List, Tuple
 from enum import Enum
 

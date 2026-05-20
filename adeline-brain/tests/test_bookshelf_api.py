@@ -1,4 +1,4 @@
-from app.api.bookshelf import AddBookRequest, AddBookResponse, BookResponse
+from app.api.bookshelf import AddBookRequest, BookResponse
 
 
 def test_add_book_request_model():

@@ -10,18 +10,17 @@ Tables:
   conversation_messages — one row per message (student or assistant)
   conversation_sessions — groups messages into sessions (optional)
 """
-import os
 import logging
 from datetime import datetime, timezone
 from typing import Optional, Literal
 
-from sqlalchemy import text, Column, String, Integer, Text, DateTime, Boolean, Enum as SQLEnum
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy import text, Column, String, Integer, Text, DateTime
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
 logger = logging.getLogger(__name__)
 
-from app.config import ASYNC_POSTGRES_DSN as ASYNC_DSN
+from app.config import ASYNC_POSTGRES_DSN as ASYNC_DSN  # noqa: E402
 
 
 class ConversationBase(DeclarativeBase):

@@ -7,7 +7,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.algorithms.zpd_engine import bkt_update, BKTParams
@@ -124,7 +124,7 @@ async def genui_callback(
         if hints_used >= 3:
             should_re_render = True
             new_state = request.state
-            logger.info(f"[GENUI] Hint threshold reached - triggering re-render")
+            logger.info("[GENUI] Hint threshold reached - triggering re-render")
 
     elif request.event == "onStruggle":
         # Detect struggle and trigger scaffolding
@@ -137,7 +137,7 @@ async def genui_callback(
                 **request.state,
                 "scaffolding_level": request.state.get("scaffolding_level", 0) + 1
             }
-            logger.info(f"[GENUI] Struggle threshold reached - triggering scaffolding re-render")
+            logger.info("[GENUI] Struggle threshold reached - triggering scaffolding re-render")
 
     return GenuiCallbackResponse(
         success=True,

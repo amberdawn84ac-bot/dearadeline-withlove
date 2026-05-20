@@ -1,4 +1,3 @@
-import pytest
 import logging
 from io import StringIO
 from app.utils.structured_logger import get_structured_logger

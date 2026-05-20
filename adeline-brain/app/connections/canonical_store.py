@@ -13,7 +13,6 @@ import hashlib
 import json
 import logging
 import os
-import uuid
 from typing import Optional
 
 from app.connections.redis_client import redis_client

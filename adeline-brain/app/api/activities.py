@@ -23,8 +23,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from app.config import create_llm, GOOGLE_API_KEY, ANTHROPIC_API_KEY
-from app.schemas.api_models import Track, UserRole
-from app.api.middleware import require_role, get_current_user_id, verify_student_access
+from app.schemas.api_models import Track
+from app.api.middleware import get_current_user_id, verify_student_access
 from app.connections.journal_store import journal_store
 from contextlib import asynccontextmanager
 

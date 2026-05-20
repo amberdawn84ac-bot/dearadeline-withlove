@@ -3,7 +3,7 @@ Integration tests: Witness Protocol + deep web search acquisition.
 Validates complete flow: Hippocampus query → threshold enforcement → deep web fallback → persistence.
 """
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 from app.tools.researcher import search_witnesses
 from app.schemas.api_models import TRUTH_THRESHOLD
 
@@ -230,13 +230,13 @@ async def test_self_improving_system_subsequent_queries():
         mock_upsert.return_value = 'newly-acquired-123'
 
         # First query
-        results1 = await search_witnesses(
+        _results1 = await search_witnesses(
             query="COINTELPRO FBI surveillance",
             track="JUSTICE_CHANGEMAKING",
         )
 
         # Second similar query should find the doc in Hippocampus (not deep web again)
-        results2 = await search_witnesses(
+        _results2 = await search_witnesses(
             query="FBI surveillance programs",
             track="JUSTICE_CHANGEMAKING",
         )
@@ -304,7 +304,7 @@ async def test_justice_track_cointelpro_deep_web_search():
         mock_upsert.side_effect = ['cointelpro-123', 'cia-plot-456']
 
         # Query should trigger deep web search for justice track
-        results = await search_witnesses(
+        _results = await search_witnesses(
             query="FBI surveillance civil rights COINTELPRO",
             track="JUSTICE_CHANGEMAKING",
         )

@@ -85,7 +85,7 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager  # noqa: E402
 
 @asynccontextmanager
 async def _get_conn():
@@ -188,8 +188,8 @@ async def create_reading_session(
             else:
                 # Should not happen, but handle gracefully
                 logger.error(
-                    f"[ReadingSession] Unexpected state: "
-                    f"insert returned no rows but select also returned no rows"
+                    "[ReadingSession] Unexpected state: "
+                    "insert returned no rows but select also returned no rows"
                 )
                 raise HTTPException(status_code=500, detail="Database error")
 

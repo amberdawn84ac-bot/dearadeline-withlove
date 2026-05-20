@@ -1,5 +1,4 @@
-import pytest
-from app.services.gpa_calculator import calculate_gpa, GradeLetter, format_gpa
+from app.services.gpa_calculator import calculate_gpa, format_gpa
 
 
 def test_calculate_gpa_all_a_grades():

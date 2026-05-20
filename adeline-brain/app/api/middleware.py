@@ -15,7 +15,7 @@ from typing import Optional
 
 import jwt
 from jwt import PyJWKClient
-from fastapi import Header, HTTPException, Depends, Cookie
+from fastapi import Header, HTTPException, Cookie
 from app.schemas.api_models import UserRole
 from app.config import SUPABASE_JWT_SECRET, SUPABASE_JWKS_URL
 

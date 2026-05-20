@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.schemas.api_models import (
     Experiment, ExperimentResponse, ExperimentStep,
     SocialMediaKit, CreationConnection,
-    ChaosLevel, ScienceCredit, Track,
+    ChaosLevel, ScienceCredit,
 )
 
 logger = logging.getLogger(__name__)

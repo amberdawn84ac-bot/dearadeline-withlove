@@ -16,7 +16,6 @@ Decision pipeline:
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Optional, Callable, Awaitable
 
@@ -26,8 +25,8 @@ from app.agents.cognitive_twin import (
     update_from_response,
     recommend_intervention,
 )
-from app.agents.pedagogy import ZPDZone, scaffold_response
-from app.safety.content_filter import content_filter, SafetyFlag
+from app.agents.pedagogy import ZPDZone
+from app.safety.content_filter import content_filter
 from app.schemas.api_models import LessonRequest, LessonResponse, LessonBlockResponse, BlockType
 
 logger = logging.getLogger(__name__)
@@ -243,7 +242,7 @@ def _infer_grade_level(request: LessonRequest) -> int:
 
 def _break_response(request: LessonRequest, twin: CognitiveTwinState) -> LessonResponse:
     """Gentle break suggestion block when cognitive load is maxed."""
-    from app.schemas.api_models import LessonResponse, LessonBlockResponse, BlockType
+    from app.schemas.api_models import LessonResponse, LessonBlockResponse
     import uuid
 
     break_block = LessonBlockResponse(
@@ -270,7 +269,6 @@ def _break_response(request: LessonRequest, twin: CognitiveTwinState) -> LessonR
 
 def _safety_redirect_block(original: LessonBlockResponse) -> LessonBlockResponse:
     """Replace a blocked block with a safe RESEARCH_MISSION."""
-    from app.schemas.api_models import BlockType
 
     return original.model_copy(update={
         "block_type": BlockType.RESEARCH_MISSION,

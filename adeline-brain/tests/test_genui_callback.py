@@ -5,7 +5,7 @@ from unittest.mock import patch, AsyncMock
 
 from app.main import app
 from app.api.middleware import get_current_user_id
-from app.models.student import load_student_state, StudentState
+from app.models.student import StudentState
 
 
 def _override_auth():

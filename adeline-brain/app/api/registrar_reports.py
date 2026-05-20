@@ -4,14 +4,14 @@ Provides reading progress analytics and recommendation tracking for administrati
 """
 import logging
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import asyncpg
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 
 from app.schemas.api_models import UserRole
-from app.api.middleware import require_role, get_current_user_id
+from app.api.middleware import require_role
 from app.config import POSTGRES_DSN as _DSN
 
 logger = logging.getLogger(__name__)

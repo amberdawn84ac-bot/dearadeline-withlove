@@ -38,7 +38,7 @@ from app.schemas.api_models import (
     LessonRequest, LessonResponse, LessonBlockResponse,
     Track, BlockType, EvidenceVerdict,
 )
-from app.protocols.witness import evaluate_evidence, build_research_mission_block
+from app.protocols.witness import evaluate_evidence
 from app.connections.pgvector_client import hippocampus
 from app.connections.neo4j_client import neo4j_client
 from app.tools.researcher import search_witnesses
@@ -606,10 +606,10 @@ async def _generate_from_knowledge(
     # Research mission as OPTIONAL enrichment (not the main lesson)
     sources_text = "\n".join(f"- {s}" for s in silent_sources[:3]) if silent_sources else ""
     enrichment = (
-        f"**Dig Deeper (Optional Research Mission):**\n"
-        f"Adeline taught this from her own knowledge. Want to go further? "
-        f"Find a primary source document on this topic and bring it back — "
-        f"she'll verify it and add it to the archive so future students benefit too."
+        "**Dig Deeper (Optional Research Mission):**\n"
+        "Adeline taught this from her own knowledge. Want to go further? "
+        "Find a primary source document on this topic and bring it back — "
+        "she'll verify it and add it to the archive so future students benefit too."
     )
     if sources_text:
         enrichment += f"\n\nStart by looking for:\n{sources_text}"
@@ -963,7 +963,7 @@ async def science_agent(state: AdelineState) -> AdelineState:
             elif "dry ice" in best_experiment.title.lower():
                 content += "CO\u2082 to fill a giant fog bubble. Which one?"
             else:
-                content += f"something unforgettable. Ready?"
+                content += "something unforgettable. Ready?"
 
             blocks.append({
                 "block_type":        BlockType.EXPERIMENT.value,
@@ -1580,7 +1580,7 @@ async def _synthesize_mind_map(
     topic: str,
     content: str,
     grade_level: str,
-) -> "MindMapData | None":
+) -> "MindMapData | None":  # noqa: F821
     """
     Extract a concept hierarchy from lesson content.
     Returns None on any failure — never surfaces errors to the student.
@@ -1617,7 +1617,7 @@ async def _synthesize_timeline(
     evidence: list,
     grade_level: str,
     is_seasonal: bool = False,
-) -> "TimelineData | None":
+) -> "TimelineData | None":  # noqa: F821
     """
     Extract a chronological sequence from lesson content.
     For history tracks: maps events to source_title from evidence.
@@ -1665,7 +1665,7 @@ async def _synthesize_timeline(
 async def _synthesize_mnemonic(
     content: str,
     grade_level: str,
-) -> "MnemonicData | None":
+) -> "MnemonicData | None":  # noqa: F821
     """
     Generate a mnemonic device when ≥3 concepts are present in the content.
     Returns None if fewer than 3 concepts detected or on any failure.
@@ -1705,7 +1705,7 @@ async def _synthesize_narrated_slide(
     content: str,
     track: "Track",
     grade_level: str,
-) -> "NarratedSlideData | None":
+) -> "NarratedSlideData | None":  # noqa: F821
     """
     Convert lesson content into a 3-5 slide narrated presentation.
     Returns None on any failure.
@@ -1742,7 +1742,7 @@ async def _synthesize_animated_sketchnote(
     track: "Track",
     grade_level: str,
     duration_seconds: int = 180,
-) -> "AnimatedSketchnoteLessonData | None":
+) -> "AnimatedSketchnoteLessonData | None":  # noqa: F821
     """
     Generate a full AnimatedSketchnoteLesson JSON via Gemini.
     Uses the same master prompt as /lesson/animated — runs as an optional
@@ -1761,7 +1761,6 @@ async def _synthesize_animated_sketchnote(
     import json
     import re
 
-    grade_desc = _GRADE_DESC.get(grade_level, f"grade {grade_level}")
     target_ages = {
         "K": "5-6", "1": "6-7", "2": "7-8", "3": "8-9", "4": "9-10",
         "5": "10-11", "6": "11-12", "7": "12-13", "8": "13-14",

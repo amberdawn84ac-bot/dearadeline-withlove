@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 from app.tools.researcher import search_witnesses
 from app.protocols.content_filter import should_return_document
-from app.schemas.api_models import TRUTH_THRESHOLD, EvidenceVerdict
+from app.schemas.api_models import EvidenceVerdict
 
 @pytest.mark.asyncio
 async def test_e2e_production_seed_to_lesson():
@@ -19,7 +19,7 @@ async def test_e2e_production_seed_to_lesson():
     """
     with patch('app.tools.researcher._embed', new_callable=AsyncMock, return_value=[0.1] * 1536), \
          patch('app.tools.researcher.hippocampus.similarity_search', new_callable=AsyncMock) as mock_hippo, \
-         patch('app.tools.researcher.hippocampus.upsert_document', new_callable=AsyncMock) as mock_upsert:
+         patch('app.tools.researcher.hippocampus.upsert_document', new_callable=AsyncMock) as _mock_upsert:
 
         # Simulate seeded Hippocampus
         mock_hippo.return_value = [

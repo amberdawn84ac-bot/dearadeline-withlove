@@ -17,11 +17,11 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Header
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from app.api.middleware import get_current_user_id, verify_student_access, require_internal_key
 from pydantic import BaseModel, Field
 
-from app.algorithms.spaced_repetition import sm2, is_due, overdue_days
+from app.algorithms.spaced_repetition import sm2, overdue_days
 from contextlib import asynccontextmanager
 
 logger = logging.getLogger(__name__)

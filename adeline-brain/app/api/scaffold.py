@@ -11,8 +11,8 @@ import logging
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
-from app.schemas.api_models import Track, UserRole
-from app.api.middleware import require_role, get_current_user_id, verify_student_access
+from app.schemas.api_models import Track
+from app.api.middleware import get_current_user_id, verify_student_access
 from app.models.student import load_student_state
 from app.agents.pedagogy import scaffold, explain_snippet, ZPDZone
 from app.models.student import MasteryBand

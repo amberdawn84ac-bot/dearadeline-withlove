@@ -10,9 +10,6 @@ import json
 
 from app.services.credit_engine import (
     apply_profile_weighting,
-    check_credit_threshold,
-    CreditBucketAccumulation,
-    ArtifactType,
 )
 from app.services.standards_mapper import map_lesson_to_oas
 

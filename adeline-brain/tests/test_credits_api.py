@@ -1,9 +1,6 @@
 """
 Tests for Credits API endpoints.
 """
-import json
-import os
-import pytest
 from app.api.credits import load_oklahoma_profiles, ProfileResponse
 
 

@@ -2,8 +2,6 @@
 
 Mirrors cascade-adeline/__tests__/learning/zpd-engine.test.ts
 """
-import math
-import pytest
 from datetime import datetime, timedelta, timezone
 
 from app.algorithms.zpd_engine import (
@@ -20,7 +18,6 @@ from app.algorithms.zpd_engine import (
     format_zpd_for_prompt,
     quality_to_mastery_delta,
     MASTERY_THRESHOLD,
-    PREREQ_READINESS,
     DECAY_HALF_LIFE_DAYS,
 )
 

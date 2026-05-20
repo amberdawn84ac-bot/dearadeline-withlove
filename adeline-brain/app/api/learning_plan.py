@@ -22,19 +22,17 @@ This is the heart of Adeline's adaptive curriculum — connecting:
 """
 import json
 import logging
-import random
 from typing import Optional
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Header
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from app.schemas.api_models import Track
 from app.api.middleware import verify_student_access
-from app.models.student import load_student_state, MasteryBand
+from app.models.student import load_student_state
 from app.connections.journal_store import journal_store
 from app.connections.neo4j_client import neo4j_client
-from app.connections.pgvector_client import hippocampus
 from app.connections.redis_client import redis_client
 from app.tools.graph_query import tool_get_zpd_candidates, ZPDCandidate
 
@@ -1040,10 +1038,8 @@ async def get_learning_plan(
         credit_gaps = _calculate_credit_gaps(credits_by_bucket, grade_level)
 
     # 4. Get recent lessons to avoid repetition
-    recent_lesson_ids: set[str] = set()
     try:
-        recent = await journal_store.get_recent(student_id, limit=20)
-        recent_lesson_ids = {r["lesson_id"] for r in recent}
+        await journal_store.get_recent(student_id, limit=20)
     except Exception as e:
         logger.warning(f"[LearningPlan] Failed to get recent lessons: {e}")
 

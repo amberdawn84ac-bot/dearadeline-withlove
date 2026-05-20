@@ -19,11 +19,9 @@ import re
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
 
 from app.schemas.api_models import (
     AnimatedLessonRequest,

@@ -3,20 +3,19 @@ pgvector Client — The Hippocampus
 Semantic similarity search over the verified source document corpus.
 Configure via POSTGRES_DSN environment variable.
 """
-import os
 import logging
 import uuid
 from typing import Optional
 
-from sqlalchemy import text, Column, String, Float, Integer, DateTime, func, UniqueConstraint
+from sqlalchemy import text, Column, String, Integer, DateTime, func, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from pgvector.sqlalchemy import Vector
 
 logger = logging.getLogger(__name__)
 
-from app.config import ASYNC_POSTGRES_DSN as ASYNC_DSN
+from app.config import ASYNC_POSTGRES_DSN as ASYNC_DSN  # noqa: E402
 
 EMBEDDING_DIM = 1536  # text-embedding-3-small
 

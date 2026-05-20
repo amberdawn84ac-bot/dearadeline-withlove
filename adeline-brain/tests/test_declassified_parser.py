@@ -4,7 +4,6 @@ Tests for DeclassifiedDocument Parser
 Parser converts raw documents from government archives into standardized chunks
 suitable for embedding and storage in Hippocampus.
 """
-import pytest
 from app.tools.declassified_parser import (
     ParsedChunk,
     parse_declassified_document,

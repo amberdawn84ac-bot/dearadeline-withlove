@@ -2,7 +2,6 @@
 
 Mirrors cascade-adeline/__tests__/learning/spaced-repetition.test.ts
 """
-import pytest
 from datetime import datetime, timedelta, timezone
 
 from app.algorithms.spaced_repetition import (

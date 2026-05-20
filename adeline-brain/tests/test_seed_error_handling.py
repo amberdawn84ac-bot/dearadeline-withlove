@@ -1,6 +1,6 @@
 """Tests for retry logic in seed_declassified_documents.py."""
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 from app.scripts.seed_declassified_documents import _retry_search
 
 

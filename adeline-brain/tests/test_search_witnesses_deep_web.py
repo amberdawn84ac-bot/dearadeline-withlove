@@ -77,7 +77,7 @@ async def test_search_witnesses_triggers_deep_search_when_hippocampus_empty():
             }
         ]
 
-        results = await search_witnesses(
+        _results = await search_witnesses(
             query="COINTELPRO surveillance program",
             track="JUSTICE_CHANGEMAKING"
         )

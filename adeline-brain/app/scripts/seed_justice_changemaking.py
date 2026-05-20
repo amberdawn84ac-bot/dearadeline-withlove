@@ -15,7 +15,7 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Dict, Optional
 
 import httpx
@@ -315,7 +315,7 @@ def _extract_year(date_str: Optional[str]) -> Optional[int]:
         # Try parsing ISO format
         dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
         return dt.year
-    except:
+    except Exception:
         # Try extracting 4-digit year
         import re
         match = re.search(r'(19|20)\d{2}', date_str)

@@ -27,12 +27,12 @@ import os
 import uuid
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import StreamingResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.schemas.api_models import LessonRequest, LessonResponse, LessonBlockResponse, Track
+from app.schemas.api_models import LessonRequest
 from app.api.middleware import get_current_user_id
 from app.models.student import load_student_state
 
@@ -136,7 +136,7 @@ async def _build_adaptation_request(
     request: LessonRequest,
     mastery_score: float,
     interaction_count: int,
-) -> "AdaptationRequest":
+) -> "AdaptationRequest":  # noqa: F821
     """
     Build a fully-populated AdaptationRequest from all personalization signals.
 
@@ -246,7 +246,6 @@ async def _stream_lesson(
     Registrar is skipped here — caller runs it via BackgroundTask.
     """
     import openai
-    from app.connections.pgvector_client import hippocampus
     from app.connections.canonical_store import canonical_store, canonical_slug
     from app.agents.orchestrator import (
         historian_agent, justice_agent, science_agent, literature_agent,
@@ -506,7 +505,7 @@ async def _run_registrar_background(
         }
         final_state = await registrar_agent(dummy_state)
 
-        from app.schemas.api_models import LessonResponse, LessonBlockResponse
+        from app.schemas.api_models import LessonResponse
         lesson = LessonResponse(
             lesson_id=lesson_id,
             title="",
