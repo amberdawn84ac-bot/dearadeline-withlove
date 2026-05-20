@@ -821,7 +821,7 @@ async def _get_available_projects(track: str = None, limit: int = 3) -> list[Pro
     return projects
 
 
-# ── Redis sliding-window helpers ───────────────────────────────────────────────────────────────────────
+# ── Redis sliding-window helpers ──────────────────────────────────────────────
 
 def _plan_cache_key(student_id: str) -> str:
     return f"learning_plan:{student_id}"
@@ -984,7 +984,7 @@ async def get_learning_plan(
     - Tracks with lower mastery → boosted (help balance progress)
     - Starter/exploration topics → lower priority
     """
-    # ── Redis sliding-window cache check ─────────────────────────────────────────────────────────────────────
+    # ── Redis sliding-window cache check ─────────────────────────────────────────
     cache_key = _plan_cache_key(student_id)
     if not refresh:
         try:
