@@ -26,11 +26,12 @@ RESEARCH_MISSION block. If a verified source is found, the lesson continues
 with a PRIMARY_SOURCE block from the auto-found archive.
 """
 import asyncio
+import contextvars
 import uuid
 import os
 import logging
 from datetime import datetime, timezone
-from typing import TypedDict, Literal
+from typing import TypedDict, Literal, Optional
 
 import anthropic
 
@@ -50,6 +51,35 @@ from app.models.student import MasteryBand
 _ANTHROPIC_MODEL = ADELINE_MODEL
 
 logger = logging.getLogger(__name__)
+
+# ── Cognitive load token ceilings ────────────────────────────────────────────
+# Set per-request via apply_cognitive_load_budget() before awaiting any agent.
+# ContextVar propagates through all awaited coroutines in the same task.
+_synthesis_token_ceil: contextvars.ContextVar[Optional[int]] = contextvars.ContextVar(
+    "adeline_synthesis_token_ceil", default=None
+)
+_pedagogical_token_ceil: contextvars.ContextVar[Optional[int]] = contextvars.ContextVar(
+    "adeline_pedagogical_token_ceil", default=None
+)
+
+
+def apply_cognitive_load_budget(load) -> None:
+    """
+    Set token ceilings based on cognitive load level.
+    Call before awaiting any specialist agent so all _synthesis_call /
+    _pedagogical_call invocations in that request respect the ceiling.
+    No-op when load is None, LOW, or MEDIUM.
+    """
+    from app.algorithms.cognitive_load import should_simplify_content
+    if load is not None and should_simplify_content(load):
+        if load.level == "CRITICAL":
+            _synthesis_token_ceil.set(400)
+            _pedagogical_token_ceil.set(300)
+            logger.info("[Orchestrator] CRITICAL cognitive load — token ceiling 400/300")
+        else:  # HIGH
+            _synthesis_token_ceil.set(700)
+            _pedagogical_token_ceil.set(500)
+            logger.info("[Orchestrator] HIGH cognitive load — token ceiling 700/500")
 
 
 def _synthesis_client():
@@ -90,6 +120,9 @@ async def _pedagogical_call(system: str, user: str, max_tokens: int = 1000) -> s
     Routes narrative voice, Socratic scaffolding, and ZPD-adapted content through
     LearnLM for higher pedagogical quality. Falls back to Gemini Flash on any error.
     """
+    ceil = _pedagogical_token_ceil.get()
+    if ceil is not None:
+        max_tokens = min(max_tokens, ceil)
     api_key = GEMINI_API_KEY or GOOGLE_API_KEY
     if api_key:
         import openai as _oai
@@ -117,6 +150,9 @@ async def _synthesis_call(system: str, user: str, max_tokens: int = 1000) -> str
     On Gemini failure, automatically retries once then falls back to Claude.
     Returns the text content of the response.
     """
+    ceil = _synthesis_token_ceil.get()
+    if ceil is not None:
+        max_tokens = min(max_tokens, ceil)
     import asyncio as _asyncio
     client, model, is_gemini = _synthesis_client()
 
