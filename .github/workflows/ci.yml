@@ -18,7 +18,7 @@ jobs:
       - name: Install ruff
         run: pip install ruff==0.4.4
       - name: Lint
-        run: ruff check adeline-brain/app/ adeline-brain/tests/
+        run: python -m ruff check adeline-brain/app/ adeline-brain/tests/
 
   test-brain:
     name: Tests (adeline-brain)
