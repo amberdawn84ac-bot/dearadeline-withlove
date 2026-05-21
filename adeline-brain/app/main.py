@@ -306,6 +306,17 @@ async def health_detailed():
         conn = await get_db_conn()
         result = await conn.fetchval('SELECT COUNT(*) FROM "HippocampusDocument"')
         health_status["hippocampus_documents"] = result
+        oas_count = await conn.fetchval('SELECT COUNT(*) FROM "OASStandard"')
+        health_status["oas_standards"] = oas_count
+        user_count = await conn.fetchval('SELECT COUNT(*) FROM "User"')
+        health_status["users"] = user_count
+        onboarded_count = await conn.fetchval('SELECT COUNT(*) FROM "User" WHERE "onboardingComplete" = true')
+        health_status["users_onboarded"] = onboarded_count
+        rls_rows = await conn.fetch(
+            "SELECT tablename, COUNT(*) as policy_count FROM pg_policies "
+            "WHERE tablename IN ('User', 'StandardMastery') GROUP BY tablename"
+        )
+        health_status["rls_policies"] = {r["tablename"]: r["policy_count"] for r in rls_rows}
         await conn.close()
     except Exception as e:
         health_status["hippocampus_error"] = str(e)

@@ -10,13 +10,28 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 @router.get("/env-check")
 async def check_env():
-    """Check if required environment variables are set."""
-    return {
+    """Check environment variables and key database state."""
+    from app.config import get_db_conn
+
+    result = {
         "openai_key_set": bool(os.getenv("OPENAI_API_KEY")),
         "database_url_set": bool(os.getenv("DATABASE_URL") or os.getenv("DIRECT_DATABASE_URL")),
         "neo4j_uri_set": bool(os.getenv("NEO4J_URI")),
         "neo4j_password_set": bool(os.getenv("NEO4J_PASSWORD")),
     }
+
+    try:
+        conn = await get_db_conn()
+        result["users_total"] = await conn.fetchval('SELECT COUNT(*) FROM "User"')
+        result["users_onboarded"] = await conn.fetchval(
+            'SELECT COUNT(*) FROM "User" WHERE "onboardingComplete" = true'
+        )
+        result["oas_standards_seeded"] = await conn.fetchval('SELECT COUNT(*) FROM "OASStandard"')
+        await conn.close()
+    except Exception as e:
+        result["db_error"] = str(e)
+
+    return result
 
 
 class SeedResponse(BaseModel):
