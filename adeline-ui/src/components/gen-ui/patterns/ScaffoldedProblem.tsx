@@ -5,7 +5,7 @@
  * Used in GENUI_ASSEMBLY blocks for mastery gap remediation.
  */
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Lightbulb, CheckCircle, XCircle } from "lucide-react";
 
 interface ScaffoldedProblemProps {
@@ -35,6 +35,7 @@ export function ScaffoldedProblem({
   const [showHint, setShowHint] = useState(false);
   const [userAnswer, setUserAnswer] = useState("");
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
+  const mountedAt = useRef(Date.now());
 
   const handleNextStep = () => {
     if (currentStep < steps.length - 1) {
@@ -43,7 +44,8 @@ export function ScaffoldedProblem({
       setShowHint(false);
       setUserAnswer("");
       setIsCorrect(null);
-      onStateChange({ ...state, currentStep: newStep, hintsUsed });
+      const responseTimeMs = Date.now() - mountedAt.current;
+      onStateChange({ ...state, currentStep: newStep, hintsUsed, responseTimeMs });
     }
   };
 

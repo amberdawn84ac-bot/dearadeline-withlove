@@ -38,6 +38,8 @@ class GenuiCallbackResponse(BaseModel):
     should_re_render: bool = False  # New: trigger component re-render
     new_state: Optional[dict] = None  # New: updated component state
     new_props: Optional[dict] = None  # New: updated component props
+    scaffold_component: Optional[str] = None  # Component type to stream as remediation
+    scaffold_props: Optional[dict] = None  # Props for the scaffold component
 
 
 @router.post("/callback", response_model=GenuiCallbackResponse)
@@ -73,6 +75,8 @@ async def genui_callback(
     should_re_render = False
     new_state = None
     new_props = None
+    scaffold_component = None
+    scaffold_props = None
 
     if request.event == "onAnswer":
         is_correct = request.state.get("isCorrect", False)
@@ -124,7 +128,17 @@ async def genui_callback(
         if hints_used >= 3:
             should_re_render = True
             new_state = request.state
-            logger.info("[GENUI] Hint threshold reached - triggering re-render")
+            scaffold_component = "TaskScaffold"
+            scaffold_props = {
+                "title": "Need a hand?",
+                "description": "Let's break this down into smaller steps.",
+                "tasks": [
+                    {"id": "1", "label": "Re-read the source material", "done": False},
+                    {"id": "2", "label": "Write down what you DO know", "done": False},
+                    {"id": "3", "label": "Answer in your own words", "done": False},
+                ],
+            }
+            logger.info("[GENUI] Hint threshold reached - triggering TaskScaffold re-render")
 
     elif request.event == "onStruggle":
         # Detect struggle and trigger scaffolding
@@ -137,6 +151,17 @@ async def genui_callback(
                 **request.state,
                 "scaffolding_level": request.state.get("scaffolding_level", 0) + 1
             }
+            scaffold_component = "TaskScaffold"
+            scaffold_props = {
+                "title": "Let's slow down",
+                "description": "You've made a few attempts — here's a scaffold to help you think through it.",
+                "tasks": [
+                    {"id": "1", "label": "State the question in your own words", "done": False},
+                    {"id": "2", "label": "What do you already know about this?", "done": False},
+                    {"id": "3", "label": "What evidence from the source applies?", "done": False},
+                    {"id": "4", "label": "Now try the answer again", "done": False},
+                ],
+            }
             logger.info("[GENUI] Struggle threshold reached - triggering scaffolding re-render")
 
     return GenuiCallbackResponse(
@@ -145,7 +170,9 @@ async def genui_callback(
         message=f"Processed {request.event} event for {request.component_type}",
         should_re_render=should_re_render,
         new_state=new_state,
-        new_props=new_props
+        new_props=new_props,
+        scaffold_component=scaffold_component,
+        scaffold_props=scaffold_props,
     )
 
 

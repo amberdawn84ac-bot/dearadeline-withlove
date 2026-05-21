@@ -6,7 +6,7 @@
  * Uses dearadeline's PAPAYA/PARADISE/PALM color palette.
  */
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { CheckCircle, XCircle } from "lucide-react";
 
 export interface QuizCardProps {
@@ -15,6 +15,11 @@ export interface QuizCardProps {
   correctIndex: number;
   explanation?: string;
   onAnswer?: (isCorrect: boolean) => void;
+  /** GenUI context — passed by DynamicComponent for telemetry */
+  blockId?: string;
+  lessonId?: string;
+  track?: string;
+  studentId?: string;
 }
 
 export function QuizCard({
@@ -23,15 +28,40 @@ export function QuizCard({
   correctIndex,
   explanation,
   onAnswer,
+  blockId,
+  lessonId,
+  track,
+  studentId,
 }: QuizCardProps) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [showResult, setShowResult]       = useState(false);
+  const mountedAt = useRef(Date.now());
 
   const handleSelect = (index: number) => {
     if (showResult) return;
+    const isCorrect = index === correctIndex;
+    const responseTimeMs = Date.now() - mountedAt.current;
     setSelectedIndex(index);
     setShowResult(true);
-    onAnswer?.(index === correctIndex);
+    onAnswer?.(isCorrect);
+
+    if (studentId && lessonId) {
+      const brainUrl = process.env.NEXT_PUBLIC_BRAIN_URL ?? "";
+      fetch(`${brainUrl}/brain/genui/callback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          student_id: studentId,
+          lesson_id: lessonId,
+          component_type: "QuizCard",
+          event: "onAnswer",
+          state: { isCorrect, responseTimeMs },
+          block_id: blockId ?? null,
+          track: track ?? null,
+        }),
+      }).catch(() => {});
+    }
   };
 
   const isCorrect = selectedIndex === correctIndex;

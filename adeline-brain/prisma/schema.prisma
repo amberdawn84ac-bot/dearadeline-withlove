@@ -108,6 +108,20 @@ model InviteCode {
   createdAt      DateTime @default(now())
 }
 
+model Subscription {
+  id                   String    @id @default(uuid())
+  userId               String    @unique
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  stripePriceId        String?
+  tier                 String    @default("FREE")
+  status               String    @default("ACTIVE")
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
 model LearningRecord {
   id            String     @id @default(uuid())
   studentId     String

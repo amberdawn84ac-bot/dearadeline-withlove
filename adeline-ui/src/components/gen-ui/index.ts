@@ -52,4 +52,13 @@ export type { NarratedSlidesProps } from "./patterns/NarratedSlides";
 export { EmbeddedInterrupt } from "./patterns/EmbeddedInterrupt";
 export type { EmbeddedInterruptProps, EmbeddedInterruptOption } from "./patterns/EmbeddedInterrupt";
 
+export { CodePlayground } from "./patterns/CodePlayground";
+export type { CodePlaygroundProps } from "./patterns/CodePlayground";
+
+export { InteractiveConceptMap } from "./patterns/InteractiveConceptMap";
+export type { InteractiveConceptMapProps, ConceptNode, ConceptEdge } from "./patterns/InteractiveConceptMap";
+
+export { MoleculeSimulator } from "./patterns/MoleculeSimulator";
+export type { MoleculeSimulatorProps, MoleculeSimulatorQuestion } from "./patterns/MoleculeSimulator";
+
 export { TextSelectionMenu } from "./TextSelectionMenu";

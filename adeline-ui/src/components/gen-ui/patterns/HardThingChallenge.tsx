@@ -5,7 +5,7 @@
  * Used in GENUI_ASSEMBLY blocks for discipleship tracks.
  */
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Target, Heart, CheckCircle2 } from "lucide-react";
 
 interface HardThingChallengeProps {
@@ -31,11 +31,13 @@ export function HardThingChallenge({
   const [progress, setProgress] = useState(state.progress || 0);
   const [committed, setCommitted] = useState(state.committed || false);
   const [reflection, setReflection] = useState(state.reflection || "");
+  const mountedAt = useRef(Date.now());
 
   const handleCommit = () => {
     if (!committed && reflection.trim()) {
       setCommitted(true);
-      onStateChange({ ...state, progress: 100, committed: true, reflection });
+      const responseTimeMs = Date.now() - mountedAt.current;
+      onStateChange({ ...state, progress: 100, committed: true, reflection, responseTimeMs });
       if (callbacks.includes("onComplete")) {
         console.log("[HardThingChallenge] Commitment made");
       }

@@ -34,7 +34,15 @@ from slowapi.util import get_remote_address
 
 from app.schemas.api_models import LessonRequest
 from app.api.middleware import get_current_user_id
+from app.api.subscriptions import get_user_tier
 from app.models.student import load_student_state
+
+# Tracks that require a paid subscription tier.
+# FREE users receive a polite access-denied SSE event instead of a lesson.
+_PREMIUM_TRACKS = {
+    "CREATIVE_ECONOMY",
+    "HOMESTEADING",
+}  # TODO: expand set as product decides
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lesson", tags=["lesson-stream"])
@@ -658,6 +666,23 @@ async def stream_lesson(
       - CanonicalStore saves lesson for future cache hits
     """
     lesson_id = str(uuid.uuid4())
+
+    # ── Subscription tier gate ────────────────────────────────────────────────
+    track_value = lesson_request.track.value if hasattr(lesson_request.track, 'value') else str(lesson_request.track)
+    if track_value in _PREMIUM_TRACKS:
+        tier = await get_user_tier(student_id)
+        if tier == "FREE":
+            logger.info(f"[LessonStream] FREE user {student_id} blocked from premium track {track_value}")
+            async def _access_denied():
+                yield _sse({
+                    "type": "error",
+                    "message": "This track requires a Student or Parent plan. Upgrade at Settings → Subscription.",
+                })
+            return StreamingResponse(
+                _access_denied(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
 
     async def event_generator():
         registrar_snapshot = {}

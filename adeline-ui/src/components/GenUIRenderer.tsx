@@ -53,6 +53,11 @@ import { MnemonicCard } from "@/components/gen-ui/patterns/MnemonicCard";
 import { NarratedSlides } from "@/components/gen-ui/patterns/NarratedSlides";
 import { EmbeddedInterrupt } from "@/components/gen-ui/patterns/EmbeddedInterrupt";
 import AnimatedSketchnoteRenderer from "@/components/gen-ui/patterns/AnimatedSketchnoteRenderer";
+import { ExperimentCard } from "@/components/gen-ui/patterns/ExperimentCard";
+import { LabGuide } from "@/components/gen-ui/patterns/LabGuide";
+import { CodePlayground } from "@/components/gen-ui/patterns/CodePlayground";
+import { InteractiveConceptMap } from "@/components/gen-ui/patterns/InteractiveConceptMap";
+import { MoleculeSimulator } from "@/components/gen-ui/patterns/MoleculeSimulator";
 import { TextSelectionMenu } from "@/components/gen-ui/TextSelectionMenu";
 import { WeightTierBadge } from "@/components/lessons/WeightTierBadge";
 import { DistortionFlag } from "@/components/lessons/DistortionFlag";
@@ -81,9 +86,20 @@ const componentRegistry: Record<string, React.ComponentType<any>> = {
   InsightReport:     InsightReport,
   // Memory / vocabulary
   MnemonicCard:      MnemonicCard,
+  Flashcard:         Flashcard,
+  MindMap:           MindMap,
   // Neuroadaptive
   FocusReset:        FocusReset,
   TaskScaffold:      TaskScaffold,
+  // Science / lab
+  ExperimentCard:    ExperimentCard,
+  LabGuide:          LabGuide,
+  // Coding
+  CodePlayground:    CodePlayground,
+  // Knowledge mapping
+  InteractiveConceptMap: InteractiveConceptMap,
+  // Science simulation
+  MoleculeSimulator:     MoleculeSimulator,
   // Presentation
   NarratedSlides:    NarratedSlides,
   EmbeddedInterrupt: EmbeddedInterrupt,
@@ -839,6 +855,16 @@ function GenUIRenderer({
   studentId,
 }: GenUIRendererProps) {
   const visibleBlocks = blocks.filter((b) => !b.is_silenced);
+  const [extraBlocks, setExtraBlocks] = useState<Array<{ componentType: string; props: Record<string, any> }>>([]);
+
+  const handleScaffoldResponse = (data: { scaffold_component?: string; scaffold_props?: Record<string, any> }) => {
+    if (data.scaffold_component && data.scaffold_props) {
+      setExtraBlocks((prev) => [
+        ...prev,
+        { componentType: data.scaffold_component!, props: data.scaffold_props! },
+      ]);
+    }
+  };
 
   return (
     <motion.div 
@@ -892,7 +918,7 @@ function GenUIRenderer({
                   initialState={assemblyData?.initial_state || {}}
                   callbacks={assemblyData?.callbacks || []}
                   onStateChange={async (newState) => {
-                    // Send to backend to update BKT/ZPD
+                    // Send to backend to update BKT/ZPD and check for scaffold triggers
                     try {
                       const response = await fetch("/api/genui/callback", {
                         method: "POST",
@@ -909,6 +935,9 @@ function GenUIRenderer({
                       if (response.ok) {
                         const data = await response.json();
                         console.log("[GENUI] BKT updated:", data.updated_mastery);
+                        if (data.should_re_render) {
+                          handleScaffoldResponse(data);
+                        }
                       }
                     } catch (error) {
                       console.error("[GENUI] Callback failed:", error);
@@ -993,6 +1022,21 @@ function GenUIRenderer({
           <OASStandardsSection standards={oasStandards} />
         </motion.div>
       )}
+
+      {extraBlocks.map((eb, i) => (
+        <motion.div
+          key={`scaffold-${i}`}
+          variants={blockVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <DynamicComponent
+            componentType={eb.componentType}
+            props={eb.props}
+            initialState={{}}
+          />
+        </motion.div>
+      ))}
 
       <motion.div
         variants={blockVariants}

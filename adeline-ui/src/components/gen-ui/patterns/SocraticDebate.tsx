@@ -37,6 +37,7 @@ export function SocraticDebate({
   const [completed, setCompleted] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const mountedAt = useRef(Date.now());
 
   const themeColor = track === "TRUTH_HISTORY" ? "#6B3A2A" : "#2F4731";
   const accentColor = track === "TRUTH_HISTORY" ? "#C27C4E" : "#8BAE6B";
@@ -55,7 +56,8 @@ export function SocraticDebate({
     setTurnStates(newStates);
     setDraft("");
     setShowHint(false);
-    onStateChange?.({ currentTurn, responses: newResponses });
+    const responseTimeMs = Date.now() - mountedAt.current;
+    onStateChange?.({ currentTurn, responses: newResponses, responseTimeMs });
 
     if (currentTurn + 1 >= turns.length) {
       setCompleted(true);

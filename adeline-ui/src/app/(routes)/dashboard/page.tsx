@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabase';
 import type { LessonResponse, Track, LessonSuggestion, ProjectSuggestion, BookRecommendation } from '@/lib/brain-client';
 import { RecommendedBooks } from '@/components/dashboard/RecommendedBooks';
 import GenUIRendererWithHighlightAsk from '@/components/GenUIRenderer';
+import { LessonSkeleton } from '@/components/gen-ui/LessonSkeleton';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -280,23 +281,9 @@ function DashboardContent() {
                 agentName=""
                 studentId={studentId}
               />
-            ) : (
-              // While streaming and no blocks yet, show the raw text content
-              messages
-                .filter((m) => m.role === 'assistant')
-                .slice(-1)
-                .map((m) => {
-                  const text = extractTextParts(m.parts ?? []);
-                  return text ? (
-                    <div
-                      key={m.id}
-                      className="prose prose-stone max-w-none whitespace-pre-wrap text-[#2F4731] text-sm leading-relaxed"
-                    >
-                      {text}
-                    </div>
-                  ) : null;
-                })
-            )}
+            ) : isStreaming ? (
+              <LessonSkeleton />
+            ) : null}
           </div>
         )}
 
