@@ -152,18 +152,20 @@ class CanonicalStore:
             result = await conn.execute(
                 'UPDATE "CanonicalLesson" '
                 'SET "pendingApproval" = TRUE, "needsReviewReason" = $2, "updatedAt" = NOW() '
-                'WHERE "topicSlug" = $1 AND ("pendingApproval" IS FALSE OR "pendingApproval" IS NULL)',
+                'WHERE "topicSlug" = $1',
                 slug, reason,
             )
             archived = result != "UPDATE 0"
         finally:
             await conn.close()
 
+        # Always evict Redis regardless of whether the DB row existed —
+        # a stale Redis entry must be cleared even if the DB update was a no-op.
         await self._redis_delete(slug)
         if archived:
             logger.info(f"[CanonicalStore] Archived canonical — slug={slug} reason={reason}")
         else:
-            logger.info(f"[CanonicalStore] Archive no-op (not found or already pending) — slug={slug}")
+            logger.info(f"[CanonicalStore] Archive no-op (slug not found in DB) — slug={slug}, Redis evicted anyway")
         return archived
 
     async def approve(self, slug: str, approved_by: str = "") -> bool:
