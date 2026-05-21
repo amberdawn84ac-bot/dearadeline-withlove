@@ -409,7 +409,7 @@ async def main():
     log.info("══════════════════════════════════════════")
 
     # Load OAS seed data
-    with open(OAS_SEED_PATH) as f:
+    with open(OAS_SEED_PATH, encoding="utf-8") as f:
         seed_data = json.load(f)
     mappings = seed_data["mappings"]
     log.info(f"Loaded {len(mappings)} OAS standard mappings")

@@ -1,5 +1,5 @@
 """
-fetch_oas_from_case.py — Pull all OAS K-8 standards from the Oklahoma CASE server
+fetch_oas_from_case.py — Pull all OAS K-12 standards from the Oklahoma CASE server
 and write them to adeline-brain/data/seeds/oas_to_8track.json.
 
 The Oklahoma Standards Satchel exposes the IMS CASE v1p0 API at:
@@ -54,12 +54,10 @@ SUBJECT_DOCS = {
 
 # ── Track mapping ─────────────────────────────────────────────────────────────
 # Maps (subject_code, grade) → Adeline track.
-# grade = 0 for Kindergarten, 1-8 for grades 1-8, 9-12 for high school (skipped).
+# grade = 0 for Kindergarten, 1-12 for grades 1-12.
 
 def _map_track(subject: str, grade: int, strand: str = "", text: str = "") -> Optional[str]:
     """Return the Adeline track for a given OAS standard, or None to skip."""
-    if grade > 8:
-        return None  # high school — not seeded in K-8 run
     s = subject.upper()
     t = strand.upper()
     x = text.upper()
@@ -196,7 +194,7 @@ async def fetch_all_documents(client: httpx.AsyncClient) -> list[dict]:
 # ── Grade extraction ──────────────────────────────────────────────────────────
 
 def _extract_grade(item: dict) -> Optional[int]:
-    """Extract numeric grade from a CFItem (0 = Kindergarten, 1-8 = grades 1-8)."""
+    """Extract numeric grade from a CFItem (0 = Kindergarten, 1-12 = grades 1-12)."""
     # Check educationLevel field
     levels = item.get("educationLevel", [])
     if isinstance(levels, str):
@@ -208,7 +206,7 @@ def _extract_grade(item: dict) -> Optional[int]:
         m = re.match(r"^0?(\d+)$", lv)
         if m:
             g = int(m.group(1))
-            if 1 <= g <= 8:
+            if 1 <= g <= 12:
                 return g
     # Try to extract from humanCodingScheme or fullStatement
     code = item.get("humanCodingScheme", "") or ""
@@ -217,7 +215,7 @@ def _extract_grade(item: dict) -> Optional[int]:
         m = re.search(r"\bGrade\s+(\d+)\b", src, re.I)
         if m:
             g = int(m.group(1))
-            if 0 <= g <= 8:
+            if 0 <= g <= 12:
                 return g
         if re.search(r"\bKindergarten\b", src, re.I):
             return 0
@@ -244,6 +242,8 @@ def _extract_strand(item: dict, parents: dict) -> str:
 
 def _detect_subject(doc_title: str) -> str:
     t = doc_title.upper()
+    if "RETIRED" in t or "WIDA" in t or "COMPUTER SCIENCE" in t:
+        return "UNKNOWN"
     if "ENGLISH" in t or "ELA" in t or "LANGUAGE ARTS" in t:
         return "ELA"
     if "MATH" in t:
@@ -257,12 +257,17 @@ def _detect_subject(doc_title: str) -> str:
     return "UNKNOWN"
 
 
+def _document_year(doc_title: str) -> int:
+    years = [int(y) for y in re.findall(r"\b(20\d{2})\b", doc_title)]
+    return max(years) if years else 0
+
+
 # ── Convert a CFItem to a seed mapping entry ──────────────────────────────────
 
 def _cf_item_to_mapping(item: dict, subject: str) -> Optional[dict]:
     """Convert a single CASE CFItem into an oas_to_8track.json mapping entry."""
     grade = _extract_grade(item)
-    if grade is None or grade > 8:
+    if grade is None:
         return None
 
     standard_id = item.get("humanCodingScheme", "").strip()
@@ -336,14 +341,18 @@ async def main(subjects: list[str], dry_run: bool):
         try:
             all_docs = await fetch_all_documents(client)
             log.info(f"Found {len(all_docs)} documents on server")
+            discovered_docs: dict[str, tuple[int, str, str]] = {}
             for doc in all_docs:
                 title = doc.get("title", "")
                 subject = _detect_subject(title)
                 if subject in subjects:
                     guid = doc.get("identifier", "")
-                    if guid and guid not in SUBJECT_DOCS.values():
-                        log.info(f"  Discovered: {title} → {subject} ({guid})")
-                        SUBJECT_DOCS[subject] = guid
+                    year = _document_year(title)
+                    if guid and year >= discovered_docs.get(subject, (0, "", ""))[0]:
+                        discovered_docs[subject] = (year, guid, title)
+            for subject, (_, guid, title) in discovered_docs.items():
+                log.info(f"  Discovered: {title} → {subject} ({guid})")
+                SUBJECT_DOCS[subject] = guid
         except Exception as e:
             log.warning(f"Document discovery failed (using hardcoded GUIDs): {e}")
 
@@ -399,7 +408,7 @@ async def main(subjects: list[str], dry_run: bool):
             "source":           "Oklahoma Academic Standards (OAS) — fetched via CASE API",
             "case_server":      CASE_BASE,
             "version":          "auto-fetched",
-            "purpose":          "GraphRAG seed — maps OAS K-8 standards to the 10-Track Constitution",
+            "purpose":          "GraphRAG seed — maps OAS K-12 standards to the 10-Track Constitution",
             "witness_threshold": 0.85,
             "maintainer":       "adeline-core/src/types.ts → Track enum is the authority",
             "regenerate_with":  "python scripts/fetch_oas_from_case.py",
@@ -407,7 +416,7 @@ async def main(subjects: list[str], dry_run: bool):
         "mappings": mappings,
     }
 
-    with open(OUTPUT_PATH, "w") as f:
+    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
 
     log.info(f"Written {len(mappings)} standards to {OUTPUT_PATH}")
@@ -417,7 +426,7 @@ async def main(subjects: list[str], dry_run: bool):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Fetch OAS K-8 standards via CASE API")
+    parser = argparse.ArgumentParser(description="Fetch OAS K-12 standards via CASE API")
     parser.add_argument("--dry-run", action="store_true", help="Count only, don't write file")
     parser.add_argument(
         "--subjects",
