@@ -1021,6 +1021,15 @@ async def science_agent(state: AdelineState) -> AdelineState:
 
         # No Witness Protocol threshold — science content doesn't need archival verification.
         # Hippocampus results are reference material; Claude synthesizes the actual lesson.
+        # Minimum relevance floor: discard anything below 0.40 — OAS standards metadata and
+        # unrelated chunks can score as low as 0.15-0.25 and produce garbage Primary Source blocks.
+        _SCIENCE_RELEVANCE_FLOOR = 0.40
+        raw_results = [r for r in raw_results if float(r["similarity_score"]) >= _SCIENCE_RELEVANCE_FLOOR]
+        if not raw_results:
+            logger.info(
+                f"[ScienceAgent] All Hippocampus results below relevance floor "
+                f"({_SCIENCE_RELEVANCE_FLOOR}) — falling through to knowledge generation."
+            )
         for result in raw_results:
             raw = result["chunk"]
             block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
@@ -1090,20 +1099,50 @@ async def science_agent(state: AdelineState) -> AdelineState:
                 })
                 state["researcher_activated"] = True
             else:
-                # Web search also empty — Claude generates from its own knowledge
-                logger.info("[ScienceAgent] No web results — generating from Claude knowledge.")
-                block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
-                content = await _state_synthesize(
-                    state,
-                    block_type=block_type.value,
-                    source_chunks=[],
-                    raw_content=request.topic,
-                )
+                # Web search also empty — synthesize from knowledge with a proper track voice
+                logger.info("[ScienceAgent] No web results — generating from knowledge with Lab Director voice.")
+                grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
                 if is_homesteading:
-                    content = (
-                        f"**Homestead Lab Mission**\n\n{content}\n\n"
-                        "*Observe this directly on your land. Record what you find.*"
+                    sys_prompt = (
+                        f"You are Adeline — {_TRACK_PERSONA[Track.HOMESTEADING]}\n\n"
+                        f"Teaching a {grade_desc} student in a Christian homeschool family.\n\n"
+                        f"{_ADELINE_VOICE}\n"
+                        "Write a HOMESTEAD LAB MISSION. Structure:\n"
+                        "1. One vivid opening sentence — drop the student into a real land-based moment.\n"
+                        "2. What to observe, grow, build, or do — specific and practical.\n"
+                        "3. What science principle they'll see in action.\n"
+                        "4. One question: 'Who designed this system and why does it work so well?'\n"
+                        "Keep it under 200 words. No fluff."
                     )
+                else:
+                    sys_prompt = (
+                        f"You are Adeline — {_TRACK_PERSONA[Track.CREATION_SCIENCE]}\n\n"
+                        f"Teaching a {grade_desc} student in a Christian homeschool family.\n\n"
+                        f"{_ADELINE_VOICE}\n"
+                        "Write a CREATION SCIENCE lesson. Structure:\n"
+                        "1. One hook sentence — a specific, observable fact that demands an explanation.\n"
+                        "2. What the secular model says about this topic — be fair and accurate.\n"
+                        "3. What the Creation model says — specific, evidence-based, no 'God said so' shortcuts.\n"
+                        "   Name real scientists, real experiments, real data points where possible.\n"
+                        "4. One challenge question the student can investigate themselves.\n"
+                        "DO NOT say 'the archive doesn't have sources' or refer to your limitations. TEACH.\n"
+                        "Keep it under 300 words. Direct, specific, intellectually honest."
+                    )
+                user_prompt = (
+                    f"Topic: {request.topic}\n\n"
+                    "Teach this lesson now."
+                )
+                try:
+                    content = (await _synthesis_call(sys_prompt, user_prompt, max_tokens=900)).strip()
+                except Exception as e:
+                    logger.warning(f"[ScienceAgent] Knowledge synthesis failed: {e}")
+                    content = (
+                        f"**{request.topic}**\n\n"
+                        "Adeline is preparing this lesson. Check back shortly."
+                    )
+                if is_homesteading:
+                    content = f"**Homestead Lab Mission**\n\n{content}"
+                block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.NARRATIVE
                 blocks.append({
                     "block_type":        block_type.value,
                     "content":           content,
