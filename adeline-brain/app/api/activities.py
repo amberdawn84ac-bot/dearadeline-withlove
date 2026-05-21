@@ -410,7 +410,7 @@ async def report_activity(
                     $8, $9::"CreditType",
                     NULL, NULL,
                     $10, 'RegistrarAgent'::"AgentName", false,
-                    $11::timestamp, $12::timestamp, NULL
+                    $11::date, $12::timestamptz, NULL
                 )
                 ON CONFLICT ("studentId", "lessonId") DO UPDATE SET
                     "courseTitle"         = EXCLUDED."courseTitle",

@@ -165,10 +165,12 @@ def _infer_tracks(message: str, explicit_track: Optional[str]) -> list[str]:
     """
     Return active tracks for this conversation turn.
     Uses the explicit track if provided; otherwise returns a safe default.
+    DISCIPLESHIP is the fallback — it bypasses the Witness Protocol so Adeline
+    can always respond without hitting ARCHIVE_SILENT on general chat.
     """
     if explicit_track:
         return [explicit_track]
-    return ["TRUTH_HISTORY"]
+    return ["DISCIPLESHIP"]
 
 
 async def _stream_llm(
