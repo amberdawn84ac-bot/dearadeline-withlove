@@ -23,6 +23,7 @@ from app.connections.knowledge_graph import get_concept_graph_for_track, TRACKS_
 from app.connections.neo4j_client import neo4j_client
 from app.connections.postgres import get_db_session
 from app.services.standards_mapper import StandardsMapper
+from app.api.middleware import get_current_user_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/learning-path", tags=["learning-path"])
