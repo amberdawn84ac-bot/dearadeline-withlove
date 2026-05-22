@@ -243,7 +243,7 @@ async def _award_widget_credit(
     """
     from app.api.learning_records import (
         RecordLearningRequest, XAPIStatementIn, TranscriptEntryIn,
-        record_learning, seal_transcript,
+        record_learning, _seal_transcript_db,
     )
 
     statement_id = str(uuid.uuid4())
@@ -284,7 +284,7 @@ async def _award_widget_credit(
 
     # 2. Award CASE credit (0.15 credits for interactive widget completion)
     credit_hours = 0.15
-    await seal_transcript(TranscriptEntryIn(
+    await _seal_transcript_db(TranscriptEntryIn(
         id=entry_id,
         student_id=student_id,
         lesson_id=lesson_id,

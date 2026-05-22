@@ -94,7 +94,7 @@ GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 # generation (narrative voice, Socratic scaffolding, ZPD adaptation).
 # Falls back to GEMINI_MODEL (Flash 2.5) on any API error.
 # Uses the same GEMINI_API_KEY and GEMINI_BASE_URL as Flash.
-LEARNLM_MODEL   = os.getenv("LEARNLM_MODEL",   "learnlm-2.0-flash-experimental")
+LEARNLM_MODEL   = os.getenv("LEARNLM_MODEL",   "gemini-2.0-flash")
 
 # ── Primary LLM (LangGraph-compatible factory) ────────────────────────────────
 # ADELINE_MODEL drives the factory below.  Valid prefixes:

@@ -91,7 +91,7 @@ async def _persist_learning_records(lesson: LessonResponse) -> None:
     """
     from app.api.learning_records import (
         RecordLearningRequest, XAPIStatementIn, TranscriptEntryIn,
-        record_learning, seal_transcript,
+        record_learning, _seal_transcript_db,
     )
     try:
         if lesson.xapi_statements:
@@ -120,7 +120,7 @@ async def _persist_learning_records(lesson: LessonResponse) -> None:
 
         if lesson.credits_awarded:
             credit = lesson.credits_awarded[0]
-            await seal_transcript(TranscriptEntryIn(
+            await _seal_transcript_db(TranscriptEntryIn(
                 id=credit.get("id", ""),
                 student_id=credit.get("student_id", ""),
                 lesson_id=lesson.lesson_id,

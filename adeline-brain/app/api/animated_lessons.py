@@ -59,9 +59,10 @@ def _get_gemini_model():
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY environment variable is not set.")
 
+    from app.config import GEMINI_MODEL
     genai.configure(api_key=api_key)
     return genai.GenerativeModel(
-        model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-pro"),
+        model_name=GEMINI_MODEL,
         generation_config={
             "temperature": 0.7,
             "max_output_tokens": 8192,

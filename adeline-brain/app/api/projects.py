@@ -689,7 +689,7 @@ async def seal_project(
     rounded to one decimal place.
     """
     from uuid import uuid4
-    from app.api.learning_records import seal_transcript, TranscriptEntryIn
+    from app.api.learning_records import _seal_transcript_db, TranscriptEntryIn
     
     project = PROJECTS.get(project_id)
     if not project:
@@ -715,7 +715,7 @@ async def seal_project(
         logger.warning(f"[/projects/seal] Journal seal failed (non-fatal): {e}")
 
     try:
-        await seal_transcript(TranscriptEntryIn(
+        await _seal_transcript_db(TranscriptEntryIn(
             id=str(uuid4()),
             student_id=student_id,
             lesson_id=lesson_id,

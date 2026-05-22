@@ -5,6 +5,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -88,7 +89,7 @@ model StudentLesson {
 
 model CanonicalLesson {
   id                  String   @id @default(uuid())
-  topicSlug           String
+  topicSlug           String   @unique
   topic               String
   track               Track
   title               String

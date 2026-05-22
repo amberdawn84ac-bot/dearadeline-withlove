@@ -439,3 +439,16 @@ ALTER TABLE "CanonicalLesson"
 
 CREATE INDEX IF NOT EXISTS "SpacedRepetitionCard_studentId_track_idx"
   ON "SpacedRepetitionCard"("studentId", "track");
+
+-- ── 2026-05-21: Ensure unique CONSTRAINTS exist for ON CONFLICT clauses ────────
+-- PostgreSQL ON CONFLICT (col) DO UPDATE requires a constraint, not just an index.
+
+DO $$ BEGIN
+  ALTER TABLE "CanonicalLesson"
+    ADD CONSTRAINT "CanonicalLesson_topicSlug_key" UNIQUE ("topicSlug");
+EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  ALTER TABLE "TranscriptEntry"
+    ADD CONSTRAINT "TranscriptEntry_studentId_lessonId_key" UNIQUE ("studentId", "lessonId");
+EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;

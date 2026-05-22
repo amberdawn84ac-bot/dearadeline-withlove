@@ -190,15 +190,10 @@ async def record_learning(
 
 # ── POST /learning/transcript ─────────────────────────────────────────────────
 
-@router.post("/transcript", response_model=SealTranscriptResponse, status_code=201)
-async def seal_transcript(
-    entry: TranscriptEntryIn,
-    background_tasks: BackgroundTasks,
-    _key: str = Depends(require_internal_key),
-):
+async def _seal_transcript_db(entry: "TranscriptEntryIn") -> None:
     """
-    Persist a CASE-compatible TranscriptEntry for a completed lesson.
-    Upserts on (studentId, lessonId) — resealing a lesson updates the record.
+    Core DB write for sealing a transcript entry. Callable directly (no FastAPI DI).
+    Upserts on (studentId, lessonId).
     """
     completed_at = _parse_ts(entry.completed_at)
     sealed_at    = _now_dt()
@@ -241,6 +236,19 @@ async def seal_transcript(
         f"[Transcript] Sealed entry for student={entry.student_id}, "
         f"lesson={entry.lesson_id}, credits={entry.credit_hours} {entry.credit_type}"
     )
+
+
+@router.post("/transcript", response_model=SealTranscriptResponse, status_code=201)
+async def seal_transcript(
+    entry: TranscriptEntryIn,
+    background_tasks: BackgroundTasks,
+    _key: str = Depends(require_internal_key),
+):
+    """
+    Persist a CASE-compatible TranscriptEntry for a completed lesson.
+    Upserts on (studentId, lessonId) — resealing a lesson updates the record.
+    """
+    await _seal_transcript_db(entry)
 
     # ── Sliding-window queue: pop completed lesson + replenish in background ──────
     from app.api.learning_plan import pop_completed_lesson, _replenish_learning_plan_queue
