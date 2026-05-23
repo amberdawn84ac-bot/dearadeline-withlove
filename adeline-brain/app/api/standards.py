@@ -13,6 +13,7 @@ Integration points:
 - PedagogyAgent queries match endpoint
 - Daily Bread uses gaps endpoint for personalization
 """
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -25,10 +26,11 @@ from app.connections.postgres import get_db_session
 from app.services.standards_mapper import (
     StandardsMapper,
     MasteryEvidence,
-    OASProficiencyLevel,
     StandardsSubject,
 )
 from app.services.storage import upload_mastery_evidence
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/standards", tags=["standards"])
 
