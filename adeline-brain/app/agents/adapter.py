@@ -102,7 +102,9 @@ def select_transformation(block: dict, req: AdaptationRequest) -> str:
 
     # Already structured — don't re-transform
     if block_type in ("MIND_MAP", "TIMELINE", "MNEMONIC", "NARRATED_SLIDE",
-                      "QUIZ", "FLASHCARD", "BOOK_SUGGESTION"):
+                      "QUIZ", "FLASHCARD", "BOOK_SUGGESTION", "GENUI_ASSEMBLY",
+                      "ANIMATED_SKETCHNOTE_LESSON", "SOCRATIC_DEBATE",
+                      "SCAFFOLDED_PROBLEM", "HARD_THING_CHALLENGE"):
         return "text_only"
 
     # Early interactions: keep simple regardless

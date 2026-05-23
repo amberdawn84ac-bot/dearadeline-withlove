@@ -1809,29 +1809,55 @@ async def _run_multimodal_synthesis(
                 "narrated_slide_data": ns.model_dump(),
             })
 
-    # ── Promote any remaining plain NARRATIVE/TEXT blocks to NARRATED_SLIDE ────
-    # No bare prose should ever reach the frontend — every block must be a rich
-    # interactive or visual component.
+    # ── Promote any remaining plain NARRATIVE/TEXT blocks to a rich component ───
+    # Hard guarantee: no bare prose ever reaches the frontend.
+    # Cascade: NARRATED_SLIDE → MIND_MAP → GENUI_ASSEMBLY (minimal fallback)
     plain_types = {BlockType.NARRATIVE.value, BlockType.TEXT.value}
     for block in blocks:
-        if block.get("block_type") in plain_types:
-            ns = await _synthesize_narrated_slide(
-                request.topic,
-                block.get("content", ""),
-                request.track,
-                request.grade_level,
-            )
-            if ns:
-                block["block_type"] = BlockType.NARRATED_SLIDE.value
-                block["narrated_slide_data"] = ns.model_dump()
-                block["content"] = f"{len(ns.slides)} slides · {ns.total_duration_minutes} min"
-            else:
-                # Narrated slide synthesis failed — fall back to MIND_MAP if possible
-                mm = await _synthesize_mind_map(request.topic, block.get("content", ""), request.grade_level)
-                if mm:
-                    block["block_type"] = BlockType.MIND_MAP.value
-                    block["mind_map_data"] = mm.model_dump()
-                    block["content"] = f"Concept map: {mm.concept}"
+        if block.get("block_type") not in plain_types:
+            continue
+        original_content = block.get("content", "")
+
+        ns = await _synthesize_narrated_slide(
+            request.topic, original_content, request.track, request.grade_level,
+        )
+        if ns:
+            block["block_type"] = BlockType.NARRATED_SLIDE.value
+            block["narrated_slide_data"] = ns.model_dump()
+            block["content"] = f"{len(ns.slides)} slides · {ns.total_duration_minutes} min"
+            continue
+
+        # Narrated slide failed — try MIND_MAP
+        mm = await _synthesize_mind_map(request.topic, original_content, request.grade_level)
+        if mm:
+            block["block_type"] = BlockType.MIND_MAP.value
+            block["mind_map_data"] = mm.model_dump()
+            block["content"] = f"Concept map: {mm.concept}"
+            continue
+
+        # Both LLM synthesis functions failed — hard-convert to a minimal GENUI_ASSEMBLY
+        # so that a bare NARRATIVE never reaches the frontend under any circumstances.
+        logger.warning(
+            f"[Orchestrator] Both NARRATED_SLIDE and MIND_MAP synthesis failed for "
+            f"topic='{request.topic}' track={request.track.value} — forcing GENUI_ASSEMBLY fallback"
+        )
+        block["block_type"] = BlockType.GENUI_ASSEMBLY.value
+        block["genui_assembly_data"] = {
+            "component_type": "ProjectBuilder",
+            "props": {
+                "title": request.topic,
+                "description": original_content[:400],
+                "steps": [
+                    {"id": "reflect", "title": "Reflect", "instruction": original_content[:300], "type": "reflect"},
+                ],
+                "materials": [],
+                "pricingPrompt": "",
+            },
+            "initial_state": {"currentStep": 0, "completedSteps": []},
+            "callbacks": ["onComplete"],
+            "re_render_triggers": ["onComplete"],
+        }
+        block["content"] = f"Project: {request.topic}"
 
 
 # ── Multimodal synthesis functions ────────────────────────────────────────────
