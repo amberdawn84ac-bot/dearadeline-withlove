@@ -74,15 +74,17 @@ class CanonicalStore:
 
     async def _db_write(self, slug: str, record: dict, pending: bool = False) -> None:
         from app.config import get_db_conn
+        from datetime import datetime, timezone
         conn = await get_db_conn()
         try:
+            now = datetime.now(timezone.utc)
             await conn.execute(
                 """
                 INSERT INTO "CanonicalLesson" (
                     id, "topicSlug", topic, track, title,
                     "blocksJson", "oasStandards", "researcherActivated", "agentName",
-                    "pendingApproval", "needsReviewReason"
-                ) VALUES ($1, $2, $3, $4::"Track", $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11)
+                    "pendingApproval", "needsReviewReason", "updatedAt"
+                ) VALUES ($1, $2, $3, $4::"Track", $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12)
                 ON CONFLICT ("topicSlug") DO UPDATE SET
                     title               = EXCLUDED.title,
                     "blocksJson"        = EXCLUDED."blocksJson",
@@ -96,7 +98,7 @@ class CanonicalStore:
                 record["id"], slug, record["topic"], record["track"], record["title"],
                 json.dumps(record["blocks"]), json.dumps(record["oas_standards"]),
                 record["researcher_activated"], record["agent_name"],
-                pending, record.get("needs_review_reason"),
+                pending, record.get("needs_review_reason"), now,
             )
         finally:
             await conn.close()
