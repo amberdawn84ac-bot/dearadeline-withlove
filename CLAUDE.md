@@ -167,7 +167,7 @@ The project catalog (`projects.py`) returns structured `Project` objects — ste
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/lesson/generate` | Full lesson: embed → Hippocampus → Witness → Agent → Registrar |
+| POST | `/lesson/stream` | Full lesson SSE stream: embed → canonical cache → Witness → Agent → Registrar → learning plan refresh |
 | POST | `/lesson/scaffold` | ZPD Socratic response to student answer |
 | GET  | `/lesson/student-state/{id}` | Per-track mastery scores + bands |
 | POST | `/journal/seal` | Seal a lesson, record OAS mastery in Neo4j |
