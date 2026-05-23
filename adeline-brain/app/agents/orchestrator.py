@@ -2372,14 +2372,31 @@ def _track_to_credit_type(track: Track) -> str:
 
 # ── Router ────────────────────────────────────────────────────────────────────
 
+# Business/financial subtopics within HOMESTEADING route to practical_agent
+# instead of science_agent — budgets, pricing, market plans are applied math,
+# not lab science.
+_HOMESTEAD_BUSINESS_KEYWORDS: frozenset[str] = frozenset({
+    "business", "plan", "planning", "budget", "budgeting",
+    "profit", "loss", "revenue", "cost", "costs", "price", "pricing",
+    "market", "marketing", "sell", "selling", "sales", "income", "expense",
+    "expenses", "financial", "finance", "money", "accounting", "bookkeeping",
+    "cash", "investment", "capital", "loan", "grant", "profit margin",
+    "break even", "breakeven", "cash flow", "ledger", "invoice", "tax",
+})
+
+
 def _route(state: AdelineState) -> Literal[
     "historian", "justice", "science", "discipleship", "literature", "practical"
 ]:
     track = state["request"].track
+    topic = state["request"].topic.lower()
     if track in _HISTORIAN_TRACKS:
         return "historian"
     if track in _JUSTICE_TRACKS:
         return "justice"
+    # Business/financial subtopics on HOMESTEADING belong with practical_agent
+    if track == Track.HOMESTEADING and any(kw in topic for kw in _HOMESTEAD_BUSINESS_KEYWORDS):
+        return "practical"
     if track in _SCIENCE_TRACKS:
         return "science"
     if track in _LITERATURE_TRACKS:

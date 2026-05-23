@@ -478,3 +478,39 @@ async def approve_canonical(
         )
     logger.info(f"[Admin] Canonical approved — {slug} by {user_id}")
     return {"approved": True, "slug": slug, "approved_by": user_id}
+
+
+@router.post(
+    "/canonicals/archive",
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+)
+async def archive_canonical(
+    topic: str,
+    track: str,
+    reason: str = "admin_archive",
+    user_id: str = Depends(get_current_user_id),
+) -> dict:
+    """
+    Archive (soft-delete) a canonical lesson by topic + track.
+
+    Marks pendingApproval=TRUE in DB so the next request regenerates it fresh,
+    and evicts the Redis cache entry. Use this to fix bad cached lessons without
+    losing xAPI foreign key references.
+
+    Query params:
+      topic  — exact topic string (case/whitespace-insensitive)
+      track  — Track enum value (e.g. HOMESTEADING)
+      reason — optional label for needsReviewReason (default: admin_archive)
+    """
+    from app.connections.canonical_store import canonical_store, canonical_slug
+    slug = canonical_slug(topic, track)
+    archived = await canonical_store.archive(slug, reason=reason)
+    logger.info(f"[Admin] Canonical archived — topic='{topic}' track={track} slug={slug} by {user_id}")
+    return {
+        "archived": archived,
+        "slug": slug,
+        "topic": topic,
+        "track": track,
+        "reason": reason,
+        "note": "Lesson will regenerate fresh on next student request." if archived else "Slug not found in DB; Redis evicted anyway.",
+    }
