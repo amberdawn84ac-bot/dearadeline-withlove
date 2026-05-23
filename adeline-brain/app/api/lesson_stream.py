@@ -27,7 +27,7 @@ import os
 import uuid
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -604,6 +604,8 @@ async def _run_registrar_background(
                 track=request.track.value,
                 limit=1,
             )
+            # quality=3: SM-2 "lesson-only" default (see _quiz_quality in journal.py);
+            # journal/seal will re-score if the student completes quiz blocks.
             if zpd_candidates:
                 top = zpd_candidates[0]
                 await update_card_after_lesson(
@@ -635,6 +637,14 @@ async def _run_registrar_background(
             await invalidate_student_state_cache(request.student_id)
         except Exception:
             pass
+
+        # Remove completed suggestion from the learning plan queue and replenish
+        try:
+            from app.api.learning_plan import pop_completed_lesson, _replenish_learning_plan_queue
+            await pop_completed_lesson(request.student_id, request.topic)
+            await _replenish_learning_plan_queue(request.student_id)
+        except Exception as plan_err:
+            logger.warning(f"[LessonStream] Learning plan refresh failed (non-fatal): {plan_err}")
 
         logger.info(f"[LessonStream] Registrar background task complete — lesson_id={lesson_id}")
     except Exception as e:
@@ -675,7 +685,6 @@ async def _save_canonical_background(
 async def stream_lesson(
     request: Request,
     lesson_request: LessonRequest,
-    background_tasks: BackgroundTasks,
     student_id: str = Depends(get_current_user_id),
 ):
     """
@@ -687,11 +696,13 @@ async def stream_lesson(
     Canonical Persistence:
       - Pre-generation: Checks canonical store for existing lesson (slug = SHA256(topic:track)).
         If found, instantly streams cached blocks without running the orchestrator.
-      - Post-generation: New lessons are saved to the canonical store via BackgroundTask
-        after the stream completes, ensuring future requests are instant cache hits.
+      - Post-generation: New lessons are saved to the canonical store after the stream
+        completes, ensuring future requests are instant cache hits.
 
-    Background Tasks:
+    Post-stream tasks (run inside event_generator after all blocks are yielded):
       - RegistrarAgent emits xAPI statements + CASE credits
+      - BKT/SM-2 card updated for the primary concept studied
+      - Learning plan queue refreshed: completed suggestion removed, new ones replenished
       - CanonicalStore saves lesson for future cache hits
     """
     lesson_id = str(uuid.uuid4())
