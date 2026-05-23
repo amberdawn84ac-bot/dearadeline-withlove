@@ -137,7 +137,19 @@ async def _pedagogical_call(system: str, user: str, max_tokens: int = 1000) -> s
                         {"role": "user",   "content": user},
                     ],
                 )
-                return response.choices[0].message.content or ""
+                choice = response.choices[0]
+                finish_reason = getattr(choice, "finish_reason", None)
+                content = choice.message.content or ""
+                # Treat safety-filter / non-stop finish reasons as a failure so we fall through
+                # to the next model (or Claude). Returning a truncated fragment would render a
+                # broken lesson to the student.
+                if finish_reason and finish_reason != "stop":
+                    logger.warning(
+                        f"[Pedagogical] {model} returned finish_reason={finish_reason!r} "
+                        f"(content len={len(content)}) — trying next model"
+                    )
+                    continue
+                return content
             except Exception as e:
                 logger.warning(f"[Pedagogical] {model} failed ({e}) — trying fallback")
     # Final fallback: Claude
@@ -167,7 +179,19 @@ async def _synthesis_call(system: str, user: str, max_tokens: int = 1000) -> str
                         {"role": "user",   "content": user},
                     ],
                 )
-                return response.choices[0].message.content or ""
+                choice = response.choices[0]
+                finish_reason = getattr(choice, "finish_reason", None)
+                content = choice.message.content or ""
+                # If Gemini's safety filter blocked the response (partial or empty content with
+                # a non-"stop" finish_reason), fall through to Claude instead of returning the
+                # truncated fragment. This is common for Creation Science / Origins topics.
+                if finish_reason and finish_reason != "stop":
+                    logger.warning(
+                        f"[Synthesis] Gemini returned finish_reason={finish_reason!r} "
+                        f"(content len={len(content)}) — treating as failure and falling back to Claude"
+                    )
+                    break
+                return content
             except Exception as gemini_err:
                 if attempt == 0:
                     logger.warning(
