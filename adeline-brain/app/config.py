@@ -102,7 +102,7 @@ LEARNLM_MODEL   = os.getenv("LEARNLM_MODEL",   "gemini-2.0-flash")
 #   "claude"  → ChatAnthropic           (uses ANTHROPIC_API_KEY)
 #   "gpt"     → ChatOpenAI              (uses OPENAI_API_KEY)
 
-ADELINE_MODEL   = os.getenv("ADELINE_MODEL", "claude-sonnet-4-6")
+ADELINE_MODEL   = os.getenv("ADELINE_MODEL", "claude-3-5-sonnet-20241022")
 GOOGLE_API_KEY  = os.getenv("GOOGLE_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 

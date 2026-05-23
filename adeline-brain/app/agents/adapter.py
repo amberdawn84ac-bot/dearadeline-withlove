@@ -169,7 +169,7 @@ async def _llm_call(system: str, user: str, max_tokens: int = 600) -> str:
         import anthropic
         client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         response = await client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-3-haiku-20240307",
             max_tokens=max_tokens,
             system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": user}],
