@@ -377,6 +377,35 @@ async def _stream_lesson(
                 "from_canonical": True,
             })
             return
+        elif canonical and is_pending:
+            # Canonical exists but is pending admin approval (controversial topic, etc.)
+            # Show a graceful "under review" message instead of attempting live generation
+            # which may fail due to safety filters or produce poor content.
+            review_reason = canonical.get("needs_review_reason") or canonical.get("needsReviewReason") or "Awaiting review"
+            logger.info(f"[LessonStream] Pending canonical found — slug={slug}, reason={review_reason}")
+            yield _sse({"type": "status", "message": "This lesson is being prepared by our teaching team..."})
+            
+            pending_block = {
+                "block_type": "NARRATIVE",
+                "content": (
+                    f"**{request.topic}**\n\n"
+                    "This lesson is being carefully prepared by our teaching team "
+                    "to ensure it presents truth with accuracy and care.\n\n"
+                    f"*Status: {review_reason}*\n\n"
+                    "Please check back soon, or ask Adeline a different question in the meantime!"
+                ),
+                "evidence": [],
+                "is_silenced": False,
+            }
+            yield _sse({"type": "block", "block": pending_block})
+            yield _sse({
+                "type": "done",
+                "lesson_id": lesson_id,
+                "title": f"{request.topic} — Coming Soon",
+                "from_canonical": True,  # Treated as canonical (cached) to prevent regeneration
+                "_state_for_canonical": None,  # Don't save again
+            })
+            return
     except Exception as e:
         logger.warning(f"[LessonStream] Canonical check failed (non-fatal): {e}")
 

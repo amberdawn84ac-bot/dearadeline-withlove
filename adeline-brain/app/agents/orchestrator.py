@@ -25,9 +25,83 @@ calls SearchWitnesses (Tavily → scrape → cosine) before falling back to a
 RESEARCH_MISSION block. If a verified source is found, the lesson continues
 with a PRIMARY_SOURCE block from the auto-found archive.
 """
+
+# ── Controversial Topic Detection ────────────────────────────────────────────
+# Topics that trigger safety filters or require theological review before publishing.
+# When these are detected, lessons are saved as "pending approval" for admin review.
+
+_CONTROVERSIAL_KEYWORDS = {
+    # Origins / Creation vs Evolution
+    "origins", "origin of life", "evolution", "darwin", "darwinism", "natural selection",
+    "common ancestor", "ape", "monkey", "primate", "hominid", "missing link",
+    "big bang", "cosmology", "abiogenesis", "spontaneous generation",
+    # Sensitive History
+    "civil war", "slavery", "slave", "confederate", "holocaust", "genocide",
+    "concentration camp", "nazi", "hitler", "world war", "atomic bomb",
+    # Sexuality / Gender (requires careful theological framing)
+    "sexuality", "gender", "transgender", "homosexual", "gay", "lesbian", "lgbt",
+    # Other potentially sensitive topics
+    "abortion", "euthanasia", "assisted suicide", "divorce", "marriage equality",
+}
+
+
+def is_controversial_topic(topic: str) -> tuple[bool, str]:
+    """
+    Check if a topic may trigger AI safety filters or requires theological review.
+    Returns (is_controversial, reason_string).
+    """
+    topic_lower = topic.lower()
+    matched = [kw for kw in _CONTROVERSIAL_KEYWORDS if kw in topic_lower]
+    if matched:
+        return True, f"Controversial keywords detected: {', '.join(matched[:3])}"
+    return False, ""
+
+
+class SynthesisSafetyError(Exception):
+    """Raised when Gemini's safety filter blocks content generation."""
+    pass
+
+
+async def _save_pending_canonical(state: "AdelineState", reason: str) -> None:
+    """
+    Save a stub canonical lesson marked as pending approval.
+    Called when synthesis fails (e.g., safety filter) so the topic is queued
+    for admin review instead of showing students a broken lesson.
+    """
+    from app.connections.canonical_store import canonical_store, canonical_slug
+    request = state["request"]
+    slug = canonical_slug(request.topic, request.track.value)
+    
+    record = {
+        "id": str(uuid.uuid4()),
+        "topic": request.topic,
+        "track": request.track.value,
+        "title": f"{request.topic} — {request.track.value.replace('_', ' ').title()}",
+        "blocks": [{
+            "block_type": "NARRATIVE",
+            "content": (
+                f"**{request.topic}**\n\n"
+                "This lesson is being carefully prepared by our teaching team "
+                "to ensure it presents truth with accuracy and care. Check back soon!"
+            ),
+            "evidence": [],
+            "is_silenced": False,
+        }],
+        "oas_standards": [],
+        "researcher_activated": False,
+        "agent_name": "PendingReview",
+        "needs_review_reason": reason,
+    }
+    
+    try:
+        await canonical_store.save(slug, record, pending=True)
+        logger.info(f"[PendingCanonical] Saved for review — slug={slug}, reason={reason}")
+    except Exception as e:
+        logger.warning(f"[PendingCanonical] Failed to save (non-fatal): {e}")
+
+
 import asyncio
 import contextvars
-import uuid
 import os
 import logging
 from datetime import datetime, timezone
@@ -207,7 +281,13 @@ async def _synthesis_call(system: str, user: str, max_tokens: int = 1000) -> str
         # Gemini exhausted — fall back to Claude
         anthropic_key = os.getenv("ANTHROPIC_API_KEY")
         if not anthropic_key:
-            raise RuntimeError("Gemini unavailable and ANTHROPIC_API_KEY not set")
+            # No Claude fallback available — this is a safety-filter scenario on a controversial topic.
+            # Raise SynthesisSafetyError so the agent can save a "pending review" canonical
+            # instead of returning a broken/partial lesson to the student.
+            raise SynthesisSafetyError(
+                f"Gemini safety filter triggered (finish_reason={finish_reason}) "
+                "and ANTHROPIC_API_KEY not set — cannot generate lesson"
+            )
         fallback_client = anthropic.AsyncAnthropic(api_key=anthropic_key)
         response = await fallback_client.messages.create(
             model=_ANTHROPIC_MODEL,
@@ -1158,6 +1238,18 @@ async def science_agent(state: AdelineState) -> AdelineState:
                 )
                 try:
                     content = (await _synthesis_call(sys_prompt, user_prompt, max_tokens=900)).strip()
+                except SynthesisSafetyError as e:
+                    # Safety filter triggered and no Claude fallback — save for admin review
+                    logger.warning(f"[ScienceAgent] Safety filter on '{request.topic}': {e}")
+                    is_controversial, reason = is_controversial_topic(request.topic)
+                    review_reason = reason if is_controversial else "AI safety filter triggered"
+                    await _save_pending_canonical(state, review_reason)
+                    # Return graceful placeholder that won't be saved again
+                    content = (
+                        f"**{request.topic}**\n\n"
+                        "This lesson is being carefully prepared by our teaching team "
+                        "to ensure it presents truth with accuracy and care. Check back soon!"
+                    )
                 except Exception as e:
                     logger.warning(f"[ScienceAgent] Knowledge synthesis failed: {e}")
                     content = (
