@@ -256,17 +256,22 @@ async def _conversation_sse(
         llm_messages.append({"role": "user", "content": message})
 
         # Stream + parse
-        async for event in parse_stream(_stream_llm(system_prompt, llm_messages)):
-            if event["type"] == "text":
-                yield _sse("text", {"delta": event["delta"]})
-            elif event["type"] == "block":
-                yield _sse("block", event["block"])
+        try:
+            async for event in parse_stream(_stream_llm(system_prompt, llm_messages)):
+                if event["type"] == "text":
+                    yield _sse("text", {"delta": event["delta"]})
+                elif event["type"] == "block":
+                    yield _sse("block", event["block"])
+        except Exception as llm_err:
+            logger.exception(f"[/conversation/stream] LLM stream failed: {llm_err}")
+            yield _sse("error", {"message": "I ran into a hiccup — give me a moment and try again."})
+            return
 
         yield _sse("done", {})
 
     except Exception as e:
         logger.exception(f"[/conversation/stream] Unhandled error: {e}")
-        yield _sse("error", {"message": "Adeline ran into a problem. Please try again."})
+        yield _sse("error", {"message": "I ran into a hiccup — give me a moment and try again."})
 
 
 @router.post("/stream")

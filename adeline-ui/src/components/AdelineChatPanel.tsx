@@ -344,7 +344,7 @@ export function AdelineChatPanel({
           setMessages((prev) =>
             prev.map((m) =>
               m.id === streamingId
-                ? { ...m, content: "The archive is temporarily unavailable. Please try again in a moment.", streaming: false }
+                ? { ...m, content: "I ran into a hiccup — give me a moment and try again.", streaming: false }
                 : m
             )
           );
@@ -359,8 +359,7 @@ export function AdelineChatPanel({
     } catch (err) {
       addMessage({
         role: "adeline",
-        content:
-          "The archive is temporarily unavailable. Please try again in a moment.",
+        content: "I ran into a hiccup — give me a moment and try again.",
       });
     } finally {
       setIsLoading(false);
@@ -391,7 +390,7 @@ export function AdelineChatPanel({
             addMessage({ role: 'adeline', content: lesson.title || 'Here is your Daily Bread study.' });
             onLessonGenerated?.(lesson);
           } catch {
-            addMessage({ role: 'adeline', content: 'The archive is temporarily unavailable. Please try again in a moment.' });
+            addMessage({ role: 'adeline', content: 'I ran into a hiccup — give me a moment and try again.' });
           } finally {
             setIsLoading(false);
           }
