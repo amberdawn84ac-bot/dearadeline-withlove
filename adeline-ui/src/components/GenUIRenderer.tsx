@@ -382,10 +382,15 @@ function LessonContent({
   return (
     <div className="space-y-5">
       {paragraphs.map((para, i) => {
-        // Bold/italic markdown — **text** and *text*
-        const formatted = para
-          .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-          .replace(/\*(.+?)\*/g, "<em>$1</em>");
+        // Escape raw HTML first, then apply markdown so the italic regex
+        // cannot consume asterisks inside already-converted <strong> tags.
+        const escaped = para
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+        const formatted = escaped
+          .replace(/\*\*([^*]+?)\*\*/g, "<strong>$1</strong>")
+          .replace(/\*([^*]+?)\*/g, "<em>$1</em>");
 
         return (
           <p

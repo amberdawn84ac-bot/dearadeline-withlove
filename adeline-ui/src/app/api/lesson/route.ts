@@ -135,12 +135,12 @@ export async function POST(req: NextRequest) {
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop() ?? "";
 
-          for (const raw of lines) {
-            const line = raw.trim();
-            if (!line.startsWith("data:")) continue;
+          for (const frame of frames) {
+            const line = frame.split("\n").find((l) => l.trimStart().startsWith("data:")) ?? "";
+            if (!line) continue;
 
             let event: Record<string, unknown>;
             try {

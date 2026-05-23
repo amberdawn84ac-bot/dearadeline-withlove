@@ -118,6 +118,9 @@ function DashboardContent() {
   const statusEvent = lessonAnnotations.find(
     (a): a is Extract<LessonAnnotation, { type: 'status' }> => a.type === 'status',
   );
+  const errorEvent = lessonAnnotations.find(
+    (a): a is Extract<LessonAnnotation, { type: 'error' }> => a.type === 'error',
+  );
   const lessonTitle = doneEvent?.title ?? '';
   const lessonStatus = isStreaming
     ? (statusEvent?.message ?? 'Adeline is preparing your lesson…')
@@ -236,9 +239,9 @@ function DashboardContent() {
         </div>
 
         {/* ── Streaming lesson view ── */}
-        {!activeLesson && (isStreaming || lessonBlocks.length > 0) && (
+        {!activeLesson && (isStreaming || lessonBlocks.length > 0 || !!errorEvent) && (
           <div className="px-6 pb-8 pt-5">
-            {!isStreaming && lessonBlocks.length > 0 && (
+            {!isStreaming && (lessonBlocks.length > 0 || !!errorEvent) && (
               <div className="flex items-center gap-3 mb-4">
                 <button
                   onClick={handleBackToSuggestions}
@@ -257,6 +260,12 @@ function DashboardContent() {
                     <span className="text-sm font-medium">Regenerate lesson</span>
                   </button>
                 )}
+              </div>
+            )}
+
+            {errorEvent && (
+              <div className="mb-4 p-4 rounded-xl bg-[#FEE2E2] border border-[#FECACA]">
+                <p className="text-sm font-medium text-[#991B1B]">{errorEvent.message}</p>
               </div>
             )}
 

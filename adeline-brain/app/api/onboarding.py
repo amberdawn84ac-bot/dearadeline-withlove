@@ -356,6 +356,15 @@ async def post_onboarding(
                     'UPDATE "InviteCode" SET "isUsed" = true, "claimedByEmail" = $1 WHERE code = $2',
                     email, request.inviteCode,
                 )
+                # Grant STUDENT tier for all invite-code users — no Stripe required
+                await conn.execute(
+                    """
+                    INSERT INTO "Subscription" ("id", "userId", "tier", "status", "createdAt", "updatedAt")
+                    VALUES (gen_random_uuid()::text, $1, 'STUDENT', 'ACTIVE', NOW(), NOW())
+                    ON CONFLICT ("userId") DO NOTHING
+                    """,
+                    user_id,
+                )
     except HTTPException:
         raise
     except Exception as e:

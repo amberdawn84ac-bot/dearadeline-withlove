@@ -1550,11 +1550,56 @@ async def practical_agent(state: AdelineState) -> AdelineState:
             "homestead_content": None,
         })
 
+    # ── CREATIVE_ECONOMY: always inject a ProjectBuilder GenUI block ──────────
+    if request.track.value == "CREATIVE_ECONOMY" and blocks:
+        project_block = await _synthesize_creative_project_block(request, blocks[0].get("content", ""))
+        if project_block:
+            blocks.append(project_block)
+
     # ── Multimodal synthesis ─────────────────────────────────────────────────
     await _run_multimodal_synthesis(state, blocks)
 
     state["blocks"] = blocks
     return state
+
+
+async def _synthesize_creative_project_block(request: "LessonRequest", narrative_content: str) -> dict | None:
+    """Generate a ProjectBuilder GENUI_ASSEMBLY block for CREATIVE_ECONOMY lessons."""
+    import json as _json
+    grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
+    system = (
+        "You generate structured ProjectBuilder component data for a creative economy lesson. "
+        "Return ONLY valid JSON — no markdown fences. "
+        "Schema: {\"component_type\": \"ProjectBuilder\", \"props\": {\"title\": str, "
+        "\"description\": str, \"steps\": [{\"id\": str, \"title\": str, \"instruction\": str, \"type\": \"task|reflect|create\"}], "
+        "\"materials\": [str], \"pricingPrompt\": str}, "
+        "\"initial_state\": {\"currentStep\": 0, \"completedSteps\": []}, "
+        "\"callbacks\": [\"onComplete\"], \"re_render_triggers\": [\"onComplete\"]}"
+    )
+    user = (
+        f"Topic: {request.topic}\n"
+        f"Grade: {grade_desc}\n"
+        f"Lesson content:\n{narrative_content[:600]}\n\n"
+        "Generate a ProjectBuilder block that walks the student through actually MAKING or SELLING "
+        "something related to this topic. Steps should be concrete and doable today. "
+        "Include real materials they likely have at home and a pricing prompt at the end."
+    )
+    try:
+        raw = await _synthesis_call(system, user, max_tokens=800)
+        raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        data = _json.loads(raw)
+        if "props" in data and "steps" in data.get("props", {}):
+            return {
+                "block_type": "GENUI_ASSEMBLY",
+                "content": f"Project: {request.topic}",
+                "evidence": [],
+                "is_silenced": False,
+                "homestead_content": None,
+                "genui_assembly_data": data,
+            }
+    except Exception as e:
+        logger.warning(f"[PracticalAgent] ProjectBuilder synthesis failed (non-fatal): {e}")
+    return None
 
 
 async def _synthesize_practical(request: LessonRequest) -> str:
@@ -1763,6 +1808,30 @@ async def _run_multimodal_synthesis(
                 "homestead_content": None,
                 "narrated_slide_data": ns.model_dump(),
             })
+
+    # ── Promote any remaining plain NARRATIVE/TEXT blocks to NARRATED_SLIDE ────
+    # No bare prose should ever reach the frontend — every block must be a rich
+    # interactive or visual component.
+    plain_types = {BlockType.NARRATIVE.value, BlockType.TEXT.value}
+    for block in blocks:
+        if block.get("block_type") in plain_types:
+            ns = await _synthesize_narrated_slide(
+                request.topic,
+                block.get("content", ""),
+                request.track,
+                request.grade_level,
+            )
+            if ns:
+                block["block_type"] = BlockType.NARRATED_SLIDE.value
+                block["narrated_slide_data"] = ns.model_dump()
+                block["content"] = f"{len(ns.slides)} slides · {ns.total_duration_minutes} min"
+            else:
+                # Narrated slide synthesis failed — fall back to MIND_MAP if possible
+                mm = await _synthesize_mind_map(request.topic, block.get("content", ""), request.grade_level)
+                if mm:
+                    block["block_type"] = BlockType.MIND_MAP.value
+                    block["mind_map_data"] = mm.model_dump()
+                    block["content"] = f"Concept map: {mm.concept}"
 
 
 # ── Multimodal synthesis functions ────────────────────────────────────────────

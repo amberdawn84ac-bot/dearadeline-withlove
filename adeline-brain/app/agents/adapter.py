@@ -451,6 +451,8 @@ async def generate_genui_assembly_data(content: str, req: AdaptationRequest) -> 
         component_type = "ScaffoldedProblem"
     elif req.track in ("DISCIPLESHIP", "HEALTH_NATUROPATHY", "GOVERNMENT_ECONOMICS"):
         component_type = "HardThingChallenge"
+    elif req.track in ("CREATIVE_ECONOMY", "APPLIED_MATHEMATICS"):
+        component_type = "ProjectBuilder"
     else:
         component_type = "InteractiveQuiz"
 
