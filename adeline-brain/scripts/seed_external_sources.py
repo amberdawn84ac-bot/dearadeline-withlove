@@ -61,6 +61,15 @@ BOOKS = [
         "description": "A book challenging teenagers to reject cultural low expectations and do hard things for God's glory.",
         "source_url": "https://www.amazon.com/Do-Hard-Things-Rebellion-Expectations/dp/1601421125",
     },
+    {
+        "title": "Lies My Teacher Told Me: Everything Your American History Textbook Got Wrong",
+        "author": "James W. Loewen",
+        "track": "TRUTH_HISTORY",
+        "grade_band": [9, 12],
+        "lexile": 1100,
+        "description": "A critical examination of American history textbooks, exposing myths and teaching students to think critically about historical narratives. Essential for truth-based history education.",
+        "source_url": "https://www.amazon.com/Lies-My-Teacher-Told-Everything/dp/1620973928",
+    },
 ]
 
 
