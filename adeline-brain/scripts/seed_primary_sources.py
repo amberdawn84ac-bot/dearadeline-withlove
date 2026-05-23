@@ -29,6 +29,33 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.connections.pgvector_client import hippocampus
 
+
+async def _get_embedding(text: str) -> list[float]:
+    """Generate OpenAI embedding for text."""
+    import openai
+    client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    response = await client.embeddings.create(
+        model="text-embedding-3-small",
+        input=text[:8000],  # Limit to 8k chars
+    )
+    return response.data[0].embedding
+
+
+async def _check_duplicate(title: str, track: str) -> bool:
+    """Check if document with similar title already exists."""
+    try:
+        embedding = await _get_embedding(title)
+        results = await hippocampus.similarity_search(
+            query_embedding=embedding,
+            track=track,
+            top_k=1,
+        )
+        if results and results[0].get("similarity_score", 0) > 0.95:
+            return True
+    except Exception as e:
+        print(f"    [WARN] Duplicate check failed: {e}")
+    return False
+
 # Primary source documents to seed (all from public domain / government archives)
 PRIMARY_SOURCES = [
     # Mayflower Compact — Original text, 1620
@@ -219,43 +246,47 @@ async def seed_primary_sources():
     print("Seeding Primary Source Archive — Real Historical Documents")
     print("=" * 70)
     
+    # Verify OpenAI API key
+    if not os.getenv("OPENAI_API_KEY"):
+        print("ERROR: OPENAI_API_KEY not set — needed for embeddings")
+        sys.exit(1)
+    
     added = 0
     skipped = 0
     
     for source in PRIMARY_SOURCES:
         print(f"\n[Document] {source['title'][:60]}...")
         
-        # Check for duplicates (by title)
-        existing = await hippocampus.similarity_search(
-            query=source['title'],
-            track="TRUTH_HISTORY",
-            limit=1,
-            min_similarity=0.95,
-        )
-        if existing:
+        # Check for duplicates (by title similarity)
+        if await _check_duplicate(source['title'], "TRUTH_HISTORY"):
             print(f"  [SKIP] Already exists in Hippocampus")
             skipped += 1
             continue
         
-        # Add to Hippocampus
-        chunk_id = str(uuid.uuid4())
-        await hippocampus.add_chunk(
-            chunk_id=chunk_id,
-            text=source['text'],
-            metadata={
-                "source_title": source['title'],
-                "source_url": source['source_url'],
-                "citation_author": source['citation_author'],
-                "citation_year": source['citation_year'],
-                "citation_archive_name": source['archive_name'],
-                "track": "TRUTH_HISTORY",
-                "tags": source['tags'],
-                "document_type": "primary_source",
-                "topic": source['topic'],
-            }
-        )
-        print(f"  [ADDED] chunk_id={chunk_id[:8]}... length={len(source['text'])}")
-        added += 1
+        # Generate embedding for the text
+        try:
+            embedding = await _get_embedding(source['text'])
+        except Exception as e:
+            print(f"  [ERROR] Failed to generate embedding: {e}")
+            continue
+        
+        # Add to Hippocampus using upsert_document
+        try:
+            doc_id = await hippocampus.upsert_document(
+                source_title=source['title'],
+                track="TRUTH_HISTORY",
+                chunk=source['text'],
+                embedding=embedding,
+                citation_author=source['citation_author'],
+                citation_year=source['citation_year'],
+                citation_archive_name=source['archive_name'],
+                source_url=source['source_url'],
+                source_type="PRIMARY_SOURCE",
+            )
+            print(f"  [ADDED] doc_id={doc_id[:8]}... length={len(source['text'])}")
+            added += 1
+        except Exception as e:
+            print(f"  [ERROR] Failed to add document: {e}")
     
     print("\n" + "=" * 70)
     print(f"Primary Source Seeding Complete!")
