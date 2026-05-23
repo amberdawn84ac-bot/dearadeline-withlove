@@ -251,6 +251,11 @@ async def seed_primary_sources():
         print("ERROR: OPENAI_API_KEY not set — needed for embeddings")
         sys.exit(1)
     
+    # Initialize Hippocampus connection
+    print("\n[Init] Connecting to Hippocampus...")
+    await hippocampus.connect()
+    print("[Init] Connected successfully")
+    
     added = 0
     skipped = 0
     
