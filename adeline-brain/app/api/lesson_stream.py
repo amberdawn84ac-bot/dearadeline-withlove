@@ -290,7 +290,7 @@ async def _stream_lesson(
             mastery_score = track_mastery.mastery_score
             mastery_band = track_mastery.mastery_band
         # Sum lesson counts across all tracks — StudentState has no total_interactions attr
-        interaction_count = sum(tm.lesson_count for tm in student_state.tracks.values()) or 10
+        interaction_count = sum(tm.lesson_count for tm in student_state.tracks.values())
     except Exception as e:
         logger.warning(f"[LessonStream] Student state load failed (non-fatal): {e}")
 
