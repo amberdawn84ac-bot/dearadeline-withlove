@@ -237,6 +237,233 @@ I have a dream that one day on the red hills of Georgia, the sons of former slav
         "archive_name": "King Papers Project - Stanford University",
         "tags": ["primary_source", "letter", "civil_rights", "segregation", "nonviolence", "justice"],
     },
+    
+    # Declaration of Independence — 1776
+    {
+        "topic": "Declaration of Independence",
+        "title": "The Declaration of Independence (July 4, 1776)",
+        "source": "National Archives",
+        "source_url": "https://www.archives.gov/founding-docs/declaration-transcript",
+        "text": """IN CONGRESS, July 4, 1776.
+
+The unanimous Declaration of the thirteen united States of America,
+
+When in the Course of human events, it becomes necessary for one people to dissolve the political bands which have connected them with another, and to assume among the powers of the earth, the separate and equal station to which the Laws of Nature and of Nature's God entitle them, a decent respect to the opinions of mankind requires that they should declare the causes which impel them to the separation.
+
+We hold these truths to be self-evident, that all men are created equal, that they are endowed by their Creator with certain unalienable Rights, that among these are Life, Liberty and the pursuit of Happiness.--That to secure these rights, Governments are instituted among Men, deriving their just powers from the consent of the governed, --That whenever any Form of Government becomes destructive of these ends, it is the Right of the People to alter or to abolish it, and to institute new Government, laying its foundation on such principles and organizing its powers in such form, as to them shall seem most likely to effect their Safety and Happiness.
+
+[... list of grievances against King George III ...]
+
+We, therefore, the Representatives of the united States of America, in General Congress, Assembled, appealing to the Supreme Judge of the world for the rectitude of our intentions, do, in the Name, and by Authority of the good People of these Colonies, solemnly publish and declare, That these United Colonies are, and of Right ought to be Free and Independent States; that they are Absolved from all Allegiance to the British Crown, and that all political connection between them and the State of Great Britain, is and ought to be totally dissolved.
+
+And for the support of this Declaration, with a firm reliance on the protection of divine Providence, we mutually pledge to each other our Lives, our Fortunes and our sacred Honor.
+
+[Signers include: John Hancock, Thomas Jefferson, Benjamin Franklin, John Adams, Roger Sherman, and 50 others]""",
+        "citation_author": "Continental Congress",
+        "citation_year": 1776,
+        "archive_name": "National Archives - Founding Documents",
+        "tags": ["primary_source", "founding_document", "independence", "natural_rights", "self_governance"],
+    },
+    
+    # U.S. Constitution — Preamble and Article I excerpts — 1787
+    {
+        "topic": "U.S. Constitution",
+        "title": "The Constitution of the United States (September 17, 1787)",
+        "source": "National Archives",
+        "source_url": "https://www.archives.gov/founding-docs/constitution-transcript",
+        "text": """We the People of the United States, in Order to form a more perfect Union, establish Justice, insure domestic Tranquility, provide for the common defence, promote the general Welfare, and secure the Blessings of Liberty to ourselves and our Posterity, do ordain and establish this Constitution for the United States of America.
+
+Article I
+
+Section 1. All legislative Powers herein granted shall be vested in a Congress of the United States, which shall consist of a Senate and House of Representatives.
+
+[...]
+
+Section 8. The Congress shall have Power To lay and collect Taxes, Duties, Imposts and Excises, to pay the Debts and provide for the common Defence and general Welfare of the United States; but all Duties, Imposts and Excises shall be uniform throughout the United States;
+
+[... enumerated powers ...]
+
+To promote the Progress of Science and useful Arts, by securing for limited Times to Authors and Inventors the exclusive Right to their respective Writings and Discoveries;
+
+[...]
+
+Article II
+
+Section 1. The executive Power shall be vested in a President of the United States of America. He shall hold his Office during the Term of four Years, and, together with the Vice President, chosen for the same Term, be elected, as follows:
+
+[... Electoral College provisions ...]
+
+Article III
+
+Section 1. The judicial Power of the United States, shall be vested in one supreme Court, and in such inferior Courts as the Congress may from time to time ordain and establish.
+
+[...]
+
+Article VI
+
+[...]
+
+This Constitution, and the Laws of the United States which shall be made in Pursuance thereof; and all Treaties made, or which shall be made, under the Authority of the United States, shall be the supreme Law of the Land; and the Judges in every State shall be bound thereby, any Thing in the Constitution or Laws of any State to the Contrary notwithstanding.""",
+        "citation_author": "Constitutional Convention",
+        "citation_year": 1787,
+        "archive_name": "National Archives - Founding Documents",
+        "tags": ["primary_source", "founding_document", "constitution", "federalism", "separation_of_powers"],
+    },
+    
+    # Bill of Rights — 1791
+    {
+        "topic": "Bill of Rights",
+        "title": "The Bill of Rights (December 15, 1791)",
+        "source": "National Archives",
+        "source_url": "https://www.archives.gov/founding-docs/bill-of-rights-transcript",
+        "text": """The Preamble to The Bill of Rights
+
+Congress of the United States begun and held at the City of New-York, on Wednesday the fourth of March, one thousand seven hundred and eighty nine.
+
+THE Conventions of a number of the States, having at the time of their adopting the Constitution, expressed a desire, in order to prevent misconstruction or abuse of its powers, that further declaratory and restrictive clauses should be added: And as extending the ground of public confidence in the Government, will best ensure the beneficent ends of its institution.
+
+RESOLVED by the Senate and House of Representatives of the United States of America, in Congress assembled, two thirds of both Houses concurring, that the following Articles be proposed to the Legislatures of the several States, as Amendments to the Constitution of the United States, all, or any of which Articles, when ratified by three fourths of the said Legislatures, to be valid to all intents and purposes, as part of the said Constitution;
+
+[Amendment I]
+
+Congress shall make no law respecting an establishment of religion, or prohibiting the free exercise thereof; or abridging the freedom of speech, or of the press; or the right of the people peaceably to assemble, and to petition the Government for a redress of grievances.
+
+[Amendment II]
+
+A well regulated Militia, being necessary to the security of a free State, the right of the people to keep and bear Arms, shall not be infringed.
+
+[Amendment III]
+
+No Soldier shall, in time of peace be quartered in any house, without the consent of the Owner, nor in time of war, but in a manner to be prescribed by law.
+
+[Amendment IV]
+
+The right of the people to be secure in their persons, houses, papers, and effects, against unreasonable searches and seizures, shall not be violated, and no Warrants shall issue, but upon probable cause, supported by Oath or affirmation, and particularly describing the place to be searched, and the persons or things to be seized.
+
+[Amendment V]
+
+No person shall be held to answer for a capital, or otherwise infamous crime, unless on a presentment or indictment of a Grand Jury, except in cases arising in the land or naval forces, or in the Militia, when in actual service in time of War or public danger; nor shall any person be subject for the same offence to be twice put in jeopardy of life or limb; nor shall be compelled in any criminal case to be a witness against himself, nor be deprived of life, liberty, or property, without due process of law; nor shall private property be taken for public use, without just compensation.
+
+[Amendment VI]
+
+In all criminal prosecutions, the accused shall enjoy the right to a speedy and public trial, by an impartial jury of the State and district wherein the crime shall have been committed, which district shall have been previously ascertained by law, and to be informed of the nature and cause of the accusation; to be confronted with the witnesses against him; to have compulsory process for obtaining witnesses in his favor, and to have the Assistance of Counsel for his defence.
+
+[Amendment VII]
+
+In suits at common law, where the value in controversy shall exceed twenty dollars, the right of trial by jury shall be preserved, and no fact tried by a jury, shall be otherwise re-examined in any Court of the United States, than according to the rules of the common law.
+
+[Amendment VIII]
+
+Excessive bail shall not be required, nor excessive fines imposed, nor cruel and unusual punishments inflicted.
+
+[Amendment IX]
+
+The enumeration in the Constitution, of certain rights, shall not be construed to deny or disparage others retained by the people.
+
+[Amendment X]
+
+The powers not delegated to the United States by the Constitution, nor prohibited by it to the States, are reserved to the States respectively, or to the people.""",
+        "citation_author": "First Federal Congress",
+        "citation_year": 1791,
+        "archive_name": "National Archives - Founding Documents",
+        "tags": ["primary_source", "founding_document", "bill_of_rights", "amendments", "civil_liberties"],
+    },
+    
+    # Emancipation Proclamation — 1863
+    {
+        "topic": "Emancipation Proclamation",
+        "title": "The Emancipation Proclamation (January 1, 1863)",
+        "source": "National Archives",
+        "source_url": "https://www.archives.gov/exhibits/featured-documents/emancipation-proclamation",
+        "text": """By the President of the United States of America:
+
+A Proclamation.
+
+Whereas, on the twenty-second day of September, in the year of our Lord one thousand eight hundred and sixty-two, a proclamation was issued by the President of the United States, containing, among other things, the following, to wit:
+
+"That on the first day of January, in the year of our Lord one thousand eight hundred and sixty-three, all persons held as slaves within any State or designated part of a State, the people whereof shall then be in rebellion against the United States, shall be then, thenceforward, and forever free; and the Executive Government of the United States, including the military and naval authority thereof, will recognize and maintain the freedom of such persons, and will do no act or acts to repress such persons, or any of them, in any efforts they may make for their actual freedom.
+
+[...]
+
+That the Executive will, on the first day of January aforesaid, by proclamation, designate the States and parts of States, if any, in which the people thereof, respectively, shall then be in rebellion against the United States; and the fact that any State, or the people thereof, shall on that day be, in good faith, represented in the Congress of the United States by members chosen thereto at elections wherein a majority of the qualified voters of such State shall have participated, shall, in the absence of strong countervailing testimony, be deemed conclusive evidence that such State, and the people thereof, are not then in rebellion against the United States.
+
+[...]
+
+Now, therefore I, Abraham Lincoln, President of the United States, by virtue of the power in me vested as Commander-in-Chief, of the Army and Navy of the United States in time of actual armed rebellion against the authority and government of the United States, and as a fit and necessary war measure for suppressing said rebellion, do, on this first day of January, in the year of our Lord one thousand eight hundred and sixty-three, order and designate as the States and parts of States wherein the people thereof respectively, are this day in rebellion against the United States, the following, to wit:
+
+[Arkansas, Texas, Louisiana, Mississippi, Alabama, Florida, Georgia, South Carolina, North Carolina, Virginia]
+
+[...]
+
+And upon this act, sincerely believed to be an act of justice, warranted by the Constitution, upon military necessity, I invoke the considerate judgment of mankind, and the gracious favor of Almighty God.
+
+In witness whereof, I have hereunto set my hand and caused the seal of the United States to be affixed.
+
+Done at the City of Washington, this first day of January, in the year of our Lord one thousand eight hundred and sixty-three, and of the Independence of the United States of America the eighty-seventh.
+
+By the President: Abraham Lincoln
+William H. Seward, Secretary of State.""",
+        "citation_author": "Abraham Lincoln",
+        "citation_year": 1863,
+        "archive_name": "National Archives",
+        "tags": ["primary_source", "emancipation", "slavery", "civil_war", "executive_order"],
+    },
+    
+    # Gettysburg Address — 1863
+    {
+        "topic": "Gettysburg Address",
+        "title": "The Gettysburg Address (November 19, 1863)",
+        "source": "Library of Congress",
+        "source_url": "https://www.loc.gov/item/16022632/",
+        "text": """Four score and seven years ago our fathers brought forth on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal.
+
+Now we are engaged in a great civil war, testing whether that nation, or any nation so conceived and so dedicated, can long endure. We are met on a great battle-field of that war. We have come to dedicate a portion of that field, as a final resting place for those who here gave their lives that that nation might live. It is altogether fitting and proper that we should do this.
+
+But, in a larger sense, we can not dedicate -- we can not consecrate -- we can not hallow -- this ground. The brave men, living and dead, who struggled here, have consecrated it, far above our poor power to add or detract. The world will little note, nor long remember what we say here, but it can never forget what they did here.
+
+It is for us the living, rather, to be dedicated here to the unfinished work which they who fought here have thus far so nobly advanced. It is rather for us to be here dedicated to the great task remaining before us -- that from these honored dead we take increased devotion to that cause for which they gave the last full measure of devotion -- that we here highly resolve that these dead shall not have died in vain -- that this nation, under God, shall have a new birth of freedom -- and that government of the people, by the people, for the people, shall not perish from the earth.""",
+        "citation_author": "Abraham Lincoln",
+        "citation_year": 1863,
+        "archive_name": "Library of Congress",
+        "tags": ["primary_source", "speech", "civil_war", "dedication", "equality", "democracy"],
+    },
+    
+    # Brown v. Board of Education — 1954
+    {
+        "topic": "Brown v Board",
+        "title": "Brown v. Board of Education of Topeka (May 17, 1954)",
+        "source": "Library of Congress / Supreme Court",
+        "source_url": "https://www.loc.gov/item/usrep347483/",
+        "text": """SUPREME COURT OF THE UNITED STATES
+
+Brown v. Board of Education, 347 U.S. 483 (1954)
+
+Syllabus
+
+Segregation of white and Negro children in the public schools of a State solely on the basis of race, pursuant to state laws permitting or requiring such segregation, denies to Negro children the equal protection of the laws guaranteed by the Fourteenth Amendment -- even though the physical facilities and other "tangible" factors of white and Negro schools may be equal.
+
+(a) The history of the Fourteenth Amendment is inconclusive as to its intended effect on public education.
+
+(b) The question presented in these cases must be determined not on the basis of conditions existing when the Fourteenth Amendment was adopted, but in the light of the full development of public education and its present place in American life throughout the Nation.
+
+(c) Where a State has undertaken to provide an opportunity for an education in its public schools, such an opportunity is a right which must be made available to all on equal terms.
+
+(d) Segregation of children in public schools solely on the basis of race deprives children of the minority group of equal educational opportunities, even though the physical facilities and other "tangible" factors may be equal.
+
+(e) The "separate but equal" doctrine adopted in Plessy v. Ferguson, 163 U.S. 537, has no place in the field of public education.
+
+(f) The cases are restored to the docket for further argument on specified questions relating to the forms of the decrees.
+
+Chief Justice Warren delivered the opinion of the Court.
+
+[...]
+
+We conclude that, in the field of public education, the doctrine of "separate but equal" has no place. Separate educational facilities are inherently unequal. Therefore, we hold that the plaintiffs and others similarly situated for whom the actions have been brought are, by reason of the segregation complained of, deprived of the equal protection of the laws guaranteed by the Fourteenth Amendment.""",
+        "citation_author": "Chief Justice Earl Warren",
+        "citation_year": 1954,
+        "archive_name": "Library of Congress - Supreme Court Records",
+        "tags": ["primary_source", "supreme_court", "segregation", "civil_rights", "education"],
+    },
 ]
 
 

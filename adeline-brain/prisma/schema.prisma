@@ -224,6 +224,46 @@ model OASStandard {
   @@index([track])
 }
 
+model Book {
+  id              String   @id @default(uuid())
+  title           String
+  author          String
+  description     String?
+  track           Track
+  gradeBand       String?  // JSON array like "[7,12]"
+  lexileLevel     Int?
+  coverImageUrl   String?
+  sourceUrl       String?  // Amazon, publisher, etc.
+  isbn            String?
+  totalPages      Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  readingSessions ReadingSession[]
+  
+  @@index([track])
+  @@index([title])
+}
+
+model ReadingSession {
+  id              String    @id @default(uuid())
+  studentId       String
+  bookId          String
+  book            Book      @relation(fields: [bookId], references: [id])
+  status          String    @default("reading") // reading, completed, paused
+  currentLocation String?   // Page, chapter, or location string
+  pagesRead       Int       @default(0)
+  totalPages      Int?
+  minutesRead     Int       @default(0)
+  startedAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  completedAt     DateTime?
+  
+  @@unique([studentId, bookId])
+  @@index([studentId])
+  @@index([bookId])
+}
+
 enum UserRole {
   STUDENT
   PARENT
