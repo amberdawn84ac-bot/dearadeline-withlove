@@ -170,9 +170,9 @@ function DashboardContent() {
 
   const handleSuggestionClick = useCallback(
     (suggestion: LessonSuggestion) => {
-      const hasContent = messages.some((m) => m.role === 'assistant');
-      if (isStreaming || hasContent || !studentId) return;
+      if (isStreaming || !studentId) return;
       setActiveLesson(null);
+      setMessages([]);
       setCurrentLessonMeta({ topic: suggestion.title, track: suggestion.track as Track });
       append(
         { text: suggestion.title },
@@ -189,7 +189,7 @@ function DashboardContent() {
         },
       );
     },
-    [studentId, gradeLevel, isStreaming, messages, append],
+    [studentId, gradeLevel, isStreaming, setMessages, append],
   );
 
   const handleRegenerateLesson = useCallback(() => {
