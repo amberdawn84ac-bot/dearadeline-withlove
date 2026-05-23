@@ -8,13 +8,16 @@ Tracks with Witness enforcement:
   TRUTH_HISTORY         — every block must be backed by a verified primary source (0.82 default)
   JUSTICE_CHANGEMAKING  — same primary-source requirement; lobbying records, civil rights docs,
                           legislative history (threshold configurable independently via env var)
+  CREATION_SCIENCE      — origins debate content must be sourced; lower threshold (0.72) because
+                          science sources have more varied phrasing than historical documents
 
 All other tracks bypass Witness entirely (threshold = 0.0), so they never produce
 ARCHIVE_SILENT verdicts or forced Research Missions.
 
 Thresholds are configurable via environment variables:
-  WITNESS_HISTORY_THRESHOLD — for TRUTH_HISTORY (default: 0.82)
-  WITNESS_JUSTICE_THRESHOLD — for JUSTICE_CHANGEMAKING (default: same as TRUTH_HISTORY)
+  WITNESS_HISTORY_THRESHOLD  — for TRUTH_HISTORY (default: 0.82)
+  WITNESS_JUSTICE_THRESHOLD  — for JUSTICE_CHANGEMAKING (default: same as TRUTH_HISTORY)
+  WITNESS_SCIENCE_THRESHOLD  — for CREATION_SCIENCE (default: 0.72)
 """
 import os
 from typing import Optional
@@ -25,8 +28,9 @@ logger = logging.getLogger(__name__)
 
 _HISTORY_THRESHOLD = float(os.getenv("WITNESS_HISTORY_THRESHOLD", "0.82"))
 _JUSTICE_THRESHOLD = float(os.getenv("WITNESS_JUSTICE_THRESHOLD", str(_HISTORY_THRESHOLD)))
+_SCIENCE_THRESHOLD = float(os.getenv("WITNESS_SCIENCE_THRESHOLD", "0.72"))
 
-_WITNESS_TRACKS = {"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING"}
+_WITNESS_TRACKS = {"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING", "CREATION_SCIENCE"}
 
 
 def get_witness_threshold(track: str) -> float:
@@ -37,12 +41,17 @@ def get_witness_threshold(track: str) -> float:
     - JUSTICE_CHANGEMAKING: Same primary-source requirement — lobbying records, civil rights
                             documents, legislative history must be verified before display.
                             Independently configurable via WITNESS_JUSTICE_THRESHOLD.
+    - CREATION_SCIENCE:     Origins debate content must be sourced. Lower threshold (0.72)
+                            because science sources have more varied phrasing.
+                            Independently configurable via WITNESS_SCIENCE_THRESHOLD.
     - Everything else:      Disabled (0.0) — never blocks, never triggers ARCHIVE_SILENT.
     """
     if track == "TRUTH_HISTORY":
         return _HISTORY_THRESHOLD
     if track == "JUSTICE_CHANGEMAKING":
         return _JUSTICE_THRESHOLD
+    if track == "CREATION_SCIENCE":
+        return _SCIENCE_THRESHOLD
     return 0.0
 
 

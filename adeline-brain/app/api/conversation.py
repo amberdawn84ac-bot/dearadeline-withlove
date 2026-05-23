@@ -19,10 +19,7 @@ from typing import Optional, AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
-
-from app.config import create_llm, ADELINE_MODEL
 
 from app.api.middleware import get_current_user_id
 from app.algorithms.pedagogical_directives import get_mode_directives, get_quick_directives
@@ -32,8 +29,6 @@ from app.utils.stream_parser import parse_stream
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/conversation", tags=["conversation"])
-
-_MODEL = ADELINE_MODEL
 
 _ADELINE_BASE = """You are Adeline — a Truth-First K-12 AI Mentor grounded in the 10-Track Constitution.
 
@@ -177,21 +172,19 @@ async def _stream_llm(
     system_prompt: str,
     messages: list[dict],
 ) -> AsyncIterator[str]:
-    """Yield raw text chunks using the active LLM provider via LangChain."""
-    lc_messages = [SystemMessage(content=system_prompt)]
-    for m in messages:
-        role = m.get("role", "user")
-        content = m.get("content", "")
-        if role == "user":
-            lc_messages.append(HumanMessage(content=content))
-        else:
-            from langchain_core.messages import AIMessage
-            lc_messages.append(AIMessage(content=content))
+    """Yield text using the active synthesis client (Gemini, with Claude fallback)."""
+    from app.agents.orchestrator import _synthesis_call
 
-    llm = create_llm(max_tokens=2000)
-    async for chunk in llm.astream(lc_messages):
-        if chunk.content:
-            yield chunk.content
+    # Build a single user turn: history + current message concatenated
+    history_text = ""
+    for m in messages[:-1]:
+        role = "Student" if m.get("role") == "user" else "Adeline"
+        history_text += f"{role}: {m.get('content', '')}\n"
+    last = messages[-1].get("content", "") if messages else ""
+    user_prompt = (history_text + last).strip()
+
+    response = await _synthesis_call(system_prompt, user_prompt, max_tokens=2000)
+    yield response
 
 
 async def _conversation_sse(
