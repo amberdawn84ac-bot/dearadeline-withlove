@@ -77,7 +77,8 @@ class CanonicalStore:
         from datetime import datetime, timezone
         conn = await get_db_conn()
         try:
-            now = datetime.now(timezone.utc)
+            # Use naive UTC datetime (asyncpg/PostgreSQL prefers naive timestamps)
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             await conn.execute(
                 """
                 INSERT INTO "CanonicalLesson" (
