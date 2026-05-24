@@ -1726,30 +1726,30 @@ async def _synthesize_drag_drop_timeline_block(request: "LessonRequest", timelin
     shuffled = timeline_events[:]
     _random.shuffle(shuffled)
 
-    # DragDropTimeline expects: items[] with id, label, date, correctIndex
+    # DragDropTimeline expects: events[] with id, label, date, description
+    # The component determines correct order by sorting on event.date — no correctIndex needed.
     try:
-        items = []
+        events_in_order = []
         for idx, event in enumerate(timeline_events):
             label = event.get("label", "")
             date  = event.get("date", "")
             if not label:
                 continue
-            items.append({
-                "id":           f"evt-{idx}",
-                "label":        label,
-                "date":         date,
-                "correctIndex": idx,
+            events_in_order.append({
+                "id":          f"evt-{idx}",
+                "label":       label,
+                "date":        date,
+                "description": event.get("description", ""),
             })
 
-        shuffled_items = items[:]
-        _random.shuffle(shuffled_items)
+        shuffled_events = events_in_order[:]
+        _random.shuffle(shuffled_events)
 
         data = {
             "component_type": "DragDropTimeline",
             "props": {
-                "title":       f"Put these events in order: {request.topic}",
-                "items":       shuffled_items,
-                "correctOrder": [item["id"] for item in items],
+                "title":   f"Put these events in order: {request.topic}",
+                "events":  shuffled_events,
             },
             "initial_state": {"completed": False},
             "callbacks": ["onComplete"],
@@ -1764,6 +1764,56 @@ async def _synthesize_drag_drop_timeline_block(request: "LessonRequest", timelin
         }
     except Exception as e:
         logger.warning(f"[HistorianAgent] DragDropTimeline synthesis failed (non-fatal): {e}")
+    return None
+
+
+def _synthesize_concept_map_block(topic: str, mind_map_data: dict) -> dict | None:
+    """
+    Convert an existing mind_map_data tree into an InteractiveConceptMap GENUI_ASSEMBLY block.
+    Students drag nodes and draw their own connections on top of the tree structure.
+    No LLM call needed — derives nodes and edges directly from the mind map.
+    """
+    try:
+        root = mind_map_data.get("root") or {}
+        nodes: list[dict] = []
+        edges: list[dict] = []
+
+        def walk(node: dict, parent_id: str | None = None) -> None:
+            nid = node.get("id", "")
+            label = node.get("label", "")
+            if not nid or not label:
+                return
+            nodes.append({"id": nid, "label": label})
+            if parent_id:
+                edges.append({"source": parent_id, "target": nid})
+            for child in node.get("children", []):
+                walk(child, nid)
+
+        walk(root)
+
+        if len(nodes) < 3:
+            return None
+
+        data = {
+            "component_type": "InteractiveConceptMap",
+            "props": {
+                "title":          f"Map the connections: {topic}",
+                "nodes":          nodes,
+                "suggestedEdges": edges[:4],  # show a few parent-child edges as hints
+            },
+            "initial_state": {},
+            "callbacks": ["onComplete"],
+        }
+        return {
+            "block_type":        "GENUI_ASSEMBLY",
+            "content":           f"Concept map: {topic}",
+            "evidence":          [],
+            "is_silenced":       False,
+            "homestead_content": None,
+            "genui_assembly_data": data,
+        }
+    except Exception as e:
+        logger.warning(f"[Orchestrator] InteractiveConceptMap synthesis failed (non-fatal): {e}")
     return None
 
 
@@ -1923,14 +1973,20 @@ async def _run_multimodal_synthesis(
     if "MIND_MAP" in formats:
         mm = await _synthesize_mind_map(request.topic, primary_content, request.grade_level)
         if mm:
+            mm_dict = mm.model_dump()
             blocks.append({
                 "block_type": BlockType.MIND_MAP.value,
                 "content": f"Concept map: {mm.concept}",
                 "evidence": [],
                 "is_silenced": False,
                 "homestead_content": None,
-                "mind_map_data": mm.model_dump(),
+                "mind_map_data": mm_dict,
             })
+            # InteractiveConceptMap — derived from the mind map tree so students
+            # can draw and verify connections themselves (no extra LLM call)
+            concept_map_block = _synthesize_concept_map_block(request.topic, mm_dict)
+            if concept_map_block:
+                blocks.append(concept_map_block)
 
     if "TIMELINE" in formats:
         tl = await _synthesize_timeline(
