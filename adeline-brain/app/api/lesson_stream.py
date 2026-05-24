@@ -479,6 +479,7 @@ async def _stream_lesson(
         state["blocks"] = await adapt_canonical_for_student(canonical_dummy, adaptation_req)
 
     yield _sse({"type": "status", "message": "Streaming lesson blocks..."})
+    logger.info(f"[LessonStream] Emitting {len(state['blocks'])} blocks: {[b['type'] for b in state['blocks']]}")
     for block in state["blocks"]:
         yield _sse({"type": "block", "block": block})
         tool_event = _from_block_tool_call(block, lesson_id, request.track.value)

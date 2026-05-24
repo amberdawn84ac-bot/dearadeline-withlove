@@ -690,6 +690,11 @@ function BlockBubble({ block }: { block: LessonBlockResponse }) {
       <Presentation size={13} /> {block.narrated_slide_data?.slides.length} Slides · {block.narrated_slide_data?.total_duration_minutes} min
     </div>
   );
+  if (block.block_type === "ANIMATED_SKETCHNOTE_LESSON") return (
+    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-purple-700 bg-purple-50 text-purple-800">
+      <Sparkles size={13} /> Animated Lesson · {block.animated_sketchnote_data?.scenes?.length ?? "?"} scenes
+    </div>
+  );
 
   // VERIFIED
   return (
