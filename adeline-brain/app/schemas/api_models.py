@@ -88,6 +88,7 @@ class BlockType(str, Enum):
     NARRATED_SLIDE   = "NARRATED_SLIDE"
     BOOK_SUGGESTION  = "BOOK_SUGGESTION"
     ANIMATED_SKETCHNOTE_LESSON = "ANIMATED_SKETCHNOTE_LESSON"
+    GENUI_ASSEMBLY   = "GENUI_ASSEMBLY"
 
 
 # ── Multimodal Data Models ────────────────────────────────────────────────────
