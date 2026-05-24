@@ -18,8 +18,8 @@ import { BookOpen, FlaskConical, ChevronRight, ExternalLink } from "lucide-react
 import { useTrackPage, useLessonStubs, useResourceLinks } from "@/lib/hygraph/useHygraph";
 import { BlockRenderer } from "./BlockRenderer";
 import type { Track } from "@/lib/hygraph/client";
-import type { LessonResponse } from "@/lib/brain-client";
-import { generateLesson, pollLessonResult } from "@/lib/brain-client";
+import type { LessonResponse, LessonBlockResponse } from "@/lib/brain-client";
+import { streamLesson } from "@/lib/brain-client";
 
 const GRADE_BAND_LABELS: Record<string, string> = {
   K2:  "K–2",
@@ -72,18 +72,40 @@ export function TrackPageView({
 
   const startLesson = async (title: string, slug: string) => {
     setLoadingSlug(slug);
+    const blocks: LessonBlockResponse[] = [];
+    let lessonId = "";
+    let lessonTitle = title;
     try {
-      const job = await generateLesson({
-        student_id:  studentId,
+      for await (const event of streamLesson({
+        student_id:   studentId,
         track,
-        topic:       title,
+        topic:        title,
         is_homestead: isHomestead,
-        grade_level: gradeLevel,
-      });
-      const lesson = await pollLessonResult(job.job_id, { intervalMs: 2000, timeoutMs: 90000 });
-      onLessonGenerated?.(lesson);
+        grade_level:  gradeLevel,
+      })) {
+        if (event.type === "block") {
+          blocks.push(event.block);
+        } else if (event.type === "done") {
+          lessonId = event.lesson_id;
+          lessonTitle = event.title || title;
+          // Notify parent with the completed lesson
+          const lesson: LessonResponse = {
+            lesson_id: lessonId,
+            title: lessonTitle,
+            track,
+            blocks,
+            has_research_missions: blocks.some((b) => b.block_type === "RESEARCH_MISSION"),
+            researcher_activated: false,
+            oas_standards: (event.oas_standards as LessonResponse["oas_standards"]) ?? [],
+            agent_name: "",
+            xapi_statements: [],
+            credits_awarded: [],
+          };
+          onLessonGenerated?.(lesson);
+        }
+      }
     } catch (e) {
-      console.error("[TrackPageView] Lesson generation failed:", e);
+      console.error("[TrackPageView] Lesson streaming failed:", e);
     } finally {
       setLoadingSlug(null);
     }

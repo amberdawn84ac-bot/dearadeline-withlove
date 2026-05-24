@@ -1267,6 +1267,12 @@ async def science_agent(state: AdelineState) -> AdelineState:
                     "homestead_content": None,
                 })
 
+    # ── CREATION_SCIENCE: inject MoleculeSimulator for chemistry/matter topics ──
+    if is_creation_science and blocks:
+        mol_block = await _synthesize_molecule_sim_block(request, blocks[0].get("content", ""))
+        if mol_block:
+            blocks.append(mol_block)
+
     # ── Multimodal synthesis ─────────────────────────────────────────────────
     await _run_multimodal_synthesis(
         state, blocks,
@@ -1556,6 +1562,12 @@ async def practical_agent(state: AdelineState) -> AdelineState:
         if project_block:
             blocks.append(project_block)
 
+    # ── APPLIED_MATHEMATICS: inject a CodePlayground for interactive calculation ──
+    if request.track.value == "APPLIED_MATHEMATICS" and blocks:
+        code_block = await _synthesize_code_playground_block(request, blocks[0].get("content", ""))
+        if code_block:
+            blocks.append(code_block)
+
     # ── Multimodal synthesis ─────────────────────────────────────────────────
     await _run_multimodal_synthesis(state, blocks)
 
@@ -1599,6 +1611,209 @@ async def _synthesize_creative_project_block(request: "LessonRequest", narrative
             }
     except Exception as e:
         logger.warning(f"[PracticalAgent] ProjectBuilder synthesis failed (non-fatal): {e}")
+    return None
+
+
+async def _synthesize_code_playground_block(request: "LessonRequest", narrative_content: str) -> dict | None:
+    """Generate a CodePlayground GENUI_ASSEMBLY block for APPLIED_MATHEMATICS lessons."""
+    import json as _json
+    grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
+    system = (
+        "You generate starter JavaScript code for a math exercise playground. "
+        "Return ONLY valid JSON — no markdown fences, no extra keys. "
+        "Schema: {\"component_type\": \"CodePlayground\", \"props\": {"
+        "\"language\": \"javascript\", "
+        "\"starterCode\": str, "
+        "\"instructions\": str, "
+        "\"expectedOutput\": str"
+        "}, \"initial_state\": {}, \"callbacks\": [\"onComplete\"]}"
+        "\n\nRules for starterCode:"
+        "\n• 6-12 lines of beginner JavaScript"
+        "\n• Use console.log() so output is visible"
+        "\n• One concrete calculation related to the math topic"
+        "\n• Variable names that match the real-world scenario"
+        "\n• A TODO comment where the student fills in the formula"
+    )
+    user = (
+        f"Topic: {request.topic}\n"
+        f"Grade: {grade_desc}\n"
+        f"Lesson content:\n{narrative_content[:500]}\n\n"
+        "Generate a CodePlayground block with a JavaScript exercise that lets the student "
+        "calculate or verify the math concept from this lesson. "
+        "Make it feel like running a real computation, not a worksheet."
+    )
+    try:
+        raw = await _synthesis_call(system, user, max_tokens=600)
+        raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        data = _json.loads(raw)
+        if "props" in data and "starterCode" in data.get("props", {}):
+            return {
+                "block_type": "GENUI_ASSEMBLY",
+                "content": f"Try the math: {request.topic}",
+                "evidence": [],
+                "is_silenced": False,
+                "homestead_content": None,
+                "genui_assembly_data": data,
+            }
+    except Exception as e:
+        logger.warning(f"[PracticalAgent] CodePlayground synthesis failed (non-fatal): {e}")
+    return None
+
+
+async def _synthesize_molecule_sim_block(request: "LessonRequest", narrative_content: str) -> dict | None:
+    """Generate a MoleculeSimulator GENUI_ASSEMBLY block for CREATION_SCIENCE lessons."""
+    import json as _json
+    CHEMISTRY_KEYWORDS = {
+        "molecule", "atom", "bond", "compound", "element", "reaction", "gas", "liquid",
+        "solid", "water", "oxygen", "carbon", "hydrogen", "chemistry", "chemical",
+        "matter", "state", "phase", "temperature", "heat", "particle", "electron",
+        "protein", "cell", "dna", "energy",
+    }
+    topic_lower = request.topic.lower()
+    if not any(kw in topic_lower for kw in CHEMISTRY_KEYWORDS):
+        return None
+
+    grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
+    system = (
+        "You generate configuration for a molecule/particle simulation. "
+        "Return ONLY valid JSON — no markdown fences. "
+        "Schema: {\"component_type\": \"MoleculeSimulator\", \"props\": {"
+        "\"title\": str, "
+        "\"description\": str, "
+        "\"substance\": str, "
+        "\"questions\": [{\"id\": str, \"text\": str, \"options\": [str, str, str], \"correctIndex\": int}]"
+        "}, \"initial_state\": {}, \"callbacks\": [\"onComplete\"]}"
+        "\n\nRules:"
+        "\n• title: short (4-6 words)"
+        "\n• description: 1-2 sentences explaining what to observe"
+        "\n• substance: the molecule or substance name with formula if applicable"
+        "\n• questions: 2-3 questions about what the student observes in the simulation"
+    )
+    user = (
+        f"Topic: {request.topic}\n"
+        f"Grade: {grade_desc}\n"
+        f"Lesson content:\n{narrative_content[:500]}\n\n"
+        "Generate a MoleculeSimulator block so the student can interact with particle motion "
+        "and answer questions about what they observe."
+    )
+    try:
+        raw = await _synthesis_call(system, user, max_tokens=500)
+        raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        data = _json.loads(raw)
+        if "props" in data and "title" in data.get("props", {}):
+            return {
+                "block_type": "GENUI_ASSEMBLY",
+                "content": f"Molecule simulation: {data['props'].get('substance', request.topic)}",
+                "evidence": [],
+                "is_silenced": False,
+                "homestead_content": None,
+                "genui_assembly_data": data,
+            }
+    except Exception as e:
+        logger.warning(f"[ScienceAgent] MoleculeSimulator synthesis failed (non-fatal): {e}")
+    return None
+
+
+async def _synthesize_drag_drop_timeline_block(request: "LessonRequest", timeline_events: list) -> dict | None:
+    """Generate a DragDropTimeline GENUI_ASSEMBLY block from existing timeline events."""
+    if not timeline_events or len(timeline_events) < 3:
+        return None
+
+    import json as _json
+    import random as _random
+
+    # Shuffle a copy so the student must re-order them correctly
+    shuffled = timeline_events[:]
+    _random.shuffle(shuffled)
+
+    # DragDropTimeline expects: events[] with id, label, date, description
+    # The component determines correct order by sorting on event.date — no correctIndex needed.
+    try:
+        events_in_order = []
+        for idx, event in enumerate(timeline_events):
+            label = event.get("label", "")
+            date  = event.get("date", "")
+            if not label:
+                continue
+            events_in_order.append({
+                "id":          f"evt-{idx}",
+                "label":       label,
+                "date":        date,
+                "description": event.get("description", ""),
+            })
+
+        shuffled_events = events_in_order[:]
+        _random.shuffle(shuffled_events)
+
+        data = {
+            "component_type": "DragDropTimeline",
+            "props": {
+                "title":   f"Put these events in order: {request.topic}",
+                "events":  shuffled_events,
+            },
+            "initial_state": {"completed": False},
+            "callbacks": ["onComplete"],
+        }
+        return {
+            "block_type": "GENUI_ASSEMBLY",
+            "content": f"Arrange these events in chronological order",
+            "evidence": [],
+            "is_silenced": False,
+            "homestead_content": None,
+            "genui_assembly_data": data,
+        }
+    except Exception as e:
+        logger.warning(f"[HistorianAgent] DragDropTimeline synthesis failed (non-fatal): {e}")
+    return None
+
+
+def _synthesize_concept_map_block(topic: str, mind_map_data: dict) -> dict | None:
+    """
+    Convert an existing mind_map_data tree into an InteractiveConceptMap GENUI_ASSEMBLY block.
+    Students drag nodes and draw their own connections on top of the tree structure.
+    No LLM call needed — derives nodes and edges directly from the mind map.
+    """
+    try:
+        root = mind_map_data.get("root") or {}
+        nodes: list[dict] = []
+        edges: list[dict] = []
+
+        def walk(node: dict, parent_id: str | None = None) -> None:
+            nid = node.get("id", "")
+            label = node.get("label", "")
+            if not nid or not label:
+                return
+            nodes.append({"id": nid, "label": label})
+            if parent_id:
+                edges.append({"source": parent_id, "target": nid})
+            for child in node.get("children", []):
+                walk(child, nid)
+
+        walk(root)
+
+        if len(nodes) < 3:
+            return None
+
+        data = {
+            "component_type": "InteractiveConceptMap",
+            "props": {
+                "title":          f"Map the connections: {topic}",
+                "nodes":          nodes,
+                "suggestedEdges": edges[:4],  # show a few parent-child edges as hints
+            },
+            "initial_state": {},
+            "callbacks": ["onComplete"],
+        }
+        return {
+            "block_type":        "GENUI_ASSEMBLY",
+            "content":           f"Concept map: {topic}",
+            "evidence":          [],
+            "is_silenced":       False,
+            "homestead_content": None,
+            "genui_assembly_data": data,
+        }
+    except Exception as e:
+        logger.warning(f"[Orchestrator] InteractiveConceptMap synthesis failed (non-fatal): {e}")
     return None
 
 
@@ -1758,14 +1973,20 @@ async def _run_multimodal_synthesis(
     if "MIND_MAP" in formats:
         mm = await _synthesize_mind_map(request.topic, primary_content, request.grade_level)
         if mm:
+            mm_dict = mm.model_dump()
             blocks.append({
                 "block_type": BlockType.MIND_MAP.value,
                 "content": f"Concept map: {mm.concept}",
                 "evidence": [],
                 "is_silenced": False,
                 "homestead_content": None,
-                "mind_map_data": mm.model_dump(),
+                "mind_map_data": mm_dict,
             })
+            # InteractiveConceptMap — derived from the mind map tree so students
+            # can draw and verify connections themselves (no extra LLM call)
+            concept_map_block = _synthesize_concept_map_block(request.topic, mm_dict)
+            if concept_map_block:
+                blocks.append(concept_map_block)
 
     if "TIMELINE" in formats:
         tl = await _synthesize_timeline(
@@ -1782,6 +2003,15 @@ async def _run_multimodal_synthesis(
                 "homestead_content": None,
                 "timeline_data": tl.model_dump(),
             })
+            # ── DragDropTimeline: add a chronological ordering exercise
+            # when there are enough events and the track benefits from sequencing
+            _drag_tracks = {Track.TRUTH_HISTORY.value, Track.JUSTICE_CHANGEMAKING.value, Track.GOVERNMENT_ECONOMICS.value}
+            if not is_seasonal_timeline and request.track.value in _drag_tracks:
+                drag_block = await _synthesize_drag_drop_timeline_block(
+                    request, [e.model_dump() for e in tl.events]
+                )
+                if drag_block:
+                    blocks.append(drag_block)
 
     if "MNEMONIC" in formats:
         mn = await _synthesize_mnemonic(primary_content, request.grade_level)

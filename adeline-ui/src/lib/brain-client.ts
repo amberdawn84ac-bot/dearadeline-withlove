@@ -229,6 +229,13 @@ export interface LessonBlockResponse {
   lexile_level?:        number;
   // Animated Sketchnote Lesson — full lesson payload for ANIMATED_SKETCHNOTE_LESSON blocks
   animated_sketchnote_data?: AnimatedSketchnoteLesson;
+  // GENUI_ASSEMBLY — interactive component spec from the orchestrator
+  genui_assembly_data?: {
+    component_type: string;
+    props: Record<string, unknown>;
+    initial_state?: Record<string, unknown>;
+    callbacks?: string[];
+  };
 }
 
 export interface XAPIStatement {
@@ -367,6 +374,74 @@ export async function generateLesson(request: LessonRequest): Promise<LessonJobR
     status: "done",
     result: lesson
   };
+}
+
+// ── Progressive Lesson Streaming ──────────────────────────────────────────────
+
+export type LessonStreamEvent =
+  | { type: "status"; message: string }
+  | { type: "block"; block: LessonBlockResponse }
+  | { type: "done"; lesson_id: string; title: string; oas_standards?: unknown[] }
+  | { type: "error"; message: string }
+
+/**
+ * Stream lesson blocks as they arrive from the brain SSE endpoint.
+ * Yields one event per SSE packet — blocks appear immediately rather than
+ * all at once after the full lesson completes.
+ * Model: identical to streamConversation() but for lesson generation.
+ */
+export async function* streamLesson(
+  request: LessonRequest,
+): AsyncGenerator<LessonStreamEvent> {
+  const resp = await fetch(`${BRAIN_URL}/lesson/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
+    body: JSON.stringify(request),
+    cache: "no-store",
+  });
+
+  if (!resp.ok) {
+    yield { type: "error", message: `HTTP ${resp.status} ${resp.statusText}` };
+    return;
+  }
+
+  const reader = resp.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+
+    const lines = buf.split("\n");
+    buf = lines.pop()!;
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const raw = line.slice(6).trim();
+      if (!raw) continue;
+      try {
+        const payload = JSON.parse(raw);
+        if (payload.type === "status") {
+          yield { type: "status", message: payload.message };
+        } else if (payload.type === "block") {
+          yield { type: "block", block: payload.block as LessonBlockResponse };
+        } else if (payload.type === "done") {
+          yield {
+            type: "done",
+            lesson_id: payload.lesson_id ?? "",
+            title: payload.title ?? "",
+            oas_standards: payload.oas_standards,
+          };
+        } else if (payload.type === "error") {
+          yield { type: "error", message: payload.message ?? "Unknown error" };
+        }
+      } catch {
+        // skip malformed SSE data
+      }
+    }
+  }
 }
 
 export async function pollLessonResult(

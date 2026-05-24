@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Sparkles, Send, Loader2, FlaskConical, Search, Network, ListOrdered, Brain, Presentation } from "lucide-react";
-import { scaffold, generateLesson, pollLessonResult, listProjects, getProject, reportActivity, streamConversation } from "@/lib/brain-client";
+import { scaffold, generateLesson, pollLessonResult, streamLesson, listProjects, getProject, reportActivity, streamConversation } from "@/lib/brain-client";
 import type {
   Track, ScaffoldResponse, LessonResponse, LessonBlockResponse,
   ProjectSummary, ProjectDetail, ActivityReportResponse,
@@ -714,27 +714,20 @@ export function LessonBlockChatPanel({ studentId, initialTrack = "TRUTH_HISTORY"
   const [renderMode, setRenderMode] = useState<LessonRenderMode>("standard_lesson");
   const [blocks, setBlocks] = useState<LessonBlockResponse[]>([]);
   const [animatedLesson, setAnimatedLesson] = useState<AnimatedSketchnoteLesson | null>(null);
-  const [visibleCount, setVisibleCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [streamStatus, setStreamStatus] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-
-  // Reveal blocks one at a time with a short delay for the "streaming" feel
-  useEffect(() => {
-    if (visibleCount >= blocks.length) return;
-    const timer = setTimeout(() => setVisibleCount((c) => c + 1), 600);
-    return () => clearTimeout(timer);
-  }, [visibleCount, blocks.length]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [visibleCount, loading]);
+  }, [blocks.length, loading]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!topic.trim() || loading) return;
     setBlocks([]);
     setAnimatedLesson(null);
-    setVisibleCount(0);
+    setStreamStatus(null);
     setLoading(true);
 
     if (renderMode === "animated_sketchnote_lesson") {
@@ -752,29 +745,38 @@ export function LessonBlockChatPanel({ studentId, initialTrack = "TRUTH_HISTORY"
         // surface nothing — user can retry
       } finally {
         setLoading(false);
+        setStreamStatus(null);
       }
       return;
     }
 
     try {
-      const job = await generateLesson({
+      for await (const event of streamLesson({
         student_id: studentId,
         track,
         topic: topic.trim(),
         is_homestead: false,
         grade_level: "9",
-      });
-      const lesson: LessonResponse = await pollLessonResult(job.job_id, { intervalMs: 2000, timeoutMs: 90000 });
-      setBlocks(lesson.blocks);
+      })) {
+        if (event.type === "status") {
+          setStreamStatus(event.message);
+        } else if (event.type === "block") {
+          setBlocks((prev) => [...prev, event.block]);
+        } else if (event.type === "done") {
+          setLoading(false);
+          setStreamStatus(null);
+        } else if (event.type === "error") {
+          setLoading(false);
+          setStreamStatus(null);
+        }
+      }
     } catch {
       // surface nothing — user can retry
     } finally {
       setLoading(false);
+      setStreamStatus(null);
     }
   }
-
-  const visibleBlocks = blocks.slice(0, visibleCount);
-  const stillStreaming = visibleCount < blocks.length && blocks.length > 0;
 
   return (
     <div className="flex flex-col h-full" style={{ background: "#FFFEF7" }}>
@@ -809,21 +811,23 @@ export function LessonBlockChatPanel({ studentId, initialTrack = "TRUTH_HISTORY"
           <AnimatedSketchnoteRenderer lesson={animatedLesson} />
         )}
 
-        {visibleBlocks.map((block) => (
+        {blocks.map((block) => (
           <div key={block.block_id} className="flex justify-start">
             <BlockBubble block={block} />
           </div>
         ))}
 
-        {/* Typing indicator between blocks or during fetch */}
-        {(loading || stillStreaming) && (
+        {/* Progressive status — shows actual SSE status messages while streaming */}
+        {loading && (
           <div className="flex justify-start">
             <div
               className="rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-2"
               style={{ background: "#FDF6E9", border: "1px solid #E7DAC3" }}
             >
               <Loader2 size={14} className="animate-spin text-[#BD6809]" />
-              <span className="text-sm text-[#2F4731]/60 italic">Adeline is thinking…</span>
+              <span className="text-sm text-[#2F4731]/60 italic">
+                {streamStatus ?? "Adeline is thinking…"}
+              </span>
             </div>
           </div>
         )}

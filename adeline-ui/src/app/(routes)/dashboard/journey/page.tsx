@@ -2,8 +2,8 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { ArrowLeft, AlertCircle } from "lucide-react";
-import { generateLesson, pollLessonResult } from "@/lib/brain-client";
-import type { LessonResponse, Track } from "@/lib/brain-client";
+import { streamLesson } from "@/lib/brain-client";
+import type { LessonResponse, LessonBlockResponse, Track } from "@/lib/brain-client";
 import LessonRenderer from "@/components/lessons/LessonRenderer";
 import { AdelineChatPanel } from "@/components/AdelineChatPanel";
 import { StudentStatusBar } from "@/components/StudentStatusBar";
@@ -65,6 +65,8 @@ export default function JourneyPage() {
   const STUDENT_ID = student?.id ?? '';
   const GRADE_LEVEL_VAL = student?.gradeLevel ?? '8';
   const [activeLesson, setActiveLesson] = useState<LessonResponse | null>(null);
+  const [streamingBlocks, setStreamingBlocks] = useState<LessonBlockResponse[]>([]);
+  const [streamStatus, setStreamStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [highlightedText, setHighlightedText] = useState<string | null>(null);
@@ -82,21 +84,52 @@ export default function JourneyPage() {
 
   const handleLessonRequest = useCallback(async (topic: string, track: Track = "TRUTH_HISTORY") => {
     setIsLoading(true);
+    setStreamingBlocks([]);
+    setStreamStatus(null);
+    setActiveLesson(null);
     setError(null);
+    const collectedBlocks: LessonBlockResponse[] = [];
     try {
-      const job = await generateLesson({
-        student_id: STUDENT_ID,
+      for await (const event of streamLesson({
+        student_id:   STUDENT_ID,
         track,
         topic,
         is_homestead: false,
-        grade_level: GRADE_LEVEL_VAL,
-      });
-      const lesson = await pollLessonResult(job.job_id, { intervalMs: 2000, timeoutMs: 90000 });
-      setActiveLesson(lesson);
+        grade_level:  GRADE_LEVEL_VAL,
+      })) {
+        if (event.type === "status") {
+          setStreamStatus(event.message);
+        } else if (event.type === "block") {
+          collectedBlocks.push(event.block);
+          setStreamingBlocks([...collectedBlocks]);
+        } else if (event.type === "done") {
+          const lesson: LessonResponse = {
+            lesson_id: event.lesson_id,
+            title: event.title || topic,
+            track,
+            blocks: collectedBlocks,
+            has_research_missions: collectedBlocks.some((b) => b.block_type === "RESEARCH_MISSION"),
+            researcher_activated: false,
+            oas_standards: (event.oas_standards as LessonResponse["oas_standards"]) ?? [],
+            agent_name: "",
+            xapi_statements: [],
+            credits_awarded: [],
+          };
+          setActiveLesson(lesson);
+          setStreamingBlocks([]);
+          setStreamStatus(null);
+          setIsLoading(false);
+        } else if (event.type === "error") {
+          setError(event.message);
+          setIsLoading(false);
+          setStreamStatus(null);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate lesson");
     } finally {
       setIsLoading(false);
+      setStreamStatus(null);
     }
   }, [STUDENT_ID, GRADE_LEVEL_VAL]);
 
@@ -129,7 +162,7 @@ export default function JourneyPage() {
             My Learning Plan
           </h1>
           <p className="text-[#2F4731]/60 mt-0.5 text-sm">
-            {activeLesson
+            {activeLesson || isLoading
               ? "Lesson in progress — ask Adeline questions in the panel →"
               : "Choose a topic below or ask Adeline in the panel →"}
           </p>
@@ -155,7 +188,7 @@ export default function JourneyPage() {
         )}
 
         {/* ── Idle: suggestion cards ── */}
-        {!activeLesson && !isLoading && (
+        {!activeLesson && !isLoading && streamingBlocks.length === 0 && (
           <main className="px-6 pb-8 pt-5">
             <div className="grid sm:grid-cols-2 gap-4">
               {LESSON_SUGGESTIONS.map((suggestion) => (
@@ -184,10 +217,34 @@ export default function JourneyPage() {
           </main>
         )}
 
-        {/* Loading state — Transparent AI thinking visualization */}
-        <AgentThinkingState isActive={isLoading} />
+        {/* Loading state — shows thinking animation only before first block arrives */}
+        <AgentThinkingState isActive={isLoading && streamingBlocks.length === 0} />
 
-        {/* ── Active lesson ── */}
+        {/* ── Streaming blocks — appear progressively while loading ── */}
+        {isLoading && streamingBlocks.length > 0 && (
+          <div className="px-6 pb-4 pt-5 space-y-3">
+            {streamStatus && (
+              <p className="text-xs text-[#2F4731]/50 italic pl-1">{streamStatus}</p>
+            )}
+            <LessonRenderer
+              lesson={{
+                lesson_id: "streaming",
+                title: "",
+                track: "TRUTH_HISTORY",
+                blocks: streamingBlocks,
+                has_research_missions: false,
+                researcher_activated: false,
+                oas_standards: [],
+                agent_name: "",
+                xapi_statements: [],
+                credits_awarded: [],
+              }}
+              studentId={STUDENT_ID}
+            />
+          </div>
+        )}
+
+        {/* ── Active lesson (complete) ── */}
         {activeLesson && !isLoading && (
           <div ref={lessonContainerRef} className="px-6 pb-8 pt-5">
             <button
