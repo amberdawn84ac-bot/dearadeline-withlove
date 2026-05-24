@@ -289,13 +289,18 @@ async def _synthesis_call(system: str, user: str, max_tokens: int = 1000) -> str
                 "and ANTHROPIC_API_KEY not set — cannot generate lesson"
             )
         fallback_client = anthropic.AsyncAnthropic(api_key=anthropic_key)
-        response = await fallback_client.messages.create(
-            model=_ANTHROPIC_MODEL,
-            max_tokens=max_tokens,
-            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
-            messages=[{"role": "user", "content": user}],
-            extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
-        )
+        try:
+            response = await fallback_client.messages.create(
+                model=_ANTHROPIC_MODEL,
+                max_tokens=max_tokens,
+                system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+                messages=[{"role": "user", "content": user}],
+                extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
+            )
+        except (anthropic.RateLimitError, anthropic.APIConnectionError) as claude_err:
+            raise SynthesisSafetyError(
+                f"Claude fallback unavailable ({type(claude_err).__name__}): {claude_err}"
+            ) from claude_err
         return response.content[0].text
     else:
         # Use Anthropic prompt caching on the system prompt (static prefix cached 5 min)

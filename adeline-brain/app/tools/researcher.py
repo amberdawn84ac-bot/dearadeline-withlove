@@ -37,6 +37,7 @@ Search backend: DuckDuckGo (100% free, no API key required).
 import asyncio
 import os
 import logging
+import traceback
 from typing import Optional
 
 import numpy as np
@@ -218,8 +219,11 @@ def _parse_ddg_results(raw: str, archive_name: str) -> list[dict]:
                         'snippet': item.get('snippet', ''),
                     })
             return results
-    except Exception:
-        pass
+    except Exception as parse_err:
+        logger.warning(
+            f"[Researcher/DDG] ast.literal_eval failed for {archive_name}: {parse_err} — "
+            f"raw output (first 500 chars): {raw[:500]!r}"
+        )
 
     # Fallback: parse the flat string format
     # Format: [snippet: ..., title: ..., link: ...]
@@ -269,11 +273,14 @@ async def search_archive_async(query: str, archive_name: str, domains_map: dict 
             return results
         except Exception as e:
             wait = 2 ** attempt
-            logger.warning(
-                f"[Researcher/DDG] Failed searching {archive_name} (attempt {attempt + 1}): {e} "
-                f"— retrying in {wait}s"
+            level = logging.ERROR if attempt == 2 else logging.WARNING
+            logger.log(
+                level,
+                f"[Researcher/DDG] Failed searching {archive_name} (attempt {attempt + 1}/3): {e}"
+                + (f" — retrying in {wait}s" if attempt < 2 else " — all retries exhausted, returning []"),
             )
-            await asyncio.sleep(wait)
+            if attempt < 2:
+                await asyncio.sleep(wait)
     return []
 
 
@@ -502,5 +509,7 @@ async def search_witnesses(
         return []
 
     except Exception as e:
-        logger.error(f"[Researcher] Error in search_witnesses: {e}")
+        logger.error(
+            f"[Researcher] Error in search_witnesses: {e}\n{traceback.format_exc()}"
+        )
         return []

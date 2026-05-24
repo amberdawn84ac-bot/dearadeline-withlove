@@ -437,8 +437,8 @@ export async function* streamLesson(
         } else if (payload.type === "error") {
           yield { type: "error", message: payload.message ?? "Unknown error" };
         }
-      } catch {
-        // skip malformed SSE data
+      } catch (e) {
+        console.warn("[Adeline] Malformed SSE frame skipped:", e);
       }
     }
   }
