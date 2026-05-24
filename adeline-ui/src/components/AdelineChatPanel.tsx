@@ -2,11 +2,12 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Sparkles, Send, Loader2, FlaskConical, Search, Network, ListOrdered, Brain, Presentation } from "lucide-react";
-import { scaffold, generateLesson, pollLessonResult, streamLesson, listProjects, getProject, reportActivity, streamConversation } from "@/lib/brain-client";
+import { scaffold, streamLesson, listProjects, getProject, reportActivity, streamConversation } from "@/lib/brain-client";
+import { LessonSkeleton } from "@/components/gen-ui/LessonSkeleton";
 import type {
   Track, ScaffoldResponse, LessonResponse, LessonBlockResponse,
   ProjectSummary, ProjectDetail, ActivityReportResponse,
-  ConversationMessage,
+  ConversationMessage, LessonRequest,
 } from "@/lib/brain-client";
 import { ProjectCatalog } from "@/components/projects/ProjectCard";
 import { ProjectGuide } from "@/components/projects/ProjectGuide";
@@ -376,18 +377,41 @@ export function AdelineChatPanel({
         setInput('');
         addMessage({ role: 'user', content: initialPrompt });
         setIsLoading(true);
-        // Trigger the same flow as handleSend by calling the generate endpoint
+        // Stream the lesson progressively — avoids the 6s+ blank wait from the
+        // old batch generateLesson() + pollLessonResult() approach.
         (async () => {
           try {
-            const job = await generateLesson({
+            const request: LessonRequest = {
               student_id: studentId,
               topic: initialPrompt,
               track: 'DISCIPLESHIP' as Track,
               grade_level: gradeLevel,
               is_homestead: false,
-            });
-            const lesson = await pollLessonResult(job.job_id, { intervalMs: 2000, timeoutMs: 90000 });
-            addMessage({ role: 'adeline', content: lesson.title || 'Here is your Daily Bread study.' });
+            };
+            const blocks: LessonBlockResponse[] = [];
+            let title = initialPrompt;
+            for await (const event of streamLesson(request)) {
+              if (event.type === 'block') {
+                blocks.push(event.block);
+              } else if (event.type === 'done') {
+                if (event.title) title = event.title;
+              } else if (event.type === 'error') {
+                throw new Error(event.message);
+              }
+            }
+            addMessage({ role: 'adeline', content: title || 'Here is your Daily Bread study.' });
+            const lesson: LessonResponse = {
+              lesson_id: `lesson-${Date.now()}`,
+              title,
+              track: 'DISCIPLESHIP' as Track,
+              blocks,
+              has_research_missions: false,
+              researcher_activated: false,
+              oas_standards: [],
+              agent_name: '',
+              xapi_statements: [],
+              credits_awarded: [],
+            };
             onLessonGenerated?.(lesson);
           } catch {
             addMessage({ role: 'adeline', content: 'I ran into a hiccup — give me a moment and try again.' });
@@ -619,19 +643,43 @@ interface LessonBlockChatPanelProps {
 }
 
 function BlockBubble({ block }: { block: LessonBlockResponse }) {
-  const verdict = block.evidence[0]?.verdict ?? "ARCHIVE_SILENT";
-  const sourceTitle = block.evidence[0]?.source_title;
+  if (block.is_silenced) return null;
 
-  if (block.is_silenced || verdict === "ARCHIVE_SILENT") {
+  // Block-type-specific renders always take priority over evidence verdict.
+  // NARRATIVE and RESEARCH_MISSION blocks from DiscipleshipAgent often have an
+  // empty evidence array; checking verdict first (old behaviour) defaulted to
+  // ARCHIVE_SILENT and wrongly showed a "Source not found" gray bubble.
+
+  if (block.block_type === "NARRATIVE") {
     return (
       <div
-        className="max-w-[88%] rounded-2xl rounded-bl-sm px-4 py-3 space-y-1 animate-fade-slide-in"
-        style={{ background: "#F3F4F6", border: "1px solid #D1D5DB" }}
+        className="max-w-[88%] rounded-2xl rounded-bl-sm px-4 py-3 space-y-1.5 animate-fade-slide-in"
+        style={{ background: "#FDF6E9", border: "1.5px solid #E7DAC3" }}
       >
-        <p className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wide">
-          Source not found
-        </p>
-        <p className="text-sm text-[#374151] leading-relaxed">{block.content}</p>
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm">📖</span>
+          <span className="text-[10px] font-bold text-[#2F4731] uppercase tracking-wide">
+            Narrative
+          </span>
+        </div>
+        <p className="text-sm text-[#2F4731] leading-relaxed">{block.content}</p>
+      </div>
+    );
+  }
+
+  if (block.block_type === "RESEARCH_MISSION") {
+    return (
+      <div
+        className="max-w-[88%] rounded-2xl rounded-bl-sm px-4 py-3 space-y-1.5 animate-fade-slide-in"
+        style={{ background: "#FEFCE8", border: "2px solid #CA8A04" }}
+      >
+        <div className="flex items-center gap-1.5">
+          <Search size={13} className="text-[#CA8A04]" />
+          <span className="text-[10px] font-bold text-[#CA8A04] uppercase tracking-wide">
+            Research Mission
+          </span>
+        </div>
+        <p className="text-sm text-[#2F4731] leading-relaxed">{block.content}</p>
       </div>
     );
   }
@@ -645,24 +693,7 @@ function BlockBubble({ block }: { block: LessonBlockResponse }) {
         <div className="flex items-center gap-1.5">
           <FlaskConical size={13} className="text-[#BD6809]" />
           <span className="text-[10px] font-bold text-[#BD6809] uppercase tracking-wide">
-            Experiment
-          </span>
-        </div>
-        <p className="text-sm text-[#2F4731] leading-relaxed">{block.content}</p>
-      </div>
-    );
-  }
-
-  if (verdict === "RESEARCH_MISSION") {
-    return (
-      <div
-        className="max-w-[88%] rounded-2xl rounded-bl-sm px-4 py-3 space-y-1.5 animate-fade-slide-in"
-        style={{ background: "#FEFCE8", border: "2px solid #CA8A04" }}
-      >
-        <div className="flex items-center gap-1.5">
-          <Search size={13} className="text-[#CA8A04]" />
-          <span className="text-[10px] font-bold text-[#CA8A04] uppercase tracking-wide">
-            Research Mission
+            {block.block_type === "EXPERIMENT" ? "Sovereign Lab" : "Experiment"}
           </span>
         </div>
         <p className="text-sm text-[#2F4731] leading-relaxed">{block.content}</p>
@@ -696,7 +727,25 @@ function BlockBubble({ block }: { block: LessonBlockResponse }) {
     </div>
   );
 
-  // VERIFIED
+  // For PRIMARY_SOURCE/TEXT: check evidence verdict to decide display style.
+  const verdict = block.evidence[0]?.verdict;
+  const sourceTitle = block.evidence[0]?.source_title;
+
+  if (verdict === "ARCHIVE_SILENT") {
+    return (
+      <div
+        className="max-w-[88%] rounded-2xl rounded-bl-sm px-4 py-3 space-y-1 animate-fade-slide-in"
+        style={{ background: "#F3F4F6", border: "1px solid #D1D5DB" }}
+      >
+        <p className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wide">
+          Source not found
+        </p>
+        <p className="text-sm text-[#374151] leading-relaxed">{block.content}</p>
+      </div>
+    );
+  }
+
+  // VERIFIED or no evidence (TEXT blocks, PRIMARY_SOURCE with source)
   return (
     <div
       className="max-w-[88%] rounded-2xl rounded-bl-sm px-4 py-3 space-y-2 animate-fade-slide-in"
@@ -822,8 +871,11 @@ export function LessonBlockChatPanel({ studentId, initialTrack = "TRUTH_HISTORY"
           </div>
         ))}
 
-        {/* Progressive status — shows actual SSE status messages while streaming */}
-        {loading && (
+        {/* Skeleton before first block arrives — gives immediate visual structure */}
+        {loading && blocks.length === 0 && <LessonSkeleton />}
+
+        {/* Progressive status — shows actual SSE status messages once blocks start arriving */}
+        {loading && blocks.length > 0 && (
           <div className="flex justify-start">
             <div
               className="rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-2"
