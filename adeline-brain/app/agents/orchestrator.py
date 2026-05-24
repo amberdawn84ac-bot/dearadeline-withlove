@@ -147,13 +147,13 @@ def apply_cognitive_load_budget(load) -> None:
     from app.algorithms.cognitive_load import should_simplify_content
     if load is not None and should_simplify_content(load):
         if load.level == "CRITICAL":
-            _synthesis_token_ceil.set(400)
-            _pedagogical_token_ceil.set(300)
-            logger.info("[Orchestrator] CRITICAL cognitive load — token ceiling 400/300")
+            _synthesis_token_ceil.set(1200)
+            _pedagogical_token_ceil.set(800)
+            logger.info("[Orchestrator] CRITICAL cognitive load — token ceiling 1200/800")
         else:  # HIGH
-            _synthesis_token_ceil.set(700)
-            _pedagogical_token_ceil.set(500)
-            logger.info("[Orchestrator] HIGH cognitive load — token ceiling 700/500")
+            _synthesis_token_ceil.set(1800)
+            _pedagogical_token_ceil.set(1200)
+            logger.info("[Orchestrator] HIGH cognitive load — token ceiling 1800/1200")
 
 
 def _synthesis_client():
