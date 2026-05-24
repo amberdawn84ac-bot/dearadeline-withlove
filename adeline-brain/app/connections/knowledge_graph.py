@@ -243,24 +243,28 @@ async def get_concept_graph_for_track(track: str) -> list[dict]:
       id, name, description, track, standard_code, grade_band,
       prerequisite_ids (list[str]), dependent_count (int)
     """
-    rows = await neo4j_client.run(
-        """
-        MATCH (c:Concept)-[:BELONGS_TO]->(t:Track {name: $track})
-        OPTIONAL MATCH (c)-[:PREREQUISITE_OF]->(prereq:Concept)
-        OPTIONAL MATCH (dep:Concept)-[:PREREQUISITE_OF]->(c)
-        RETURN
-            c.id          AS id,
-            c.title       AS name,
-            c.description AS description,
-            c.track       AS track,
-            c.standard_code AS standard_code,
-            c.grade_band  AS grade_band,
-            collect(DISTINCT prereq.id) AS prerequisite_ids,
-            count(DISTINCT dep)         AS dependent_count
-        """,
-        {"track": track},
-    )
-    return rows
+    try:
+        rows = await neo4j_client.run(
+            """
+            MATCH (c:Concept)-[:BELONGS_TO]->(t:Track {name: $track})
+            OPTIONAL MATCH (c)-[:PREREQUISITE_OF]->(prereq:Concept)
+            OPTIONAL MATCH (dep:Concept)-[:PREREQUISITE_OF]->(c)
+            RETURN
+                c.id          AS id,
+                c.title       AS name,
+                c.description AS description,
+                c.track       AS track,
+                c.standard_code AS standard_code,
+                c.grade_band  AS grade_band,
+                collect(DISTINCT prereq.id) AS prerequisite_ids,
+                count(DISTINCT dep)         AS dependent_count
+            """,
+            {"track": track},
+        )
+        return rows
+    except Exception as e:
+        logger.error(f"[KnowledgeGraph] get_concept_graph_for_track failed for {track}: {e}")
+        return []
 
 
 async def get_zpd_candidates_with_bkt(
@@ -300,35 +304,39 @@ async def get_zpd_candidates(student_id: str, track: str, limit: int = 5) -> lis
 
     Returns concepts sorted by number of dependents descending (highest leverage first).
     """
-    return await neo4j_client.run(
-        """
-        MATCH (c:Concept)-[:BELONGS_TO]->(t:Track {name: $track})
-        WHERE NOT EXISTS {
-            MATCH (st:Student {id: $student_id})-[m:MASTERED]->(c)
-            WHERE m.score >= 0.7
-        }
-        OPTIONAL MATCH (c)-[:PREREQUISITE_OF]->(prereq:Concept)
-        WITH c, collect(prereq) AS prereqs
-        WHERE ALL(p IN prereqs WHERE EXISTS {
-            MATCH (st:Student {id: $student_id})-[m:MASTERED]->(p)
-            WHERE m.score >= 0.7
-        })
-        OPTIONAL MATCH (dep:Concept)-[:PREREQUISITE_OF]->(c)
-        RETURN
-            c.id          AS concept_id,
-            c.title       AS title,
-            c.description AS description,
-            c.track       AS track,
-            c.difficulty  AS difficulty,
-            c.standard_code AS standard_code,
-            c.grade_band  AS grade_band,
-            count(dep)    AS dependent_count,
-            size(prereqs) AS prereq_count
-        ORDER BY dependent_count DESC, prereq_count ASC
-        LIMIT $limit
-        """,
-        {"student_id": student_id, "track": track, "limit": limit},
-    )
+    try:
+        return await neo4j_client.run(
+            """
+            MATCH (c:Concept)-[:BELONGS_TO]->(t:Track {name: $track})
+            WHERE NOT EXISTS {
+                MATCH (st:Student {id: $student_id})-[m:MASTERED]->(c)
+                WHERE m.score >= 0.7
+            }
+            OPTIONAL MATCH (c)-[:PREREQUISITE_OF]->(prereq:Concept)
+            WITH c, collect(prereq) AS prereqs
+            WHERE ALL(p IN prereqs WHERE EXISTS {
+                MATCH (st:Student {id: $student_id})-[m:MASTERED]->(p)
+                WHERE m.score >= 0.7
+            })
+            OPTIONAL MATCH (dep:Concept)-[:PREREQUISITE_OF]->(c)
+            RETURN
+                c.id          AS concept_id,
+                c.title       AS title,
+                c.description AS description,
+                c.track       AS track,
+                c.difficulty  AS difficulty,
+                c.standard_code AS standard_code,
+                c.grade_band  AS grade_band,
+                count(dep)    AS dependent_count,
+                size(prereqs) AS prereq_count
+            ORDER BY dependent_count DESC, prereq_count ASC
+            LIMIT $limit
+            """,
+            {"student_id": student_id, "track": track, "limit": limit},
+        )
+    except Exception as e:
+        logger.error(f"[KnowledgeGraph] get_zpd_candidates failed for {track}/{student_id}: {e}")
+        return []
 
 
 async def get_prerequisite_chain(concept_id: str, depth: int = 3) -> list[dict]:
@@ -337,19 +345,23 @@ async def get_prerequisite_chain(concept_id: str, depth: int = 3) -> list[dict]:
     Returns the ordered chain of prerequisites (most fundamental first).
     Used to answer: 'What should I learn before X?'
     """
-    return await neo4j_client.run(
-        """
-        MATCH path = (c:Concept {id: $concept_id})-[:PREREQUISITE_OF*1..$depth]->(prereq:Concept)
-        RETURN
-            prereq.id          AS concept_id,
-            prereq.title       AS title,
-            prereq.track       AS track,
-            prereq.difficulty  AS difficulty,
-            length(path)       AS distance
-        ORDER BY distance ASC
-        """,
-        {"concept_id": concept_id, "depth": depth},
-    )
+    try:
+        return await neo4j_client.run(
+            """
+            MATCH path = (c:Concept {id: $concept_id})-[:PREREQUISITE_OF*1..$depth]->(prereq:Concept)
+            RETURN
+                prereq.id          AS concept_id,
+                prereq.title       AS title,
+                prereq.track       AS track,
+                prereq.difficulty  AS difficulty,
+                length(path)       AS distance
+            ORDER BY distance ASC
+            """,
+            {"concept_id": concept_id, "depth": depth},
+        )
+    except Exception as e:
+        logger.error(f"[KnowledgeGraph] get_prerequisite_chain failed for {concept_id}: {e}")
+        return []
 
 
 async def get_cross_track_concepts(track: str, topic_keywords: list[str], limit: int = 4) -> list[dict]:
@@ -358,23 +370,27 @@ async def get_cross_track_concepts(track: str, topic_keywords: list[str], limit:
     Powers Adeline's multi-hop reasoning: 'How does [Track A topic] connect to [Track B]?'
     """
     keyword_pattern = "|".join(topic_keywords) if topic_keywords else ".*"
-    return await neo4j_client.run(
-        """
-        MATCH (c:Concept)-[:BELONGS_TO]->(t:Track)
-        WHERE t.name <> $track
-          AND (c.title =~ $pattern OR c.description =~ $pattern)
-        OPTIONAL MATCH (link:Concept)-[:BELONGS_TO]->(src:Track {name: $track})
-        WHERE link.title =~ $pattern OR link.description =~ $pattern
-        RETURN DISTINCT
-            c.id          AS concept_id,
-            c.title       AS title,
-            c.track       AS track,
-            c.description AS description,
-            t.theme       AS track_theme
-        LIMIT $limit
-        """,
-        {"track": track, "pattern": f"(?i).*({keyword_pattern}).*", "limit": limit},
-    )
+    try:
+        return await neo4j_client.run(
+            """
+            MATCH (c:Concept)-[:BELONGS_TO]->(t:Track)
+            WHERE t.name <> $track
+              AND (c.title =~ $pattern OR c.description =~ $pattern)
+            OPTIONAL MATCH (link:Concept)-[:BELONGS_TO]->(src:Track {name: $track})
+            WHERE link.title =~ $pattern OR link.description =~ $pattern
+            RETURN DISTINCT
+                c.id          AS concept_id,
+                c.title       AS title,
+                c.track       AS track,
+                c.description AS description,
+                t.theme       AS track_theme
+            LIMIT $limit
+            """,
+            {"track": track, "pattern": f"(?i).*({keyword_pattern}).*", "limit": limit},
+        )
+    except Exception as e:
+        logger.error(f"[KnowledgeGraph] get_cross_track_concepts failed for {track}: {e}")
+        return []
 
 
 async def get_cross_track_bias(

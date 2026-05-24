@@ -203,16 +203,22 @@ async def _build_adaptation_request(
         raw_bias = cross_bias_result[0]
         cross_track_bias = float(raw_bias) if raw_bias is not None else 0.0
 
-    # ZPD priority for this specific topic (match by title substring; fall back to top candidate)
+    # ZPD priority for this specific topic (exact normalized match first, then substring fallback)
     priority_score = 0.5
     if isinstance(zpd_candidates, list) and zpd_candidates:
-        topic_lower = request.topic.lower()
-        for c in zpd_candidates:
-            if topic_lower in c.title.lower() or c.title.lower() in topic_lower:
-                priority_score = c.priority
-                break
-        else:
-            priority_score = zpd_candidates[0].priority
+        topic_norm = request.topic.strip().lower()
+        matched = next(
+            (c for c in zpd_candidates if c.title.strip().lower() == topic_norm),
+            None,
+        )
+        if matched is None:
+            # Looser substring match as fallback — prevents wrong candidate assignment
+            matched = next(
+                (c for c in zpd_candidates
+                 if topic_norm in c.title.lower() and len(topic_norm) >= 5),
+                None,
+            )
+        priority_score = matched.priority if matched else zpd_candidates[0].priority
 
     # Per-concept proficiency map
     proficiency = proficiency_map if isinstance(proficiency_map, dict) else {}
@@ -616,17 +622,12 @@ async def _run_registrar_background(
                     quality=3,
                 )
             else:
-                # Fallback: derive concept_id from track + topic
-                slug = (
-                    f"{request.track.value.lower()}-"
-                    f"{request.topic.lower().replace(' ', '-')[:50]}"
-                )
-                await update_card_after_lesson(
-                    student_id=request.student_id,
-                    concept_id=slug,
-                    concept_name=request.topic,
-                    track=request.track.value,
-                    quality=3,
+                # No matching ZPD concept — skip SM-2 update to avoid orphaned card records.
+                # The RegistrarAgent still records the xAPI/CASE credit; only the SM-2
+                # card (which requires a real concept_id) is omitted.
+                logger.info(
+                    f"[LessonStream] No ZPD concept found for topic='{request.topic}' "
+                    f"track={request.track.value} — SM-2 card update skipped"
                 )
         except Exception as bkt_err:
             logger.warning(f"[LessonStream] BKT/SM-2 update failed (non-fatal): {bkt_err}")
