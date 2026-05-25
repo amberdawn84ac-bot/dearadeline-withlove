@@ -684,6 +684,222 @@ async def _researcher_fallback(
     return None
 
 
+# ── Rich structured lesson constants ─────────────────────────────────────────
+
+_ADELINE_RICH_SYSTEM_INSTRUCTION = (
+    "You are Adeline, an authentic, adaptive AI Mentor for K-12 students. "
+    "You are grounded in a Truth-First, worldview-driven educational philosophy. "
+    "You speak as a grounded, supportive peer — never a rigid lecturer.\n\n"
+    "You use a Sketchnote aesthetic in your descriptions, highlighting:\n"
+    "- [Papaya Vocab] for rich vocabulary or key terms\n"
+    "- [Paradise Scripture] for Scripture integration or divine reference\n"
+    "- [Fuchsia Investigation] for active scientific exploration, lab, or history discovery\n\n"
+    "You guide students through 10 Integrated Tracks:\n"
+    "1. God's Creation & Science (CREATION_SCIENCE) — Prioritize direct observation with homestead tools.\n"
+    "2. Health/Naturopathy (HEALTH_NATUROPATHY) — Body stewardship, local herbs, natural nutrition.\n"
+    "3. Homesteading & Stewardship (HOMESTEADING) — Practical homesteading, farming, resource stewardship.\n"
+    "4. Government/Economics (GOVERNMENT_ECONOMICS) — Liberty, free markets, local administration.\n"
+    "5. Justice/Change-making (JUSTICE_CHANGEMAKING) — Advocacy, truth, real-world community action.\n"
+    "6. Discipleship & Cultural Discernment (DISCIPLESHIP) — Scripture applied to media and culture.\n"
+    "7. Truth-Based History (TRUTH_HISTORY) — Only speak if a primary source Witness exists. Never simulate history.\n"
+    "8. English Language & Literature (ENGLISH_LITERATURE) — Classic texts, grammar, creative journaling.\n"
+    "9. Applied Mathematics (APPLIED_MATHEMATICS) — Math connected to real life: budgets, land, building, markets.\n"
+    "10. Creative Economy (CREATIVE_ECONOMY) — Making, crafting, branding, and selling real products.\n\n"
+    "Calibrate to the chosen Grade Level:\n"
+    "- early-elementary: K-3, highly visual, warm, simplified.\n"
+    "- upper-elementary: 4-5, narrative-focused, hands-on.\n"
+    "- middle-school: 6-8, analytical, investigative.\n"
+    "- high-school: 9-12, rigorous, primary source analysis, moral discernment.\n\n"
+    "BRAND VOICE (non-negotiable): Clear, strong sentences. No fluff. "
+    "Write like you are telling truth at a kitchen table. "
+    "Short paragraphs. Active verbs. Specific details. "
+    "No 'Today we will learn...' openers. No 'Great job!' closings. "
+    "Treat the student like a leader in training."
+)
+
+_LESSON_SCHEMA_PROMPT = """{
+  "title": "string",
+  "trackId": "string",
+  "gradeLevel": "string",
+  "narrativeIntro": "string with embedded [Papaya Vocab: word], [Paradise Scripture: text], [Fuchsia Investigation: action] markers",
+  "suggestedJournalPrompt": "string",
+  "vocabulary": [{"word": "string", "definition": "string", "pronunciation": "string (optional)", "exampleSentence": "string"}],
+  "scripture": {"verse": "string", "reference": "string", "insight": "string"},
+  "scienceLab": {"title": "string", "hypothesis": "string", "materials": ["string"], "steps": ["string"], "observationChecklist": ["string"], "labDesignBackup": "string (optional)"},
+  "historyWitness": {"title": "string", "documentDate": "string", "excerpt": "string (REAL primary source, never invented)", "sourceOrigin": "string", "reliabilityContext": "string", "witnessReflectionPrompts": ["string"]},
+  "challengeActivity": {"title": "string", "challengePrompt": "string", "steps": ["string"], "interactiveVariables": [{"label": "string", "description": "string", "options": ["string","string","string"], "outcomes": ["string","string","string"]}]},
+  "quiz": [{"id": "string", "question": "string", "options": ["string","string","string"], "correctIndex": 0, "explanation": "string"}]
+}"""
+
+
+def _grade_level_band(grade_level: str | None) -> str:
+    """Map grade string (K, 1-12) to Adeline's grade band."""
+    if grade_level in ("K", "1", "2", "3"):
+        return "early-elementary"
+    if grade_level in ("4", "5"):
+        return "upper-elementary"
+    if grade_level in ("6", "7", "8"):
+        return "middle-school"
+    return "high-school"
+
+
+def _track_module_for_prompt(track: Track) -> str:
+    """Return per-track JSON population instruction for the structured lesson prompt."""
+    if track == Track.CREATION_SCIENCE:
+        return (
+            'Populate "scienceLab" with a hands-on experiment using homestead/kitchen tools. '
+            'Omit "historyWitness" and "challengeActivity".'
+        )
+    if track == Track.TRUTH_HISTORY:
+        return (
+            'Populate "historyWitness" with a REAL primary source — a genuine document, letter, or record. '
+            'Never invent or simulate history. If no primary source exists, say so in reliabilityContext. '
+            'Omit "scienceLab" and "challengeActivity".'
+        )
+    return (
+        'Populate "challengeActivity" with exactly 3 "interactiveVariables", '
+        'each with exactly 3 options and exactly 3 outcomes (one per option). '
+        'Omit "scienceLab" and "historyWitness".'
+    )
+
+
+async def _gemini_structured_lesson(
+    topic: str,
+    track: Track,
+    grade_level: str | None,
+) -> dict | None:
+    """
+    Call Gemini with JSON response format to produce the full rich lesson schema.
+    Returns parsed dict or None on any failure — caller falls back to plain synthesis.
+    """
+    import json as _json
+    import openai as _openai
+
+    grade_band = _grade_level_band(grade_level)
+    user_message = (
+        f"Generate a complete lesson for:\n"
+        f"Topic: {topic}\n"
+        f"Track: {track.value}\n"
+        f"Grade Level: {grade_band}\n\n"
+        f"{_track_module_for_prompt(track)}\n\n"
+        "Include exactly 3 quiz questions testing worldview, direct observation, or analytical reading. "
+        "Include 2-4 vocabulary words.\n\n"
+        f"Return valid JSON matching exactly this schema:\n{_LESSON_SCHEMA_PROMPT}"
+    )
+
+    try:
+        client = _openai.AsyncOpenAI(api_key=GEMINI_API_KEY, base_url=GEMINI_BASE_URL)
+        resp = await client.chat.completions.create(
+            model=GEMINI_MODEL,
+            response_format={"type": "json_object"},
+            temperature=0.8,
+            messages=[
+                {"role": "system", "content": _ADELINE_RICH_SYSTEM_INSTRUCTION},
+                {"role": "user",   "content": user_message},
+            ],
+        )
+        raw_text = resp.choices[0].message.content or ""
+        if not raw_text.strip():
+            logger.warning("[RichLesson] Gemini returned empty content")
+            return None
+        return _json.loads(raw_text)
+    except Exception as e:
+        logger.warning(f"[RichLesson] Gemini structured call failed: {e}")
+        return None
+
+
+def _structured_lesson_to_blocks(lesson: dict, request: LessonRequest) -> list[dict]:
+    """Convert a structured Gemini lesson dict to LessonBlock wire format."""
+    import json as _json
+    blocks: list[dict] = []
+
+    def _block(block_type: BlockType, content: str) -> dict:
+        return {
+            "block_type": block_type.value,
+            "content": content,
+            "evidence": [],
+            "is_silenced": False,
+            "homestead_content": (
+                _homestead_adapt(content) if request.is_homestead else None
+            ),
+        }
+
+    narrative = lesson.get("narrativeIntro", "")
+    if narrative:
+        blocks.append(_block(BlockType.NARRATIVE, narrative))
+
+    vocab = lesson.get("vocabulary", [])
+    if vocab:
+        vocab_lines = []
+        for v in vocab:
+            word = v.get("word", "")
+            defn = v.get("definition", "")
+            pron = v.get("pronunciation", "")
+            example = v.get("exampleSentence", "")
+            pron_str = f" *({pron})*" if pron else ""
+            vocab_lines.append(f"**{word}**{pron_str} — {defn}")
+            if example:
+                vocab_lines.append(f"> *{example}*")
+        blocks.append(_block(BlockType.TEXT, "\n\n".join(vocab_lines)))
+
+    scripture = lesson.get("scripture")
+    if scripture:
+        verse = scripture.get("verse", "")
+        ref = scripture.get("reference", "")
+        insight = scripture.get("insight", "")
+        blocks.append(_block(
+            BlockType.NARRATIVE,
+            f"**[Paradise Scripture: {ref}]**\n\n> {verse}\n\n{insight}",
+        ))
+
+    journal = lesson.get("suggestedJournalPrompt", "")
+    if journal:
+        blocks.append(_block(BlockType.TEXT, f"**Journal Prompt:** {journal}"))
+
+    science_lab = lesson.get("scienceLab")
+    history_witness = lesson.get("historyWitness")
+    challenge = lesson.get("challengeActivity")
+
+    if science_lab and request.track == Track.CREATION_SCIENCE:
+        blocks.append({
+            "block_type": BlockType.LAB_MISSION.value,
+            "content": _json.dumps(science_lab),
+            "evidence": [],
+            "is_silenced": False,
+            "homestead_content": None,
+        })
+    elif history_witness and request.track == Track.TRUTH_HISTORY:
+        blocks.append({
+            "block_type": BlockType.PRIMARY_SOURCE.value,
+            "content": _json.dumps(history_witness),
+            "evidence": [],
+            "is_silenced": False,
+            "homestead_content": None,
+        })
+    elif challenge:
+        blocks.append({
+            "block_type": BlockType.LAB_MISSION.value,
+            "content": _json.dumps(challenge),
+            "evidence": [],
+            "is_silenced": False,
+            "homestead_content": (
+                _homestead_adapt(_json.dumps(challenge)) if request.is_homestead else None
+            ),
+        })
+
+    quiz = lesson.get("quiz", [])
+    if quiz:
+        blocks.append({
+            "block_type": BlockType.QUIZ.value,
+            "content": _json.dumps(quiz),
+            "evidence": [],
+            "is_silenced": False,
+            "homestead_content": None,
+        })
+
+    return blocks
+
+
 async def _generate_from_knowledge(
     state: AdelineState,
     silent_sources: list[str],
@@ -692,13 +908,22 @@ async def _generate_from_knowledge(
     Knowledge-generation fallback — Adeline ALWAYS teaches.
 
     Called when both Hippocampus and the Researcher return empty.
-    Uses Gemini (via _synthesis_call) to generate a real lesson from training
-    knowledge, then appends a RESEARCH_MISSION as optional enrichment.
-
-    The student gets a full lesson. The research mission is a bonus "dig deeper"
-    activity — never the main content.
+    First tries Gemini structured output (rich lesson: vocabulary, scripture,
+    lab/witness/challenge, quiz). Falls back to plain narrative synthesis if
+    Gemini fails.
     """
     request = state["request"]
+
+    structured = await _gemini_structured_lesson(
+        request.topic, request.track, request.grade_level
+    )
+    if structured:
+        logger.info(
+            f"[RichLesson] Structured lesson generated for {request.topic!r} ({request.track.value})"
+        )
+        return _structured_lesson_to_blocks(structured, request)
+
+    # Graceful degradation: original plain narrative synthesis
     track_name = request.track.value.replace("_", " ").title()
     grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
     persona = _TRACK_PERSONA.get(request.track, "a knowledgeable mentor")
@@ -737,7 +962,6 @@ async def _generate_from_knowledge(
             f"she's gathering what she knows about this topic."
         )
 
-    # Main lesson block — always present
     blocks.append({
         "block_type":  BlockType.NARRATIVE.value,
         "content":     content,
@@ -748,7 +972,6 @@ async def _generate_from_knowledge(
         ),
     })
 
-    # Research mission as OPTIONAL enrichment (not the main lesson)
     sources_text = "\n".join(f"- {s}" for s in silent_sources[:3]) if silent_sources else ""
     enrichment = (
         "**Dig Deeper (Optional Research Mission):**\n"
