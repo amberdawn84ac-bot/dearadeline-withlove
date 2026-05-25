@@ -288,7 +288,10 @@ async def seed_neo4j(driver, mappings: list[dict]):
         log.info(f"[Neo4j] Upserted {len(tracks)} Track nodes")
 
         # Upsert each OASStandard node
+        # Use neo4j_node.properties.id (compound key) as the MERGE anchor so
+        # standards with the same humanCodingScheme across subjects don't collide.
         for m in mappings:
+            node_id = m["neo4j_node"]["properties"].get("id", m["standard_id"])
             props = {
                 **m["neo4j_node"]["properties"],
                 "standard_text":  m["standard_text"],
@@ -303,13 +306,14 @@ async def seed_neo4j(driver, mappings: list[dict]):
                 MERGE (t:Track {name: $track})
                 MERGE (s)-[:MAPS_TO_TRACK]->(t)
                 """,
-                {"id": m["standard_id"], "props": props, "track": m["track"]},
+                {"id": node_id, "props": props, "track": m["track"]},
             )
-            log.info(f"  [Neo4j] Merged {m['standard_id']} → {m['track']}")
+            log.info(f"  [Neo4j] Merged {node_id} → {m['track']}")
 
         # Upsert cross-track and progression relationships
         rel_count = 0
         for m in mappings:
+            node_id = m["neo4j_node"]["properties"].get("id", m["standard_id"])
             for rel in m.get("neo4j_relationships", []):
                 target = rel["target"]
                 rel_type = rel["type"]
@@ -324,7 +328,7 @@ async def seed_neo4j(driver, mappings: list[dict]):
                         MERGE (t:Track {{name: $target}})
                         MERGE (s)-[:{rel_type}]->(t)
                         """,
-                        {"sid": m["standard_id"], "target": target},
+                        {"sid": node_id, "target": target},
                     )
                 else:
                     # Progression relationship targets another OASStandard
@@ -334,7 +338,7 @@ async def seed_neo4j(driver, mappings: list[dict]):
                         MERGE (b:OASStandard {{id: $to_id}})
                         MERGE (a)-[:{rel_type}]->(b)
                         """,
-                        {"from_id": m["standard_id"], "to_id": target},
+                        {"from_id": node_id, "to_id": target},
                     )
                 rel_count += 1
         log.info(f"[Neo4j] Created {rel_count} relationships")
