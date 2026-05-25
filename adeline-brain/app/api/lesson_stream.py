@@ -471,15 +471,24 @@ async def _stream_lesson(
             state["cross_track_acknowledgment"] + "\n\n" + state["blocks"][0]["content"]
         )
 
-    # ── Phase 2: Emit blocks ──────────────────────────────────────────────────
     # ── Phase 2: Personalize via Adapter ──────────────────────────────────────
     if state["blocks"]:
         yield _sse({"type": "status", "message": "Personalizing lesson for you..."})
         canonical_dummy = {"topic": request.topic, "blocks": state["blocks"]}
         state["blocks"] = await adapt_canonical_for_student(canonical_dummy, adaptation_req)
 
+    # ── Phase 2: Enrich with vocabulary, quiz, journal, scripture ─────────────
+    try:
+        from app.agents.orchestrator import _append_lesson_enrichment
+        existing_types = {b.get("block_type") for b in state["blocks"]}
+        if "QUIZ" not in existing_types:
+            yield _sse({"type": "status", "message": "Adding vocabulary and knowledge check..."})
+            await _append_lesson_enrichment(state)
+    except Exception as _enrich_err:
+        logger.warning(f"[LessonStream] Enrichment failed (non-fatal): {_enrich_err}")
+
     yield _sse({"type": "status", "message": "Streaming lesson blocks..."})
-    logger.info(f"[LessonStream] Emitting {len(state['blocks'])} blocks: {[b['type'] for b in state['blocks']]}")
+    logger.info(f"[LessonStream] Emitting {len(state['blocks'])} blocks: {[b.get('block_type', 'UNKNOWN') for b in state['blocks']]}")
     for block in state["blocks"]:
         yield _sse({"type": "block", "block": block})
         tool_event = _from_block_tool_call(block, lesson_id, request.track.value)
