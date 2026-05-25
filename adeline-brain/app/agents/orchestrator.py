@@ -2869,6 +2869,89 @@ _HOMESTEAD_BUSINESS_KEYWORDS: frozenset[str] = frozenset({
 })
 
 
+async def _append_lesson_enrichment(state: AdelineState) -> None:
+    """
+    Append vocabulary, quiz, journal prompt, and scripture to every lesson.
+
+    Called after the specialist agent runs. Skips if a QUIZ block already
+    exists (meaning _generate_from_knowledge already produced the full rich
+    set via the structured fallback). Does NOT add the track-specific activity
+    module (scienceLab/historyWitness/challengeActivity) — specialist agents
+    own that content.
+    """
+    import json as _json
+
+    existing_types = {b.get("block_type") for b in state["blocks"]}
+    if BlockType.QUIZ.value in existing_types:
+        return  # already fully enriched (came through _generate_from_knowledge)
+
+    request = state["request"]
+    structured = await _gemini_structured_lesson(
+        request.topic, request.track, request.grade_level
+    )
+    if not structured:
+        return
+
+    def _block(block_type: BlockType, content: str) -> dict:
+        return {
+            "block_type": block_type.value,
+            "content": content,
+            "evidence": [],
+            "is_silenced": False,
+            "homestead_content": (
+                _homestead_adapt(content) if request.is_homestead else None
+            ),
+        }
+
+    # Vocabulary
+    vocab = structured.get("vocabulary", [])
+    if vocab:
+        vocab_lines = []
+        for v in vocab:
+            word = v.get("word", "")
+            defn = v.get("definition", "")
+            pron = v.get("pronunciation", "")
+            example = v.get("exampleSentence", "")
+            pron_str = f" *({pron})*" if pron else ""
+            vocab_lines.append(f"**{word}**{pron_str} — {defn}")
+            if example:
+                vocab_lines.append(f"> *{example}*")
+        state["blocks"].append(_block(BlockType.TEXT, "\n\n".join(vocab_lines)))
+
+    # Scripture
+    scripture = structured.get("scripture")
+    if scripture:
+        verse = scripture.get("verse", "")
+        ref = scripture.get("reference", "")
+        insight = scripture.get("insight", "")
+        state["blocks"].append(_block(
+            BlockType.NARRATIVE,
+            f"**[Paradise Scripture: {ref}]**\n\n> {verse}\n\n{insight}",
+        ))
+
+    # Journal prompt
+    journal = structured.get("suggestedJournalPrompt", "")
+    if journal:
+        state["blocks"].append(_block(BlockType.TEXT, f"**Journal Prompt:** {journal}"))
+
+    # Quiz — always added
+    quiz = structured.get("quiz", [])
+    if quiz:
+        state["blocks"].append({
+            "block_type": BlockType.QUIZ.value,
+            "content": _json.dumps(quiz),
+            "evidence": [],
+            "is_silenced": False,
+            "homestead_content": None,
+        })
+
+    logger.info(
+        f"[RichLesson] Enrichment appended for {request.topic!r} "
+        f"({request.track.value}): vocab={len(vocab)}, quiz={len(quiz)}, "
+        f"scripture={'yes' if scripture else 'no'}, journal={'yes' if journal else 'no'}"
+    )
+
+
 def _route(state: AdelineState) -> Literal[
     "historian", "justice", "science", "discipleship", "literature", "practical"
 ]:
@@ -2964,6 +3047,9 @@ async def run_orchestrator(
         state = await practical_agent(state)
     else:
         state = await discipleship_agent(state)
+
+    # ── 1.5. Lesson enrichment — vocabulary, quiz, journal (every lesson) ────────
+    await _append_lesson_enrichment(state)
 
     # ── 2. Cross-track acknowledgment (prepend to first block if set) ─────────
     if state.get("cross_track_acknowledgment") and state["blocks"]:
