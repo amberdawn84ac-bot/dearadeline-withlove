@@ -529,7 +529,7 @@ function ResearchMissionBlock({ block }: { block: LessonBlockResponse }) {
 // ── QUIZ block ────────────────────────────────────────────────────────────────
 
 function QuizBlock({ block }: { block: LessonBlockResponse }) {
-  // If adapter generated structured quiz_data, use the interactive QuizCard
+  // Path 1: adapter-generated quiz_data with {text, is_correct} option format
   if (block.quiz_data) {
     const qd = block.quiz_data;
     const options = qd.options.map((o) => o.text);
@@ -549,7 +549,42 @@ function QuizBlock({ block }: { block: LessonBlockResponse }) {
       </div>
     );
   }
-  // Fallback: open-ended text response
+
+  // Path 2: enrichment-generated quiz stored as JSON in content field.
+  // Gemini format: [{question, options: string[], correctIndex, explanation}]
+  try {
+    const parsed = JSON.parse(block.content);
+    const questions: Array<{
+      id?: string;
+      question: string;
+      options: string[];
+      correctIndex: number;
+      explanation?: string;
+    }> = Array.isArray(parsed) ? parsed : [parsed];
+    if (questions.length > 0 && questions[0].question && Array.isArray(questions[0].options)) {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-lg">❓</span>
+            <BlockLabel type="QUIZ" />
+          </div>
+          {questions.map((q, i) => (
+            <QuizCard
+              key={q.id ?? i}
+              question={q.question}
+              options={q.options}
+              correctIndex={typeof q.correctIndex === "number" ? q.correctIndex : 0}
+              explanation={q.explanation}
+            />
+          ))}
+        </div>
+      );
+    }
+  } catch {
+    // not JSON — fall through to open-ended textarea
+  }
+
+  // Path 3: plain-text open-ended question (no structured data)
   return (
     <div
       className="rounded-xl p-5 space-y-3"
@@ -636,12 +671,11 @@ function TextBlock({ block }: { block: LessonBlockResponse }) {
   return (
     <div className="rounded-xl p-5 space-y-2" style={{ background: "#F9FAFB" }}>
       <BlockLabel type="TEXT" />
-      <p
-        className="text-base text-[#374151] leading-[1.8] whitespace-pre-wrap"
-        style={{ fontFamily: "var(--font-kalam), cursive" }}
-      >
-        {block.content}
-      </p>
+      <LessonContent
+        content={block.content}
+        fontFamily="var(--font-kalam), cursive"
+        color="#374151"
+      />
     </div>
   );
 }
