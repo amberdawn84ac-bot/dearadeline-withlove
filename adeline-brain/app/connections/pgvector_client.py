@@ -29,8 +29,10 @@ class HippocampusDocument(Base):
     A verified source document chunk stored with its embedding vector.
     This is what the Witness Protocol searches against.
 
-    Unique constraint on (source_url, track) prevents duplicate seeding
-    of the same source URL for the same curriculum track.
+    Unique constraint on (source_url, chunk) prevents re-seeding the same
+    content. Using chunk (not track) as the second key allows multiple
+    standards from the same source URL (e.g. all OAS standards share one
+    base URL) to coexist as separate rows.
     """
     __tablename__ = "hippocampus_documents"
 
@@ -47,13 +49,7 @@ class HippocampusDocument(Base):
     citation_archive_name = Column(String, nullable=False, default="")
     created_at    = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Unique constraint: (source_url, track) pair must be unique
-    __table_args__ = (
-        UniqueConstraint("source_url", "track", name="hippocampus_document_source_url_track_key"),
-    )
-
     def __init__(self, **kwargs):
-        # Apply Python-level defaults for columns before calling super().__init__
         kwargs.setdefault("source_type", "PRIMARY_SOURCE")
         super().__init__(**kwargs)
 
@@ -100,20 +96,21 @@ class HippocampusClient:
         Returns the document ID (existing or newly created).
         """
         async with self._session_factory() as session:
-            # Check for duplicate (source_url, track) pair
+            # Dedup by (source_url, chunk) — chunk is unique per standard.
+            # Using track alone would block all standards sharing the same base URL.
             existing = await session.execute(
                 text("""
                     SELECT id FROM hippocampus_documents
-                    WHERE source_url = :source_url AND track = :track
+                    WHERE source_url = :source_url AND chunk = :chunk
                     LIMIT 1
                 """),
-                {"source_url": source_url, "track": track},
+                {"source_url": source_url, "chunk": chunk},
             )
             result = existing.scalar()
 
             if result:
                 logger.debug(
-                    f"[Duplicate] Skipping {source_url} for track {track} — already exists (id={result})"
+                    f"[Duplicate] Skipping existing chunk for {source_url} (id={result})"
                 )
                 return str(result)
 

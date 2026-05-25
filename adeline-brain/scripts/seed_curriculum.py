@@ -137,11 +137,6 @@ class HippocampusDocument(Base):
         kwargs.setdefault("source_type", "PRIMARY_SOURCE")
         super().__init__(**kwargs)
 
-    # Unique constraint: (source_url, track) pair must be unique
-    __table_args__ = (
-        UniqueConstraint("source_url", "track", name="hippocampus_document_source_url_track_key"),
-    )
-
 
 # ── Embedding helper ──────────────────────────────────────────────────────────
 
@@ -182,10 +177,12 @@ async def init_hippocampus(engine):
 
 async def insert_document(session_factory, embedding: list[float], **meta) -> str:
     async with session_factory() as session:
-        # Skip if (source_url, track) already exists
+        # Dedup by (source_url, chunk) — chunk is unique per standard.
+        # Deduping by (source_url, track) would block all standards that share
+        # the same base URL (e.g. every OAS standard uses the same SDE URL).
         existing = await session.execute(
-            text("SELECT id FROM hippocampus_documents WHERE source_url = :url AND track = :track LIMIT 1"),
-            {"url": meta.get("source_url", ""), "track": meta.get("track", "")},
+            text("SELECT id FROM hippocampus_documents WHERE source_url = :url AND chunk = :chunk LIMIT 1"),
+            {"url": meta.get("source_url", ""), "chunk": meta.get("chunk", "")},
         )
         if existing.scalar():
             log.info(f"  [skip] Already seeded: {meta.get('source_title', '?')} → {meta.get('track', '?')}")
