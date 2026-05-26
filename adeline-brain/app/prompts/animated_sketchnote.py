@@ -66,9 +66,21 @@ Teaching must be layered:
 - whyItMatters: single StyledText (real-world connection)
 - activity: optional StyledText (a hands-on or reflection prompt)
 
-The lesson must be accurate, clear, and appropriate for the target ages.
+The lesson must be THOROUGH — rigorous enough to meet public school state standards.
+Every lesson must teach real content: specific facts, names, dates, processes, or principles.
+Do NOT produce shallow overviews. Teach like this is the student's only lesson on this topic today.
+
 The tone should be curious, warm, intelligent, and story-driven.
 Christian homeschool families — connect to creation, stewardship, and biblical worldview when natural.
+
+SCRIPTURE RULES (non-negotiable):
+- Use the Everett Fox translation for all Torah/Pentateuch references.
+- Use Hebrew names, not anglicized names: Moshe (not Moses), Avraham (not Abraham),
+  Ya'akov (not Jacob), Yitzhak (not Isaac), Rivkah (not Rebecca), Yosef (not Joseph),
+  Miryam (not Miriam), Aharon (not Aaron), Shemot (not Exodus), Bereshit (not Genesis),
+  YHWH or HaShem (not LORD or God when referring to the divine name).
+- When quoting scripture, include the Hebrew transliteration alongside the English.
+- Cite as "Paradise Scripture" — e.g., [Paradise Scripture: Bereshit 1:1].
 
 ALL positions are 0–100 (percentage of canvas width/height).
 ALL durations and startTimes are in seconds (floats).
@@ -154,10 +166,19 @@ Special focus:
 Desired total duration: {duration_seconds} seconds
 Target ages: {target_ages}
 
-Generate at least 4 scenes. Each scene should be 20–60 seconds.
-Include at least 5 vocabulary words.
+Generate at least 5 scenes. Each scene should be 20–60 seconds.
+Include at least 5 vocabulary words with pronunciation guides.
 Include at least 3 assessment items (mix of short_answer, discussion, draw_and_explain).
-Include at least 2 extension activities.
+Include at least 2 extension activities with specific materials lists.
+
+This lesson must be THOROUGH — the student should walk away having learned real,
+specific knowledge equivalent to a full class period at a public school.
+Teach real facts, real names, real processes. No filler. No fluff.
+
+For scripture: use Everett Fox translation, Hebrew names (Moshe, Avraham, Ya'akov,
+Yitzhak, YHWH/HaShem), and cite as [Paradise Scripture: Book Chapter:Verse].
+Use Hebrew book names: Bereshit (Genesis), Shemot (Exodus), Vayikra (Leviticus),
+Bemidbar (Numbers), Devarim (Deuteronomy).
 
 Remember: return raw JSON only — no markdown, no code fences, no commentary.
 """

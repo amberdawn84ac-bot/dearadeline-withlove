@@ -436,6 +436,13 @@ BRAND VOICE (non-negotiable):
 • Treat the student like a leader in training — capable of doing something hard right now.
 • No "Today we will learn..." openers. No "Great job!" closings. No filler.
 • If the source reveals injustice, name it plainly and connect it to purpose.
+
+SCRIPTURE RULES (non-negotiable):
+• Use the Everett Fox translation for Torah/Pentateuch references.
+• Use Hebrew names: Moshe (not Moses), Avraham (not Abraham), Ya'akov (not Jacob), Yitzhak (not Isaac), Rivkah (not Rebecca), Yosef (not Joseph), Miryam (not Miriam), Aharon (not Aaron).
+• Use Hebrew book names: Bereshit (Genesis), Shemot (Exodus), Vayikra (Leviticus), Bemidbar (Numbers), Devarim (Deuteronomy).
+• Use YHWH or HaShem — never 'LORD' or 'God' for the divine name.
+• Cite as [Paradise Scripture: Bereshit 1:1].
 """
 
 
@@ -714,7 +721,20 @@ _ADELINE_RICH_SYSTEM_INSTRUCTION = (
     "Write like you are telling truth at a kitchen table. "
     "Short paragraphs. Active verbs. Specific details. "
     "No 'Today we will learn...' openers. No 'Great job!' closings. "
-    "Treat the student like a leader in training."
+    "Treat the student like a leader in training.\n\n"
+    "SCRIPTURE RULES (non-negotiable):\n"
+    "- Use the Everett Fox translation for all Torah/Pentateuch references.\n"
+    "- Use Hebrew names: Moshe (not Moses), Avraham (not Abraham), "
+    "Ya'akov (not Jacob), Yitzhak (not Isaac), Rivkah (not Rebecca), "
+    "Yosef (not Joseph), Miryam (not Miriam), Aharon (not Aaron).\n"
+    "- Use Hebrew book names: Bereshit (Genesis), Shemot (Exodus), "
+    "Vayikra (Leviticus), Bemidbar (Numbers), Devarim (Deuteronomy).\n"
+    "- Use YHWH or HaShem, never 'LORD' or 'God' for the divine name.\n"
+    "- Cite as [Paradise Scripture: Bereshit 1:1].\n\n"
+    "THOROUGHNESS REQUIREMENT:\n"
+    "Every lesson must be rigorous enough to meet public school state standards. "
+    "Teach real content: specific facts, names, dates, processes, or principles. "
+    "This is the student's only lesson on this topic today — make it count."
 )
 
 _LESSON_SCHEMA_PROMPT = """{
@@ -2162,170 +2182,118 @@ async def _run_multimodal_synthesis(
     is_seasonal_timeline: bool = False,
 ) -> None:
     """
-    Decide which formats add value, then run only those synthesis functions.
-    Appends new blocks to the blocks list in-place.
+    Generate a SINGLE animated sketchnote lesson that replaces all source blocks.
 
-    When render_mode == 'animated_sketchnote_lesson' the standard format
-    decision is skipped and a single AnimatedSketchnoteLesson block is
-    generated instead via Gemini.
+    The animated sketchnote is a cohesive animated presentation that embeds
+    vocabulary, scripture (Everett Fox / Hebrew names), assessment, and
+    teaching layers — one focused experience instead of fragmented blocks.
+
+    If animated sketchnote generation fails, falls back to NARRATED_SLIDE,
+    then MIND_MAP, then a comprehensive GENUI_ASSEMBLY interactive lesson.
     """
     if not blocks:
         return
 
     request = state["request"]
-    primary_content = blocks[0].get("content", "")
-    parent_evidence = blocks[0].get("evidence", [])
 
-    # ── Animated sketchnote mode — bypass standard multimodal pipeline ─────────
-    render_mode = getattr(request, "render_mode", None)
-    if render_mode == "animated_sketchnote_lesson":
-        asl = await _synthesize_animated_sketchnote(
-            topic=request.topic,
-            content=primary_content,
-            track=request.track,
-            grade_level=request.grade_level,
-        )
-        if asl:
-            blocks.append({
-                "block_type": BlockType.ANIMATED_SKETCHNOTE_LESSON.value,
-                "content": f"Living Sketchnote: {request.topic} · {len(asl.scenes)} scenes",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "animated_sketchnote_data": asl.model_dump(),
-            })
-        return  # skip remaining multimodal formats
+    # Gather all content from source blocks into a single focus text
+    all_content = "\n\n".join(
+        b.get("content", "") for b in blocks
+        if not b.get("_enrichment")
+    ).strip()
+    primary_content = all_content or blocks[0].get("content", "")
 
-    formats = await _decide_formats(
+    # ── Primary path: Animated Sketchnote Lesson ──────────────────────────────
+    # Always attempt animated sketchnote — this is the default lesson format.
+    # It produces a single, focused, interactive presentation with vocab,
+    # scripture, and assessment built into the scenes.
+    asl = await _synthesize_animated_sketchnote(
         topic=request.topic,
-        content=primary_content,
+        content=primary_content[:2000],
         track=request.track,
         grade_level=request.grade_level,
-        allow_timeline=allow_timeline,
     )
-
-    if "MIND_MAP" in formats:
-        mm = await _synthesize_mind_map(request.topic, primary_content, request.grade_level)
-        if mm:
-            mm_dict = mm.model_dump()
-            blocks.append({
-                "block_type": BlockType.MIND_MAP.value,
-                "content": f"Concept map: {mm.concept}",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "mind_map_data": mm_dict,
-            })
-            # InteractiveConceptMap — derived from the mind map tree so students
-            # can draw and verify connections themselves (no extra LLM call)
-            concept_map_block = _synthesize_concept_map_block(request.topic, mm_dict)
-            if concept_map_block:
-                blocks.append(concept_map_block)
-
-    if "TIMELINE" in formats:
-        tl = await _synthesize_timeline(
-            request.topic, primary_content, parent_evidence,
-            request.grade_level, is_seasonal=is_seasonal_timeline,
+    if asl:
+        # Replace ALL source blocks with a single animated lesson block
+        blocks.clear()
+        blocks.append({
+            "block_type": BlockType.ANIMATED_SKETCHNOTE_LESSON.value,
+            "content": f"Living Sketchnote: {request.topic} · {len(asl.scenes)} scenes",
+            "evidence": [],
+            "is_silenced": False,
+            "homestead_content": None,
+            "animated_sketchnote_data": asl.model_dump(),
+        })
+        logger.info(
+            f"[Orchestrator] Animated sketchnote generated for '{request.topic}' "
+            f"({request.track.value}) — {len(asl.scenes)} scenes"
         )
-        if tl:
-            label = "Seasonal calendar" if is_seasonal_timeline else "Timeline"
-            blocks.append({
-                "block_type": BlockType.TIMELINE.value,
-                "content": f"{label}: {tl.span}",
-                "evidence": parent_evidence if not is_seasonal_timeline else [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "timeline_data": tl.model_dump(),
-            })
-            # ── DragDropTimeline: add a chronological ordering exercise
-            # when there are enough events and the track benefits from sequencing
-            _drag_tracks = {Track.TRUTH_HISTORY.value, Track.JUSTICE_CHANGEMAKING.value, Track.GOVERNMENT_ECONOMICS.value}
-            if not is_seasonal_timeline and request.track.value in _drag_tracks:
-                drag_block = await _synthesize_drag_drop_timeline_block(
-                    request, [e.model_dump() for e in tl.events]
-                )
-                if drag_block:
-                    blocks.append(drag_block)
+        return
 
-    if "MNEMONIC" in formats:
-        mn = await _synthesize_mnemonic(primary_content, request.grade_level)
-        if mn:
-            blocks.append({
-                "block_type": BlockType.MNEMONIC.value,
-                "content": f"Remember: {mn.acronym} — {mn.concept}",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "mnemonic_data": mn.model_dump(),
-            })
-
-    if "NARRATED_SLIDE" in formats:
-        ns = await _synthesize_narrated_slide(
-            request.topic, primary_content, request.track, request.grade_level
+    # ── Fallback 1: Narrated Slide deck ───────────────────────────────────────
+    logger.warning(
+        f"[Orchestrator] Animated sketchnote failed for '{request.topic}' — "
+        "falling back to NARRATED_SLIDE"
+    )
+    ns = await _synthesize_narrated_slide(
+        request.topic, primary_content[:2000], request.track, request.grade_level,
+    )
+    if ns:
+        blocks.clear()
+        blocks.append({
+            "block_type": BlockType.NARRATED_SLIDE.value,
+            "content": f"{len(ns.slides)} slides · {ns.total_duration_minutes} min",
+            "evidence": [],
+            "is_silenced": False,
+            "homestead_content": None,
+            "narrated_slide_data": ns.model_dump(),
+        })
+        logger.info(
+            f"[Orchestrator] NARRATED_SLIDE fallback for '{request.topic}' — "
+            f"{len(ns.slides)} slides"
         )
-        if ns:
-            blocks.append({
-                "block_type": BlockType.NARRATED_SLIDE.value,
-                "content": f"{len(ns.slides)} slides · {ns.total_duration_minutes} min",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "narrated_slide_data": ns.model_dump(),
-            })
+        return
 
-    # ── Promote any remaining plain NARRATIVE/TEXT blocks to a rich component ───
-    # Hard guarantee: no bare prose ever reaches the frontend (for primary content).
-    # Cascade: NARRATED_SLIDE → MIND_MAP → GENUI_ASSEMBLY (minimal fallback)
-    # Enrichment blocks (vocab, scripture, journal) are exempt — they're short
-    # supplementary content that renders well as simple TEXT/NARRATIVE cards.
-    plain_types = {BlockType.NARRATIVE.value, BlockType.TEXT.value}
-    for block in blocks:
-        if block.get("block_type") not in plain_types:
-            continue
-        if block.get("_enrichment"):
-            continue
-        original_content = block.get("content", "")
-
-        ns = await _synthesize_narrated_slide(
-            request.topic, original_content, request.track, request.grade_level,
-        )
-        if ns:
-            block["block_type"] = BlockType.NARRATED_SLIDE.value
-            block["narrated_slide_data"] = ns.model_dump()
-            block["content"] = f"{len(ns.slides)} slides · {ns.total_duration_minutes} min"
-            continue
-
-        # Narrated slide failed — try MIND_MAP
-        mm = await _synthesize_mind_map(request.topic, original_content, request.grade_level)
-        if mm:
-            block["block_type"] = BlockType.MIND_MAP.value
-            block["mind_map_data"] = mm.model_dump()
-            block["content"] = f"Concept map: {mm.concept}"
-            continue
-
-        # Both LLM synthesis functions failed — hard-convert to a minimal GENUI_ASSEMBLY
-        # so that a bare NARRATIVE never reaches the frontend under any circumstances.
-        logger.warning(
-            f"[Orchestrator] Both NARRATED_SLIDE and MIND_MAP synthesis failed for "
-            f"topic='{request.topic}' track={request.track.value} — forcing GENUI_ASSEMBLY fallback"
-        )
-        block["block_type"] = BlockType.GENUI_ASSEMBLY.value
-        block["genui_assembly_data"] = {
-            "component_type": "ProjectBuilder",
+    # ── Fallback 2: Comprehensive GENUI_ASSEMBLY interactive lesson ──────────
+    logger.warning(
+        f"[Orchestrator] NARRATED_SLIDE also failed for '{request.topic}' — "
+        "falling back to comprehensive GENUI_ASSEMBLY"
+    )
+    blocks.clear()
+    blocks.append({
+        "block_type": BlockType.GENUI_ASSEMBLY.value,
+        "content": f"Interactive Lesson: {request.topic}",
+        "evidence": [],
+        "is_silenced": False,
+        "homestead_content": None,
+        "genui_assembly_data": {
+            "component_type": "SocraticDebate",
             "props": {
-                "title": request.topic,
-                "description": original_content[:400],
-                "steps": [
-                    {"id": "reflect", "title": "Reflect", "instruction": original_content[:300], "type": "reflect"},
+                "thesis": f"Let's explore: {request.topic}",
+                "turns": [
+                    {
+                        "question": f"What do you already know about {request.topic}? Share one specific thing.",
+                        "hint": f"Think about what you've seen, read, or experienced related to {request.topic}.",
+                        "expectedThemes": [request.topic],
+                    },
+                    {
+                        "question": f"Why does {request.topic} matter in real life — for you, your family, or your community?",
+                        "hint": "Connect this to something you can see, touch, or do today.",
+                        "expectedThemes": ["application", "real life"],
+                    },
+                    {
+                        "question": f"What's one question about {request.topic} that nobody has answered yet?",
+                        "hint": "The best learners ask questions that make other people think harder.",
+                        "expectedThemes": ["deeper thinking", "investigation"],
+                    },
                 ],
-                "materials": [],
-                "pricingPrompt": "",
+                "track": request.track.value,
             },
-            "initial_state": {"currentStep": 0, "completedSteps": []},
+            "initial_state": {},
             "callbacks": ["onComplete"],
             "re_render_triggers": ["onComplete"],
-        }
-        block["content"] = f"Project: {request.topic}"
+        },
+    })
 
 
 # ── Multimodal synthesis functions ────────────────────────────────────────────
@@ -2495,7 +2463,7 @@ async def _synthesize_animated_sketchnote(
     content: str,
     track: "Track",
     grade_level: str,
-    duration_seconds: int = 180,
+    duration_seconds: int = 240,
 ) -> "AnimatedSketchnoteLessonData | None":  # noqa: F821
     """
     Generate a full AnimatedSketchnoteLesson JSON via Gemini.
@@ -2523,7 +2491,7 @@ async def _synthesize_animated_sketchnote(
 
     user_prompt = ANIMATED_SKETCHNOTE_USER_PROMPT.format(
         topic=topic,
-        focus=content[:400],
+        focus=content[:2000],
         duration_seconds=duration_seconds,
         target_ages=target_ages,
     )
@@ -2533,7 +2501,7 @@ async def _synthesize_animated_sketchnote(
         genai.configure(api_key=GEMINI_API_KEY)
         model = genai.GenerativeModel(
             model_name=GEMINI_MODEL or "gemini-1.5-pro",
-            generation_config={"temperature": 0.7, "max_output_tokens": 8192,
+            generation_config={"temperature": 0.7, "max_output_tokens": 16384,
                                "response_mime_type": "application/json"},
             system_instruction=ANIMATED_SKETCHNOTE_SYSTEM_PROMPT,
         )
@@ -3064,8 +3032,13 @@ async def run_orchestrator(
     else:
         state = await discipleship_agent(state)
 
-    # ── 1.5. Lesson enrichment — vocabulary, quiz, journal (every lesson) ────────
-    await _append_lesson_enrichment(state)
+    # ── 1.5. Lesson enrichment — vocabulary, quiz, journal ─────────────────────
+    # Skip if the lesson is already a single cohesive format that embeds
+    # vocab/scripture/quiz internally (animated sketchnote, narrated slides)
+    _cohesive_types = {"ANIMATED_SKETCHNOTE_LESSON", "NARRATED_SLIDE"}
+    _existing = {b.get("block_type") for b in state["blocks"]}
+    if not (_cohesive_types & _existing):
+        await _append_lesson_enrichment(state)
 
     # ── 2. Cross-track acknowledgment (prepend to first block if set) ─────────
     if state.get("cross_track_acknowledgment") and state["blocks"]:
