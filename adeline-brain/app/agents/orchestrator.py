@@ -840,21 +840,27 @@ def _structured_lesson_to_blocks(lesson: dict, request: LessonRequest) -> list[d
             vocab_lines.append(f"**{word}**{pron_str} — {defn}")
             if example:
                 vocab_lines.append(f"> *{example}*")
-        blocks.append(_block(BlockType.TEXT, "\n\n".join(vocab_lines)))
+        b = _block(BlockType.TEXT, "\n\n".join(vocab_lines))
+        b["_enrichment"] = True
+        blocks.append(b)
 
     scripture = lesson.get("scripture")
     if scripture:
         verse = scripture.get("verse", "")
         ref = scripture.get("reference", "")
         insight = scripture.get("insight", "")
-        blocks.append(_block(
+        b = _block(
             BlockType.NARRATIVE,
             f"**[Paradise Scripture: {ref}]**\n\n> {verse}\n\n{insight}",
-        ))
+        )
+        b["_enrichment"] = True
+        blocks.append(b)
 
     journal = lesson.get("suggestedJournalPrompt", "")
     if journal:
-        blocks.append(_block(BlockType.TEXT, f"**Journal Prompt:** {journal}"))
+        b = _block(BlockType.TEXT, f"**Journal Prompt:** {journal}")
+        b["_enrichment"] = True
+        blocks.append(b)
 
     science_lab = lesson.get("scienceLab")
     history_witness = lesson.get("historyWitness")
@@ -2268,11 +2274,15 @@ async def _run_multimodal_synthesis(
             })
 
     # ── Promote any remaining plain NARRATIVE/TEXT blocks to a rich component ───
-    # Hard guarantee: no bare prose ever reaches the frontend.
+    # Hard guarantee: no bare prose ever reaches the frontend (for primary content).
     # Cascade: NARRATED_SLIDE → MIND_MAP → GENUI_ASSEMBLY (minimal fallback)
+    # Enrichment blocks (vocab, scripture, journal) are exempt — they're short
+    # supplementary content that renders well as simple TEXT/NARRATIVE cards.
     plain_types = {BlockType.NARRATIVE.value, BlockType.TEXT.value}
     for block in blocks:
         if block.get("block_type") not in plain_types:
+            continue
+        if block.get("_enrichment"):
             continue
         original_content = block.get("content", "")
 
@@ -2916,7 +2926,9 @@ async def _append_lesson_enrichment(state: AdelineState) -> None:
             vocab_lines.append(f"**{word}**{pron_str} — {defn}")
             if example:
                 vocab_lines.append(f"> *{example}*")
-        state["blocks"].append(_block(BlockType.TEXT, "\n\n".join(vocab_lines)))
+        b = _block(BlockType.TEXT, "\n\n".join(vocab_lines))
+        b["_enrichment"] = True
+        state["blocks"].append(b)
 
     # Scripture
     scripture = structured.get("scripture")
@@ -2924,15 +2936,19 @@ async def _append_lesson_enrichment(state: AdelineState) -> None:
         verse = scripture.get("verse", "")
         ref = scripture.get("reference", "")
         insight = scripture.get("insight", "")
-        state["blocks"].append(_block(
+        b = _block(
             BlockType.NARRATIVE,
             f"**[Paradise Scripture: {ref}]**\n\n> {verse}\n\n{insight}",
-        ))
+        )
+        b["_enrichment"] = True
+        state["blocks"].append(b)
 
     # Journal prompt
     journal = structured.get("suggestedJournalPrompt", "")
     if journal:
-        state["blocks"].append(_block(BlockType.TEXT, f"**Journal Prompt:** {journal}"))
+        b = _block(BlockType.TEXT, f"**Journal Prompt:** {journal}")
+        b["_enrichment"] = True
+        state["blocks"].append(b)
 
     # Quiz — always added
     quiz = structured.get("quiz", [])

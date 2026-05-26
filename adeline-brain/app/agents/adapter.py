@@ -107,6 +107,10 @@ def select_transformation(block: dict, req: AdaptationRequest) -> str:
                       "SCAFFOLDED_PROBLEM", "HARD_THING_CHALLENGE"):
         return "text_only"
 
+    # Enrichment blocks (vocab, scripture, journal) — render as-is
+    if block.get("_enrichment"):
+        return "text_only"
+
     # Early interactions: keep simple regardless
     if req.interaction_count <= 3:
         if grade <= 5:
