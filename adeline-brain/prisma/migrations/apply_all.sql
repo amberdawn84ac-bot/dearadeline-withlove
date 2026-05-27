@@ -342,7 +342,6 @@ EXCEPTION WHEN duplicate_table OR unique_violation THEN NULL; END $$;
 
 CREATE INDEX IF NOT EXISTS "Book_track_idx" ON "Book"("track");
 CREATE INDEX IF NOT EXISTS "Book_lexile_level_idx" ON "Book"("lexile_level");
-CREATE INDEX IF NOT EXISTS "Book_sourceLibrary_idx" ON "Book"("sourceLibrary");
 CREATE INDEX IF NOT EXISTS "Book_embedding_idx" ON "Book" USING hnsw ("embedding" vector_cosine_ops);
 
 -- ── 2026-04-04: ReadingSession table ──────────────────────────────────────────

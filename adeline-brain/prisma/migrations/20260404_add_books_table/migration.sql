@@ -15,7 +15,6 @@ ALTER TABLE "Book" ADD CONSTRAINT "Book_source_url_unique" UNIQUE ("source_url")
 -- Create indexes for common queries
 CREATE INDEX "Book_track_idx" ON "Book"("track");
 CREATE INDEX "Book_lexile_level_idx" ON "Book"("lexile_level");
-CREATE INDEX "Book_sourceLibrary_idx" ON "Book"("sourceLibrary");
 
 -- Create HNSW index for pgvector similarity search (cosine distance)
 CREATE INDEX "Book_embedding_idx" ON "Book" USING hnsw ("embedding" vector_cosine_ops);
