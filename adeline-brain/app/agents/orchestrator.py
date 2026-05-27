@@ -1095,8 +1095,8 @@ async def historian_agent(state: AdelineState) -> AdelineState:
             )
             blocks = await _generate_from_knowledge(state, silent_sources[:3])
 
-    # ── Multimodal synthesis ─────────────────────────────────────────────────
-    await _run_multimodal_synthesis(state, blocks, allow_timeline=True)
+    # ── Render to cohesive format ──────────────────────────────────────────────
+    await _render_lesson(state, blocks)
 
     state["blocks"] = blocks
     return state
@@ -1270,8 +1270,8 @@ RESEARCH_MISSION:
         )
         blocks = await _generate_from_knowledge(state, [])
 
-    # ── Multimodal synthesis ─────────────────────────────────────────────────
-    await _run_multimodal_synthesis(state, blocks, allow_timeline=True)
+    # ── Render to cohesive format ──────────────────────────────────────────────
+    await _render_lesson(state, blocks)
 
     state["blocks"] = blocks
     return state
@@ -1369,32 +1369,76 @@ async def science_agent(state: AdelineState) -> AdelineState:
                 "experiment_data":   best_experiment.model_dump(),
             })
 
-    # ── Step 2: Hippocampus retrieval (HOMESTEADING, or CREATION_SCIENCE fallback)
-    if not experiment_matched:
-        raw_results = await hippocampus.similarity_search(
-            query_embedding=state["query_embedding"],
-            track=request.track.value,
-            top_k=3,
-        )
+    # ── Step 2: Hippocampus retrieval (always — provides content for the renderer)
+    # Even when an experiment matched, we need teaching content for the animated
+    # sketchnote/narrated slide. The experiment is a supplement alongside it.
+    raw_results = await hippocampus.similarity_search(
+        query_embedding=state["query_embedding"],
+        track=request.track.value,
+        top_k=3,
+    )
 
-        # No Witness Protocol threshold — science content doesn't need archival verification.
-        # Hippocampus results are reference material; Claude synthesizes the actual lesson.
-        # Minimum relevance floor: discard anything below 0.40 — OAS standards metadata and
-        # unrelated chunks can score as low as 0.15-0.25 and produce garbage Primary Source blocks.
-        _SCIENCE_RELEVANCE_FLOOR = 0.40
-        raw_results = [r for r in raw_results if float(r["similarity_score"]) >= _SCIENCE_RELEVANCE_FLOOR]
-        if not raw_results:
-            logger.info(
-                f"[ScienceAgent] All Hippocampus results below relevance floor "
-                f"({_SCIENCE_RELEVANCE_FLOOR}) — falling through to knowledge generation."
+    # No Witness Protocol threshold — science content doesn't need archival verification.
+    # Hippocampus results are reference material; Claude synthesizes the actual lesson.
+    # Minimum relevance floor: discard anything below 0.40 — OAS standards metadata and
+    # unrelated chunks can score as low as 0.15-0.25 and produce garbage Primary Source blocks.
+    _SCIENCE_RELEVANCE_FLOOR = 0.40
+    raw_results = [r for r in raw_results if float(r["similarity_score"]) >= _SCIENCE_RELEVANCE_FLOOR]
+    if not raw_results:
+        logger.info(
+            f"[ScienceAgent] All Hippocampus results below relevance floor "
+            f"({_SCIENCE_RELEVANCE_FLOOR}) — falling through to knowledge generation."
+        )
+    for result in raw_results:
+        raw = result["chunk"]
+        block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
+        content = await _state_synthesize(
+            state,
+            block_type=block_type.value,
+            source_chunks=[result],
+            raw_content=raw,
+        )
+        if is_homesteading:
+            content = (
+                f"**Homestead Lab Mission**\n\n{content}\n\n"
+                "*Observe this directly on your land. Record what you find.*"
             )
-        for result in raw_results:
-            raw = result["chunk"]
+        blocks.append({
+            "block_type":        block_type.value,
+            "content":           content,
+            "evidence":          [{
+                "source_id":        result["id"],
+                "source_title":     result["source_title"],
+                "source_url":       result.get("source_url", ""),
+                "witness_citation": {
+                    "author":       result.get("citation_author", ""),
+                    "year":         result.get("citation_year"),
+                    "archive_name": result.get("citation_archive_name", ""),
+                },
+                "similarity_score": float(result["similarity_score"]),
+                "verdict":          "VERIFIED",
+                "chunk":            raw,
+            }],
+            "is_silenced":       False,
+            "homestead_content": _homestead_adapt(raw) if request.is_homestead else None,
+        })
+
+    # Check if we have any content blocks (not just experiment supplements)
+    _has_content = any(
+        b.get("block_type") not in (BlockType.EXPERIMENT.value, "GENUI_ASSEMBLY")
+        for b in blocks
+    )
+    if not _has_content:
+        # No teaching content yet — try web search (seeds Hippocampus for next time)
+        logger.info("[ScienceAgent] No content blocks — searching web to seed and generate.")
+        web_results = await search_witnesses(request.topic, request.track.value)
+        if web_results:
+            raw = web_results[0].get("chunk", request.topic)
             block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
             content = await _state_synthesize(
                 state,
                 block_type=block_type.value,
-                source_chunks=[result],
+                source_chunks=web_results,
                 raw_content=raw,
             )
             if is_homesteading:
@@ -1406,120 +1450,81 @@ async def science_agent(state: AdelineState) -> AdelineState:
                 "block_type":        block_type.value,
                 "content":           content,
                 "evidence":          [{
-                    "source_id":        result["id"],
-                    "source_title":     result["source_title"],
-                    "source_url":       result.get("source_url", ""),
-                    "witness_citation": {
-                        "author":       result.get("citation_author", ""),
-                        "year":         result.get("citation_year"),
-                        "archive_name": result.get("citation_archive_name", ""),
-                    },
-                    "similarity_score": float(result["similarity_score"]),
+                    "source_id":        r.get("source_id", ""),
+                    "source_title":     r.get("source_title", ""),
+                    "source_url":       r.get("source_url", ""),
+                    "witness_citation": r.get("witness_citation", {}),
+                    "similarity_score": float(r.get("similarity_score", 0)),
                     "verdict":          "VERIFIED",
-                    "chunk":            raw,
-                }],
+                    "chunk":            r.get("chunk", ""),
+                } for r in web_results[:2]],
                 "is_silenced":       False,
-                "homestead_content": _homestead_adapt(raw) if request.is_homestead else None,
+                "homestead_content": None,
             })
-
-        if not blocks:
-            # Hippocampus empty — try web search first (seeds Hippocampus for next time)
-            logger.info("[ScienceAgent] Hippocampus empty — searching web to seed and generate.")
-            web_results = await search_witnesses(request.topic, request.track.value)
-            if web_results:
-                raw = web_results[0].get("chunk", request.topic)
-                block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
-                content = await _state_synthesize(
-                    state,
-                    block_type=block_type.value,
-                    source_chunks=web_results,
-                    raw_content=raw,
+            state["researcher_activated"] = True
+        else:
+            # Web search also empty — synthesize from knowledge with a proper track voice
+            logger.info("[ScienceAgent] No web results — generating from knowledge with Lab Director voice.")
+            grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
+            if is_homesteading:
+                sys_prompt = (
+                    f"You are Adeline — {_TRACK_PERSONA[Track.HOMESTEADING]}\n\n"
+                    f"Teaching a {grade_desc} student in a Christian homeschool family.\n\n"
+                    f"{_ADELINE_VOICE}\n"
+                    "Write a HOMESTEAD LAB MISSION. Structure:\n"
+                    "1. One vivid opening sentence — drop the student into a real land-based moment.\n"
+                    "2. What to observe, grow, build, or do — specific and practical.\n"
+                    "3. What science principle they'll see in action.\n"
+                    "4. One question: 'Who designed this system and why does it work so well?'\n"
+                    "Keep it under 200 words. No fluff."
                 )
-                if is_homesteading:
-                    content = (
-                        f"**Homestead Lab Mission**\n\n{content}\n\n"
-                        "*Observe this directly on your land. Record what you find.*"
-                    )
-                blocks.append({
-                    "block_type":        block_type.value,
-                    "content":           content,
-                    "evidence":          [{
-                        "source_id":        r.get("source_id", ""),
-                        "source_title":     r.get("source_title", ""),
-                        "source_url":       r.get("source_url", ""),
-                        "witness_citation": r.get("witness_citation", {}),
-                        "similarity_score": float(r.get("similarity_score", 0)),
-                        "verdict":          "VERIFIED",
-                        "chunk":            r.get("chunk", ""),
-                    } for r in web_results[:2]],
-                    "is_silenced":       False,
-                    "homestead_content": None,
-                })
-                state["researcher_activated"] = True
             else:
-                # Web search also empty — synthesize from knowledge with a proper track voice
-                logger.info("[ScienceAgent] No web results — generating from knowledge with Lab Director voice.")
-                grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
-                if is_homesteading:
-                    sys_prompt = (
-                        f"You are Adeline — {_TRACK_PERSONA[Track.HOMESTEADING]}\n\n"
-                        f"Teaching a {grade_desc} student in a Christian homeschool family.\n\n"
-                        f"{_ADELINE_VOICE}\n"
-                        "Write a HOMESTEAD LAB MISSION. Structure:\n"
-                        "1. One vivid opening sentence — drop the student into a real land-based moment.\n"
-                        "2. What to observe, grow, build, or do — specific and practical.\n"
-                        "3. What science principle they'll see in action.\n"
-                        "4. One question: 'Who designed this system and why does it work so well?'\n"
-                        "Keep it under 200 words. No fluff."
-                    )
-                else:
-                    sys_prompt = (
-                        f"You are Adeline — {_TRACK_PERSONA[Track.CREATION_SCIENCE]}\n\n"
-                        f"Teaching a {grade_desc} student in a Christian homeschool family.\n\n"
-                        f"{_ADELINE_VOICE}\n"
-                        "Write a CREATION SCIENCE lesson. Structure:\n"
-                        "1. One hook sentence — a specific, observable fact that demands an explanation.\n"
-                        "2. What the secular model says about this topic — be fair and accurate.\n"
-                        "3. What the Creation model says — specific, evidence-based, no 'God said so' shortcuts.\n"
-                        "   Name real scientists, real experiments, real data points where possible.\n"
-                        "4. One challenge question the student can investigate themselves.\n"
-                        "DO NOT say 'the archive doesn't have sources' or refer to your limitations. TEACH.\n"
-                        "Keep it under 300 words. Direct, specific, intellectually honest."
-                    )
-                user_prompt = (
-                    f"Topic: {request.topic}\n\n"
-                    "Teach this lesson now."
+                sys_prompt = (
+                    f"You are Adeline — {_TRACK_PERSONA[Track.CREATION_SCIENCE]}\n\n"
+                    f"Teaching a {grade_desc} student in a Christian homeschool family.\n\n"
+                    f"{_ADELINE_VOICE}\n"
+                    "Write a CREATION SCIENCE lesson. Structure:\n"
+                    "1. One hook sentence — a specific, observable fact that demands an explanation.\n"
+                    "2. What the secular model says about this topic — be fair and accurate.\n"
+                    "3. What the Creation model says — specific, evidence-based, no 'God said so' shortcuts.\n"
+                    "   Name real scientists, real experiments, real data points where possible.\n"
+                    "4. One challenge question the student can investigate themselves.\n"
+                    "DO NOT say 'the archive doesn't have sources' or refer to your limitations. TEACH.\n"
+                    "Keep it under 300 words. Direct, specific, intellectually honest."
                 )
-                try:
-                    content = (await _synthesis_call(sys_prompt, user_prompt, max_tokens=900)).strip()
-                except SynthesisSafetyError as e:
-                    # Safety filter triggered and no Claude fallback — save for admin review
-                    logger.warning(f"[ScienceAgent] Safety filter on '{request.topic}': {e}")
-                    is_controversial, reason = is_controversial_topic(request.topic)
-                    review_reason = reason if is_controversial else "AI safety filter triggered"
-                    await _save_pending_canonical(state, review_reason)
-                    # Return graceful placeholder that won't be saved again
-                    content = (
-                        f"**{request.topic}**\n\n"
-                        "This lesson is being carefully prepared by our teaching team "
-                        "to ensure it presents truth with accuracy and care. Check back soon!"
-                    )
-                except Exception as e:
-                    logger.warning(f"[ScienceAgent] Knowledge synthesis failed: {e}")
-                    content = (
-                        f"**{request.topic}**\n\n"
-                        "Adeline is preparing this lesson. Check back shortly."
-                    )
-                if is_homesteading:
-                    content = f"**Homestead Lab Mission**\n\n{content}"
-                block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.NARRATIVE
-                blocks.append({
-                    "block_type":        block_type.value,
-                    "content":           content,
-                    "evidence":          [],
-                    "is_silenced":       False,
-                    "homestead_content": None,
-                })
+            user_prompt = (
+                f"Topic: {request.topic}\n\n"
+                "Teach this lesson now."
+            )
+            try:
+                content = (await _synthesis_call(sys_prompt, user_prompt, max_tokens=900)).strip()
+            except SynthesisSafetyError as e:
+                # Safety filter triggered and no Claude fallback — save for admin review
+                logger.warning(f"[ScienceAgent] Safety filter on '{request.topic}': {e}")
+                is_controversial, reason = is_controversial_topic(request.topic)
+                review_reason = reason if is_controversial else "AI safety filter triggered"
+                await _save_pending_canonical(state, review_reason)
+                content = (
+                    f"**{request.topic}**\n\n"
+                    "This lesson is being carefully prepared by our teaching team "
+                    "to ensure it presents truth with accuracy and care. Check back soon!"
+                )
+            except Exception as e:
+                logger.warning(f"[ScienceAgent] Knowledge synthesis failed: {e}")
+                content = (
+                    f"**{request.topic}**\n\n"
+                    "Adeline is preparing this lesson. Check back shortly."
+                )
+            if is_homesteading:
+                content = f"**Homestead Lab Mission**\n\n{content}"
+            block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.NARRATIVE
+            blocks.append({
+                "block_type":        block_type.value,
+                "content":           content,
+                "evidence":          [],
+                "is_silenced":       False,
+                "homestead_content": None,
+            })
 
     # ── CREATION_SCIENCE: inject MoleculeSimulator for chemistry/matter topics ──
     if is_creation_science and blocks:
@@ -1527,12 +1532,8 @@ async def science_agent(state: AdelineState) -> AdelineState:
         if mol_block:
             blocks.append(mol_block)
 
-    # ── Multimodal synthesis ─────────────────────────────────────────────────
-    await _run_multimodal_synthesis(
-        state, blocks,
-        allow_timeline=is_homesteading,
-        is_seasonal_timeline=is_homesteading,
-    )
+    # ── Render to cohesive format ──────────────────────────────────────────────
+    await _render_lesson(state, blocks)
 
     state["blocks"] = blocks
     return state
@@ -1684,8 +1685,8 @@ async def literature_agent(state: AdelineState) -> AdelineState:
                 "homestead_content": None,
             })
 
-    # ── Multimodal synthesis ─────────────────────────────────────────────────
-    await _run_multimodal_synthesis(state, blocks)
+    # ── Render to cohesive format ──────────────────────────────────────────────
+    await _render_lesson(state, blocks)
 
     state["blocks"] = blocks
     return state
@@ -1822,8 +1823,8 @@ async def practical_agent(state: AdelineState) -> AdelineState:
         if code_block:
             blocks.append(code_block)
 
-    # ── Multimodal synthesis ─────────────────────────────────────────────────
-    await _run_multimodal_synthesis(state, blocks)
+    # ── Render to cohesive format ──────────────────────────────────────────────
+    await _render_lesson(state, blocks)
 
     state["blocks"] = blocks
     return state
@@ -2175,116 +2176,139 @@ async def _decide_formats(
         return ["MIND_MAP", "NARRATED_SLIDE"]
 
 
-async def _run_multimodal_synthesis(
+async def _render_lesson(
     state: "AdelineState",
     blocks: list[dict],
-    allow_timeline: bool = False,
-    is_seasonal_timeline: bool = False,
 ) -> None:
     """
-    Generate a SINGLE animated sketchnote lesson that replaces all source blocks.
+    Render gathered content into a cohesive lesson format. Mutates `blocks` in place.
 
-    The animated sketchnote is a cohesive animated presentation that embeds
-    vocabulary, scripture (Everett Fox / Hebrew names), assessment, and
-    teaching layers — one focused experience instead of fragmented blocks.
+    Pipeline (first success wins):
+      1. ANIMATED_SKETCHNOTE_LESSON — full interactive animated presentation
+         with vocabulary, scripture, and assessment embedded in scenes.
+      2. NARRATED_SLIDE — slide deck with voice narration script.
+      3. Content blocks preserved + GENUI_ASSEMBLY (SocraticDebate) appended
+         as the interactive engagement layer.
 
-    If animated sketchnote generation fails, falls back to NARRATED_SLIDE,
-    then MIND_MAP, then a comprehensive GENUI_ASSEMBLY interactive lesson.
+    Interactive supplement blocks (EXPERIMENT, CodePlayground, ProjectBuilder,
+    MoleculeSimulator) are ALWAYS preserved and appended after the main block.
+    They are never destroyed by the render cascade.
     """
     if not blocks:
         return
 
     request = state["request"]
 
-    # Gather all content from source blocks into a single focus text
-    all_content = "\n\n".join(
-        b.get("content", "") for b in blocks
+    # ── Separate interactive supplements from content blocks ──────────────────
+    _SUPPLEMENT_TYPES = {"EXPERIMENT"}
+    supplements: list[dict] = []
+    content_blocks: list[dict] = []
+
+    for b in blocks:
+        block_type = b.get("block_type", "")
+        if block_type in _SUPPLEMENT_TYPES:
+            supplements.append(b)
+        elif block_type == "GENUI_ASSEMBLY":
+            # Agent-specific GENUI widgets (CodePlayground, ProjectBuilder, etc.)
+            # are supplements. We only create SocraticDebate as a fallback below.
+            supplements.append(b)
+        else:
+            content_blocks.append(b)
+
+    if not content_blocks:
+        return  # Only supplements present — nothing to render
+
+    # ── Gather synthesis text from content blocks ─────────────────────────────
+    synthesis_text = "\n\n".join(
+        b.get("content", "") for b in content_blocks
         if not b.get("_enrichment")
     ).strip()
-    primary_content = all_content or blocks[0].get("content", "")
+    if not synthesis_text:
+        synthesis_text = request.topic
 
-    # ── Primary path: Animated Sketchnote Lesson ──────────────────────────────
-    # Always attempt animated sketchnote — this is the default lesson format.
-    # It produces a single, focused, interactive presentation with vocab,
-    # scripture, and assessment built into the scenes.
+    # Collect evidence from all content blocks for attribution on cohesive formats
+    all_evidence = []
+    for b in content_blocks:
+        all_evidence.extend(b.get("evidence", []))
+
+    # ── Cascade: Animated Sketchnote → Narrated Slide → Content + Debate ─────
+
+    # Primary: Animated Sketchnote Lesson
     asl = await _synthesize_animated_sketchnote(
         topic=request.topic,
-        content=primary_content[:2000],
+        content=synthesis_text[:2000],
         track=request.track,
         grade_level=request.grade_level,
     )
     if asl:
-        # Replace ALL source blocks with a single animated lesson block
         blocks.clear()
         blocks.append({
             "block_type": BlockType.ANIMATED_SKETCHNOTE_LESSON.value,
             "content": f"Living Sketchnote: {request.topic} · {len(asl.scenes)} scenes",
-            "evidence": [],
+            "evidence": all_evidence,
             "is_silenced": False,
             "homestead_content": None,
             "animated_sketchnote_data": asl.model_dump(),
         })
+        blocks.extend(supplements)
         logger.info(
-            f"[Orchestrator] Animated sketchnote generated for '{request.topic}' "
-            f"({request.track.value}) — {len(asl.scenes)} scenes"
+            f"[Render] Animated sketchnote — {len(asl.scenes)} scenes, "
+            f"{len(supplements)} supplement(s) for '{request.topic}'"
         )
         return
 
-    # ── Fallback 1: Narrated Slide deck ───────────────────────────────────────
-    logger.warning(
-        f"[Orchestrator] Animated sketchnote failed for '{request.topic}' — "
-        "falling back to NARRATED_SLIDE"
-    )
+    # Fallback 1: Narrated Slide
+    logger.info(f"[Render] Sketchnote unavailable for '{request.topic}' — trying narrated slide")
     ns = await _synthesize_narrated_slide(
-        request.topic, primary_content[:2000], request.track, request.grade_level,
+        request.topic, synthesis_text[:2000], request.track, request.grade_level,
     )
     if ns:
         blocks.clear()
         blocks.append({
             "block_type": BlockType.NARRATED_SLIDE.value,
             "content": f"{len(ns.slides)} slides · {ns.total_duration_minutes} min",
-            "evidence": [],
+            "evidence": all_evidence,
             "is_silenced": False,
             "homestead_content": None,
             "narrated_slide_data": ns.model_dump(),
         })
+        blocks.extend(supplements)
         logger.info(
-            f"[Orchestrator] NARRATED_SLIDE fallback for '{request.topic}' — "
-            f"{len(ns.slides)} slides"
+            f"[Render] Narrated slide — {len(ns.slides)} slides, "
+            f"{len(supplements)} supplement(s) for '{request.topic}'"
         )
         return
 
-    # ── Fallback 2: Comprehensive GENUI_ASSEMBLY interactive lesson ──────────
-    logger.warning(
-        f"[Orchestrator] NARRATED_SLIDE also failed for '{request.topic}' — "
-        "falling back to comprehensive GENUI_ASSEMBLY"
-    )
+    # Fallback 2: Keep content blocks + append SocraticDebate for interaction
+    logger.info(f"[Render] Slide unavailable for '{request.topic}' — keeping content + debate")
+    key_phrase = synthesis_text[:80].split(".")[0] if synthesis_text else request.topic
     blocks.clear()
+    blocks.extend(content_blocks)
     blocks.append({
         "block_type": BlockType.GENUI_ASSEMBLY.value,
-        "content": f"Interactive Lesson: {request.topic}",
+        "content": f"Discussion: {request.topic}",
         "evidence": [],
         "is_silenced": False,
         "homestead_content": None,
         "genui_assembly_data": {
             "component_type": "SocraticDebate",
             "props": {
-                "thesis": f"Let's explore: {request.topic}",
+                "thesis": f"Let's go deeper: {request.topic}",
                 "turns": [
                     {
-                        "question": f"What do you already know about {request.topic}? Share one specific thing.",
-                        "hint": f"Think about what you've seen, read, or experienced related to {request.topic}.",
-                        "expectedThemes": [request.topic],
+                        "question": f"Based on what you just learned about {request.topic} — what's the one fact that surprised you most?",
+                        "hint": f"Look at: {key_phrase}",
+                        "expectedThemes": [request.topic.lower()],
                     },
                     {
-                        "question": f"Why does {request.topic} matter in real life — for you, your family, or your community?",
-                        "hint": "Connect this to something you can see, touch, or do today.",
+                        "question": f"How does {request.topic} connect to something you can see or do on your land, in your home, or in your community this week?",
+                        "hint": "Think practical. What would change if you acted on this?",
                         "expectedThemes": ["application", "real life"],
                     },
                     {
-                        "question": f"What's one question about {request.topic} that nobody has answered yet?",
-                        "hint": "The best learners ask questions that make other people think harder.",
-                        "expectedThemes": ["deeper thinking", "investigation"],
+                        "question": f"If you had to teach someone younger about {request.topic}, what would you say first?",
+                        "hint": "Teaching is the best way to know if you really understand something.",
+                        "expectedThemes": ["understanding", "synthesis"],
                     },
                 ],
                 "track": request.track.value,
@@ -2294,6 +2318,7 @@ async def _run_multimodal_synthesis(
             "re_render_triggers": ["onComplete"],
         },
     })
+    blocks.extend(supplements)
 
 
 # ── Multimodal synthesis functions ────────────────────────────────────────────
@@ -2575,50 +2600,50 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
                 "is_silenced": False,
             })
 
-            # Fall through to multimodal synthesis below
         else:
             logger.warning(f"[DiscipleshipAgent] Failed to fetch {biblical_ref} from Sefaria, falling back to Hippocampus")
 
-    # Hippocampus reference — no Witness Protocol threshold.
+    # Hippocampus reference — only if Sefaria didn't already provide content.
     # Discipleship content is worldview synthesis, not archival verification.
     # Hippocampus results are context; Claude wraps them in Adeline's voice.
-    raw_results = await hippocampus.similarity_search(
-        query_embedding=state["query_embedding"],
-        track=request.track.value,
-        top_k=3,
-    )
-
-    for result in raw_results:
-        raw = result["chunk"]
-        content = await _state_synthesize(
-            state,
-            block_type=BlockType.NARRATIVE.value,
-            source_chunks=[result],
-            raw_content=raw,
+    if not blocks:
+        raw_results = await hippocampus.similarity_search(
+            query_embedding=state["query_embedding"],
+            track=request.track.value,
+            top_k=3,
         )
-        blocks.append({
-            "block_type":        BlockType.NARRATIVE.value,
-            "content":           _worldview_wrap(content, request.track),
-            "evidence":          [{
-                "source_id":        result["id"],
-                "source_title":     result["source_title"],
-                "source_url":       result.get("source_url", ""),
-                "witness_citation": {
-                    "author":       result.get("citation_author", ""),
-                    "year":         result.get("citation_year"),
-                    "archive_name": result.get("citation_archive_name", ""),
-                },
-                "similarity_score": float(result["similarity_score"]),
-                "verdict":          "VERIFIED",
-                "chunk":            raw,
-            }],
-            "is_silenced":       False,
-            "homestead_content": _homestead_adapt(raw) if request.is_homestead else None,
-        })
+
+        for result in raw_results:
+            raw = result["chunk"]
+            content = await _state_synthesize(
+                state,
+                block_type=BlockType.NARRATIVE.value,
+                source_chunks=[result],
+                raw_content=raw,
+            )
+            blocks.append({
+                "block_type":        BlockType.NARRATIVE.value,
+                "content":           _worldview_wrap(content, request.track),
+                "evidence":          [{
+                    "source_id":        result["id"],
+                    "source_title":     result["source_title"],
+                    "source_url":       result.get("source_url", ""),
+                    "witness_citation": {
+                        "author":       result.get("citation_author", ""),
+                        "year":         result.get("citation_year"),
+                        "archive_name": result.get("citation_archive_name", ""),
+                    },
+                    "similarity_score": float(result["similarity_score"]),
+                    "verdict":          "VERIFIED",
+                    "chunk":            raw,
+                }],
+                "is_silenced":       False,
+                "homestead_content": _homestead_adapt(raw) if request.is_homestead else None,
+            })
 
     if not blocks:
-        # Hippocampus empty — try web search first (seeds Hippocampus for next time)
-        logger.info("[DiscipleshipAgent] Hippocampus empty — searching web to seed and generate.")
+        # Both Sefaria and Hippocampus empty — try web search (seeds Hippocampus for next time)
+        logger.info("[DiscipleshipAgent] No content yet — searching web to seed and generate.")
         web_results = await search_witnesses(request.topic, request.track.value)
         if web_results:
             raw = web_results[0].get("chunk", request.topic)
@@ -2661,8 +2686,8 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
                 "homestead_content": None,
             })
 
-    # ── Multimodal synthesis ─────────────────────────────────────────────────
-    await _run_multimodal_synthesis(state, blocks)
+    # ── Render to cohesive format ──────────────────────────────────────────────
+    await _render_lesson(state, blocks)
 
     state["blocks"] = blocks
     return state
@@ -2834,17 +2859,6 @@ def _track_to_credit_type(track: Track) -> str:
 
 # ── Router ────────────────────────────────────────────────────────────────────
 
-# Business/financial subtopics within HOMESTEADING route to practical_agent
-# instead of science_agent — budgets, pricing, market plans are applied math,
-# not lab science.
-_HOMESTEAD_BUSINESS_KEYWORDS: frozenset[str] = frozenset({
-    "business", "plan", "planning", "budget", "budgeting",
-    "profit", "loss", "revenue", "cost", "costs", "price", "pricing",
-    "market", "marketing", "sell", "selling", "sales", "income", "expense",
-    "expenses", "financial", "finance", "money", "accounting", "bookkeeping",
-    "cash", "investment", "capital", "loan", "grant", "profit margin",
-    "break even", "breakeven", "cash flow", "ledger", "invoice", "tax",
-})
 
 
 async def _append_lesson_enrichment(state: AdelineState) -> None:
@@ -2940,14 +2954,10 @@ def _route(state: AdelineState) -> Literal[
     "historian", "justice", "science", "discipleship", "literature", "practical"
 ]:
     track = state["request"].track
-    topic = state["request"].topic.lower()
     if track in _HISTORIAN_TRACKS:
         return "historian"
     if track in _JUSTICE_TRACKS:
         return "justice"
-    # Business/financial subtopics on HOMESTEADING belong with practical_agent
-    if track == Track.HOMESTEADING and any(kw in topic for kw in _HOMESTEAD_BUSINESS_KEYWORDS):
-        return "practical"
     if track in _SCIENCE_TRACKS:
         return "science"
     if track in _LITERATURE_TRACKS:
@@ -3031,14 +3041,6 @@ async def run_orchestrator(
         state = await practical_agent(state)
     else:
         state = await discipleship_agent(state)
-
-    # ── 1.5. Lesson enrichment — vocabulary, quiz, journal ─────────────────────
-    # Skip if the lesson is already a single cohesive format that embeds
-    # vocab/scripture/quiz internally (animated sketchnote, narrated slides)
-    _cohesive_types = {"ANIMATED_SKETCHNOTE_LESSON", "NARRATED_SLIDE"}
-    _existing = {b.get("block_type") for b in state["blocks"]}
-    if not (_cohesive_types & _existing):
-        await _append_lesson_enrichment(state)
 
     # ── 2. Cross-track acknowledgment (prepend to first block if set) ─────────
     if state.get("cross_track_acknowledgment") and state["blocks"]:

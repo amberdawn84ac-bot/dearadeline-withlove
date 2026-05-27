@@ -477,23 +477,6 @@ async def _stream_lesson(
         canonical_dummy = {"topic": request.topic, "blocks": state["blocks"]}
         state["blocks"] = await adapt_canonical_for_student(canonical_dummy, adaptation_req)
 
-    # ── Phase 2: Enrich with vocabulary, quiz, journal, scripture ─────────────
-    # Skip enrichment if the lesson is already a single cohesive format
-    # (animated sketchnote, narrated slides, etc.) — these embed vocab/quiz/scripture
-    _cohesive_types = {"ANIMATED_SKETCHNOTE_LESSON", "NARRATED_SLIDE"}
-    existing_types = {b.get("block_type") for b in state["blocks"]}
-    _is_cohesive = bool(_cohesive_types & existing_types)
-    if _is_cohesive:
-        logger.info("[LessonStream] Cohesive lesson format detected — skipping enrichment")
-    else:
-        try:
-            from app.agents.orchestrator import _append_lesson_enrichment
-            if "QUIZ" not in existing_types:
-                yield _sse({"type": "status", "message": "Adding vocabulary and knowledge check..."})
-                await _append_lesson_enrichment(state)
-        except Exception as _enrich_err:
-            logger.warning(f"[LessonStream] Enrichment failed (non-fatal): {_enrich_err}")
-
     yield _sse({"type": "status", "message": "Streaming lesson blocks..."})
     logger.info(f"[LessonStream] Emitting {len(state['blocks'])} blocks: {[b.get('block_type', 'UNKNOWN') for b in state['blocks']]}")
     for block in state["blocks"]:
