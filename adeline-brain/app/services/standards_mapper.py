@@ -11,20 +11,17 @@ OAS is an overlay (not controlling), but metadata enriches transcripts.
 """
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime
 from enum import Enum
 from typing import Optional
 from dataclasses import dataclass, field
-from pathlib import Path
 
 import openai
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.connections.neo4j_client import neo4j_client
-from app.config import POSTGRES_DSN
 
 logger = logging.getLogger(__name__)
 

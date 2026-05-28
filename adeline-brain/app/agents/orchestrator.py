@@ -26,6 +26,32 @@ RESEARCH_MISSION block. If a verified source is found, the lesson continues
 with a PRIMARY_SOURCE block from the auto-found archive.
 """
 
+import asyncio
+import contextvars
+import logging
+import os
+import uuid
+from datetime import datetime, timezone
+from typing import TypedDict, Literal, Optional
+
+import anthropic
+
+from app.schemas.api_models import (
+    LessonRequest, LessonResponse, LessonBlockResponse,
+    Track, BlockType, EvidenceVerdict,
+)
+from app.protocols.witness import evaluate_evidence
+from app.connections.pgvector_client import hippocampus
+from app.connections.neo4j_client import neo4j_client
+from app.tools.researcher import search_witnesses
+from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL, GOOGLE_API_KEY, ADELINE_MODEL, LEARNLM_MODEL
+from app.algorithms.pedagogical_directives import generate_pedagogical_directives, get_quick_directives
+from app.agents.pedagogy import ZPDZone
+from app.models.student import MasteryBand
+
+_ANTHROPIC_MODEL = ADELINE_MODEL
+logger = logging.getLogger(__name__)
+
 # ── Controversial Topic Detection ────────────────────────────────────────────
 # Topics that trigger safety filters or require theological review before publishing.
 # When these are detected, lessons are saved as "pending approval" for admin review.
@@ -99,32 +125,6 @@ async def _save_pending_canonical(state: "AdelineState", reason: str) -> None:
     except Exception as e:
         logger.warning(f"[PendingCanonical] Failed to save (non-fatal): {e}")
 
-
-import asyncio
-import contextvars
-import os
-import logging
-from datetime import datetime, timezone
-from typing import TypedDict, Literal, Optional
-
-import anthropic
-
-from app.schemas.api_models import (
-    LessonRequest, LessonResponse, LessonBlockResponse,
-    Track, BlockType, EvidenceVerdict,
-)
-from app.protocols.witness import evaluate_evidence
-from app.connections.pgvector_client import hippocampus
-from app.connections.neo4j_client import neo4j_client
-from app.tools.researcher import search_witnesses
-from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL, GOOGLE_API_KEY, ADELINE_MODEL, LEARNLM_MODEL
-from app.algorithms.pedagogical_directives import generate_pedagogical_directives, get_quick_directives
-from app.agents.pedagogy import ZPDZone
-from app.models.student import MasteryBand
-
-_ANTHROPIC_MODEL = ADELINE_MODEL
-
-logger = logging.getLogger(__name__)
 
 # ── Cognitive load token ceilings ────────────────────────────────────────────
 # Set per-request via apply_cognitive_load_budget() before awaiting any agent.
@@ -1306,7 +1306,6 @@ async def science_agent(state: AdelineState) -> AdelineState:
 
     # ── Step 1: Experiment match (CREATION_SCIENCE only) ──────────────────────
     # Search the experiment catalog for concept keyword overlap with the topic.
-    experiment_matched = False
     if is_creation_science:
         topic_lower = request.topic.lower()
         best_experiment = None
@@ -1332,7 +1331,6 @@ async def science_agent(state: AdelineState) -> AdelineState:
                 best_experiment = exp
 
         if best_experiment and best_overlap >= 1:
-            experiment_matched = True
             logger.info(
                 f"[ScienceAgent] Experiment match: '{best_experiment.title}' "
                 f"(overlap={best_overlap}) for topic='{request.topic}'"
@@ -1974,7 +1972,6 @@ async def _synthesize_drag_drop_timeline_block(request: "LessonRequest", timelin
     if not timeline_events or len(timeline_events) < 3:
         return None
 
-    import json as _json
     import random as _random
 
     # Shuffle a copy so the student must re-order them correctly
@@ -2011,7 +2008,7 @@ async def _synthesize_drag_drop_timeline_block(request: "LessonRequest", timelin
         }
         return {
             "block_type": "GENUI_ASSEMBLY",
-            "content": f"Arrange these events in chronological order",
+            "content": "Arrange these events in chronological order",
             "evidence": [],
             "is_silenced": False,
             "homestead_content": None,
