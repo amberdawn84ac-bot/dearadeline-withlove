@@ -8,6 +8,7 @@
 
 import { useState } from "react";
 import { GripVertical, CheckCircle2, XCircle, ArrowUpDown } from "lucide-react";
+import { fireGenUICallback } from "@/lib/genui-callback";
 
 interface TimelineEvent {
   id: string;
@@ -20,6 +21,10 @@ interface DragDropTimelineProps {
   state: Record<string, any>;
   onStateChange: (newState: Record<string, any>) => void;
   callbacks?: string[];
+  studentId?: string;
+  lessonId?: string;
+  blockId?: string;
+  track?: string;
   // Component-specific props
   events: TimelineEvent[];
   scrambled?: boolean;  // If true, events are shuffled initially
@@ -29,6 +34,10 @@ export function DragDropTimeline({
   state,
   onStateChange,
   callbacks = [],
+  studentId,
+  lessonId,
+  blockId,
+  track,
   events,
   scrambled = true,
 }: DragDropTimelineProps) {

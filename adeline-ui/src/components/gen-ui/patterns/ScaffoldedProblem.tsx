@@ -7,11 +7,16 @@
 
 import { useState, useRef } from "react";
 import { Lightbulb, CheckCircle, XCircle } from "lucide-react";
+import { fireGenUICallback } from "@/lib/genui-callback";
 
 interface ScaffoldedProblemProps {
   state: Record<string, any>;
   onStateChange: (newState: Record<string, any>) => void;
   callbacks?: string[];
+  studentId?: string;
+  lessonId?: string;
+  blockId?: string;
+  track?: string;
   // Component-specific props
   question: string;
   steps: Array<{
@@ -26,6 +31,10 @@ export function ScaffoldedProblem({
   state,
   onStateChange,
   callbacks = [],
+  studentId,
+  lessonId,
+  blockId,
+  track,
   question,
   steps,
   difficulty = "medium",
@@ -55,8 +64,9 @@ export function ScaffoldedProblem({
       setShowHint(true);
       onStateChange({ ...state, currentStep, hintsUsed: hintsUsed + 1 });
       if (callbacks.includes("onHint")) {
-        // TODO: Call backend to log hint usage
-        console.log("[ScaffoldedProblem] Hint used");
+        fireGenUICallback({ studentId, lessonId, componentType: "ScaffoldedProblem", event: "onHint", state: { hintsUsed: hintsUsed + 1 }, blockId, track }).then(result => {
+          if (result?.should_re_render) onStateChange({ ...state, _scaffold: { component: result.scaffold_component, props: result.scaffold_props } });
+        });
       }
     }
   };
@@ -69,8 +79,10 @@ export function ScaffoldedProblem({
     setIsCorrect(correct);
     onStateChange({ ...state, currentStep, hintsUsed, lastAnswerCorrect: correct });
     if (callbacks.includes("onAnswer")) {
-      // TODO: Call backend to update BKT
-      console.log("[ScaffoldedProblem] Answer checked:", correct);
+      fireGenUICallback({ studentId, lessonId, componentType: "ScaffoldedProblem", event: "onAnswer", state: { isCorrect: correct, hintsUsed }, blockId, track });
+    }
+    if (correct && currentStep === steps.length - 1) {
+      fireGenUICallback({ studentId, lessonId, componentType: "ScaffoldedProblem", event: "onComplete", state: { hintsUsed, steps: steps.length }, blockId, track });
     }
   };
 

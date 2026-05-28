@@ -18,7 +18,7 @@ COMPONENT_REGISTRY = {
     "SimulationEmbed": {
         "category": "multimodal",
         "modalities": ["visual", "kinesthetic"],
-        "difficulties": ["SEEDLING", "GROWING", "HARVEST"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
         "estimated_minutes": 5,
         "stealth_assessment": False,
         "tags": ["science", "math", "exploration", "hands-on"],
@@ -26,7 +26,7 @@ COMPONENT_REGISTRY = {
     "VirtualManipulative": {
         "category": "multimodal",
         "modalities": ["kinesthetic", "visual"],
-        "difficulties": ["SEEDLING", "GROWING"],
+        "difficulties": ["EMERGING", "DEVELOPING"],
         "estimated_minutes": 4,
         "stealth_assessment": False,
         "tags": ["math", "concrete", "hands-on", "spatial"],
@@ -34,7 +34,7 @@ COMPONENT_REGISTRY = {
     "VideoExplanation": {
         "category": "multimodal",
         "modalities": ["visual", "auditory"],
-        "difficulties": ["SEEDLING", "GROWING", "HARVEST"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
         "estimated_minutes": 6,
         "stealth_assessment": False,
         "tags": ["explanation", "lecture", "visual-learner", "passive"],
@@ -42,7 +42,7 @@ COMPONENT_REGISTRY = {
     "TextExplanation": {
         "category": "multimodal",
         "modalities": ["reading"],
-        "difficulties": ["GROWING", "HARVEST"],
+        "difficulties": ["DEVELOPING", "MASTERING"],
         "estimated_minutes": 4,
         "stealth_assessment": False,
         "tags": ["reading", "text", "reference", "key-terms"],
@@ -50,7 +50,7 @@ COMPONENT_REGISTRY = {
     "RealWorldApplication": {
         "category": "multimodal",
         "modalities": ["reading", "kinesthetic"],
-        "difficulties": ["GROWING", "HARVEST"],
+        "difficulties": ["DEVELOPING", "MASTERING"],
         "estimated_minutes": 7,
         "stealth_assessment": True,
         "tags": ["application", "scenario", "problem-solving", "transfer"],
@@ -58,7 +58,7 @@ COMPONENT_REGISTRY = {
     "StealthAssessment": {
         "category": "assessment",
         "modalities": ["reading", "kinesthetic"],
-        "difficulties": ["SEEDLING", "GROWING", "HARVEST"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
         "estimated_minutes": 4,
         "stealth_assessment": True,
         "tags": ["assessment", "stealth", "mastery-inference"],
@@ -66,7 +66,7 @@ COMPONENT_REGISTRY = {
     "AdaptiveQuiz": {
         "category": "assessment",
         "modalities": ["reading"],
-        "difficulties": ["SEEDLING", "GROWING", "HARVEST"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
         "estimated_minutes": 5,
         "stealth_assessment": False,
         "tags": ["quiz", "adaptive", "mastery-check"],
@@ -74,7 +74,7 @@ COMPONENT_REGISTRY = {
     "MultiCompetencyWorkspace": {
         "category": "assessment",
         "modalities": ["reading", "kinesthetic"],
-        "difficulties": ["GROWING", "HARVEST"],
+        "difficulties": ["DEVELOPING", "MASTERING"],
         "estimated_minutes": 8,
         "stealth_assessment": True,
         "tags": ["multi-skill", "complex", "synthesis"],
@@ -82,7 +82,7 @@ COMPONENT_REGISTRY = {
     "CorrectiveOverlay": {
         "category": "feedback",
         "modalities": ["reading", "visual"],
-        "difficulties": ["SEEDLING", "GROWING", "HARVEST"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
         "estimated_minutes": 2,
         "stealth_assessment": False,
         "tags": ["feedback", "error-correction", "scaffolding"],
@@ -90,7 +90,7 @@ COMPONENT_REGISTRY = {
     "LearningVelocityCard": {
         "category": "visualization",
         "modalities": ["visual"],
-        "difficulties": ["SEEDLING", "GROWING", "HARVEST"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
         "estimated_minutes": 1,
         "stealth_assessment": False,
         "tags": ["dashboard", "metrics", "motivation"],
@@ -98,7 +98,7 @@ COMPONENT_REGISTRY = {
     "ProgressMap": {
         "category": "visualization",
         "modalities": ["visual"],
-        "difficulties": ["SEEDLING", "GROWING", "HARVEST"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
         "estimated_minutes": 1,
         "stealth_assessment": False,
         "tags": ["navigation", "progress", "path"],
@@ -106,7 +106,7 @@ COMPONENT_REGISTRY = {
     "AutoDiagram": {
         "category": "visualization",
         "modalities": ["visual"],
-        "difficulties": ["GROWING", "HARVEST"],
+        "difficulties": ["DEVELOPING", "MASTERING"],
         "estimated_minutes": 2,
         "stealth_assessment": False,
         "tags": ["diagram", "concept-map", "relationships"],
