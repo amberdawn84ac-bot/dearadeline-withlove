@@ -2279,11 +2279,26 @@ async def _render_lesson(
         )
         return
 
-    # Fallback 2: Keep content blocks + append SocraticDebate for interaction
-    logger.info(f"[Render] Slide unavailable for '{request.topic}' — keeping content + debate")
+    # Fallback 2: Synthesize one cohesive narrative + SocraticDebate for interaction
+    logger.info(f"[Render] Slide unavailable for '{request.topic}' — synthesizing cohesive narrative + debate")
     key_phrase = synthesis_text[:80].split(".")[0] if synthesis_text else request.topic
+
+    # Synthesize one cohesive NARRATIVE from all content blocks (not fragmented blocks)
+    cohesive_content = await _synthesize_cohesive_narrative(
+        topic=request.topic,
+        content=synthesis_text[:3000],
+        track=request.track,
+        grade_level=request.grade_level,
+    )
+
     blocks.clear()
-    blocks.extend(content_blocks)
+    blocks.append({
+        "block_type": BlockType.NARRATIVE.value,
+        "content": cohesive_content,
+        "evidence": all_evidence,
+        "is_silenced": False,
+        "homestead_content": None,
+    })
     blocks.append({
         "block_type": BlockType.GENUI_ASSEMBLY.value,
         "content": f"Discussion: {request.topic}",
@@ -2445,6 +2460,43 @@ async def _synthesize_mnemonic(
     except Exception as e:
         logger.warning(f"[Mnemonic] synthesis failed: {e}")
         return None
+
+
+async def _synthesize_cohesive_narrative(
+    topic: str,
+    content: str,
+    track: "Track",
+    grade_level: str,
+) -> str:
+    """
+    Synthesize a cohesive, flowing lesson narrative from fragmented content.
+    Returns a single unified text suitable for a NARRATIVE block.
+    Never fails — returns original content on any error.
+    """
+    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
+        return content  # Fallback: return raw content if no AI available
+
+    grade_desc = _GRADE_DESC.get(grade_level, f"grade {grade_level}")
+    system_prompt = (
+        "You are a master teacher who weaves fragmented lesson notes into a cohesive, engaging narrative. "
+        "Write in a warm, Socratic voice addressing the student directly. "
+        "Create a flowing lesson that connects ideas naturally — not a list of bullet points. "
+        "Include an opening hook, clear explanations with examples, and a closing reflection. "
+        "Never mention 'In conclusion' or 'As we learned'. End with a thought-provoking question."
+    )
+    user_prompt = (
+        f"Lesson topic: {topic}\n"
+        f"Student grade: {grade_desc}\n"
+        f"Track: {track.value}\n\n"
+        f"Fragmented source material:\n{content[:2500]}\n\n"
+        f"Write ONE cohesive lesson narrative that flows naturally. Address the student as 'Adeline'."
+    )
+    try:
+        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=2000)
+        return text.strip() if text.strip() else content
+    except Exception as e:
+        logger.warning(f"[CohesiveNarrative] synthesis failed: {e} — returning raw content")
+        return content
 
 
 async def _synthesize_narrated_slide(
