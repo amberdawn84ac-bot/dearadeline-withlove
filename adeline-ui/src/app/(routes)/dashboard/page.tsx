@@ -90,8 +90,33 @@ function DashboardContent() {
   }), []);
 
   // useChat drives lesson streaming via /api/lesson translation bridge
-  const { messages, setMessages, sendMessage: append, status: chatStatus } = useChat({
+  const { messages, setMessages, sendMessage: append, addToolResult, status: chatStatus } = useChat({
     transport: chatTransport,
+    onToolCall: async ({ toolCall }) => {
+      // Bidirectional remediation loop:
+      // When the backend streams a tool call, handle it client-side
+      if (toolCall.toolName === 'student_needs_remediation') {
+        // Backend detected struggle — acknowledge so stream continues with remediation
+        console.info('[Dashboard] Remediation triggered:', toolCall.input);
+        addToolResult({ tool: toolCall.toolName, toolCallId: toolCall.toolCallId, output: { acknowledged: true, action: 'stream_remediation' } });
+      } else if (toolCall.toolName === 'student_completed_task') {
+        // Fire telemetry for successful completion — non-blocking
+        const input = toolCall.input as Record<string, unknown>;
+        fetch('/brain/genui/telemetry', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id: studentId,
+            lesson_id: input.lesson_id || 'unknown',
+            component_type: input.component_type || 'unknown',
+            event: 'completion',
+            state: input.state || {},
+            duration_ms: input.duration_ms,
+          }),
+        }).catch(() => { /* fire-and-forget */ });
+        addToolResult({ tool: toolCall.toolName, toolCallId: toolCall.toolCallId, output: { acknowledged: true, action: 'telemetry_sent' } });
+      }
+    },
     onError: (err: Error) => {
       console.error('[Dashboard] Lesson stream error:', err);
     },

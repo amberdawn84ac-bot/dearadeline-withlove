@@ -176,6 +176,78 @@ async def genui_callback(
     )
 
 
+# ── Telemetry Endpoint (fire-and-forget) ─────────────────────────────────────
+
+
+class TelemetryEvent(BaseModel):
+    """Fire-and-forget telemetry payload from GenUI components."""
+    student_id: str
+    lesson_id: str
+    component_type: str
+    event: str  # "completion", "struggle", "interaction", "hint", "timeout"
+    state: dict = {}
+    duration_ms: Optional[int] = None
+    block_id: Optional[str] = None
+    track: Optional[str] = None
+
+
+@router.post("/telemetry", status_code=202)
+async def genui_telemetry(
+    request: TelemetryEvent,
+    current_user_id: str = Depends(get_current_user_id),
+):
+    """
+    Fire-and-forget telemetry sink for GenUI component interactions.
+
+    Accepts completion, struggle, interaction, hint, and timeout events.
+    Persists to LearningRecord and updates mastery cache without blocking the UI.
+    Returns 202 Accepted immediately.
+    """
+    logger.info(
+        f"[GENUI_TELEMETRY] event={request.event} component={request.component_type} "
+        f"student={request.student_id} lesson={request.lesson_id} "
+        f"duration_ms={request.duration_ms} block_id={request.block_id}"
+    )
+
+    # Persist interaction asynchronously
+    import asyncio
+
+    async def _persist_telemetry():
+        try:
+            if request.event == "completion":
+                await _award_widget_credit(
+                    student_id=request.student_id,
+                    lesson_id=request.lesson_id,
+                    track=request.track or "TRUTH_HISTORY",
+                    component_type=request.component_type,
+                    block_id=request.block_id,
+                )
+            elif request.event == "struggle":
+                # Log struggle for adaptive routing — update BKT with negative signal
+                student_state = await load_student_state(request.student_id)
+                track_mastery = student_state.tracks.get(request.track or "TRUTH_HISTORY")
+                pL = track_mastery.mastery_score if track_mastery else 0.5
+                params = BKTParams(pL=pL, pT=0.15, pS=0.05, pG=0.25)
+                updated = bkt_update(params, observed_correct=False)
+                await _persist_mastery_update(
+                    student_id=request.student_id,
+                    track=request.track or "TRUTH_HISTORY",
+                    mastery_score=updated,
+                    component_type=request.component_type,
+                    block_id=request.block_id,
+                )
+            # For "interaction", "hint", "timeout" — just log, no mastery update
+        except Exception as e:
+            logger.warning(f"[GENUI_TELEMETRY] Background persist failed (non-fatal): {e}")
+
+    asyncio.ensure_future(_persist_telemetry())
+
+    return {"status": "accepted"}
+
+
+# ── Internal helpers ─────────────────────────────────────────────────────────
+
+
 async def _persist_mastery_update(
     student_id: str,
     track: str,

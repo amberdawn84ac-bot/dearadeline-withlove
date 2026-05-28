@@ -58,6 +58,18 @@ import { LabGuide } from "@/components/gen-ui/patterns/LabGuide";
 import { CodePlayground } from "@/components/gen-ui/patterns/CodePlayground";
 import { InteractiveConceptMap } from "@/components/gen-ui/patterns/InteractiveConceptMap";
 import { MoleculeSimulator } from "@/components/gen-ui/patterns/MoleculeSimulator";
+import { SimulationEmbed } from "@/components/gen-ui/patterns/SimulationEmbed";
+import { VirtualManipulative } from "@/components/gen-ui/patterns/VirtualManipulative";
+import { VideoExplanation } from "@/components/gen-ui/patterns/VideoExplanation";
+import { TextExplanation } from "@/components/gen-ui/patterns/TextExplanation";
+import { RealWorldApplication } from "@/components/gen-ui/patterns/RealWorldApplication";
+import { StealthAssessment } from "@/components/gen-ui/patterns/StealthAssessment";
+import { AdaptiveQuiz } from "@/components/gen-ui/patterns/AdaptiveQuiz";
+import { MultiCompetencyWorkspace } from "@/components/gen-ui/patterns/MultiCompetencyWorkspace";
+import { CorrectiveOverlay } from "@/components/gen-ui/patterns/CorrectiveOverlay";
+import { LearningVelocityCard } from "@/components/gen-ui/patterns/LearningVelocityCard";
+import { ProgressMap } from "@/components/gen-ui/patterns/ProgressMap";
+import { AutoDiagram } from "@/components/gen-ui/patterns/AutoDiagram";
 import { TextSelectionMenu } from "@/components/gen-ui/TextSelectionMenu";
 import { WeightTierBadge } from "@/components/lessons/WeightTierBadge";
 import { DistortionFlag } from "@/components/lessons/DistortionFlag";
@@ -103,6 +115,22 @@ const componentRegistry: Record<string, React.ComponentType<any>> = {
   // Presentation
   NarratedSlides:    NarratedSlides,
   EmbeddedInterrupt: EmbeddedInterrupt,
+  // Adaptive Learning Path — multimodal
+  SimulationEmbed:   SimulationEmbed,
+  VirtualManipulative: VirtualManipulative,
+  VideoExplanation:  VideoExplanation,
+  TextExplanation:   TextExplanation,
+  RealWorldApplication: RealWorldApplication,
+  // Adaptive Learning Path — assessment
+  StealthAssessment: StealthAssessment,
+  AdaptiveQuiz:      AdaptiveQuiz,
+  MultiCompetencyWorkspace: MultiCompetencyWorkspace,
+  // Adaptive Learning Path — feedback
+  CorrectiveOverlay: CorrectiveOverlay,
+  // Adaptive Learning Path — visualization
+  LearningVelocityCard: LearningVelocityCard,
+  ProgressMap:       ProgressMap,
+  AutoDiagram:       AutoDiagram,
 };
 
 // ── DynamicComponent Wrapper ─────────────────────────────────────────────────────
