@@ -118,7 +118,7 @@ COMPONENT_REGISTRY = {
 class LearnerContext:
     """Learner state for component selection."""
     mastery_score: float = 0.5
-    difficulty: str = "GROWING"
+    difficulty: str = "DEVELOPING"
     preferred_modalities: list[str] = field(default_factory=lambda: ["visual", "reading"])
     recent_struggle_count: int = 0
     time_available_minutes: int = 15

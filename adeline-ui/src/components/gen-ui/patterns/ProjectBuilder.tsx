@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle, Circle, ChevronDown, ChevronUp, Package, Clock, Award } from "lucide-react";
+import { fireGenUICallback } from "@/lib/genui-callback";
 
 export interface ProjectStep {
   title: string;
@@ -20,6 +21,9 @@ export interface ProjectBuilderProps {
   estimated_hours?: number;
   portfolio_credit?: boolean;
   difficulty?: "beginner" | "intermediate" | "advanced";
+  studentId?: string;
+  lessonId?: string;
+  blockId?: string;
   onComplete?: (completedSteps: number[]) => void;
   onStateChange?: (state: Record<string, any>) => void;
 }
@@ -39,6 +43,9 @@ export function ProjectBuilder({
   estimated_hours,
   portfolio_credit = false,
   difficulty = "beginner",
+  studentId,
+  lessonId,
+  blockId,
   onComplete,
   onStateChange,
 }: ProjectBuilderProps) {
@@ -66,6 +73,7 @@ export function ProjectBuilder({
 
     if (next.size === steps.length) {
       onComplete?.([...next]);
+      fireGenUICallback({ studentId, lessonId, componentType: "ProjectBuilder", event: "onComplete", state: { completedSteps: [...next], total: steps.length, portfolioCredit: portfolio_credit }, blockId, track });
     }
   };
 
@@ -73,6 +81,7 @@ export function ProjectBuilder({
     setSubmitted(true);
     onComplete?.([...completedSteps]);
     onStateChange?.({ submitted: true, completedSteps: [...completedSteps] });
+    fireGenUICallback({ studentId, lessonId, componentType: "ProjectBuilder", event: "onComplete", state: { completedSteps: [...completedSteps], total: steps.length, portfolioCredit: portfolio_credit }, blockId, track });
   };
 
   return (

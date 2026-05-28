@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, Sparkles } from "lucide-react";
+import { fireGenUICallback } from "@/lib/genui-callback";
 
 export interface StealthScenario {
   id: string;
@@ -16,6 +17,9 @@ export interface StealthAssessmentProps {
   intro: string;
   scenarios: StealthScenario[];
   track?: string;
+  studentId?: string;
+  lessonId?: string;
+  blockId?: string;
   onComplete?: (state: { inferredMastery: number; choices: string[]; timeMs: number }) => void;
   onStateChange?: (state: Record<string, unknown>) => void;
 }
@@ -25,6 +29,9 @@ export function StealthAssessment({
   intro,
   scenarios,
   track,
+  studentId,
+  lessonId,
+  blockId,
   onComplete,
   onStateChange,
 }: StealthAssessmentProps) {
@@ -71,6 +78,7 @@ export function StealthAssessment({
       setCompleted(true);
       const inferredMastery = sig.reduce((a, b) => a + b, 0) / sig.length;
       onComplete?.({ inferredMastery, choices: ch, timeMs: Date.now() - mountedAt.current });
+      fireGenUICallback({ studentId, lessonId, componentType: "StealthAssessment", event: "onAnswer", state: { isCorrect: inferredMastery > 0.5, inferredMastery }, blockId, track });
     } else {
       setCurrentScenario(currentScenario + 1);
     }

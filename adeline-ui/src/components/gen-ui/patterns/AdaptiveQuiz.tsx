@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Brain, TrendingUp, TrendingDown, CheckCircle2, XCircle } from "lucide-react";
+import { fireGenUICallback } from "@/lib/genui-callback";
 
 export interface AdaptiveQuestion {
   id: string;
@@ -18,6 +19,9 @@ export interface AdaptiveQuizProps {
   questions: AdaptiveQuestion[];
   startDifficulty?: "easy" | "medium" | "hard";
   track?: string;
+  studentId?: string;
+  lessonId?: string;
+  blockId?: string;
   onComplete?: (state: { finalDifficulty: string; correct: number; total: number; timeMs: number }) => void;
   onStateChange?: (state: Record<string, unknown>) => void;
   onStruggle?: (state: { wrongStreak: number; currentDifficulty: string }) => void;
@@ -30,6 +34,9 @@ export function AdaptiveQuiz({
   questions,
   startDifficulty = "medium",
   track,
+  studentId,
+  lessonId,
+  blockId,
   onComplete,
   onStateChange,
   onStruggle,
@@ -89,6 +96,9 @@ export function AdaptiveQuiz({
       // Trigger struggle callback
       if (wrongStreak + 1 >= 3) {
         onStruggle?.({ wrongStreak: wrongStreak + 1, currentDifficulty });
+        fireGenUICallback({ studentId, lessonId, componentType: "AdaptiveQuiz", event: "onStruggle", state: { wrongStreak: wrongStreak + 1, currentDifficulty }, blockId, track }).then(result => {
+          if (result?.should_re_render) onStateChange?.({ _scaffold: { component: result.scaffold_component, props: result.scaffold_props } });
+        });
       }
     }
   };
@@ -101,6 +111,7 @@ export function AdaptiveQuiz({
     setShowExplanation(true);
     adjustDifficulty(isCorrect);
     onStateChange?.({ correct: correct + (isCorrect ? 1 : 0), total: total + 1, currentDifficulty });
+    fireGenUICallback({ studentId, lessonId, componentType: "AdaptiveQuiz", event: "onAnswer", state: { isCorrect, currentDifficulty }, blockId, track });
   };
 
   const nextQuestion = () => {
@@ -120,6 +131,7 @@ export function AdaptiveQuiz({
         total: total,
         timeMs: Date.now() - mountedAt.current,
       });
+      fireGenUICallback({ studentId, lessonId, componentType: "AdaptiveQuiz", event: "onComplete", state: { finalDifficulty: currentDifficulty, correct, total, timeMs: Date.now() - mountedAt.current }, blockId, track });
     }
   };
 

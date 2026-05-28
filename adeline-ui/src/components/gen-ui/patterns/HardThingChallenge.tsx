@@ -7,11 +7,16 @@
 
 import { useState, useRef } from "react";
 import { Target, Heart, CheckCircle2 } from "lucide-react";
+import { fireGenUICallback } from "@/lib/genui-callback";
 
 interface HardThingChallengeProps {
   state: Record<string, any>;
   onStateChange: (newState: Record<string, any>) => void;
   callbacks?: string[];
+  studentId?: string;
+  lessonId?: string;
+  blockId?: string;
+  track?: string;
   // Component-specific props
   principle: string;
   scripture?: string;
@@ -23,6 +28,10 @@ export function HardThingChallenge({
   state,
   onStateChange,
   callbacks = [],
+  studentId,
+  lessonId,
+  blockId,
+  track,
   principle,
   scripture,
   challenge,
@@ -39,7 +48,7 @@ export function HardThingChallenge({
       const responseTimeMs = Date.now() - mountedAt.current;
       onStateChange({ ...state, progress: 100, committed: true, reflection, responseTimeMs });
       if (callbacks.includes("onComplete")) {
-        console.log("[HardThingChallenge] Commitment made");
+        fireGenUICallback({ studentId, lessonId, componentType: "HardThingChallenge", event: "onComplete", state: { reflection, responseTimeMs }, blockId, track });
       }
     }
   };

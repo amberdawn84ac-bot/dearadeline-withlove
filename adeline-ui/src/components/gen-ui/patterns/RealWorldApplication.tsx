@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Globe, ChevronRight, CheckCircle2, Lightbulb } from "lucide-react";
+import { fireGenUICallback } from "@/lib/genui-callback";
 
 export interface ScenarioStep {
   id: string;
@@ -17,6 +18,9 @@ export interface RealWorldApplicationProps {
   steps: ScenarioStep[];
   context?: string;
   track?: string;
+  studentId?: string;
+  lessonId?: string;
+  blockId?: string;
   onComplete?: (state: { correctSteps: number; totalSteps: number; timeMs: number }) => void;
   onStateChange?: (state: Record<string, unknown>) => void;
 }
@@ -27,6 +31,9 @@ export function RealWorldApplication({
   steps,
   context,
   track,
+  studentId,
+  lessonId,
+  blockId,
   onComplete,
   onStateChange,
 }: RealWorldApplicationProps) {
@@ -48,6 +55,7 @@ export function RealWorldApplication({
     setFeedback(fb);
     if (isCorrect) setCorrectCount((c) => c + 1);
     onStateChange?.({ currentStep, responses: { ...responses, [step.id]: optionLabel }, correctCount });
+    fireGenUICallback({ studentId, lessonId, componentType: "RealWorldApplication", event: "onAnswer", state: { isCorrect, step: step.id, optionLabel }, blockId, track });
   };
 
   const handleFreeSubmit = () => {
@@ -62,6 +70,7 @@ export function RealWorldApplication({
     if (currentStep + 1 >= steps.length) {
       setCompleted(true);
       onComplete?.({ correctSteps: correctCount, totalSteps: steps.length, timeMs: Date.now() - mountedAt.current });
+      fireGenUICallback({ studentId, lessonId, componentType: "RealWorldApplication", event: "onComplete", state: { correctSteps: correctCount, totalSteps: steps.length, timeMs: Date.now() - mountedAt.current }, blockId, track });
     } else {
       setCurrentStep(currentStep + 1);
     }

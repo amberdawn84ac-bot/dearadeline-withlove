@@ -7,20 +7,26 @@
  */
 
 import { useState } from "react";
+import { useGenUITelemetry } from "@/lib/useGenUITelemetry";
 
 export interface FlashcardProps {
   term: string;
   definition: string;
   example?: string;
   category?: string;
+  studentId?: string;
+  lessonId?: string;
+  blockId?: string;
+  track?: string;
 }
 
-export function Flashcard({ term, definition, example, category }: FlashcardProps) {
+export function Flashcard({ term, definition, example, category, studentId, lessonId, blockId, track }: FlashcardProps) {
   const [isFlipped, setIsFlipped] = useState(false);
+  const { reportInteraction } = useGenUITelemetry({ studentId: studentId ?? "", lessonId: lessonId ?? "" });
 
   return (
     <div
-      onClick={() => setIsFlipped((f) => !f)}
+      onClick={() => { setIsFlipped((f) => !f); if (studentId && lessonId) reportInteraction("Flashcard", { flipped: !isFlipped, term }, blockId); }}
       className="cursor-pointer select-none"
       style={{ perspective: "1000px", minHeight: 200 }}
       role="button"
