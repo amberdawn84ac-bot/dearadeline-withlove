@@ -590,6 +590,8 @@ class AdelineState(TypedDict):
     mastery_score:        float
     mastery_band:         str  # MasteryBand value
     student_message:      str | None  # Last student message for ZPD detection
+    # Adaptive learning path — modality-matched component injection
+    preferred_modality:   str  # "visual" | "auditory" | "kinesthetic" | "text"
 
 
 # ── Neo4j graph-link (multi-hop) ──────────────────────────────────────────────
@@ -2173,6 +2175,183 @@ async def _decide_formats(
         return ["MIND_MAP", "NARRATED_SLIDE"]
 
 
+async def _inject_modal_supplement(
+    state: "AdelineState",
+    blocks: list[dict],
+    synthesis_text: str,
+) -> None:
+    """
+    Append a modality-matched GENUI_ASSEMBLY supplement if the student's preferred
+    learning style is not already well-served by the rendered blocks.
+
+    Called at the end of _render_lesson after the main cascade resolves.
+    Mutates blocks in place. Non-blocking — any failure is logged and skipped.
+    """
+    import json as _json
+    from app.algorithms.component_selector import select_modal_supplement
+
+    modality = state.get("preferred_modality", "text")
+    if not modality or modality == "auditory":
+        return  # auditory is served by animated sketchnote / narrated slide cascade
+
+    # Collect components already in this lesson to avoid duplication
+    already_emitted = [
+        b.get("genui_assembly_data", {}).get("component_type", "")
+        for b in blocks
+        if b.get("block_type") == "GENUI_ASSEMBLY"
+    ]
+
+    request = state["request"]
+    mastery_band = state.get("mastery_band", "DEVELOPING")
+
+    # Map mastery band to DifficultyLevel
+    diff_map = {
+        "NOVICE":      "EMERGING",
+        "DEVELOPING":  "DEVELOPING",
+        "PROFICIENT":  "EXPANDING",
+        "ADVANCED":    "MASTERING",
+        "EMERGING":    "EMERGING",
+        "EXPANDING":   "EXPANDING",
+        "MASTERING":   "MASTERING",
+    }
+    difficulty = diff_map.get(mastery_band, "DEVELOPING")
+
+    component_type = select_modal_supplement(
+        preferred_modality=modality,
+        difficulty=difficulty,
+        track=request.track.value,
+        already_emitted=already_emitted,
+    )
+
+    if not component_type:
+        return
+
+    # Build lightweight props for the selected component
+    try:
+        props: dict = {}
+        initial_state: dict = {}
+        callbacks: list[str] = ["onComplete"]
+
+        if component_type == "AutoDiagram":
+            props = {
+                "description": synthesis_text[:500],
+                "diagramType": "concept_map",
+                "title": f"Concept Map: {request.topic}",
+            }
+
+        elif component_type == "VirtualManipulative":
+            topic_lower = request.topic.lower()
+            manip_type = (
+                "fractions" if any(w in topic_lower for w in ["fraction", "ratio", "divide", "part"])
+                else "geometry" if any(w in topic_lower for w in ["shape", "angle", "area", "perimeter", "geometry"])
+                else "place_value"
+            )
+            props = {"type": manip_type, "title": f"Explore: {request.topic}"}
+            initial_state = {"currentStep": 0}
+
+        elif component_type == "SimulationEmbed":
+            props = {
+                "simulationUrl": "https://phet.colorado.edu/en/simulations",
+                "title": f"Interactive Simulation: {request.topic}",
+                "parameters": {"topic": request.topic},
+            }
+
+        elif component_type == "TaskScaffold":
+            props = {
+                "title": f"Step-by-step: {request.topic}",
+                "tasks": [
+                    {"id": "t1", "instruction": f"Read through what you learned about {request.topic}."},
+                    {"id": "t2", "instruction": "Write down the three most important facts in your own words."},
+                    {"id": "t3", "instruction": "Apply what you learned: find one real example in your home or community."},
+                ],
+                "currentStep": 0,
+            }
+            initial_state = {"currentStep": 0, "completedTasks": []}
+
+        elif component_type == "ScaffoldedProblem":
+            grade_desc = _GRADE_DESC.get(request.grade_level, "your grade level")
+            props = {
+                "title": f"Practice Problem: {request.topic}",
+                "problem": {
+                    "question": f"Based on what you just learned about {request.topic}, solve this step-by-step.",
+                    "context": synthesis_text[:300],
+                    "scaffoldLevel": 3,
+                },
+                "scaffoldLevel": 3,
+            }
+            initial_state = {"currentStep": 0, "hintsUsed": 0}
+
+        elif component_type == "HardThingChallenge":
+            props = {
+                "title": f"Challenge: {request.topic}",
+                "misconceptions": [
+                    f"A common misunderstanding about {request.topic} is oversimplifying it.",
+                ],
+                "counterexamples": [
+                    f"Think of a situation where the standard explanation of {request.topic} breaks down.",
+                ],
+                "testCases": [
+                    f"Explain {request.topic} to someone younger without using any technical terms.",
+                ],
+            }
+
+        elif component_type == "GlowGrow":
+            props = {
+                "strengthArea": f"You engaged with {request.topic}",
+                "growthArea": f"Going deeper on {request.topic}",
+                "feedbackText": (
+                    f"You've covered the core ideas around {request.topic}. "
+                    "What's one question you still have? Bring it back to Adeline."
+                ),
+            }
+
+        elif component_type == "RealWorldApplication":
+            props = {
+                "applicationText": synthesis_text[:400],
+                "examples": [
+                    {"scenario": f"How does {request.topic} show up on a homestead or in your daily life?"},
+                ],
+            }
+
+        elif component_type in ("PeerTutoringCard", "DiscussionForum"):
+            props = {
+                "conceptTitle": request.topic,
+                "conceptTrack": request.track.value,
+                "difficulty": difficulty,
+                "prompt": (
+                    f"Now that you've studied {request.topic}, here's a question to discuss: "
+                    f"{synthesis_text[:200]}..."
+                ),
+            }
+            if component_type == "PeerTutoringCard":
+                props["requestingStudentId"] = request.student_id
+
+        else:
+            # Generic fallback props
+            props = {"title": request.topic, "content": synthesis_text[:400]}
+
+        blocks.append({
+            "block_type": "GENUI_ASSEMBLY",
+            "content": f"{component_type}: {request.topic}",
+            "evidence": [],
+            "is_silenced": False,
+            "homestead_content": None,
+            "genui_assembly_data": {
+                "component_type": component_type,
+                "props": props,
+                "initial_state": initial_state,
+                "callbacks": callbacks,
+            },
+        })
+        logger.info(
+            f"[ModalSupplement] Injected {component_type} for "
+            f"modality={modality} track={request.track.value}"
+        )
+
+    except Exception as e:
+        logger.warning(f"[ModalSupplement] Failed to build props for {component_type} (non-fatal): {e}")
+
+
 async def _render_lesson(
     state: "AdelineState",
     blocks: list[dict],
@@ -2248,6 +2427,7 @@ async def _render_lesson(
             "animated_sketchnote_data": asl.model_dump(),
         })
         blocks.extend(supplements)
+        await _inject_modal_supplement(state, blocks, synthesis_text[:500])
         logger.info(
             f"[Render] Animated sketchnote — {len(asl.scenes)} scenes, "
             f"{len(supplements)} supplement(s) for '{request.topic}'"
@@ -2270,6 +2450,7 @@ async def _render_lesson(
             "narrated_slide_data": ns.model_dump(),
         })
         blocks.extend(supplements)
+        await _inject_modal_supplement(state, blocks, synthesis_text[:500])
         logger.info(
             f"[Render] Narrated slide — {len(ns.slides)} slides, "
             f"{len(supplements)} supplement(s) for '{request.topic}'"
@@ -2331,6 +2512,7 @@ async def _render_lesson(
         },
     })
     blocks.extend(supplements)
+    await _inject_modal_supplement(state, blocks, cohesive_content[:500])
 
 
 # ── Multimodal synthesis functions ────────────────────────────────────────────
@@ -3030,6 +3212,7 @@ async def run_orchestrator(
     mastery_score: float = 0.0,
     mastery_band: str = "NOVICE",
     student_message: str | None = None,
+    preferred_modality: str = "text",
 ) -> LessonResponse:
     """
     Routes the request to the correct specialist agent, graph-links to
@@ -3073,6 +3256,7 @@ async def run_orchestrator(
         "mastery_score":        mastery_score,
         "mastery_band":         mastery_band,
         "student_message":      student_message,
+        "preferred_modality":   preferred_modality,
     }
 
     route = _route(state)

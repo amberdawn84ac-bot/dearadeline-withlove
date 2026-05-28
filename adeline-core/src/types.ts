@@ -249,6 +249,9 @@ export enum BlockType {
   GENUI_ASSEMBLY   = "GENUI_ASSEMBLY",   // Dynamic stateful component assembly with callbacks
   // ── Living Sketchnote Lessons ────────────────────────────────────
   ANIMATED_SKETCHNOTE_LESSON = "ANIMATED_SKETCHNOTE_LESSON", // Animated whiteboard lesson with narration
+  // ── Collaborative Learning ───────────────────────────────────────
+  PEER_TUTOR       = "PEER_TUTOR",       // Peer tutoring matchup
+  DISCUSSION_FORUM = "DISCUSSION_FORUM", // Dynamic discussion workspace
 }
 
 export enum DifficultyLevel {
@@ -266,6 +269,27 @@ export const GenUIComponentType = z.enum([
   "ProjectBuilder",
   "SocraticDebate",
   "HardThingChallenge",
+  // Multi-modal representation
+  "SimulationEmbed",
+  "VirtualManipulative",
+  "VideoExplanation",
+  "TextExplanation",
+  "RealWorldApplication",
+  "AutoDiagram",
+  "MoleculeSimulator",
+  // Stealth / adaptive assessment
+  "StealthAssessment",
+  "AdaptiveQuiz",
+  "MultiCompetencyWorkspace",
+  // Intelligent feedback & scaffolding
+  "CorrectiveOverlay",
+  "GlowGrow",
+  "TaskScaffold",
+  "LearningVelocityCard",
+  "ProgressMap",
+  // Collaborative learning
+  "PeerTutoringCard",
+  "DiscussionForum",
 ]);
 
 const HomesteadVariantSchema = z.object({
