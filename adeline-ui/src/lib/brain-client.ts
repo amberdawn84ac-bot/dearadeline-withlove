@@ -236,6 +236,7 @@ export interface LessonBlockResponse {
     initial_state?: Record<string, unknown>;
     callbacks?: string[];
   };
+  track?: string;
 }
 
 export interface XAPIStatement {

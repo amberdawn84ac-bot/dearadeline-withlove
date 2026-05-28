@@ -8,6 +8,7 @@
 
 import { useState } from "react";
 import { GripVertical, CheckCircle2, XCircle, ArrowUpDown } from "lucide-react";
+import { fireGenUICallback } from "@/lib/genui-callback";
 
 interface TimelineEvent {
   id: string;
@@ -20,6 +21,10 @@ interface DragDropTimelineProps {
   state: Record<string, any>;
   onStateChange: (newState: Record<string, any>) => void;
   callbacks?: string[];
+  studentId?: string;
+  lessonId?: string;
+  blockId?: string;
+  track?: string;
   // Component-specific props
   events: TimelineEvent[];
   scrambled?: boolean;  // If true, events are shuffled initially
@@ -29,6 +34,10 @@ export function DragDropTimeline({
   state,
   onStateChange,
   callbacks = [],
+  studentId,
+  lessonId,
+  blockId,
+  track,
   events,
   scrambled = true,
 }: DragDropTimelineProps) {
@@ -79,7 +88,7 @@ export function DragDropTimeline({
         isComplete: true,
       });
       if (callbacks.includes("onComplete")) {
-        console.log("[DragDropTimeline] Timeline completed successfully");
+        fireGenUICallback({ studentId, lessonId, componentType: "DragDropTimeline", event: "onComplete", state: { wrongAttempts }, blockId, track });
       }
     } else {
       const newWrongAttempts = wrongAttempts + 1;
@@ -90,10 +99,12 @@ export function DragDropTimeline({
         wrongAttempts: newWrongAttempts,
         isComplete: false,
       });
-      
+
       // Trigger onStruggle after 2+ wrong attempts
       if (newWrongAttempts >= 2 && callbacks.includes("onStruggle")) {
-        console.log("[DragDropTimeline] Struggle detected - 2+ wrong attempts");
+        fireGenUICallback({ studentId, lessonId, componentType: "DragDropTimeline", event: "onStruggle", state: { wrongAttempts: newWrongAttempts }, blockId, track }).then(result => {
+          if (result?.should_re_render) onStateChange({ ...state, _scaffold: { component: result.scaffold_component, props: result.scaffold_props } });
+        });
       }
     }
   };

@@ -16,7 +16,7 @@ from app.schemas.api_models import UserRole
 from app.api.middleware import require_role
 from app.config import POSTGRES_DSN as _DSN
 from app.connections.postgres import get_db_session
-from app.services.standards_mapper import StandardsMapper, StandardsProgressReport
+from app.services.standards_mapper import StandardsMapper
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/registrar/reports", tags=["registrar-reports"])

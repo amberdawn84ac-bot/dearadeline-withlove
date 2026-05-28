@@ -211,7 +211,7 @@ def _download_local(storage_key: str) -> Optional[bytes]:
 # ── Supabase Storage ─────────────────────────────────────────────────────────
 
 async def _upload_supabase(storage_key: str, epub_bytes: bytes) -> None:
-    url = f"{_SUPABASE_URL}/storage/v1/object/{_BUCKET}/{storage_key}"
+    url = f"{_SUPABASE_URL}/storage/v1/object/{_BUCKET_BOOKS}/{storage_key}"
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
             url,
@@ -229,7 +229,7 @@ async def _upload_supabase(storage_key: str, epub_bytes: bytes) -> None:
 
 
 async def _download_supabase(storage_key: str) -> Optional[bytes]:
-    url = f"{_SUPABASE_URL}/storage/v1/object/{_BUCKET}/{storage_key}"
+    url = f"{_SUPABASE_URL}/storage/v1/object/{_BUCKET_BOOKS}/{storage_key}"
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.get(
             url,

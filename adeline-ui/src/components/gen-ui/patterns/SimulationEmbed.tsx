@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Play, Pause, ExternalLink, Clock, CheckCircle2 } from "lucide-react";
+import { fireGenUICallback } from "@/lib/genui-callback";
 
 export interface SimulationEmbedProps {
   title: string;
@@ -12,6 +13,9 @@ export interface SimulationEmbedProps {
   estimatedMinutes?: number;
   competencies?: string[];
   track?: string;
+  studentId?: string;
+  lessonId?: string;
+  blockId?: string;
   onComplete?: (state: { timeSpentMs: number; interacted: boolean }) => void;
   onStateChange?: (state: Record<string, unknown>) => void;
 }
@@ -24,6 +28,9 @@ export function SimulationEmbed({
   estimatedMinutes = 5,
   competencies = [],
   track,
+  studentId,
+  lessonId,
+  blockId,
   onComplete,
   onStateChange,
 }: SimulationEmbedProps) {
@@ -57,6 +64,7 @@ export function SimulationEmbed({
     setIsActive(false);
     if (intervalRef.current) clearInterval(intervalRef.current);
     onComplete?.({ timeSpentMs: Date.now() - mountedAt.current, interacted: timeSpent > 10 });
+    fireGenUICallback({ studentId, lessonId, componentType: "SimulationEmbed", event: "onComplete", state: { timeSpentMs: Date.now() - mountedAt.current, interacted: timeSpent > 10 }, blockId, track });
   };
 
   const formatTime = (seconds: number) => {

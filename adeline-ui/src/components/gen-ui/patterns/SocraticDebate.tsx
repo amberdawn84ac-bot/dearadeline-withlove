@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, ChevronDown, ChevronUp, Lightbulb } from "lucide-react";
+import { fireGenUICallback } from "@/lib/genui-callback";
 
 export interface SocraticTurn {
   question: string;
@@ -14,6 +15,9 @@ export interface SocraticDebateProps {
   thesis: string;
   turns: SocraticTurn[];
   track?: string;
+  studentId?: string;
+  lessonId?: string;
+  blockId?: string;
   onComplete?: (responses: string[]) => void;
   onStateChange?: (state: Record<string, any>) => void;
 }
@@ -24,6 +28,9 @@ export function SocraticDebate({
   thesis,
   turns,
   track,
+  studentId,
+  lessonId,
+  blockId,
   onComplete,
   onStateChange,
 }: SocraticDebateProps) {
@@ -62,6 +69,7 @@ export function SocraticDebate({
     if (currentTurn + 1 >= turns.length) {
       setCompleted(true);
       onComplete?.(newResponses);
+      fireGenUICallback({ studentId, lessonId, componentType: "SocraticDebate", event: "onComplete", state: { responses: newResponses, responseTimeMs: Date.now() - mountedAt.current, turns: turns.length }, blockId, track });
     } else {
       setCurrentTurn(currentTurn + 1);
     }

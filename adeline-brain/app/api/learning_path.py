@@ -17,6 +17,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.connections.knowledge_graph import get_concept_graph_for_track, TRACKS_METADATA

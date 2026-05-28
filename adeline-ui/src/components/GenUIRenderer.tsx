@@ -981,10 +981,14 @@ function GenUIRenderer({
               blockContent = (
                 <DynamicComponent
                   componentType={assemblyData?.component_type || "InteractiveQuiz"}
-                  props={assemblyData?.props || {}}
+                  props={{ ...(assemblyData?.props || {}), studentId: studentId ?? "", lessonId: _lessonId, blockId: block.block_id, track: block.track }}
                   initialState={assemblyData?.initial_state || {}}
                   callbacks={assemblyData?.callbacks || []}
                   onStateChange={async (newState) => {
+                    if ((newState as any)._scaffold) {
+                      handleScaffoldResponse((newState as any)._scaffold);
+                      return;
+                    }
                     // Send to backend to update BKT/ZPD and check for scaffold triggers
                     try {
                       const response = await fetch("/api/genui/callback", {

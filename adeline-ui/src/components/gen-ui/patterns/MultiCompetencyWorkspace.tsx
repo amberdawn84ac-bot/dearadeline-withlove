@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { Layers, CheckCircle2, Circle } from "lucide-react";
+import { fireGenUICallback } from "@/lib/genui-callback";
 
 export interface WorkspaceTask {
   id: string;
@@ -20,6 +21,9 @@ export interface MultiCompetencyWorkspaceProps {
   tasks: WorkspaceTask[];
   competencies: string[];
   track?: string;
+  studentId?: string;
+  lessonId?: string;
+  blockId?: string;
   onComplete?: (state: { completedTasks: number; totalTasks: number; timeMs: number; competencyScores: Record<string, number> }) => void;
   onStateChange?: (state: Record<string, unknown>) => void;
 }
@@ -30,6 +34,9 @@ export function MultiCompetencyWorkspace({
   tasks,
   competencies,
   track,
+  studentId,
+  lessonId,
+  blockId,
   onComplete,
   onStateChange,
 }: MultiCompetencyWorkspaceProps) {
@@ -69,6 +76,7 @@ export function MultiCompetencyWorkspace({
         timeMs: Date.now() - mountedAt.current,
         competencyScores,
       });
+      fireGenUICallback({ studentId, lessonId, componentType: "MultiCompetencyWorkspace", event: "onComplete", state: { completedTasks: submitted.size + 1, totalTasks: tasks.length, timeMs: Date.now() - mountedAt.current, competencyScores }, blockId, track });
     }
   };
 
