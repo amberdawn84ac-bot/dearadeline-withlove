@@ -2531,7 +2531,11 @@ async def _synthesize_animated_sketchnote(
             system_instruction=ANIMATED_SKETCHNOTE_SYSTEM_PROMPT,
         )
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(None, lambda: model.generate_content(user_prompt))
+        # 30s timeout — prevents hanging on complex history topics
+        response = await asyncio.wait_for(
+            loop.run_in_executor(None, lambda: model.generate_content(user_prompt)),
+            timeout=30.0
+        )
         raw_text = response.text.strip()
         raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
         raw_text = re.sub(r"\s*```$", "", raw_text)
