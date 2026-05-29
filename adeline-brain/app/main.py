@@ -48,6 +48,7 @@ from app.api.parent import router as parent_router
 from app.api.admin import router as admin_router
 from app.api.learning_plan import router as learning_plan_router
 from app.api.genui import router as genui_router
+from app.api.focus import router as focus_router
 from app.api.auth import router as auth_router
 from app.api.realtime import router as realtime_router
 from app.api.conversation import router as conversation_router
@@ -279,6 +280,7 @@ app.include_router(animated_lessons_router, prefix="/brain")
 app.include_router(learning_path_router, prefix="/brain")
 app.include_router(daily_bread_router, prefix="/brain")
 app.include_router(standards_router, prefix="/brain")
+app.include_router(focus_router, prefix="/brain")
 
 
 @app.get("/health")

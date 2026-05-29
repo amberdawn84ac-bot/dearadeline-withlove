@@ -85,6 +85,9 @@ class ManagerAgent:
         })
 
         # ── Step 2: Intervention override ─────────────────────────────────────
+        if intervention == "FOCUS_RESET":
+            return _focus_reset_response(request, twin)
+
         if intervention == "BREAK":
             return _break_response(request, twin)
 
@@ -257,6 +260,43 @@ def _infer_grade_level(request: LessonRequest) -> int:
             return 7
         return 10
     return 7  # Default: middle school
+
+
+def _focus_reset_response(request: LessonRequest, twin: CognitiveTwinState) -> LessonResponse:
+    """Return a GENUI_ASSEMBLY FocusReset block when a focus gap is detected."""
+    import uuid
+
+    gap_type = twin.detect_focus_gap()
+    if gap_type == "COGNITIVE_OVERLOAD":
+        message = (
+            f"Hey {request.student_id.split('-')[0]}, your brain is working hard. "
+            "Let's take a quick breath before we continue."
+        )
+        mode = "breathe"
+    else:
+        message = "Let's check in — sometimes the best thing is a quick reset."
+        mode = "ground"
+
+    reset_block = LessonBlockResponse(
+        block_id=str(uuid.uuid4()),
+        block_type=BlockType.GENUI_ASSEMBLY,
+        content=message,
+        genui_component="FocusReset",
+        genui_props={
+            "mode": mode,
+            "message": message,
+            "gap_type": gap_type,
+        },
+    )
+    return LessonResponse(
+        lesson_id=str(uuid.uuid4()),
+        title="Focus Reset",
+        track=request.track,
+        blocks=[reset_block],
+        oas_standards=[],
+        xapi_statements=[],
+        credits_awarded=[],
+    )
 
 
 def _break_response(request: LessonRequest, twin: CognitiveTwinState) -> LessonResponse:

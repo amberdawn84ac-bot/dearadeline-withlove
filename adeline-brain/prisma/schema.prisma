@@ -294,6 +294,12 @@ enum BlockType {
   DATA_TRACKING
   PROBLEM
   WRITING
+  SIMULATION
+  VIDEO
+  TEXT_DEEP
+  REAL_WORLD_APP
+  CORRECTIVE_OVERLAY
+  CONCEPT_MAP
 }
 
 enum XAPIVerb {
@@ -310,6 +316,7 @@ enum XAPIVerb {
   practiced
   researched
   sealed
+  focus_gap_detected
 }
 
 enum CreditType {
