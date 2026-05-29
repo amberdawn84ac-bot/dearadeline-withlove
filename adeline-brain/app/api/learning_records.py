@@ -185,6 +185,16 @@ async def record_learning(
 
     lesson_id = payload.statements[0].lesson_id if payload.statements else ""
     logger.info(f"[LearningRecord] Recorded {recorded}/{len(payload.statements)} statements for lesson={lesson_id}")
+
+    # Close the RL feedback loop: update Q-table when a lesson completes with a score
+    completed_stmts = [
+        s for s in payload.statements
+        if s.completion and s.score_raw is not None
+    ]
+    if completed_stmts:
+        import asyncio
+        asyncio.ensure_future(_apply_rl_feedback(completed_stmts))
+
     return RecordLearningResponse(recorded=recorded, lesson_id=lesson_id)
 
 
@@ -425,3 +435,62 @@ async def submit_review(
         repetitions=result.repetitions,
         due_at=result.next_due_at.isoformat(),
     )
+
+
+# ── RL Feedback Loop ──────────────────────────────────────────────────────────
+
+async def _apply_rl_feedback(completed_stmts: list) -> None:
+    """
+    Update each student's Q-table after a lesson completion using direct q_update().
+    Fired as a background task when completion=True and score_raw is set.
+    Uses a simplified (mastery_band, track) state tuple as the RL state key.
+    """
+    try:
+        import json as _json
+        from app.algorithms.rl_optimizer import q_update, serialize_q_table, deserialize_q_table
+        from app.connections.redis_client import redis_client
+
+        _Q_TABLE_TTL = 60 * 60 * 24 * 30  # 30 days
+        _DEFAULT_COMPONENTS = ["NARRATIVE", "QUIZ", "PRIMARY_SOURCE", "RESEARCH_MISSION",
+                               "SIMULATION", "VIDEO", "TEXT_DEEP", "REAL_WORLD_APP"]
+
+        for stmt in completed_stmts:
+            student_id = stmt.student_id
+            reward = float(stmt.score_raw or 0.0)
+            component = stmt.block_type or "NARRATIVE"
+            track = stmt.track or "TRUTH_HISTORY"
+
+            # Simple state: (mastery_band_from_score, track)
+            mastery_band = (
+                "ADVANCED"    if reward >= 0.85 else
+                "PROFICIENT"  if reward >= 0.60 else
+                "DEVELOPING"  if reward >= 0.30 else
+                "NOVICE"
+            )
+            state = (mastery_band, track)
+            next_state = (mastery_band, track)  # simplified — same state for one-step update
+
+            try:
+                raw = await redis_client.get(f"q_table:{student_id}")
+                q_table = deserialize_q_table(_json.loads(raw)) if raw else {}
+
+                updated = q_update(
+                    q_table=q_table,
+                    state=state,
+                    action=component,
+                    reward=reward,
+                    next_state=next_state,
+                    available_next_actions=_DEFAULT_COMPONENTS,
+                )
+
+                payload = _json.dumps(serialize_q_table(updated))
+                await redis_client.set(f"q_table:{student_id}", payload, ex=_Q_TABLE_TTL)
+                logger.debug(
+                    "[RL] Q-table updated: student=%s component=%s reward=%.3f",
+                    student_id, component, reward,
+                )
+            except Exception as exc:
+                logger.debug("[RL] Q-table update failed for %s (non-fatal): %s", student_id, exc)
+
+    except Exception as exc:
+        logger.warning("[RL] apply_rl_feedback failed (non-fatal): %s", exc)

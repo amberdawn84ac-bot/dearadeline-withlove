@@ -23,7 +23,7 @@ import json
 import logging
 from dataclasses import dataclass, asdict, field
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Literal, Optional
 
 from app.connections.redis_client import redis_client
 from app.agents.pedagogy import ZPDZone
@@ -36,6 +36,13 @@ _TWIN_KEY_PREFIX  = "twin:"
 # Decay constants — cognitive load/frustration decay toward baseline over time
 _LOAD_DECAY_PER_MIN   = 0.04   # 4% per minute idle
 _FRUSTRATION_DECAY_PER_MIN = 0.05
+
+# Focus gap detection thresholds — exposed as constants for easy calibration
+_FOCUS_RAPID_EXIT_THRESHOLD   = 3      # exits < 10s in last 10 blocks → distraction signal
+_FOCUS_LATENCY_MULTIPLIER     = 1.5    # avg latency > 1.5x baseline → overload signal
+_FOCUS_BASELINE_LATENCY_MS    = 8_000  # baseline expected engagement time per block (ms)
+_FOCUS_OVERLOAD_ENGAGEMENT    = 0.4    # engagement below this + latency + struggles = overload
+_FOCUS_DISTRACTION_ENGAGEMENT = 0.3   # engagement below this + rapid exits = distraction
 
 
 @dataclass
@@ -52,6 +59,12 @@ class CognitiveTwinState:
     interaction_velocity: float = 0.0
     last_interaction_iso: Optional[str] = None
     interaction_timestamps: list[str] = field(default_factory=list)  # ISO strings, last 10
+    # Focus gap tracking fields
+    response_latencies: list[int] = field(default_factory=list)      # last 10 block durations ms
+    rapid_exit_count: int = 0          # exits < 10s in last 10 blocks
+    interaction_count_per_block: int = 0
+    focus_gap_detected: bool = False
+    last_block_entered_iso: Optional[str] = None
 
     @property
     def last_interaction(self) -> Optional[datetime]:
@@ -77,6 +90,36 @@ class CognitiveTwinState:
             self.zpd_zone == ZPDZone.BORED.value
             or self.consecutive_successes >= 4
         )
+
+    def detect_focus_gap(self) -> Optional[Literal["COGNITIVE_OVERLOAD", "EXTERNAL_DISTRACTION"]]:
+        """
+        Distinguish between two types of focus gaps:
+        - COGNITIVE_OVERLOAD: high latency + consecutive struggles + low engagement
+          (student is present but lost — content difficulty exceeds ZPD)
+        - EXTERNAL_DISTRACTION: rapid exits + no interaction + low engagement
+          (student left the task without engaging)
+        Returns None when neither threshold is met.
+        """
+        recent_latencies = self.response_latencies[-5:]
+        avg_latency = sum(recent_latencies) / len(recent_latencies) if recent_latencies else 0
+
+        overload = (
+            avg_latency > _FOCUS_BASELINE_LATENCY_MS * _FOCUS_LATENCY_MULTIPLIER
+            and self.consecutive_struggles >= 2
+            and self.engagement_level < _FOCUS_OVERLOAD_ENGAGEMENT
+        )
+        if overload:
+            return "COGNITIVE_OVERLOAD"
+
+        distraction = (
+            self.rapid_exit_count >= _FOCUS_RAPID_EXIT_THRESHOLD
+            and self.engagement_level < _FOCUS_DISTRACTION_ENGAGEMENT
+            and self.interaction_count_per_block < 2
+        )
+        if distraction:
+            return "EXTERNAL_DISTRACTION"
+
+        return None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -255,8 +298,10 @@ def _calc_velocity(timestamps_iso: list[str]) -> float:
 def recommend_intervention(twin: CognitiveTwinState) -> str:
     """
     Returns a terse recommendation string for ManagerAgent routing.
-    SCAFFOLD | BREAK | ELEVATE | CONTINUE
+    FOCUS_RESET | SCAFFOLD | BREAK | ELEVATE | CONTINUE
     """
+    if twin.detect_focus_gap() is not None:
+        return "FOCUS_RESET"
     if twin.needs_break():
         return "BREAK"
     if twin.is_frustrated():

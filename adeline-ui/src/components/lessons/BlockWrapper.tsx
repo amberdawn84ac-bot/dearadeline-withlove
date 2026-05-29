@@ -9,12 +9,18 @@
  */
 
 import VerifiedSeal from "@/components/icons/VerifiedSeal";
+import { FocusReset } from "@/components/gen-ui/patterns/FocusReset";
+import { useFocusMonitor } from "@/hooks/useFocusMonitor";
 import type { LessonBlockResponse } from "@/lib/brain-client";
+
+const BRAIN_URL = process.env.NEXT_PUBLIC_BRAIN_URL ?? "";
 
 interface BlockWrapperProps {
   block: LessonBlockResponse;
   children: React.ReactNode;
   showScores?: boolean;
+  studentId?: string;
+  onFocusResetComplete?: () => void;
 }
 
 type BlockStyle = {
@@ -70,11 +76,39 @@ export default function BlockWrapper({
   block,
   children,
   showScores = false,
+  studentId = "",
+  onFocusResetComplete,
 }: BlockWrapperProps) {
   const style = getBlockStyle(block.block_type);
   const topEvidence = block.evidence[0];
   const score = topEvidence?.similarity_score;
   const isPrimarySource = block.block_type === "PRIMARY_SOURCE";
+
+  const { focusGap } = useFocusMonitor(studentId, block.block_id, block.block_type);
+
+  const handleFocusResetDone = () => {
+    if (!studentId) return;
+    fetch(`${BRAIN_URL}/brain/focus/reset-complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ student_id: studentId }),
+    }).catch(() => {});
+    onFocusResetComplete?.();
+  };
+
+  if (focusGap) {
+    const message =
+      focusGap === "COGNITIVE_OVERLOAD"
+        ? "Your brain is working hard. Let's take a quick breath before we continue."
+        : "Let's check in — sometimes the best thing is a quick reset.";
+    const mode = focusGap === "COGNITIVE_OVERLOAD" ? "breathe" : "ground";
+
+    return (
+      <div style={{ ...style.wrapper, borderColor: "#6B7280" }}>
+        <FocusReset mode={mode} message={message} onComplete={handleFocusResetDone} />
+      </div>
+    );
+  }
 
   return (
     <div style={style.wrapper}>

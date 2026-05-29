@@ -86,6 +86,37 @@ COMPONENT_REGISTRY = {
         "concept_types": ["any"],
         "abstraction": "abstract",
     },
+    # ── Multi-Modal First-Class Block Types ─────────────────────────────────────
+    "Simulation": {
+        "category": "multimodal",
+        "modalities": ["kinesthetic", "visual"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+        "estimated_minutes": 5,
+        "stealth_assessment": True,
+        "tags": ["science", "math", "exploration", "hands-on", "interactive"],
+        "concept_types": ["science", "math"],
+        "abstraction": "concrete",
+    },
+    "TextDeep": {
+        "category": "multimodal",
+        "modalities": ["reading", "text"],
+        "difficulties": ["DEVELOPING", "EXPANDING", "MASTERING"],
+        "estimated_minutes": 8,
+        "stealth_assessment": False,
+        "tags": ["reading", "text", "reference", "deep-dive", "key-terms"],
+        "concept_types": ["any"],
+        "abstraction": "abstract",
+    },
+    "ConceptMap": {
+        "category": "visualization",
+        "modalities": ["visual"],
+        "difficulties": ["DEVELOPING", "EXPANDING", "MASTERING"],
+        "estimated_minutes": 3,
+        "stealth_assessment": False,
+        "tags": ["concept-map", "relationships", "synthesis", "visual"],
+        "concept_types": ["any"],
+        "abstraction": "abstract",
+    },
     # ── Stealth & Adaptive Assessment ───────────────────────────────────────────
     "StealthAssessment": {
         "category": "assessment",
