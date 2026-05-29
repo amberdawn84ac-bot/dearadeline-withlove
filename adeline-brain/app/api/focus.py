@@ -23,7 +23,6 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.agents.cognitive_twin import (
-    CognitiveTwinState,
     get_twin,
     save_twin,
 )

@@ -26,7 +26,6 @@ RESEARCH_MISSION block. If a verified source is found, the lesson continues
 with a PRIMARY_SOURCE block from the auto-found archive.
 """
 
-import asyncio
 import contextvars
 import logging
 import os
@@ -2194,7 +2193,6 @@ async def _inject_modal_supplement(
     Called at the end of _render_lesson after the main cascade resolves.
     Mutates blocks in place. Non-blocking — any failure is logged and skipped.
     """
-    import json as _json
     from app.algorithms.component_selector import select_modal_supplement
 
     modality = state.get("preferred_modality", "text")
@@ -2276,7 +2274,6 @@ async def _inject_modal_supplement(
             initial_state = {"currentStep": 0, "completedTasks": []}
 
         elif component_type == "ScaffoldedProblem":
-            grade_desc = _GRADE_DESC.get(request.grade_level, "your grade level")
             props = {
                 "title": f"Practice Problem: {request.topic}",
                 "problem": {

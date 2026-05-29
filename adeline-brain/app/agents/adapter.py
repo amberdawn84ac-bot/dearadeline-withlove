@@ -524,7 +524,7 @@ def _build_component_props_for_adapter(component_id: str, content: str, req: Ada
     elif component_id == "AutoDiagram":
         return {"title": f"Concept Map: {content[:40]}", "sourceContent": content[:1000], "diagramType": "concept-map", "track": track}
     elif component_id == "RealWorldApplication":
-        return {"title": f"Apply It: {content[:40]}", "scenario": f"How does this connect to your world?", "content": content[:800], "track": track}
+        return {"title": f"Apply It: {content[:40]}", "scenario": "How does this connect to your world?", "content": content[:800], "track": track}
     elif component_id == "StealthAssessment":
         return {"topic": content[:60], "content": content[:800], "assessmentType": "comprehension", "track": track}
     elif component_id == "SimulationEmbed":

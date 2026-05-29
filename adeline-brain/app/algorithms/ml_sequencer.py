@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 from app.algorithms.learner_profiler import (
     InteractionRecord,
@@ -26,7 +25,6 @@ from app.algorithms.learner_profiler import (
     LearnerProfileType,
     extract_features,
     classify_learner_profile,
-    PROFILE_COMPONENT_AFFINITY,
 )
 from app.algorithms.collaborative_filter import (
     PeerProfile,
