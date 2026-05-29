@@ -208,52 +208,58 @@ async def get_student_state(
     )
 
 
-# ── POST /students/{student_id}/modality-preference ───────────────────────────
+# ── POST /students/{student_id}/lesson-rating ─────────────────────────────────
 
-_VALID_MODALITIES = {"visual", "auditory", "kinesthetic", "reading"}
+class LessonRatingRequest(BaseModel):
+    lessonId:      str = Field(..., description="ID of the lesson being rated")
+    componentType: str = Field(..., description="Primary component type shown in the lesson")
+    rating:        int = Field(..., description="1 = liked, -1 = did not like")
+    track:         str | None = None
+    topic:         str | None = None
 
-class ModalityPreferenceRequest(BaseModel):
-    modality: str = Field(..., description="visual | auditory | kinesthetic | reading")
 
-
-@router.post("/{student_id}/modality-preference")
-async def save_modality_preference(
+@router.post("/{student_id}/lesson-rating")
+async def save_lesson_rating(
     student_id: str,
-    body: ModalityPreferenceRequest,
+    body: LessonRatingRequest,
     current_user_id: str = Depends(get_current_user_id),
 ):
     """
-    Save the student's explicit modality preference to the User table.
+    Save a thumbs-up / thumbs-down rating for a lesson.
 
-    This immediately overrides behavioral inference from LearningRecord rows.
-    The learner_profiler will use this as the seed modality on the next lesson,
-    then refine it over time as interaction data accumulates.
+    Ratings are stored in ComponentRating and read back by the component
+    selector on future lessons — components rated up get picked more often,
+    components rated down get deprioritized.
     """
     await verify_student_access(student_id, current_user_id)
 
-    modality = body.modality.lower().strip()
-    if modality not in _VALID_MODALITIES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"modality must be one of: {', '.join(sorted(_VALID_MODALITIES))}",
-        )
+    if body.rating not in (1, -1):
+        raise HTTPException(status_code=400, detail="rating must be 1 or -1")
 
     conn = await _get_conn()
     try:
-        result = await conn.execute(
-            'UPDATE "User" SET "learningStyle" = $1, "updatedAt" = NOW() WHERE "id" = $2',
-            modality,
+        await conn.execute(
+            """
+            INSERT INTO "ComponentRating"
+                ("studentId", "lessonId", "componentType", "rating", "track", "topic")
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT DO NOTHING
+            """,
             student_id,
+            body.lessonId,
+            body.componentType,
+            body.rating,
+            body.track,
+            body.topic,
         )
-        if result == "UPDATE 0":
-            raise HTTPException(status_code=404, detail="Student not found")
-        logger.info(f"[Students] Modality preference saved: student={student_id} modality={modality}")
-    except HTTPException:
-        raise
+        logger.info(
+            f"[Students] Lesson rating saved: student={student_id} "
+            f"component={body.componentType} rating={body.rating}"
+        )
     except Exception as e:
-        logger.error(f"[Students] Failed to save modality preference: {e}")
-        raise HTTPException(status_code=500, detail="Failed to save preference")
+        logger.error(f"[Students] Failed to save lesson rating: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save rating")
     finally:
         await conn.close()
 
-    return {"ok": True, "modality": modality}
+    return {"ok": True}

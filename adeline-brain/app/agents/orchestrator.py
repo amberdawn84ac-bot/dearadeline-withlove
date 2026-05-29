@@ -2624,31 +2624,34 @@ async def _render_lesson(
 
     await _inject_modal_supplement(state, blocks, synthesis_text[:500])
 
-    # ── LearningStylePicker — inject once for students with no explicit pick ──
-    # Fires when the student has no behavioral data yet (new student).
-    # Once they pick, learningStyle is saved and explicit_modality is set,
-    # so this block is never emitted again.
-    has_explicit_modality = bool(getattr(request, "_explicit_modality_set", False))
-    interaction_count_local = state.get("interaction_count", 0)
-    if not has_explicit_modality and interaction_count_local <= 1:
-        blocks.append({
-            "block_type": BlockType.GENUI_ASSEMBLY.value,
-            "content": "LearningStylePicker",
-            "evidence": [],
-            "is_silenced": False,
-            "homestead_content": None,
-            "genui_assembly_data": {
-                "component_type": "LearningStylePicker",
-                "props": {
-                    "studentId": request.student_id,
-                    "lessonTopic": request.topic,
-                },
-                "initial_state": {},
-                "callbacks": ["onComplete"],
-                "re_render_triggers": [],
+    # ── LessonRatingCard — injected after every lesson ────────────────────────
+    # Student rates thumbs up / down. Ratings accumulate in ComponentRating
+    # and feed back into the component selector on the next lesson.
+    primary_component = (
+        cohesive_block.get("genui_assembly_data", {}).get("component_type")
+        or cohesive_block.get("block_type", "ANIMATED_SKETCHNOTE_LESSON")
+    )
+    blocks.append({
+        "block_type": BlockType.GENUI_ASSEMBLY.value,
+        "content": "LessonRatingCard",
+        "evidence": [],
+        "is_silenced": False,
+        "homestead_content": None,
+        "genui_assembly_data": {
+            "component_type": "LessonRatingCard",
+            "props": {
+                "studentId":     request.student_id,
+                "lessonId":      state.get("lesson_id", ""),
+                "componentType": primary_component,
+                "track":         request.track.value,
+                "topic":         request.topic,
             },
-        })
-        logger.info(f"[Render] LearningStylePicker injected for new student {request.student_id}")
+            "initial_state": {},
+            "callbacks": [],
+            "re_render_triggers": [],
+        },
+    })
+    logger.info(f"[Render] LessonRatingCard injected for component={primary_component}")
 
 
 def _build_component_props(
