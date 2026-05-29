@@ -79,6 +79,7 @@ import { KeystoneConcept } from "@/components/lessons/KeystoneConcept";
 import { DistractionBox } from "@/components/lessons/DistractionBox";
 import { SourceBadge } from "./SourceBadge";
 import Link from "next/link";
+import css from "./GenUIRenderer.module.css";
 
 // ── Component Registry (safe, whitelisted only) ────────────────────────────────
 // Only components in this registry can be rendered by GENUI_ASSEMBLY blocks.
@@ -163,10 +164,7 @@ function DynamicComponent({
 
   if (!Component) {
     return (
-      <div
-        className="rounded-xl p-4 space-y-2"
-        style={{ background: "#FEF2F2", border: "1.5px solid #991B1B40" }}
-      >
+      <div className={clsx("rounded-xl p-4 space-y-2", css.unknownComponent)}>
         <BlockLabel type="GENUI_ASSEMBLY" />
         <p className="text-sm text-[#991B1B]">Unknown component: {componentType}</p>
       </div>
@@ -274,18 +272,23 @@ interface GenUIRendererProps {
 // ── Witness verdict badge ─────────────────────────────────────────────────────
 
 function VerdictBadge({ verdict }: { verdict: Evidence["verdict"] }) {
-  const styles: Record<Evidence["verdict"], { bg: string; text: string; icon: string }> = {
-    VERIFIED:         { bg: "#F0FDF4", text: "#166534", icon: "✓" },
-    ARCHIVE_SILENT:   { bg: "#FEF9C3", text: "#713F12", icon: "◎" },
-    RESEARCH_MISSION: { bg: "#FEF2F2", text: "#991B1B", icon: "?" },
+  const icons: Record<Evidence["verdict"], string> = {
+    VERIFIED:         "✓",
+    ARCHIVE_SILENT:   "◎",
+    RESEARCH_MISSION: "?",
   };
-  const s = styles[verdict];
+  const badgeClass =
+    verdict === "VERIFIED"         ? css.verdictVerified :
+    verdict === "ARCHIVE_SILENT"   ? css.verdictArchiveSilent :
+    css.verdictResearchMission;
   return (
     <span
-      className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider"
-      style={{ background: s.bg, color: s.text }}
+      className={clsx(
+        "inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider",
+        badgeClass
+      )}
     >
-      {s.icon} {verdict.replace(/_/g, " ")}
+      {icons[verdict]} {verdict.replace(/_/g, " ")}
     </span>
   );
 }
@@ -392,6 +395,26 @@ function BlockLabel({ type }: { type: string }) {
   );
 }
 
+// ── Font / color helpers (avoid inline styles) ─────────────────────────────────
+
+function _fontClass(fontFamily: string): string {
+  if (fontFamily.includes("swanky")) return css.fontSwanky;
+  if (fontFamily.includes("permanent-marker")) return css.fontPermanentMarker;
+  if (fontFamily.includes("kranky")) return css.fontKranky;
+  return css.fontKalam;
+}
+
+function _colorClass(color: string): string {
+  const map: Record<string, string> = {
+    "#2F4731": css.colorDarkGreen,
+    "#991B1B": css.colorDarkRed,
+    "#0C4A6E": css.colorDarkCyan,
+    "#374151": css.colorGray,
+    "#312E81": css.colorIndigo,
+  };
+  return map[color] || "";
+}
+
 // ── Lesson content renderer — paragraph-aware, Life of Fred style ────────────
 // Splits content on blank lines, renders first paragraph as a large hook,
 // subsequent paragraphs at a comfortable reading size with generous spacing.
@@ -428,8 +451,11 @@ function LessonContent({
         return (
           <p
             key={i}
-            className={i === 0 ? "text-xl leading-[1.85]" : "text-[17px] leading-[1.85]"}
-            style={{ fontFamily, color }}
+            className={clsx(
+              i === 0 ? "text-xl leading-[1.85]" : "text-[17px] leading-[1.85]",
+              _fontClass(fontFamily),
+              _colorClass(color)
+            )}
             dangerouslySetInnerHTML={{ __html: formatted }}
           />
         );
@@ -451,10 +477,7 @@ function PrimarySourceBlock({
   const content =
     isHomestead && block.homestead_content ? block.homestead_content : block.content;
   return (
-    <div
-      className="rounded-xl p-5 space-y-3"
-      style={{ background: "#FFFBF4", border: "1.5px solid #9A3F4A30" }}
-    >
+    <div className={clsx("rounded-xl p-5 space-y-3", css.primarySource)}>
       <BlockLabel type="PRIMARY_SOURCE" />
       <LessonContent content={content} color="#2F4731" />
       <EvidenceFooter evidence={block.evidence} />
@@ -466,10 +489,7 @@ function PrimarySourceBlock({
 
 function LabMissionBlock({ block }: { block: LessonBlockResponse }) {
   return (
-    <div
-      className="rounded-xl p-5 space-y-3"
-      style={{ background: "#F0FDF4", border: "1.5px dashed #2F4731" }}
-    >
+    <div className={clsx("rounded-xl p-5 space-y-3", css.labMission)}>
       <div className="flex items-center gap-2">
         <span className="text-lg">🌱</span>
         <BlockLabel type="LAB_MISSION" />
@@ -485,10 +505,7 @@ function LabMissionBlock({ block }: { block: LessonBlockResponse }) {
 function ExperimentBlock({ block }: { block: LessonBlockResponse }) {
   // The block may carry experiment_data in its raw dict (passed through as extra field)
   return (
-    <div
-      className="rounded-xl p-5 space-y-3"
-      style={{ background: "#FDF6E9", border: "2px solid #BD6809" }}
-    >
+    <div className={clsx("rounded-xl p-5 space-y-3", css.experiment)}>
       <div className="flex items-center gap-2">
         <span className="text-xl">🧪</span>
         <BlockLabel type="EXPERIMENT" />
@@ -496,10 +513,7 @@ function ExperimentBlock({ block }: { block: LessonBlockResponse }) {
           Sovereign Lab
         </span>
       </div>
-      <p
-        className="text-base text-[#2F4731] leading-relaxed whitespace-pre-wrap font-medium"
-        style={{ fontFamily: "var(--font-kalam), cursive" }}
-      >
+      <p className={clsx("text-base text-[#2F4731] leading-relaxed whitespace-pre-wrap font-medium", css.fontKalam)}>
         {block.content}
       </p>
       <div className="flex items-center gap-3 pt-2 border-t border-[#BD6809]/20">
@@ -523,10 +537,7 @@ function NarrativeBlock({
   const content =
     isHomestead && block.homestead_content ? block.homestead_content : block.content;
   return (
-    <div
-      className="rounded-xl p-5 space-y-3"
-      style={{ background: "#FFFEF7", border: "1.5px solid #BD680920" }}
-    >
+    <div className={clsx("rounded-xl p-5 space-y-3", css.narrative)}>
       <BlockLabel type="NARRATIVE" />
       <LessonContent content={content} color="#2F4731" />
       <EvidenceFooter evidence={block.evidence} />
@@ -538,21 +549,15 @@ function NarrativeBlock({
 
 function ResearchMissionBlock({ block }: { block: LessonBlockResponse }) {
   return (
-    <div
-      className="rounded-xl p-5 space-y-3"
-      style={{ background: "#FEF2F2", border: "1.5px solid #991B1B40" }}
-    >
+    <div className={clsx("rounded-xl p-5 space-y-3", css.researchMission)}>
       <div className="flex items-center gap-2">
         <span className="text-lg">🔍</span>
         <BlockLabel type="RESEARCH_MISSION" />
       </div>
-      <p
-        className="text-base text-[#991B1B] leading-[1.8] whitespace-pre-wrap font-bold"
-        style={{ fontFamily: "var(--font-permanent-marker), cursive" }}
-      >
+      <p className={clsx("text-base text-[#991B1B] leading-[1.8] whitespace-pre-wrap font-bold", css.fontPermanentMarker)}>
         {block.content}
       </p>
-      <p className="text-sm text-[#2F4731]/50 italic" style={{ fontFamily: "var(--font-kalam), cursive" }}>
+      <p className={clsx("text-sm text-[#2F4731]/50 italic", css.fontKalam)}>
         No verified archive source was found. This is your research mission.
       </p>
     </div>
@@ -619,23 +624,16 @@ function QuizBlock({ block }: { block: LessonBlockResponse }) {
 
   // Path 3: plain-text open-ended question (no structured data)
   return (
-    <div
-      className="rounded-xl p-5 space-y-3"
-      style={{ background: "#EEF2FF", border: "1.5px solid #4F46E5" }}
-    >
+    <div className={clsx("rounded-xl p-5 space-y-3", css.quiz)}>
       <div className="flex items-center gap-2">
         <span className="text-lg">❓</span>
         <BlockLabel type="QUIZ" />
       </div>
-      <p
-        className="text-lg text-[#312E81] leading-[1.7] whitespace-pre-wrap font-bold"
-        style={{ fontFamily: "var(--font-kranky), cursive" }}
-      >
+      <p className={clsx("text-lg text-[#312E81] leading-[1.7] whitespace-pre-wrap font-bold", css.fontKranky)}>
         {block.content}
       </p>
       <textarea
-        className="w-full mt-1 px-3 py-2 text-base text-[#2F4731] bg-white border border-[#4F46E5]/30 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-[#4F46E5]"
-        style={{ fontFamily: "var(--font-kalam), cursive" }}
+        className={clsx("w-full mt-1 px-3 py-2 text-base text-[#2F4731] bg-white border border-[#4F46E5]/30 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-[#4F46E5]", css.fontKalam)}
         rows={3}
         placeholder="Write your answer here..."
       />
@@ -664,10 +662,7 @@ function FlashcardBlock({ block }: { block: LessonBlockResponse }) {
   }
   // Fallback if no structured data
   return (
-    <div
-      className="rounded-xl p-5 space-y-3"
-      style={{ background: "#ECFEFF", border: "1.5px solid #0E7490" }}
-    >
+    <div className={clsx("rounded-xl p-5 space-y-3", css.flashcard)}>
       <BlockLabel type="FLASHCARD" />
       <LessonContent content={block.content} color="#0C4A6E" />
     </div>
@@ -679,10 +674,7 @@ function FlashcardBlock({ block }: { block: LessonBlockResponse }) {
 function InteractiveSimBlock({ block }: { block: LessonBlockResponse }) {
   const sim = (block as ExtendedBlockResponse).interactive_sim_data;
   return (
-    <div
-      className="rounded-xl p-5 space-y-3"
-      style={{ background: "#ECFDF5", border: "2px dashed #065F46" }}
-    >
+    <div className={clsx("rounded-xl p-5 space-y-3", css.interactiveSim)}>
       <div className="flex items-center gap-2">
         <span className="text-lg">⚙️</span>
         <BlockLabel type="INTERACTIVE_SIM" />
@@ -702,7 +694,7 @@ function InteractiveSimBlock({ block }: { block: LessonBlockResponse }) {
 
 function TextBlock({ block }: { block: LessonBlockResponse }) {
   return (
-    <div className="rounded-xl p-5 space-y-2" style={{ background: "#F9FAFB" }}>
+    <div className={clsx("rounded-xl p-5 space-y-2", css.textBlock)}>
       <BlockLabel type="TEXT" />
       <LessonContent
         content={block.content}
@@ -718,7 +710,7 @@ function TextBlock({ block }: { block: LessonBlockResponse }) {
 function MindMapBlock({ block }: { block: LessonBlockResponse }) {
   if (!block.mind_map_data) return null;
   return (
-    <div className="rounded-xl overflow-hidden" style={{ border: "1.5px solid #BBF7D0" }}>
+    <div className={clsx("rounded-xl overflow-hidden", css.mindMap)}>
       <MindMap data={block.mind_map_data} />
     </div>
   );
@@ -729,7 +721,7 @@ function MindMapBlock({ block }: { block: LessonBlockResponse }) {
 function TimelineBlock({ block }: { block: LessonBlockResponse }) {
   if (!block.timeline_data) return null;
   return (
-    <div className="rounded-xl overflow-hidden" style={{ border: "1.5px solid #BFDBFE" }}>
+    <div className={clsx("rounded-xl overflow-hidden", css.timeline)}>
       <Timeline data={block.timeline_data} evidence={block.evidence} />
     </div>
   );
@@ -741,10 +733,7 @@ function MnemonicBlock({ block }: { block: LessonBlockResponse }) {
   const data = block.mnemonic_data;
   if (!data) return null;
   return (
-    <div
-      className="rounded-xl p-5 space-y-3"
-      style={{ background: "#FAF5FF", border: "1.5px solid #E9D5FF" }}
-    >
+    <div className={clsx("rounded-xl p-5 space-y-3", css.mnemonic)}>
       <BlockLabel type="MNEMONIC" />
       <p className="text-sm text-[#6B21A8] font-semibold uppercase tracking-widest">
         {data.concept}
@@ -786,10 +775,7 @@ function BookSuggestionBlock({ block }: { block: LessonBlockResponse }) {
   const lexileLevel = extBlock.lexile_level;
 
   return (
-    <div
-      className="rounded-xl p-5 space-y-3"
-      style={{ background: "#FFFBEB", border: "1.5px solid #78350F40" }}
-    >
+    <div className={clsx("rounded-xl p-5 space-y-3", css.bookSuggestion)}>
       <div className="flex items-center gap-2">
         <span className="text-lg">📚</span>
         <BlockLabel type="BOOK_SUGGESTION" />
@@ -813,10 +799,7 @@ function BookSuggestionBlock({ block }: { block: LessonBlockResponse }) {
             </span>
           )}
           {block.content && (
-            <p
-              className="text-sm text-[#374151] leading-relaxed"
-              style={{ fontFamily: "var(--font-kalam), cursive" }}
-            >
+            <p className={clsx("text-sm text-[#374151] leading-relaxed", css.fontKalam)}>
               {block.content}
             </p>
           )}
@@ -843,10 +826,7 @@ function OASStandardsSection({ standards }: { standards: OASStandard[] }) {
   if (!standards.length) return null;
 
   return (
-    <div
-      className="rounded-xl p-4 space-y-3 mt-2"
-      style={{ background: "#F8FFF9", border: "1px solid #2F473130" }}
-    >
+    <div className={clsx("rounded-xl p-4 space-y-3 mt-2", css.oasStandards)}>
       <span className="text-sm font-bold text-[#2F4731] tracking-wide">
         Oklahoma Academic Standards
       </span>
