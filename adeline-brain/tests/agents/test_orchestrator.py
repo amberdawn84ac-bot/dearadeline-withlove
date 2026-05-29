@@ -87,9 +87,9 @@ class TestRoute:
         state = _make_state(Track.GOVERNMENT_ECONOMICS)
         assert _route(state) == "discipleship"
 
-    def test_english_routes_to_discipleship(self):
+    def test_english_routes_to_literature(self):
         state = _make_state(Track.ENGLISH_LITERATURE)
-        assert _route(state) == "discipleship"
+        assert _route(state) == "literature"
 
 
 # ── _block_type_to_xapi_verb() ────────────────────────────────────────────────
