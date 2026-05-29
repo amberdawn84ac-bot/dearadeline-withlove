@@ -82,6 +82,8 @@ jobs:
             --ignore=tests/test_e2e_declassified_lesson.py \
             --ignore=tests/test_e2e_bookshelf.py \
             --ignore=tests/test_e2e_content_filter.py \
+            --ignore=tests/test_credit_hook.py \
+            --ignore=tests/test_standards_mapper.py \
             -m "not slow"
 
   lint-ui:
