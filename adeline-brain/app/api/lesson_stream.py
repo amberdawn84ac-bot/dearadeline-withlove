@@ -416,6 +416,22 @@ async def _stream_lesson(
         logger.warning(f"[LessonStream] Canonical check failed (non-fatal): {e}")
 
     # ── Phase 2: Build initial state ──────────────────────────────────────────
+    # Load recent struggle count and used components from student state if available
+    recent_struggle_count = 0
+    recently_used_components: list[str] = []
+    try:
+        student_state = await load_student_state(student_id)
+        # Get recent struggle from last lesson interaction if available
+        track_mastery = student_state.tracks.get(request.track.value)
+        if track_mastery:
+            # Infer struggle from low mastery or recent quiz performance
+            if track_mastery.mastery_score < 0.4:
+                recent_struggle_count = 1
+        # TODO: Load actually used components from recent lesson history
+        recently_used_components = []
+    except Exception:
+        pass
+
     state: AdelineState = {
         "request":               request,
         "lesson_id":             lesson_id,
@@ -433,6 +449,8 @@ async def _stream_lesson(
         "mastery_band":          mastery_band,
         "student_message":       None,
         "preferred_modality":    adaptation_req.preferred_modality,
+        "recent_struggle_count": recent_struggle_count,
+        "recently_used_components": recently_used_components,
     }
 
     route = _route(state)
@@ -584,6 +602,9 @@ async def _run_registrar_background(
             "mastery_score":         0.0,
             "mastery_band":          "NOVICE",
             "student_message":       None,
+            "preferred_modality":    "text",
+            "recent_struggle_count": 0,
+            "recently_used_components": [],
         }
         final_state = await registrar_agent(dummy_state)
 

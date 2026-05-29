@@ -592,6 +592,9 @@ class AdelineState(TypedDict):
     student_message:      str | None  # Last student message for ZPD detection
     # Adaptive learning path — modality-matched component injection
     preferred_modality:   str  # "visual" | "auditory" | "kinesthetic" | "text"
+    # Component selector state — tracks struggle and recently used components
+    recent_struggle_count: int  # Consecutive wrong attempts in this session
+    recently_used_components: list[str]  # Component IDs used recently to avoid repetition
 
 
 # ── Neo4j graph-link (multi-hop) ──────────────────────────────────────────────
@@ -2418,12 +2421,12 @@ async def _render_lesson(
         LearnerContext,
     )
 
-    # Build learner context from state
-    student_state = state.get("student_state") or {}
-    mastery = student_state.get("bkt_pL", 0.5)
-    modality = student_state.get("preferred_modality", "visual")
-    interaction_count = student_state.get("interaction_count", 0)
-    struggle_count = student_state.get("recent_struggle_count", 0)
+    # Build learner context from state — all fields are top-level in AdelineState
+    mastery = state.get("mastery_score", 0.5)
+    modality = state.get("preferred_modality", "visual")
+    interaction_count = state.get("interaction_count", 0)
+    struggle_count = state.get("recent_struggle_count", 0)
+    recently_used = state.get("recently_used_components", [])
 
     # Map mastery to difficulty tier
     if mastery < 0.35:
@@ -2456,7 +2459,7 @@ async def _render_lesson(
         time_available_minutes=15,
         needs_assessment=(interaction_count >= 3 and mastery < 0.6),
         topic_tags=topic_tags,
-        recently_used_components=student_state.get("recently_used_components", []),
+        recently_used_components=recently_used,
     )
 
     # Select components from the library
