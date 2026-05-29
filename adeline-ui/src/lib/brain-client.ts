@@ -384,6 +384,12 @@ export type LessonStreamEvent =
   | { type: "block"; block: LessonBlockResponse }
   | { type: "done"; lesson_id: string; title: string; oas_standards?: unknown[] }
   | { type: "error"; message: string }
+  // GenUI progressive rendering events (Data Stream Protocol)
+  | { type: "genui_skeleton"; componentId: string; componentType: string; hints?: Record<string, unknown>; lessonId?: string; track?: string }
+  | { type: "genui_complete"; componentId: string; componentType: string; props: Record<string, unknown>; callbacks?: string[]; initialState?: Record<string, unknown>; lessonId?: string; track?: string }
+  | { type: "genui_props"; componentId: string; props: Record<string, unknown>; state: string }
+  // Remediation tool call event
+  | { type: "tool_call"; name: string; props: Record<string, unknown> }
 
 /**
  * Stream lesson blocks as they arrive from the brain SSE endpoint.
@@ -428,6 +434,39 @@ export async function* streamLesson(
           yield { type: "status", message: payload.message };
         } else if (payload.type === "block") {
           yield { type: "block", block: payload.block as LessonBlockResponse };
+        } else if (payload.type === "genui_skeleton") {
+          yield {
+            type: "genui_skeleton",
+            componentId: payload.componentId ?? "",
+            componentType: payload.componentType ?? "",
+            hints: payload.hints,
+            lessonId: payload.lessonId,
+            track: payload.track,
+          };
+        } else if (payload.type === "genui_complete") {
+          yield {
+            type: "genui_complete",
+            componentId: payload.componentId ?? "",
+            componentType: payload.componentType ?? "",
+            props: payload.props ?? {},
+            callbacks: payload.callbacks,
+            initialState: payload.initialState,
+            lessonId: payload.lessonId,
+            track: payload.track,
+          };
+        } else if (payload.type === "genui_props") {
+          yield {
+            type: "genui_props",
+            componentId: payload.componentId ?? "",
+            props: payload.props ?? {},
+            state: payload.state ?? "partial",
+          };
+        } else if (payload.type === "tool_call") {
+          yield {
+            type: "tool_call",
+            name: payload.name ?? "unknown",
+            props: payload.props ?? {},
+          };
         } else if (payload.type === "done") {
           yield {
             type: "done",
