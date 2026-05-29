@@ -15,6 +15,7 @@ export interface QuizCardProps {
   correctIndex: number;
   explanation?: string;
   onAnswer?: (isCorrect: boolean) => void;
+  onWrongAnswer?: (wrongAnswer: string, correctAnswer: string) => void;
   /** GenUI context — passed by DynamicComponent for telemetry */
   blockId?: string;
   lessonId?: string;
@@ -28,6 +29,7 @@ export function QuizCard({
   correctIndex,
   explanation,
   onAnswer,
+  onWrongAnswer,
   blockId,
   lessonId,
   track,
@@ -66,6 +68,32 @@ export function QuizCard({
       if (!isCorrect) {
         const newWrongCount = wrongCount + 1;
         setWrongCount(newWrongCount);
+
+        // Fire onWrongAnswer callback for CorrectiveOverlay injection
+        const wrongText = options[index] ?? "";
+        const correctText = options[correctIndex] ?? "";
+        onWrongAnswer?.(wrongText, correctText);
+
+        fetch(`${brainUrl}/brain/genui/callback`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            student_id: studentId,
+            lesson_id: lessonId,
+            component_type: "QuizCard",
+            event: "onWrongAnswer",
+            state: {
+              question,
+              wrongAnswer: wrongText,
+              correctAnswer: correctText,
+              wrongAttempts: newWrongCount,
+            },
+            block_id: blockId ?? null,
+            track: track ?? null,
+          }),
+        }).catch(() => {});
+
         if (newWrongCount >= 3) {
           fetch(`${brainUrl}/brain/genui/callback`, {
             method: "POST",

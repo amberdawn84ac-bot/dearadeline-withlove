@@ -140,6 +140,25 @@ async def genui_callback(
             }
             logger.info("[GENUI] Hint threshold reached - triggering TaskScaffold re-render")
 
+    elif request.event == "onWrongAnswer":
+        wrong_answer = request.state.get("wrongAnswer", "")
+        correct_answer = request.state.get("correctAnswer", "")
+        question = request.state.get("question", "")
+        logger.info(
+            f"[GENUI] Wrong answer: component={request.component_type} "
+            f"wrong='{wrong_answer}' correct='{correct_answer}'"
+        )
+        overlay_props = await _synthesize_corrective_overlay(
+            question=question,
+            wrong_answer=wrong_answer,
+            correct_answer=correct_answer,
+            track=request.track or "TRUTH_HISTORY",
+        )
+        should_re_render = True
+        scaffold_component = "CorrectiveOverlay"
+        scaffold_props = overlay_props
+        logger.info("[GENUI] CorrectiveOverlay triggered for wrong answer")
+
     elif request.event == "onStruggle":
         # Detect struggle and trigger scaffolding
         wrong_attempts = request.state.get("wrongAttempts", 0)
@@ -373,3 +392,59 @@ async def _award_widget_credit(
     ))
 
     logger.info(f"[GENUI] Credit awarded: student={student_id}, track={track}, hours={credit_hours}")
+
+
+async def _synthesize_corrective_overlay(
+    question: str,
+    wrong_answer: str,
+    correct_answer: str,
+    track: str,
+) -> dict:
+    """
+    Generate CorrectiveOverlay props via a small LLM synthesis call.
+    Returns a dict matching CorrectiveOverlayProps in the frontend.
+    Falls back to a generic overlay if the LLM call fails.
+    """
+    fallback = {
+        "studentAnswer": wrong_answer,
+        "correctAnswer": correct_answer,
+        "mistakeType": "Incorrect response",
+        "explanation": f"The correct answer is: {correct_answer}",
+        "correctApproach": "Review the source material and try again.",
+        "relatedConcepts": [],
+    }
+    try:
+        import os, json as _json
+        import anthropic
+
+        client = anthropic.AsyncAnthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        prompt = (
+            f"A student answered a {track} question incorrectly.\n"
+            f"Question: {question}\n"
+            f"Student answered: {wrong_answer}\n"
+            f"Correct answer: {correct_answer}\n\n"
+            "Respond with a JSON object with these fields:\n"
+            "- mistakeType (string): a short label for the type of mistake (e.g. 'Factual error', 'Misread the source')\n"
+            "- explanation (string): 1–2 sentences explaining why the student's answer is wrong\n"
+            "- correctApproach (string): 1–2 sentences on how to find/derive the right answer\n"
+            "- relatedConcepts (array of strings): 2–3 related concepts the student should review\n"
+            "Keep it concise and educational. No markdown — pure JSON only."
+        )
+        message = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=256,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = message.content[0].text.strip()
+        parsed = _json.loads(raw)
+        return {
+            "studentAnswer": wrong_answer,
+            "correctAnswer": correct_answer,
+            "mistakeType": parsed.get("mistakeType", fallback["mistakeType"]),
+            "explanation": parsed.get("explanation", fallback["explanation"]),
+            "correctApproach": parsed.get("correctApproach", fallback["correctApproach"]),
+            "relatedConcepts": parsed.get("relatedConcepts", []),
+        }
+    except Exception as exc:
+        logger.warning(f"[GENUI] CorrectiveOverlay synthesis failed (using fallback): {exc}")
+        return fallback

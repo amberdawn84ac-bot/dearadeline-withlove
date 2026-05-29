@@ -91,6 +91,13 @@ class BlockType(str, Enum):
     GENUI_ASSEMBLY   = "GENUI_ASSEMBLY"
     PEER_TUTOR       = "PEER_TUTOR"
     DISCUSSION_FORUM = "DISCUSSION_FORUM"
+    # Multi-modal first-class block types
+    SIMULATION         = "SIMULATION"
+    VIDEO              = "VIDEO"
+    TEXT_DEEP          = "TEXT_DEEP"
+    REAL_WORLD_APP     = "REAL_WORLD_APP"
+    CORRECTIVE_OVERLAY = "CORRECTIVE_OVERLAY"
+    CONCEPT_MAP        = "CONCEPT_MAP"
 
 
 # ── Multimodal Data Models ────────────────────────────────────────────────────
@@ -288,9 +295,14 @@ class LessonBlockResponse(BaseModel):
     block_id:         str = Field(default_factory=lambda: str(uuid.uuid4()))
     block_type:       str   # BlockType or GenUIBlockType — adapter may produce any of 15 types
     content:          str
+    title:            Optional[str] = None
     evidence:         list[Evidence] = []
     is_silenced:      bool = False
     homestead_content: Optional[str] = None
+    metadata:         Optional[dict] = None
+    # GenUI fields — populated when block_type is GENUI_ASSEMBLY
+    genui_component:  Optional[str] = None   # React component name, e.g. "FocusReset"
+    genui_props:      Optional[dict] = None  # Props passed to the component
     mind_map_data:        Optional[MindMapData] = None
     timeline_data:        Optional[TimelineData] = None
     mnemonic_data:        Optional[MnemonicData] = None
@@ -309,15 +321,16 @@ class LessonBlockResponse(BaseModel):
 
 class LessonResponse(BaseModel):
     lesson_id:            str = Field(default_factory=lambda: str(uuid.uuid4()))
-    title:                str
-    track:                Track
-    blocks:               list[LessonBlockResponse]
+    title:                str = ""
+    track:                Track = Track.TRUTH_HISTORY
+    blocks:               list[LessonBlockResponse] = Field(default_factory=list)
     has_research_missions: bool = False
     oas_standards:        list[dict] = Field(default_factory=list)
     researcher_activated: bool = False   # True when auto-search ran during generation
     agent_name:           str = ""       # Which specialist agent handled this lesson
     xapi_statements:      list[dict] = Field(default_factory=list)  # xAPI records (Phase 6 persists these)
     credits_awarded:      list[dict] = Field(default_factory=list)  # CASE credit entries
+    metadata:             Optional[dict] = None
 
 
 class CanonicalLessonRecord(BaseModel):
