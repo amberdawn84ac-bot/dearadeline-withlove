@@ -101,10 +101,9 @@ def select_transformation(block: dict, req: AdaptationRequest) -> str:
         return "text_only"
 
     # Already structured — don't re-transform
-    if block_type in ("MIND_MAP", "TIMELINE", "MNEMONIC", "NARRATED_SLIDE",
-                      "QUIZ", "FLASHCARD", "BOOK_SUGGESTION", "GENUI_ASSEMBLY",
-                      "ANIMATED_SKETCHNOTE_LESSON", "SOCRATIC_DEBATE",
-                      "SCAFFOLDED_PROBLEM", "HARD_THING_CHALLENGE"):
+    # Note: NARRATED_SLIDE, ANIMATED_SKETCHNOTE_LESSON removed — use component library instead
+    if block_type in ("MIND_MAP", "TIMELINE", "MNEMONIC",
+                      "QUIZ", "FLASHCARD", "BOOK_SUGGESTION", "GENUI_ASSEMBLY"):
         return "text_only"
 
     # Enrichment blocks (vocab, scripture, journal) — render as-is
@@ -140,9 +139,9 @@ def select_transformation(block: dict, req: AdaptationRequest) -> str:
             block_type in ("NARRATIVE", "TEXT")):
         return "to_quiz"
 
-    # Visual/kinesthetic learner, grade 6+
+    # Visual/kinesthetic learner, grade 6+ → GENUI_ASSEMBLY with visual component
     if req.preferred_modality in ("visual", "kinesthetic") and grade >= 6:
-        return "to_narrated_slide"
+        return "to_genui_assembly"
 
     return "text_only"
 
@@ -447,56 +446,101 @@ async def generate_narrated_slide_data(content: str, req: AdaptationRequest) -> 
 
 
 async def generate_genui_assembly_data(content: str, req: AdaptationRequest) -> Optional[dict]:
-    """Generate {component_type, props, initial_state, callbacks, re_render_triggers} for GENUI_ASSEMBLY."""
-    grade_desc = _GRADE_DESC.get(req.grade_level, f"grade {req.grade_level}")
+    """
+    Generate GENUI_ASSEMBLY data using the Component Selector library.
+    Returns {component_type, props, initial_state, callbacks, re_render_triggers}.
+    """
+    from app.algorithms.component_selector import select_components, LearnerContext
 
-    # Determine component type based on context
-    if req.priority_score > 0.8:
-        component_type = "ProjectBuilder" if req.grade_level >= "7" else "ScaffoldedProblem"
-    elif req.decay_adjusted_mastery < 0.6 or req.bkt_pL < 0.55:
-        component_type = "ScaffoldedProblem"
-    elif req.track in ("DISCIPLESHIP", "HEALTH_NATUROPATHY", "GOVERNMENT_ECONOMICS"):
-        component_type = "HardThingChallenge"
-    elif req.track in ("CREATIVE_ECONOMY", "APPLIED_MATHEMATICS"):
-        component_type = "ProjectBuilder"
+    # Map mastery to difficulty tier
+    if req.bkt_pL < 0.35:
+        difficulty = "SEEDLING"
+    elif req.bkt_pL < 0.65:
+        difficulty = "GROWING"
     else:
-        component_type = "InteractiveQuiz"
+        difficulty = "HARVEST"
 
-    # Determine re-render triggers based on component type
-    if component_type in ("ScaffoldedProblem", "InteractiveQuiz"):
-        re_render_triggers = ["onStruggle", "onComplete"]
-    elif component_type == "HardThingChallenge":
-        re_render_triggers = ["onComplete"]
+    # Map track to topic tags
+    _TRACK_TAGS = {
+        "TRUTH_HISTORY": ["history", "reading", "exploration"],
+        "CREATION_SCIENCE": ["science", "exploration", "hands-on"],
+        "APPLIED_MATHEMATICS": ["math", "concrete", "spatial"],
+        "ENGLISH_LITERATURE": ["reading", "text", "reference"],
+        "DISCIPLESHIP": ["application", "scenario", "problem-solving"],
+        "JUSTICE_CHANGEMAKING": ["application", "scenario", "problem-solving"],
+        "GOVERNMENT_ECONOMICS": ["reading", "scenario", "problem-solving"],
+        "HOMESTEADING": ["hands-on", "application", "concrete"],
+        "HEALTH_NATUROPATHY": ["science", "application", "hands-on"],
+        "CREATIVE_ECONOMY": ["hands-on", "application", "problem-solving"],
+    }
+    topic_tags = _TRACK_TAGS.get(req.track, ["reading", "exploration"])
+
+    # Determine modality from track/preference
+    modality = req.preferred_modality or "visual"
+
+    ctx = LearnerContext(
+        mastery_score=req.bkt_pL,
+        difficulty=difficulty,
+        preferred_modalities=[modality, "reading"],
+        recent_struggle_count=0,
+        time_available_minutes=15,
+        needs_assessment=False,
+        topic_tags=topic_tags,
+        recently_used_components=[],
+    )
+
+    # Select best component from library
+    recs = select_components(ctx, max_results=1)
+    if not recs:
+        return None
+
+    component_type = recs[0].component_id
+
+    # Build props based on component type
+    props = _build_component_props_for_adapter(component_type, content, req)
+
+    # Determine re-render triggers
+    _INTERACTIVE_COMPONENTS = {"AdaptiveQuiz", "StealthAssessment", "CorrectiveOverlay", "MultiCompetencyWorkspace"}
+    re_render_triggers = ["onComplete", "onStateChange"] if component_type in _INTERACTIVE_COMPONENTS else ["onComplete"]
+
+    return {
+        "component_type": component_type,
+        "props": props,
+        "initial_state": {},
+        "callbacks": ["onComplete", "onStateChange"],
+        "re_render_triggers": re_render_triggers,
+    }
+
+
+def _build_component_props_for_adapter(component_id: str, content: str, req: AdaptationRequest) -> dict:
+    """Build props for a GenUI component in the adapter context."""
+    track = req.track
+    if component_id == "TextExplanation":
+        return {"title": content[:60], "content": content[:2000], "keyTerms": [], "track": track}
+    elif component_id == "VideoExplanation":
+        return {"title": content[:60], "description": content[:200], "sourceType": "generated", "content": content[:500], "track": track}
+    elif component_id == "AdaptiveQuiz":
+        return {"topic": content[:60], "questions": [], "initialDifficulty": "medium", "track": track}
+    elif component_id == "AutoDiagram":
+        return {"title": f"Concept Map: {content[:40]}", "sourceContent": content[:1000], "diagramType": "concept-map", "track": track}
+    elif component_id == "RealWorldApplication":
+        return {"title": f"Apply It: {content[:40]}", "scenario": f"How does this connect to your world?", "content": content[:800], "track": track}
+    elif component_id == "StealthAssessment":
+        return {"topic": content[:60], "content": content[:800], "assessmentType": "comprehension", "track": track}
+    elif component_id == "SimulationEmbed":
+        return {"title": f"Explore: {content[:40]}", "description": content[:200], "sourceType": "generated", "track": track}
+    elif component_id == "VirtualManipulative":
+        return {"title": f"Hands-on: {content[:40]}", "type": "exploration", "track": track}
+    elif component_id == "MultiCompetencyWorkspace":
+        return {"title": f"Deep Work: {content[:40]}", "competencies": [content[:40]], "content": content[:800], "track": track}
+    elif component_id == "CorrectiveOverlay":
+        return {"topic": content[:60], "misconception": "", "correction": "", "track": track}
+    elif component_id == "LearningVelocityCard":
+        return {"topic": content[:60], "track": track}
+    elif component_id == "ProgressMap":
+        return {"topic": content[:60], "track": track}
     else:
-        re_render_triggers = ["onComplete"]
-
-    system = (
-        f"You generate structured data for a {component_type} component from lesson content. "
-        "Return ONLY valid JSON with keys: "
-        "component_type (string, must be exactly the component type you're given), "
-        "props (dict with component-specific fields), "
-        "initial_state (dict with keys like currentStep, hintsUsed, progress), "
-        "callbacks (array of strings like onAnswer, onComplete, onHint), "
-        "re_render_triggers (array of strings like onStruggle, onComplete, onMasteryDrop, onHintThreshold). "
-        "No markdown, just JSON."
-    )
-    user = (
-        f"Generate {component_type} data for a {grade_desc} student from this content:\n\n{content[:1000]}\n\n"
-        f"Context: priority_score={req.priority_score:.2f}, bkt_pL={req.bkt_pL:.2f}, "
-        f"decay_adjusted_mastery={req.decay_adjusted_mastery:.2f}\n"
-        f"Include these re_render_triggers: {', '.join(re_render_triggers)}"
-    )
-    raw = await _llm_call(system, user, max_tokens=800)
-    try:
-        data = json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
-        if "component_type" in data and "props" in data:
-            # Ensure re_render_triggers are included
-            if "re_render_triggers" not in data:
-                data["re_render_triggers"] = re_render_triggers
-            return data
-    except (json.JSONDecodeError, AttributeError):
-        pass
-    return None
+        return {"topic": content[:60], "content": content[:1000], "track": track}
 
 
 # ── Main adaptation entry point ──────────────────────────────────────────────

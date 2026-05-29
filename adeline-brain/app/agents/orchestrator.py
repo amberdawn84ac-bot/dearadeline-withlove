@@ -2183,16 +2183,18 @@ async def _render_lesson(
     """
     Render gathered content into a cohesive lesson format. Mutates `blocks` in place.
 
-    Pipeline (first success wins):
-      1. ANIMATED_SKETCHNOTE_LESSON — full interactive animated presentation
-         with vocabulary, scripture, and assessment embedded in scenes.
-      2. NARRATED_SLIDE — slide deck with voice narration script.
-      3. Content blocks preserved + GENUI_ASSEMBLY (SocraticDebate) appended
-         as the interactive engagement layer.
+    Uses the Component Selector algorithm to pick optimal GenUI components from
+    the adaptive learning library based on learner context (mastery, modality,
+    struggle patterns, topic tags).
+
+    Output structure:
+      1. ONE cohesive NARRATIVE block — the lesson content
+      2. 1-2 GENUI_ASSEMBLY blocks — interactive components selected by the algorithm
+         (TextExplanation, AdaptiveQuiz, AutoDiagram, RealWorldApplication, etc.)
 
     Interactive supplement blocks (EXPERIMENT, CodePlayground, ProjectBuilder,
     MoleculeSimulator) are ALWAYS preserved and appended after the main block.
-    They are never destroyed by the render cascade.
+    They are never destroyed by the render pipeline.
     """
     if not blocks:
         return
@@ -2231,109 +2233,201 @@ async def _render_lesson(
     for b in content_blocks:
         all_evidence.extend(b.get("evidence", []))
 
-    # ── Cascade: Animated Sketchnote → Narrated Slide → Content + Debate ─────
+    # ── Render via Component Selector Library ───────────────────────────────────
+    # Uses the component selector algorithm to pick optimal GenUI components
+    # based on learner context (mastery, modality, struggle, topic tags).
 
-    # Primary: Animated Sketchnote Lesson
-    asl = await _synthesize_animated_sketchnote(
-        topic=request.topic,
-        content=synthesis_text[:2000],
-        track=request.track,
-        grade_level=request.grade_level,
-    )
-    if asl:
-        blocks.clear()
-        blocks.append({
-            "block_type": BlockType.ANIMATED_SKETCHNOTE_LESSON.value,
-            "content": f"Living Sketchnote: {request.topic} · {len(asl.scenes)} scenes",
-            "evidence": all_evidence,
-            "is_silenced": False,
-            "homestead_content": None,
-            "animated_sketchnote_data": asl.model_dump(),
-        })
-        blocks.extend(supplements)
-        logger.info(
-            f"[Render] Animated sketchnote — {len(asl.scenes)} scenes, "
-            f"{len(supplements)} supplement(s) for '{request.topic}'"
-        )
-        return
-
-    # Fallback 1: Narrated Slide
-    logger.info(f"[Render] Sketchnote unavailable for '{request.topic}' — trying narrated slide")
-    ns = await _synthesize_narrated_slide(
-        request.topic, synthesis_text[:2000], request.track, request.grade_level,
-    )
-    if ns:
-        blocks.clear()
-        blocks.append({
-            "block_type": BlockType.NARRATED_SLIDE.value,
-            "content": f"{len(ns.slides)} slides · {ns.total_duration_minutes} min",
-            "evidence": all_evidence,
-            "is_silenced": False,
-            "homestead_content": None,
-            "narrated_slide_data": ns.model_dump(),
-        })
-        blocks.extend(supplements)
-        logger.info(
-            f"[Render] Narrated slide — {len(ns.slides)} slides, "
-            f"{len(supplements)} supplement(s) for '{request.topic}'"
-        )
-        return
-
-    # Fallback 2: Synthesize one cohesive narrative + SocraticDebate for interaction
-    logger.info(f"[Render] Slide unavailable for '{request.topic}' — synthesizing cohesive narrative + debate")
-    key_phrase = synthesis_text[:80].split(".")[0] if synthesis_text else request.topic
-
-    # Synthesize one cohesive NARRATIVE from all content blocks (not fragmented blocks)
-    cohesive_content = await _synthesize_cohesive_narrative(
-        topic=request.topic,
-        content=synthesis_text[:3000],
-        track=request.track,
-        grade_level=request.grade_level,
+    from app.algorithms.component_selector import (
+        select_components,
+        LearnerContext,
     )
 
+    # Build learner context from state
+    student_state = state.get("student_state") or {}
+    mastery = student_state.get("bkt_pL", 0.5)
+    modality = student_state.get("preferred_modality", "visual")
+    interaction_count = student_state.get("interaction_count", 0)
+    struggle_count = student_state.get("recent_struggle_count", 0)
+
+    # Map mastery to difficulty tier
+    if mastery < 0.35:
+        difficulty = "SEEDLING"
+    elif mastery < 0.65:
+        difficulty = "GROWING"
+    else:
+        difficulty = "HARVEST"
+
+    # Map track to topic tags for component selection
+    _TRACK_TAGS = {
+        "TRUTH_HISTORY": ["history", "reading", "exploration"],
+        "CREATION_SCIENCE": ["science", "exploration", "hands-on"],
+        "APPLIED_MATHEMATICS": ["math", "concrete", "spatial"],
+        "ENGLISH_LITERATURE": ["reading", "text", "reference"],
+        "DISCIPLESHIP": ["application", "scenario", "problem-solving"],
+        "JUSTICE_CHANGEMAKING": ["application", "scenario", "problem-solving"],
+        "GOVERNMENT_ECONOMICS": ["reading", "scenario", "problem-solving"],
+        "HOMESTEADING": ["hands-on", "application", "concrete"],
+        "HEALTH_NATUROPATHY": ["science", "application", "hands-on"],
+        "CREATIVE_ECONOMY": ["hands-on", "application", "problem-solving"],
+    }
+    topic_tags = _TRACK_TAGS.get(request.track.value, ["reading", "exploration"])
+
+    learner_ctx = LearnerContext(
+        mastery_score=mastery,
+        difficulty=difficulty,
+        preferred_modalities=[modality, "reading"] if modality != "reading" else ["reading", "visual"],
+        recent_struggle_count=struggle_count,
+        time_available_minutes=15,
+        needs_assessment=(interaction_count >= 3 and mastery < 0.6),
+        topic_tags=topic_tags,
+        recently_used_components=student_state.get("recently_used_components", []),
+    )
+
+    # Select components from the library
+    recommendations = select_components(learner_ctx, max_results=2)
+
+    # Build the lesson: ONE cohesive NARRATIVE block + selected GenUI components
     blocks.clear()
+
+    # Primary content: single cohesive narrative
     blocks.append({
         "block_type": BlockType.NARRATIVE.value,
-        "content": cohesive_content,
+        "content": synthesis_text,
         "evidence": all_evidence,
         "is_silenced": False,
         "homestead_content": None,
     })
-    blocks.append({
-        "block_type": BlockType.GENUI_ASSEMBLY.value,
-        "content": f"Discussion: {request.topic}",
-        "evidence": [],
-        "is_silenced": False,
-        "homestead_content": None,
-        "genui_assembly_data": {
-            "component_type": "SocraticDebate",
-            "props": {
-                "thesis": f"Let's go deeper: {request.topic}",
-                "turns": [
-                    {
-                        "question": f"Based on what you just learned about {request.topic} — what's the one fact that surprised you most?",
-                        "hint": f"Look at: {key_phrase}",
-                        "expectedThemes": [request.topic.lower()],
-                    },
-                    {
-                        "question": f"How does {request.topic} connect to something you can see or do on your land, in your home, or in your community this week?",
-                        "hint": "Think practical. What would change if you acted on this?",
-                        "expectedThemes": ["application", "real life"],
-                    },
-                    {
-                        "question": f"If you had to teach someone younger about {request.topic}, what would you say first?",
-                        "hint": "Teaching is the best way to know if you really understand something.",
-                        "expectedThemes": ["understanding", "synthesis"],
-                    },
-                ],
-                "track": request.track.value,
+
+    # Append GenUI components selected by the algorithm
+    key_phrase = synthesis_text[:80].split(".")[0] if synthesis_text else request.topic
+    for rec in recommendations:
+        component_props = _build_component_props(
+            component_id=rec.component_id,
+            topic=request.topic,
+            content=synthesis_text[:1500],
+            track=request.track.value,
+            key_phrase=key_phrase,
+        )
+        blocks.append({
+            "block_type": BlockType.GENUI_ASSEMBLY.value,
+            "content": f"{rec.component_id}: {request.topic}",
+            "evidence": [],
+            "is_silenced": False,
+            "homestead_content": None,
+            "genui_assembly_data": {
+                "component_type": rec.component_id,
+                "props": component_props,
+                "initial_state": {},
+                "callbacks": ["onComplete", "onStateChange"],
+                "re_render_triggers": ["onComplete"],
             },
-            "initial_state": {},
-            "callbacks": ["onComplete"],
-            "re_render_triggers": ["onComplete"],
-        },
-    })
+        })
+
+    logger.info(
+        f"[Render] Component library — selected {[r.component_id for r in recommendations]} "
+        f"(mastery={mastery:.2f}, difficulty={difficulty}) for '{request.topic}'"
+    )
+
     blocks.extend(supplements)
+
+
+def _build_component_props(
+    component_id: str,
+    topic: str,
+    content: str,
+    track: str,
+    key_phrase: str,
+) -> dict:
+    """
+    Build props for a GenUI component based on its type.
+    Each component has a specific prop schema — this maps content into it.
+    """
+    if component_id == "TextExplanation":
+        return {
+            "title": topic,
+            "content": content[:2000],
+            "keyTerms": [],
+            "track": track,
+        }
+    elif component_id == "VideoExplanation":
+        return {
+            "title": topic,
+            "description": f"Visual explanation of {topic}",
+            "sourceType": "generated",
+            "content": content[:500],
+            "track": track,
+        }
+    elif component_id == "AdaptiveQuiz":
+        return {
+            "topic": topic,
+            "questions": [],
+            "initialDifficulty": "medium",
+            "track": track,
+        }
+    elif component_id == "AutoDiagram":
+        return {
+            "title": f"Concept Map: {topic}",
+            "sourceContent": content[:1000],
+            "diagramType": "concept-map",
+            "track": track,
+        }
+    elif component_id == "RealWorldApplication":
+        return {
+            "title": f"Apply It: {topic}",
+            "scenario": f"How does {topic} connect to your world?",
+            "content": content[:800],
+            "track": track,
+        }
+    elif component_id == "StealthAssessment":
+        return {
+            "topic": topic,
+            "content": content[:800],
+            "assessmentType": "comprehension",
+            "track": track,
+        }
+    elif component_id == "SimulationEmbed":
+        return {
+            "title": f"Explore: {topic}",
+            "description": f"Interactive exploration of {topic}",
+            "sourceType": "generated",
+            "track": track,
+        }
+    elif component_id == "VirtualManipulative":
+        return {
+            "title": f"Hands-on: {topic}",
+            "type": "exploration",
+            "track": track,
+        }
+    elif component_id == "MultiCompetencyWorkspace":
+        return {
+            "title": f"Deep Work: {topic}",
+            "competencies": [topic],
+            "content": content[:800],
+            "track": track,
+        }
+    elif component_id == "CorrectiveOverlay":
+        return {
+            "topic": topic,
+            "misconception": "",
+            "correction": "",
+            "track": track,
+        }
+    elif component_id == "LearningVelocityCard":
+        return {
+            "topic": topic,
+            "track": track,
+        }
+    elif component_id == "ProgressMap":
+        return {
+            "topic": topic,
+            "track": track,
+        }
+    else:
+        return {
+            "topic": topic,
+            "content": content[:1000],
+            "track": track,
+        }
 
 
 # ── Multimodal synthesis functions ────────────────────────────────────────────
@@ -2459,143 +2553,6 @@ async def _synthesize_mnemonic(
         return MnemonicData.model_validate(raw)
     except Exception as e:
         logger.warning(f"[Mnemonic] synthesis failed: {e}")
-        return None
-
-
-async def _synthesize_cohesive_narrative(
-    topic: str,
-    content: str,
-    track: "Track",
-    grade_level: str,
-) -> str:
-    """
-    Synthesize a cohesive, flowing lesson narrative from fragmented content.
-    Returns a single unified text suitable for a NARRATIVE block.
-    Never fails — returns original content on any error.
-    """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
-        return content  # Fallback: return raw content if no AI available
-
-    grade_desc = _GRADE_DESC.get(grade_level, f"grade {grade_level}")
-    system_prompt = (
-        "You are a master teacher who weaves fragmented lesson notes into a cohesive, engaging narrative. "
-        "Write in a warm, Socratic voice addressing the student directly. "
-        "Create a flowing lesson that connects ideas naturally — not a list of bullet points. "
-        "Include an opening hook, clear explanations with examples, and a closing reflection. "
-        "Never mention 'In conclusion' or 'As we learned'. End with a thought-provoking question."
-    )
-    user_prompt = (
-        f"Lesson topic: {topic}\n"
-        f"Student grade: {grade_desc}\n"
-        f"Track: {track.value}\n\n"
-        f"Fragmented source material:\n{content[:2500]}\n\n"
-        f"Write ONE cohesive lesson narrative that flows naturally. Address the student as 'Adeline'."
-    )
-    try:
-        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=2000)
-        return text.strip() if text.strip() else content
-    except Exception as e:
-        logger.warning(f"[CohesiveNarrative] synthesis failed: {e} — returning raw content")
-        return content
-
-
-async def _synthesize_narrated_slide(
-    topic: str,
-    content: str,
-    track: "Track",
-    grade_level: str,
-) -> "NarratedSlideData | None":  # noqa: F821
-    """
-    Convert lesson content into a 3-5 slide narrated presentation.
-    Returns None on any failure.
-    """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
-        return None
-    from app.schemas.api_models import NarratedSlideData
-    import json
-
-    grade_desc = _GRADE_DESC.get(grade_level, f"grade {grade_level}")
-    system_prompt = (
-        "You convert lesson content into narrated slide decks for students. "
-        "Output ONLY valid JSON — no prose, no markdown fences. "
-        "Format: {\"total_duration_minutes\": <float>, \"slides\": [{\"slide_number\": <int starting at 1>, \"title\": \"<title>\", \"bullets\": [\"<bullet1>\", \"<bullet2>\"], \"narration\": \"<30-60 second spoken script>\"}]}\n"
-        "Rules: 3-5 slides, 2-4 bullets per slide, narration is natural spoken language (not bullet points)."
-    )
-    user_prompt = (
-        f"Lesson topic: {topic}\n"
-        f"Student grade: {grade_desc}\n\n"
-        f"Content:\n{content[:2000]}\n\n"
-        "Convert this into a narrated slide deck."
-    )
-    try:
-        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=1200)
-        return NarratedSlideData.model_validate(json.loads(text.strip()))
-    except Exception as e:
-        logger.warning(f"[NarratedSlide] synthesis failed: {e}")
-        return None
-
-
-async def _synthesize_animated_sketchnote(
-    topic: str,
-    content: str,
-    track: "Track",
-    grade_level: str,
-    duration_seconds: int = 240,
-) -> "AnimatedSketchnoteLessonData | None":  # noqa: F821
-    """
-    Generate a full AnimatedSketchnoteLesson JSON via Gemini.
-    Uses the same master prompt as /lesson/animated — runs as an optional
-    multimodal block appended when render_mode='animated_sketchnote_lesson'.
-    Returns None on any failure — never surfaces errors to the student.
-    """
-    if not GEMINI_API_KEY:
-        logger.warning("[AnimatedSketchnote] GEMINI_API_KEY not set — skipping")
-        return None
-
-    from app.schemas.api_models import AnimatedSketchnoteLessonData
-    from app.prompts.animated_sketchnote import (
-        ANIMATED_SKETCHNOTE_SYSTEM_PROMPT,
-        ANIMATED_SKETCHNOTE_USER_PROMPT,
-    )
-    import json
-    import re
-
-    target_ages = {
-        "K": "5-6", "1": "6-7", "2": "7-8", "3": "8-9", "4": "9-10",
-        "5": "10-11", "6": "11-12", "7": "12-13", "8": "13-14",
-        "9": "14-15", "10": "15-16", "11": "16-17", "12": "17-18",
-    }.get(grade_level, "10-15")
-
-    user_prompt = ANIMATED_SKETCHNOTE_USER_PROMPT.format(
-        topic=topic,
-        focus=content[:2000],
-        duration_seconds=duration_seconds,
-        target_ages=target_ages,
-    )
-
-    try:
-        import google.generativeai as genai  # type: ignore
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(
-            model_name=GEMINI_MODEL or "gemini-1.5-pro",
-            generation_config={"temperature": 0.7, "max_output_tokens": 16384,
-                               "response_mime_type": "application/json"},
-            system_instruction=ANIMATED_SKETCHNOTE_SYSTEM_PROMPT,
-        )
-        loop = asyncio.get_event_loop()
-        # 30s timeout — prevents hanging on complex history topics
-        response = await asyncio.wait_for(
-            loop.run_in_executor(None, lambda: model.generate_content(user_prompt)),
-            timeout=30.0
-        )
-        raw_text = response.text.strip()
-        raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
-        raw_text = re.sub(r"\s*```$", "", raw_text)
-        data = AnimatedSketchnoteLessonData(**json.loads(raw_text))
-        logger.info(f"[AnimatedSketchnote] Generated {len(data.scenes)} scenes for '{topic}'")
-        return data
-    except Exception as e:
-        logger.warning(f"[AnimatedSketchnote] synthesis failed: {e}")
         return None
 
 
