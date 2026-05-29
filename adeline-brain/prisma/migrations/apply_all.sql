@@ -310,6 +310,24 @@ EXCEPTION WHEN duplicate_column THEN NULL; END $$;
 
 CREATE INDEX IF NOT EXISTS "User_onboardingComplete_idx" ON "User"("onboardingComplete");
 
+-- ── 2026-05-23 (moved up): Book table creation ─────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS "Book" (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    author TEXT NOT NULL,
+    description TEXT,
+    track "Track" NOT NULL,
+    "gradeBand" TEXT,
+    "lexileLevel" INTEGER,
+    "coverImageUrl" TEXT,
+    "sourceUrl" TEXT,
+    isbn TEXT,
+    "totalPages" INTEGER,
+    "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- ── 2026-04-04: Book table extensions for Bookshelf v1 ─────────────────────────
 
 DO $$ BEGIN
@@ -451,3 +469,61 @@ DO $$ BEGIN
   ALTER TABLE "TranscriptEntry"
     ADD CONSTRAINT "TranscriptEntry_studentId_lessonId_key" UNIQUE ("studentId", "lessonId");
 EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
+
+-- ── 2026-05-21: Subscription table ──────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS "Subscription" (
+  "id"                   TEXT        NOT NULL,
+  "userId"               TEXT        NOT NULL,
+  "stripeCustomerId"     TEXT,
+  "stripeSubscriptionId" TEXT,
+  "stripePriceId"        TEXT,
+  "tier"                 TEXT        NOT NULL DEFAULT 'FREE',
+  "status"               TEXT        NOT NULL DEFAULT 'ACTIVE',
+  "currentPeriodEnd"     TIMESTAMPTZ,
+  "cancelAtPeriodEnd"    BOOLEAN     NOT NULL DEFAULT false,
+  "createdAt"            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  "updatedAt"            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT "Subscription_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "Subscription_userId_key" ON "Subscription"("userId");
+
+-- ── 2026-05-21: Fix User updatedAt default ──────────────────────────────────────
+
+ALTER TABLE "User"
+  ALTER COLUMN "updatedAt" SET DEFAULT CURRENT_TIMESTAMP;
+
+-- ── 2026-05-25: Fix hippocampus deduplication key ───────────────────────────────
+-- Only runs if the hippocampus_documents table exists (created by SQLAlchemy, not Prisma)
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'hippocampus_documents') THEN
+    DROP INDEX IF EXISTS "hippocampus_document_source_url_track_key";
+    DELETE FROM hippocampus_documents
+    WHERE id IN (
+        SELECT id FROM (
+            SELECT id,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY source_url, chunk
+                       ORDER BY created_at ASC
+                   ) AS rn
+            FROM hippocampus_documents
+        ) ranked
+        WHERE rn > 1
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS "hippocampus_document_source_url_chunk_key"
+        ON hippocampus_documents (source_url, md5(chunk));
+  END IF;
+END $$;
+
+-- ── 2026-05-29: Multi-modal block types + focus gap verb ────────────────────────
+
+ALTER TYPE "BlockType" ADD VALUE IF NOT EXISTS 'SIMULATION';
+ALTER TYPE "BlockType" ADD VALUE IF NOT EXISTS 'VIDEO';
+ALTER TYPE "BlockType" ADD VALUE IF NOT EXISTS 'TEXT_DEEP';
+ALTER TYPE "BlockType" ADD VALUE IF NOT EXISTS 'REAL_WORLD_APP';
+ALTER TYPE "BlockType" ADD VALUE IF NOT EXISTS 'CORRECTIVE_OVERLAY';
+ALTER TYPE "BlockType" ADD VALUE IF NOT EXISTS 'CONCEPT_MAP';
+
+ALTER TYPE "XAPIVerb" ADD VALUE IF NOT EXISTS 'focus_gap_detected';
