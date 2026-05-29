@@ -595,6 +595,7 @@ class AdelineState(TypedDict):
     # Component selector state — tracks struggle and recently used components
     recent_struggle_count: int  # Consecutive wrong attempts in this session
     recently_used_components: list[str]  # Component IDs used recently to avoid repetition
+    profiler_components: list[str]  # Top components from learner_profiler decision tree
 
 
 # ── Neo4j graph-link (multi-hop) ──────────────────────────────────────────────
@@ -2572,6 +2573,13 @@ async def _render_lesson(
     }
     topic_tags = _TRACK_TAGS.get(request.track.value, ["reading", "exploration"])
 
+    # Pull profiler-recommended components — these are the components the learner
+    # profile classifier says work best for this student's archetype.
+    # We pass them as recently_used so the selector diversifies away from them
+    # unless they are truly the best fit (high score overcomes recency penalty).
+    profiler_components: list[str] = state.get("profiler_components", [])
+    recently_used_for_selector = list(set(recently_used + profiler_components[1:]))  # keep top pick eligible
+
     from app.algorithms.component_selector import select_components, LearnerContext
     learner_ctx = LearnerContext(
         mastery_score=mastery,
@@ -2581,7 +2589,7 @@ async def _render_lesson(
         time_available_minutes=15,
         needs_assessment=(interaction_count >= 3 and mastery < 0.6),
         topic_tags=topic_tags,
-        recently_used_components=recently_used,
+        recently_used_components=recently_used_for_selector,
     )
     recommendations = select_components(learner_ctx, max_results=1)
 

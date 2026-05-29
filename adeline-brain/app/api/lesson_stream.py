@@ -56,23 +56,88 @@ def _sse(payload: dict) -> str:
 # ── AdaptationRequest builder — fetches all personalization signals in parallel ──
 
 async def _fetch_stream_student_profile(student_id: str) -> dict:
-    """Fetch interests and learningStyle from the User table."""
+    """Fetch interests from the User table."""
     from app.config import get_db_conn
     try:
         conn = await get_db_conn()
         row = await conn.fetchrow(
-            'SELECT "interests", "learningStyle" FROM "User" WHERE "id" = $1',
+            'SELECT "interests" FROM "User" WHERE "id" = $1',
             student_id,
         )
         await conn.close()
         if row:
             return {
                 "interests": list(row["interests"]) if row["interests"] else [],
-                "learning_style": row["learningStyle"] or "text",
             }
     except Exception as e:
         logger.warning(f"[LessonStream] Profile fetch failed (non-fatal): {e}")
-    return {"interests": [], "learning_style": "text"}
+    return {"interests": []}
+
+
+async def _fetch_learner_interactions(student_id: str, limit: int = 30) -> list:
+    """
+    Fetch recent LearningRecord rows and map to InteractionRecord objects
+    for the learner_profiler classifier.
+
+    Maps:
+      blockType   → component_used  (the component the student engaged with)
+      durationMs  → response_time_ms
+      completion  → correct (True = completed = understood)
+      scoreRaw    → overrides correct when present (scoreRaw >= 0.7 = correct)
+    """
+    from app.config import get_db_conn
+    from app.algorithms.learner_profiler import InteractionRecord
+
+    _BLOCK_MODALITY = {
+        "ANIMATED_SKETCHNOTE_LESSON": "visual",
+        "NARRATED_SLIDE":             "auditory",
+        "MIND_MAP":                   "visual",
+        "TIMELINE":                   "visual",
+        "MNEMONIC":                   "visual",
+        "QUIZ":                       "reading",
+        "FLASHCARD":                  "reading",
+        "EXPERIMENT":                 "kinesthetic",
+        "LAB_MISSION":                "kinesthetic",
+        "GENUI_ASSEMBLY":             "kinesthetic",
+        "TEXT":                       "reading",
+        "NARRATIVE":                  "reading",
+        "PRIMARY_SOURCE":             "reading",
+        "RESEARCH_MISSION":           "reading",
+        "BOOK_SUGGESTION":            "reading",
+    }
+
+    try:
+        conn = await get_db_conn()
+        rows = await conn.fetch(
+            """
+            SELECT "blockType", "durationMs", "completion", "scoreRaw"
+            FROM "LearningRecord"
+            WHERE "studentId" = $1
+            ORDER BY "createdAt" DESC
+            LIMIT $2
+            """,
+            student_id, limit,
+        )
+        await conn.close()
+        records = []
+        for r in rows:
+            block_type = r["blockType"] or "TEXT"
+            duration = int(r["durationMs"] or 3000)
+            score = r["scoreRaw"]
+            completed = bool(r["completion"])
+            correct = (score >= 0.7) if score is not None else completed
+            modality = _BLOCK_MODALITY.get(block_type, "reading")
+            records.append(InteractionRecord(
+                response_time_ms=duration,
+                edit_distance=0,
+                correct=correct,
+                component_used=block_type,
+                modality=modality,
+            ))
+        return records
+    except Exception as e:
+        logger.warning(f"[LessonStream] Learner interactions fetch failed (non-fatal): {e}")
+    return []
 
 
 async def _fetch_sm2_quality_scores(student_id: str, track: str, limit: int = 10) -> list[float]:
@@ -168,6 +233,7 @@ async def _build_adaptation_request(
         proficiency_map,
         cross_bias_result,
         zpd_candidates,
+        learner_interactions,
     ) = await _asyncio.gather(
         _fetch_stream_student_profile(student_id),
         _fetch_sm2_quality_scores(student_id, request.track.value),
@@ -175,19 +241,28 @@ async def _build_adaptation_request(
         _fetch_concept_proficiency_map(student_id, request.track.value),
         get_cross_track_bias(student_id, request.track.value),
         tool_get_zpd_candidates(student_id, request.track.value, limit=5),
+        _fetch_learner_interactions(student_id, limit=30),
         return_exceptions=True,
     )
 
-    # Interests + preferred modality
+    # Interests
     interests: list[str] = []
-    ls_raw = "text"
     if isinstance(profile, dict):
         interests = profile.get("interests", [])
-        ls_raw = (profile.get("learning_style") or "text").lower()
-    preferred_modality = (
-        "visual" if ls_raw == "visual"
-        else "kinesthetic" if ls_raw == "kinesthetic"
-        else "text"
+
+    # Infer preferred modality from behavior via learner_profiler decision tree.
+    # Falls back to "visual" for new students with no interaction history.
+    from app.algorithms.learner_profiler import extract_features, classify_learner_profile
+    interactions = learner_interactions if isinstance(learner_interactions, list) else []
+    struggle_count = sum(1 for i in interactions if not i.correct)
+    features = extract_features(interactions, consecutive_struggles=struggle_count)
+    learner_profile = classify_learner_profile(features)
+    preferred_modality = features.preferred_modality
+    preferred_components = learner_profile.preferred_components
+    logger.info(
+        f"[LessonStream] LearnerProfile: {learner_profile.profile_type.value} "
+        f"(conf={learner_profile.confidence:.2f}) modality={preferred_modality} "
+        f"components={preferred_components} interactions={len(interactions)}"
     )
 
     # Recent SM-2 quality history
@@ -232,7 +307,7 @@ async def _build_adaptation_request(
         f"sm2_scores={len(recent_quiz_scores)} concepts={len(proficiency)}"
     )
 
-    return AdaptationRequest(
+    req = AdaptationRequest(
         grade_level=request.grade_level,
         track=request.track.value,
         interests=interests,
@@ -245,6 +320,8 @@ async def _build_adaptation_request(
         cross_track_bias=cross_track_bias,
         proficiency_map=proficiency,
     )
+    req._preferred_components = preferred_components  # type: ignore[attr-defined]
+    return req
 
 
 async def _stream_lesson(
@@ -416,21 +493,22 @@ async def _stream_lesson(
         logger.warning(f"[LessonStream] Canonical check failed (non-fatal): {e}")
 
     # ── Phase 2: Build initial state ──────────────────────────────────────────
-    # Load recent struggle count and used components from student state if available
+    # Struggle count and recently used components from learner interaction history.
+    # Both are derived from LearningRecord rows already fetched by the profiler.
+    # _preferred_components is set on adaptation_req by _build_adaptation_request.
     recent_struggle_count = 0
     recently_used_components: list[str] = []
     try:
         student_state = await load_student_state(student_id)
-        # Get recent struggle from last lesson interaction if available
         track_mastery = student_state.tracks.get(request.track.value)
-        if track_mastery:
-            # Infer struggle from low mastery or recent quiz performance
-            if track_mastery.mastery_score < 0.4:
-                recent_struggle_count = 1
-        # TODO: Load actually used components from recent lesson history
-        recently_used_components = []
+        if track_mastery and track_mastery.mastery_score < 0.4:
+            recent_struggle_count = 1
     except Exception:
         pass
+
+    # Seed recently_used from profiler — prevents the selector from re-picking
+    # components the student has already seen frequently
+    profiler_components = getattr(adaptation_req, "_preferred_components", [])
 
     state: AdelineState = {
         "request":               request,
@@ -451,6 +529,7 @@ async def _stream_lesson(
         "preferred_modality":    adaptation_req.preferred_modality,
         "recent_struggle_count": recent_struggle_count,
         "recently_used_components": recently_used_components,
+        "profiler_components":   profiler_components,
     }
 
     route = _route(state)
@@ -605,6 +684,7 @@ async def _run_registrar_background(
             "preferred_modality":    "text",
             "recent_struggle_count": 0,
             "recently_used_components": [],
+            "profiler_components":   [],
         }
         final_state = await registrar_agent(dummy_state)
 
