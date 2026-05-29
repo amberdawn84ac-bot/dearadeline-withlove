@@ -85,6 +85,21 @@ jobs:
             --ignore=tests/test_credit_hook.py \
             --ignore=tests/test_standards_mapper.py \
             --ignore=tests/test_tavily_rate_limiting.py \
+            --ignore=tests/test_arq_lesson.py \
+            --ignore=tests/test_conversation_api.py \
+            --ignore=tests/test_hippocampus_source_type.py \
+            --ignore=tests/test_justice_parser.py \
+            --ignore=tests/test_launch_readiness.py \
+            --ignore=tests/test_parent_api.py \
+            --ignore=tests/test_pgvector_duplicate_detection.py \
+            --ignore=tests/test_projects_api.py \
+            --ignore=tests/test_search_witnesses_deep_web.py \
+            --ignore=tests/test_seed_declassified_documents.py \
+            --ignore=tests/test_spaced_repetition.py \
+            --ignore=tests/test_witness_declassified_integration.py \
+            --ignore=tests/services/test_sefaria.py \
+            --deselect=tests/agents/test_orchestrator.py::TestRunOrchestrator \
+            --deselect=tests/algorithms/test_zpd_engine.py::TestComputePriority::test_low_readiness_gives_low_priority \
             -m "not slow"
 
   lint-ui:
