@@ -2403,6 +2403,10 @@ async def _render_lesson(
     _PLACEHOLDER_PHRASES = (
         "adeline is preparing",
         "check back shortly",
+        "check back again soon",
+        "please check back",
+        "no content provided",
+        "(no content provided",
         "[genui hint",
     )
 
@@ -2416,6 +2420,22 @@ async def _render_lesson(
     ).strip()
     if not synthesis_text:
         synthesis_text = request.topic
+
+    # ── Clean supplements — strip placeholder text from content & props.description
+    def _clean_supplement(b: dict) -> dict:
+        content = b.get("content", "")
+        if _is_placeholder(content):
+            b["content"] = request.topic
+        gdata = b.get("genui_assembly_data", {})
+        props = gdata.get("props", {})
+        for key in ("description", "title", "thesis"):
+            if key in props and _is_placeholder(str(props[key])):
+                props[key] = request.topic
+        gdata["props"] = props
+        b["genui_assembly_data"] = gdata
+        return b
+
+    supplements = [_clean_supplement(b) for b in supplements]
 
     all_evidence = []
     for b in content_blocks:
@@ -2620,35 +2640,6 @@ async def _render_lesson(
     )
 
     await _inject_modal_supplement(state, blocks, synthesis_text[:500])
-
-    # ── LessonRatingCard — injected after every lesson ────────────────────────
-    # Student rates thumbs up / down. Ratings accumulate in ComponentRating
-    # and feed back into the component selector on the next lesson.
-    primary_component = (
-        cohesive_block.get("genui_assembly_data", {}).get("component_type")
-        or cohesive_block.get("block_type", "ANIMATED_SKETCHNOTE_LESSON")
-    )
-    blocks.append({
-        "block_type": BlockType.GENUI_ASSEMBLY.value,
-        "content": "LessonRatingCard",
-        "evidence": [],
-        "is_silenced": False,
-        "homestead_content": None,
-        "genui_assembly_data": {
-            "component_type": "LessonRatingCard",
-            "props": {
-                "studentId":     request.student_id,
-                "lessonId":      state.get("lesson_id", ""),
-                "componentType": primary_component,
-                "track":         request.track.value,
-                "topic":         request.topic,
-            },
-            "initial_state": {},
-            "callbacks": [],
-            "re_render_triggers": [],
-        },
-    })
-    logger.info(f"[Render] LessonRatingCard injected for component={primary_component}")
 
 
 def _build_component_props(
