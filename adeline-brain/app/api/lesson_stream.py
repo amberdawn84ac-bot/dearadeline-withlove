@@ -74,10 +74,13 @@ async def _fetch_stream_student_profile(student_id: str) -> dict:
 
 async def _fetch_component_ratings(student_id: str, limit: int = 100) -> dict:
     """
-    Fetch ComponentRating rows and return a score map:
-      { componentType: weighted_score }  where score is in [-1.0, 1.0]
+    Fetch ComponentRating rows and return:
+      { componentType: {"score": float, "count": int} }
 
-    Recent ratings count more (linear recency decay over limit rows).
+    score is a recency-weighted average in [-1.0, 1.0].
+    count is the total number of ratings for that component.
+    Both are needed by the selector so a single thumbs-down doesn't suppress
+    a component — suppression requires a consistent negative pattern.
     """
     from app.config import get_db_conn
     try:
@@ -93,13 +96,16 @@ async def _fetch_component_ratings(student_id: str, limit: int = 100) -> dict:
             student_id, limit,
         )
         await conn.close()
-        scores: dict = {}
+        buckets: dict = {}
         total = len(rows)
         for i, r in enumerate(rows):
             ct = r["componentType"]
             weight = 1.0 - (i / max(total, 1)) * 0.5
-            scores.setdefault(ct, []).append(float(r["rating"]) * weight)
-        return {ct: sum(vals) / len(vals) for ct, vals in scores.items()}
+            buckets.setdefault(ct, []).append(float(r["rating"]) * weight)
+        return {
+            ct: {"score": sum(vals) / len(vals), "count": len(vals)}
+            for ct, vals in buckets.items()
+        }
     except Exception as e:
         logger.warning(f"[LessonStream] Component ratings fetch failed (non-fatal): {e}")
     return {}
@@ -290,12 +296,20 @@ async def _build_adaptation_request(
     learner_profile = classify_learner_profile(features)
     preferred_modality = features.preferred_modality
 
-    # Merge archetype components with rating signal:
-    # positively-rated components float up; negatively-rated ones are dropped
+    # Merge archetype components with rating signal.
+    # Suppression threshold: score < 0 AND at least 2 ratings — one bad day
+    # doesn't kill a component. Boost threshold: score > 0 with any count.
+    _MIN_BAD_RATINGS = 2
     ratings: dict = component_ratings if isinstance(component_ratings, dict) else {}
     archetype_components = learner_profile.preferred_components
-    rated_good = [ct for ct, sc in sorted(ratings.items(), key=lambda x: -x[1]) if sc > 0]
-    rated_bad  = {ct for ct, sc in ratings.items() if sc < 0}
+    rated_good = [
+        ct for ct, info in sorted(ratings.items(), key=lambda x: -x[1]["score"])
+        if info["score"] > 0
+    ]
+    rated_bad = {
+        ct for ct, info in ratings.items()
+        if info["score"] < 0 and info["count"] >= _MIN_BAD_RATINGS
+    }
     preferred_components = (
         rated_good[:2] + [c for c in archetype_components if c not in rated_bad and c not in rated_good]
     ) if rated_good else [
