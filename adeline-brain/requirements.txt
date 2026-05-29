@@ -3,7 +3,7 @@ uvicorn[standard]==0.48.0
 pydantic==2.13.4
 pydantic-settings==2.14.1
 
-openai==1.30.1
+openai>=1.68.2,<2.0.0
 anthropic==0.105.2
 
 # LangChain — LLM orchestration (used by daily_bread.py and config.py)
@@ -12,7 +12,7 @@ anthropic==0.105.2
 langchain-core>=0.3.85
 langchain-anthropic>=0.3.0
 langchain-google-genai>=2.0.0
-langchain-openai>=1.1.14
+langchain-openai>=0.3.0,<1.0.0
 
 # Database — Hippocampus (pgvector)
 pgvector==0.4.2
