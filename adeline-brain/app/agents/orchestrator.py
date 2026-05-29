@@ -2362,81 +2362,202 @@ async def _render_lesson(
     """
     Render gathered content into a cohesive lesson format. Mutates `blocks` in place.
 
-    Uses the Component Selector algorithm to pick optimal GenUI components from
-    the adaptive learning library based on learner context (mastery, modality,
-    struggle patterns, topic tags).
+    Cascade (first successful format wins):
+      1. ANIMATED_SKETCHNOTE_LESSON — full animated whiteboard lesson via Gemini
+      2. NARRATED_SLIDE             — slide deck with narration (cheaper fallback)
+      3. GENUI_ASSEMBLY SocraticDebate — Socratic dialogue (always available)
 
-    Output structure:
-      1. ONE cohesive NARRATIVE block — the lesson content
-      2. 1-2 GENUI_ASSEMBLY blocks — interactive components selected by the algorithm
-         (TextExplanation, AdaptiveQuiz, AutoDiagram, RealWorldApplication, etc.)
+    Enrichment blocks (_enrichment=True) are SKIPPED — vocab, scripture, and
+    journal cards are embedded inside the cohesive format's teaching layers.
 
     Interactive supplement blocks (EXPERIMENT, CodePlayground, ProjectBuilder,
-    MoleculeSimulator) are ALWAYS preserved and appended after the main block.
-    They are never destroyed by the render pipeline.
+    MoleculeSimulator) are ALWAYS preserved and appended after the cohesive block.
+
+    After the cohesive format is selected, the Component Selector injects ONE
+    modality-matched supplement (e.g. AutoDiagram for visual, TaskScaffold for
+    kinesthetic) via _inject_modal_supplement.
     """
     if not blocks:
         return
 
     request = state["request"]
 
-    # ── Separate interactive supplements from content blocks ──────────────────
+    # ── Separate interactive supplements and enrichment from content blocks ────
     _SUPPLEMENT_TYPES = {"EXPERIMENT"}
     supplements: list[dict] = []
     content_blocks: list[dict] = []
 
     for b in blocks:
         block_type = b.get("block_type", "")
+        if b.get("_enrichment"):
+            continue  # Enrichment is embedded in cohesive format — skip
         if block_type in _SUPPLEMENT_TYPES:
             supplements.append(b)
         elif block_type == "GENUI_ASSEMBLY":
-            # Agent-specific GENUI widgets (CodePlayground, ProjectBuilder, etc.)
-            # are supplements. We only create SocraticDebate as a fallback below.
             supplements.append(b)
         else:
             content_blocks.append(b)
 
     if not content_blocks:
-        return  # Only supplements present — nothing to render
+        return
 
     # ── Gather synthesis text from content blocks ─────────────────────────────
     synthesis_text = "\n\n".join(
         b.get("content", "") for b in content_blocks
-        if not b.get("_enrichment")
     ).strip()
     if not synthesis_text:
         synthesis_text = request.topic
 
-    # Collect evidence from all content blocks for attribution on cohesive formats
     all_evidence = []
     for b in content_blocks:
         all_evidence.extend(b.get("evidence", []))
 
-    # ── Render via Component Selector Library ───────────────────────────────────
-    # Uses the component selector algorithm to pick optimal GenUI components
-    # based on learner context (mastery, modality, struggle, topic tags).
-
-    from app.algorithms.component_selector import (
-        select_components,
-        LearnerContext,
-    )
-
-    # Build learner context from state — all fields are top-level in AdelineState
+    # ── Learner context for cascade decisions ─────────────────────────────────
     mastery = state.get("mastery_score", 0.5)
     modality = state.get("preferred_modality", "visual")
     interaction_count = state.get("interaction_count", 0)
     struggle_count = state.get("recent_struggle_count", 0)
     recently_used = state.get("recently_used_components", [])
 
-    # Map mastery to difficulty tier
     if mastery < 0.35:
-        difficulty = "SEEDLING"
+        difficulty = "EMERGING"
     elif mastery < 0.65:
-        difficulty = "GROWING"
+        difficulty = "DEVELOPING"
     else:
-        difficulty = "HARVEST"
+        difficulty = "MASTERING"
 
-    # Map track to topic tags for component selection
+    grade_level = getattr(request, "grade_level", "8") or "8"
+    try:
+        grade_int = int(grade_level) if grade_level.upper() != "K" else 0
+    except (ValueError, AttributeError):
+        grade_int = 8
+
+    # Target ages string for animated sketchnote prompt
+    if grade_int <= 2:
+        target_ages = "5-8"
+    elif grade_int <= 5:
+        target_ages = "8-11"
+    elif grade_int <= 8:
+        target_ages = "11-14"
+    else:
+        target_ages = "14-18"
+
+    # ── CASCADE LEVEL 1: Animated Sketchnote Lesson ───────────────────────────
+    cohesive_block: dict | None = None
+
+    try:
+        import httpx as _httpx
+        _brain_base = os.getenv("BRAIN_BASE_URL", "http://localhost:8000")
+        async with _httpx.AsyncClient(timeout=45.0) as _client:
+            _resp = await _client.post(
+                f"{_brain_base}/lesson/animated",
+                json={
+                    "topic": request.topic,
+                    "focus": synthesis_text[:800],
+                    "duration_seconds": 180,
+                    "target_ages": target_ages,
+                    "track": request.track.value,
+                    "student_id": request.student_id,
+                },
+                headers={"Authorization": f"Bearer {os.getenv('INTERNAL_API_KEY', '')}"},
+            )
+        if _resp.status_code == 200:
+            sketchnote_data = _resp.json()
+            cohesive_block = {
+                "block_type": BlockType.ANIMATED_SKETCHNOTE_LESSON.value,
+                "content": request.topic,
+                "evidence": all_evidence,
+                "is_silenced": False,
+                "homestead_content": None,
+                "animated_sketchnote_data": sketchnote_data,
+            }
+            logger.info(f"[Render] CASCADE-1 AnimatedSketchnote OK for '{request.topic}'")
+        else:
+            logger.warning(
+                f"[Render] CASCADE-1 AnimatedSketchnote HTTP {_resp.status_code} — "
+                "falling back to NarratedSlide"
+            )
+    except Exception as _e:
+        logger.warning(f"[Render] CASCADE-1 AnimatedSketchnote failed ({_e}) — falling back to NarratedSlide")
+
+    # ── CASCADE LEVEL 2: Narrated Slides ──────────────────────────────────────
+    if cohesive_block is None:
+        try:
+            from app.agents.adapter import generate_narrated_slide_data
+            from app.agents.adapter import AdaptationRequest as _AR
+            _ar = _AR(
+                grade_level=grade_level,
+                track=request.track.value,
+                bkt_pL=mastery,
+            )
+            slide_data = await generate_narrated_slide_data(synthesis_text, _ar)
+            if slide_data:
+                cohesive_block = {
+                    "block_type": BlockType.NARRATED_SLIDE.value,
+                    "content": request.topic,
+                    "evidence": all_evidence,
+                    "is_silenced": False,
+                    "homestead_content": None,
+                    "narrated_slide_data": slide_data,
+                }
+                logger.info(f"[Render] CASCADE-2 NarratedSlide OK for '{request.topic}'")
+        except Exception as _e:
+            logger.warning(f"[Render] CASCADE-2 NarratedSlide failed ({_e}) — falling back to SocraticDebate")
+
+    # ── CASCADE LEVEL 3: SocraticDebate GENUI_ASSEMBLY (always available) ─────
+    if cohesive_block is None:
+        _topic_title = f"Let's go deeper: {request.topic}"
+        cohesive_block = {
+            "block_type": BlockType.GENUI_ASSEMBLY.value,
+            "content": synthesis_text,
+            "evidence": all_evidence,
+            "is_silenced": False,
+            "homestead_content": None,
+            "genui_assembly_data": {
+                "component_type": "SocraticDebate",
+                "props": {
+                    "thesis": _topic_title,
+                    "turns": [
+                        {
+                            "question": (
+                                f"Based on what you just learned about {request.topic} — "
+                                "what's the one fact that surprised you most?"
+                            ),
+                            "hint": f"Look at: {synthesis_text[:120]}",
+                            "expectedThemes": [request.topic.lower()],
+                        },
+                        {
+                            "question": (
+                                f"How does {request.topic} connect to something you can see "
+                                "or do on your land, in your home, or in your community this week?"
+                            ),
+                            "hint": "Think practical. What would change if you acted on this?",
+                            "expectedThemes": ["application", "real life"],
+                        },
+                        {
+                            "question": (
+                                f"If you had to teach someone younger about {request.topic}, "
+                                "what would you say first?"
+                            ),
+                            "hint": "Teaching is the best way to know if you really understand something.",
+                            "expectedThemes": ["understanding", "synthesis"],
+                        },
+                    ],
+                    "track": request.track.value,
+                },
+                "initial_state": {},
+                "callbacks": ["onComplete"],
+                "re_render_triggers": ["onComplete"],
+            },
+        }
+        logger.info(f"[Render] CASCADE-3 SocraticDebate fallback for '{request.topic}'")
+
+    # ── Assemble final block list ──────────────────────────────────────────────
+    blocks.clear()
+    blocks.append(cohesive_block)
+    blocks.extend(supplements)
+
+    # ── Modal supplement (component selector — ONE additional component) ───────
     _TRACK_TAGS = {
         "TRUTH_HISTORY": ["history", "reading", "exploration"],
         "CREATION_SCIENCE": ["science", "exploration", "hands-on"],
@@ -2451,6 +2572,7 @@ async def _render_lesson(
     }
     topic_tags = _TRACK_TAGS.get(request.track.value, ["reading", "exploration"])
 
+    from app.algorithms.component_selector import select_components, LearnerContext
     learner_ctx = LearnerContext(
         mastery_score=mastery,
         difficulty=difficulty,
@@ -2461,23 +2583,8 @@ async def _render_lesson(
         topic_tags=topic_tags,
         recently_used_components=recently_used,
     )
+    recommendations = select_components(learner_ctx, max_results=1)
 
-    # Select components from the library
-    recommendations = select_components(learner_ctx, max_results=2)
-
-    # Build the lesson: ONE cohesive NARRATIVE block + selected GenUI components
-    blocks.clear()
-
-    # Primary content: single cohesive narrative
-    blocks.append({
-        "block_type": BlockType.NARRATIVE.value,
-        "content": synthesis_text,
-        "evidence": all_evidence,
-        "is_silenced": False,
-        "homestead_content": None,
-    })
-
-    # Append GenUI components selected by the algorithm
     key_phrase = synthesis_text[:80].split(".")[0] if synthesis_text else request.topic
     for rec in recommendations:
         component_props = _build_component_props(
@@ -2503,11 +2610,10 @@ async def _render_lesson(
         })
 
     logger.info(
-        f"[Render] Component library — selected {[r.component_id for r in recommendations]} "
-        f"(mastery={mastery:.2f}, difficulty={difficulty}) for '{request.topic}'"
+        f"[Render] Final blocks: {[b.get('block_type') for b in blocks]} "
+        f"(mastery={mastery:.2f}, modality={modality}) for '{request.topic}'"
     )
 
-    blocks.extend(supplements)
     await _inject_modal_supplement(state, blocks, synthesis_text[:500])
 
 
