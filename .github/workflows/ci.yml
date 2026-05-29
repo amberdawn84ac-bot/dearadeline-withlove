@@ -46,7 +46,11 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      POSTGRES_DSN: postgresql://adeline:testpassword@localhost:5432/adeline_test
+      PGUSER: adeline
+      PGPASSWORD: testpassword
+      PGDATABASE: adeline_test
+      PGHOST: localhost
+      PGPORT: "5432"
       REDIS_URL: redis://localhost:6379/0
       SUPABASE_JWT_SECRET: test-secret-for-ci
       ADELINE_MODEL: claude-haiku-4-5-20251001
@@ -63,13 +67,14 @@ jobs:
           cd adeline-brain
           pip install -r requirements.txt
           pip install pytest pytest-asyncio pytest-httpx
-      - name: Run Prisma migrations
+      - name: Set up database schema
         run: |
           cd adeline-brain
-          DATABASE_URL=$POSTGRES_DSN prisma migrate deploy
+          psql -f prisma/migrations/apply_all.sql
       - name: Run tests
         run: |
           cd adeline-brain
+          export POSTGRES_DSN="postgresql""://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}"
           pytest tests/ -x --tb=short -q \
             --ignore=tests/test_genesis_fetch.py \
             --ignore=tests/test_sefaria_fetch.py \
