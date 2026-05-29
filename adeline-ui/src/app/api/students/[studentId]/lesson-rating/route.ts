@@ -9,9 +9,9 @@ const BRAIN_URL = (
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { studentId: string } }
+  { params }: { params: Promise<{ studentId: string }> }
 ) {
-  const { studentId } = params;
+  const { studentId } = await params;
   const body = await req.json();
   const token = req.headers.get("authorization") || "";
 
