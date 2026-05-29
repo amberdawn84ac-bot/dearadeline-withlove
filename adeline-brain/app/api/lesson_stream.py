@@ -35,7 +35,6 @@ from slowapi.util import get_remote_address
 from app.schemas.api_models import LessonRequest
 from app.api.middleware import get_current_user_id
 from app.api.subscriptions import get_user_tier
-from app.api.stream_protocol import DataStreamWriter
 from app.models.student import load_student_state
 
 # Tracks that require a paid subscription tier.

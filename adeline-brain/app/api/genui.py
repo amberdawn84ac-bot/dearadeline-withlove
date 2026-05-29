@@ -578,7 +578,8 @@ async def _synthesize_corrective_overlay(
         "relatedConcepts": [],
     }
     try:
-        import os, json as _json
+        import os
+        import json as _json
         import anthropic
 
         client = anthropic.AsyncAnthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
