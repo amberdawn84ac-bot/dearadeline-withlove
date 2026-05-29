@@ -1,22 +1,24 @@
-fastapi==0.111.0
-uvicorn[standard]==0.29.0
-pydantic==2.7.1
-pydantic-settings==2.2.1
+fastapi==0.136.3
+uvicorn[standard]==0.48.0
+pydantic==2.13.4
+pydantic-settings==2.14.1
 
 openai==1.30.1
-anthropic==0.30.1
+anthropic==0.105.2
 
 # LangChain — LLM orchestration (used by daily_bread.py and config.py)
-langchain-core>=0.2.0
-langchain-anthropic>=0.1.0
-langchain-google-genai>=1.0.0
-langchain-openai>=0.1.0
+# Minimum floors set to fix: CVE-2025-65106, CVE-2025-68664, CVE-2026-26013,
+# CVE-2026-40087, CVE-2026-44843 (langchain-core), PYSEC-2026-76 (langchain-openai)
+langchain-core>=0.3.85
+langchain-anthropic>=0.3.0
+langchain-google-genai>=2.0.0
+langchain-openai>=1.1.14
 
 # Database — Hippocampus (pgvector)
-pgvector==0.2.5
-asyncpg==0.29.0
-sqlalchemy==2.0.30
-prisma==0.13.1
+pgvector==0.4.2
+asyncpg==0.31.0
+sqlalchemy==2.0.50
+prisma==0.15.0
 
 # GraphRAG
 neo4j==5.20.0
@@ -24,35 +26,35 @@ neo4j==5.20.0
 # Auth + sessions + rate-limiting
 redis==5.0.4
 slowapi==0.1.9
-PyJWT[crypto]==2.8.0
+PyJWT[crypto]==2.13.0
 
 # Background jobs and scheduling
-APScheduler==3.10.4
-arq==0.26.1
+APScheduler==3.11.2
+arq==0.28.0
 
 # Utilities
-python-dotenv==1.0.1
-httpx==0.27.0
+python-dotenv==1.2.2
+httpx==0.28.1
 
 # Researcher tool — auto primary-source search (DuckDuckGo, free/no API key)
 duckduckgo-search==6.2.13
-beautifulsoup4==4.12.3
+beautifulsoup4==4.14.3
 numpy==1.26.4
 
 # PDF generation
-reportlab==4.1.0
+reportlab==4.5.1
 
 # Observability
-sentry-sdk[fastapi]==2.5.1
+sentry-sdk[fastapi]==2.61.0
 python-json-logger==2.0.7
-gunicorn==21.2.0
+gunicorn==23.0.0
 
 # CI / dev tools
-ruff==0.4.4
+ruff==0.15.15
 pytest==8.2.0
 pytest-asyncio==0.23.7
 pytest-httpx==0.30.0
 
 # Living Sketchnote Lessons — AI generation (Gemini) + offline TTS
-google-generativeai>=0.5.0
+google-generativeai>=0.7.0
 pyttsx3>=2.90
