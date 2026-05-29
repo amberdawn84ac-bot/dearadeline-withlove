@@ -1,0 +1,287 @@
+{
+  "models": [
+    {
+      "name": "TrackPage",
+      "apiId": "TrackPage",
+      "apiIdPlural": "TrackPages",
+      "fields": [
+        {
+          "name": "track",
+          "apiId": "track",
+          "type": "ENUM",
+          "enumerationApiId": "Track",
+          "isRequired": true,
+          "isUnique": true
+        },
+        {
+          "name": "title",
+          "apiId": "title",
+          "type": "STRING",
+          "isRequired": true,
+          "isTitle": true
+        },
+        {
+          "name": "tagline",
+          "apiId": "tagline",
+          "type": "STRING",
+          "isRequired": false
+        },
+        {
+          "name": "description",
+          "apiId": "description",
+          "type": "RICHTEXT",
+          "isRequired": false
+        },
+        {
+          "name": "heroImageUrl",
+          "apiId": "heroImageUrl",
+          "type": "STRING",
+          "isRequired": false
+        },
+        {
+          "name": "units",
+          "apiId": "units",
+          "type": "RELATION",
+          "reverseField": {
+            "modelApiId": "CurriculumUnit",
+            "apiId": "trackPage"
+          },
+          "isList": true
+        }
+      ]
+    },
+    {
+      "name": "CurriculumUnit",
+      "apiId": "CurriculumUnit",
+      "apiIdPlural": "CurriculumUnits",
+      "fields": [
+        {
+          "name": "track",
+          "apiId": "track",
+          "type": "ENUM",
+          "enumerationApiId": "Track",
+          "isRequired": true
+        },
+        {
+          "name": "title",
+          "apiId": "title",
+          "type": "STRING",
+          "isRequired": true,
+          "isTitle": true
+        },
+        {
+          "name": "gradeBand",
+          "apiId": "gradeBand",
+          "type": "ENUM",
+          "enumerationApiId": "GradeBand",
+          "isRequired": true
+        },
+        {
+          "name": "oasStandards",
+          "apiId": "oasStandards",
+          "type": "STRING",
+          "isList": true
+        },
+        {
+          "name": "lessonStubs",
+          "apiId": "lessonStubs",
+          "type": "RELATION",
+          "reverseField": {
+            "modelApiId": "LessonStub",
+            "apiId": "unit"
+          },
+          "isList": true
+        },
+        {
+          "name": "trackPage",
+          "apiId": "trackPage",
+          "type": "RELATION",
+          "reverseField": {
+            "modelApiId": "TrackPage",
+            "apiId": "units"
+          }
+        }
+      ]
+    },
+    {
+      "name": "LessonStub",
+      "apiId": "LessonStub",
+      "apiIdPlural": "LessonStubs",
+      "fields": [
+        {
+          "name": "track",
+          "apiId": "track",
+          "type": "ENUM",
+          "enumerationApiId": "Track",
+          "isRequired": true
+        },
+        {
+          "name": "title",
+          "apiId": "title",
+          "type": "STRING",
+          "isRequired": true,
+          "isTitle": true
+        },
+        {
+          "name": "gradeBand",
+          "apiId": "gradeBand",
+          "type": "ENUM",
+          "enumerationApiId": "GradeBand",
+          "isRequired": true
+        },
+        {
+          "name": "estimatedMinutes",
+          "apiId": "estimatedMinutes",
+          "type": "INT",
+          "isRequired": false
+        },
+        {
+          "name": "oasStandards",
+          "apiId": "oasStandards",
+          "type": "STRING",
+          "isList": true
+        },
+        {
+          "name": "isHomestead",
+          "apiId": "isHomestead",
+          "type": "BOOLEAN",
+          "isRequired": true,
+          "defaultValue": false
+        },
+        {
+          "name": "slug",
+          "apiId": "slug",
+          "type": "STRING",
+          "isRequired": true,
+          "isUnique": true
+        },
+        {
+          "name": "unit",
+          "apiId": "unit",
+          "type": "RELATION",
+          "reverseField": {
+            "modelApiId": "CurriculumUnit",
+            "apiId": "lessonStubs"
+          }
+        }
+      ]
+    },
+    {
+      "name": "DailyBread",
+      "apiId": "DailyBread",
+      "apiIdPlural": "DailyBreads",
+      "fields": [
+        {
+          "name": "date",
+          "apiId": "date",
+          "type": "DATE",
+          "isRequired": true,
+          "isUnique": true
+        },
+        {
+          "name": "scripture",
+          "apiId": "scripture",
+          "type": "STRING",
+          "isRequired": true
+        },
+        {
+          "name": "reference",
+          "apiId": "reference",
+          "type": "STRING",
+          "isRequired": true
+        },
+        {
+          "name": "reflection",
+          "apiId": "reflection",
+          "type": "RICHTEXT",
+          "isRequired": false
+        },
+        {
+          "name": "track",
+          "apiId": "track",
+          "type": "ENUM",
+          "enumerationApiId": "Track",
+          "isRequired": false
+        }
+      ]
+    },
+    {
+      "name": "ResourceLink",
+      "apiId": "ResourceLink",
+      "apiIdPlural": "ResourceLinks",
+      "fields": [
+        {
+          "name": "track",
+          "apiId": "track",
+          "type": "ENUM",
+          "enumerationApiId": "Track",
+          "isRequired": true
+        },
+        {
+          "name": "title",
+          "apiId": "title",
+          "type": "STRING",
+          "isRequired": true,
+          "isTitle": true
+        },
+        {
+          "name": "url",
+          "apiId": "url",
+          "type": "STRING",
+          "isRequired": true
+        },
+        {
+          "name": "description",
+          "apiId": "description",
+          "type": "STRING",
+          "isRequired": false
+        },
+        {
+          "name": "sourceType",
+          "apiId": "sourceType",
+          "type": "ENUM",
+          "enumerationApiId": "SourceType",
+          "isRequired": true
+        }
+      ]
+    }
+  ],
+  "enumerations": [
+    {
+      "name": "Track",
+      "apiId": "Track",
+      "values": [
+        { "name": "CREATION_SCIENCE", "apiId": "CREATION_SCIENCE" },
+        { "name": "HEALTH_NATUROPATHY", "apiId": "HEALTH_NATUROPATHY" },
+        { "name": "HOMESTEADING", "apiId": "HOMESTEADING" },
+        { "name": "GOVERNMENT_ECONOMICS", "apiId": "GOVERNMENT_ECONOMICS" },
+        { "name": "JUSTICE_CHANGEMAKING", "apiId": "JUSTICE_CHANGEMAKING" },
+        { "name": "DISCIPLESHIP", "apiId": "DISCIPLESHIP" },
+        { "name": "TRUTH_HISTORY", "apiId": "TRUTH_HISTORY" },
+        { "name": "ENGLISH_LITERATURE", "apiId": "ENGLISH_LITERATURE" },
+        { "name": "APPLIED_MATHEMATICS", "apiId": "APPLIED_MATHEMATICS" },
+        { "name": "CREATIVE_ECONOMY", "apiId": "CREATIVE_ECONOMY" }
+      ]
+    },
+    {
+      "name": "GradeBand",
+      "apiId": "GradeBand",
+      "values": [
+        { "name": "K2", "apiId": "K2" },
+        { "name": "3_5", "apiId": "3_5" },
+        { "name": "6_8", "apiId": "6_8" },
+        { "name": "9_12", "apiId": "9_12" }
+      ]
+    },
+    {
+      "name": "SourceType",
+      "apiId": "SourceType",
+      "values": [
+        { "name": "ARCHIVE", "apiId": "ARCHIVE" },
+        { "name": "PRIMARY", "apiId": "PRIMARY" },
+        { "name": "SECONDARY", "apiId": "SECONDARY" },
+        { "name": "TOOL", "apiId": "TOOL" }
+      ]
+    }
+  ]
+}
