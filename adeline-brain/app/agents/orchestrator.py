@@ -2399,12 +2399,20 @@ async def _render_lesson(
         else:
             content_blocks.append(b)
 
-    if not content_blocks:
-        return
-
     # ── Gather synthesis text from content blocks ─────────────────────────────
+    _PLACEHOLDER_PHRASES = (
+        "adeline is preparing",
+        "check back shortly",
+        "[genui hint",
+    )
+
+    def _is_placeholder(text: str) -> bool:
+        t = text.strip().lower()
+        return not t or any(p in t for p in _PLACEHOLDER_PHRASES)
+
     synthesis_text = "\n\n".join(
         b.get("content", "") for b in content_blocks
+        if not _is_placeholder(b.get("content", ""))
     ).strip()
     if not synthesis_text:
         synthesis_text = request.topic
@@ -2447,37 +2455,26 @@ async def _render_lesson(
     cohesive_block: dict | None = None
 
     try:
-        import httpx as _httpx
-        _brain_base = os.getenv("BRAIN_BASE_URL", "http://localhost:8000")
-        async with _httpx.AsyncClient(timeout=45.0) as _client:
-            _resp = await _client.post(
-                f"{_brain_base}/lesson/animated",
-                json={
-                    "topic": request.topic,
-                    "focus": synthesis_text[:800],
-                    "duration_seconds": 180,
-                    "target_ages": target_ages,
-                    "track": request.track.value,
-                    "student_id": request.student_id,
-                },
-                headers={"Authorization": f"Bearer {os.getenv('INTERNAL_API_KEY', '')}"},
-            )
-        if _resp.status_code == 200:
-            sketchnote_data = _resp.json()
-            cohesive_block = {
-                "block_type": BlockType.ANIMATED_SKETCHNOTE_LESSON.value,
-                "content": request.topic,
-                "evidence": all_evidence,
-                "is_silenced": False,
-                "homestead_content": None,
-                "animated_sketchnote_data": sketchnote_data,
-            }
-            logger.info(f"[Render] CASCADE-1 AnimatedSketchnote OK for '{request.topic}'")
-        else:
-            logger.warning(
-                f"[Render] CASCADE-1 AnimatedSketchnote HTTP {_resp.status_code} — "
-                "falling back to NarratedSlide"
-            )
+        from app.api.animated_lessons import generate_animated_lesson
+        from app.schemas.api_models import AnimatedLessonRequest as _ALR
+        _alr = _ALR(
+            topic=request.topic,
+            focus=synthesis_text[:800],
+            duration_seconds=180,
+            target_ages=target_ages,
+            track=request.track.value,
+            student_id=request.student_id,
+        )
+        sketchnote_data = await generate_animated_lesson(_alr)
+        cohesive_block = {
+            "block_type": BlockType.ANIMATED_SKETCHNOTE_LESSON.value,
+            "content": request.topic,
+            "evidence": all_evidence,
+            "is_silenced": False,
+            "homestead_content": None,
+            "animated_sketchnote_data": sketchnote_data.model_dump(),
+        }
+        logger.info(f"[Render] CASCADE-1 AnimatedSketchnote OK for '{request.topic}'")
     except Exception as _e:
         logger.warning(f"[Render] CASCADE-1 AnimatedSketchnote failed ({_e}) — falling back to NarratedSlide")
 
@@ -2524,7 +2521,7 @@ async def _render_lesson(
                                 f"Based on what you just learned about {request.topic} — "
                                 "what's the one fact that surprised you most?"
                             ),
-                            "hint": f"Look at: {synthesis_text[:120]}",
+                            "hint": f"Think about what stands out most to you about {request.topic}.",
                             "expectedThemes": [request.topic.lower()],
                         },
                         {
