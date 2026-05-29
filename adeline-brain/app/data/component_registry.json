@@ -1,0 +1,527 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "description": "Intelligent Content Tagging registry — every component the brain can emit via GENUI_ASSEMBLY blocks, tagged with modality, abstraction, difficulty, and concept affinity. Used by component_selector.py to match the right component to each student's learning profile.",
+    "modalities": ["visual", "auditory", "kinesthetic", "text"],
+    "abstraction_levels": ["concrete", "abstract", "any"],
+    "difficulty_levels": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_types": ["passive", "interactive", "assessment", "social"]
+  },
+
+  "InteractiveQuiz": {
+    "modality": ["text", "visual"],
+    "abstraction": "any",
+    "difficulty_range": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "assessment",
+    "block_satisfies": ["QUIZ"],
+    "concept_type": ["any"],
+    "description": "Multiple-choice quiz with immediate corrective feedback",
+    "props_schema": {
+      "questions": "QuizData[]"
+    }
+  },
+
+  "GlowGrow": {
+    "modality": ["text"],
+    "abstraction": "any",
+    "difficulty_range": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["TEXT"],
+    "concept_type": ["any"],
+    "description": "Formative strength/growth feedback with SEL alignment",
+    "props_schema": {
+      "strengthArea": "string",
+      "growthArea": "string",
+      "feedbackText": "string"
+    }
+  },
+
+  "ScaffoldedProblem": {
+    "modality": ["text", "kinesthetic"],
+    "abstraction": "abstract",
+    "difficulty_range": ["DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["PROBLEM"],
+    "concept_type": ["math", "science"],
+    "description": "Multi-step problem with fading scaffolds and step-by-step rubric",
+    "props_schema": {
+      "problem": "ProblemData",
+      "scaffoldLevel": "number (1-4)"
+    }
+  },
+
+  "SocraticDebate": {
+    "modality": ["text", "auditory"],
+    "abstraction": "abstract",
+    "difficulty_range": ["EXPANDING", "MASTERING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["TEXT", "NARRATIVE"],
+    "concept_type": ["any"],
+    "description": "Progressive Socratic questioning dialogue — deepens understanding",
+    "props_schema": {
+      "thesis": "string",
+      "turns": "DebateTurn[]",
+      "track": "Track"
+    }
+  },
+
+  "HardThingChallenge": {
+    "modality": ["text", "kinesthetic"],
+    "abstraction": "abstract",
+    "difficulty_range": ["EXPANDING", "MASTERING"],
+    "interaction_type": "assessment",
+    "block_satisfies": ["PROBLEM", "RESEARCH_MISSION"],
+    "concept_type": ["any"],
+    "description": "Multi-stage challenge exposing misconceptions and testing deep mastery",
+    "props_schema": {
+      "misconceptions": "string[]",
+      "counterexamples": "string[]",
+      "testCases": "string[]"
+    }
+  },
+
+  "ProjectBuilder": {
+    "modality": ["kinesthetic"],
+    "abstraction": "concrete",
+    "difficulty_range": ["DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["WRITING", "LAB_MISSION"],
+    "concept_type": ["any"],
+    "description": "Step-by-step project manager — student builds something real",
+    "props_schema": {
+      "title": "string",
+      "description": "string",
+      "steps": "ProjectStep[]",
+      "materials": "string[]",
+      "pricingPrompt": "string"
+    }
+  },
+
+  "DragDropTimeline": {
+    "modality": ["visual", "kinesthetic"],
+    "abstraction": "concrete",
+    "difficulty_range": ["DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "assessment",
+    "block_satisfies": ["TIMELINE"],
+    "concept_type": ["history"],
+    "description": "Drag-and-drop chronological ordering — validates correct sequence",
+    "props_schema": {
+      "title": "string",
+      "events": "TimelineEvent[]"
+    }
+  },
+
+  "LiveChart": {
+    "modality": ["visual"],
+    "abstraction": "concrete",
+    "difficulty_range": ["EXPANDING", "MASTERING"],
+    "interaction_type": "passive",
+    "block_satisfies": ["DATA_TRACKING"],
+    "concept_type": ["math", "science"],
+    "description": "Real-time streaming data visualization",
+    "props_schema": {
+      "dataSource": "string",
+      "chartType": "line | bar | scatter",
+      "updateInterval": "number"
+    }
+  },
+
+  "InsightReport": {
+    "modality": ["visual", "text"],
+    "abstraction": "abstract",
+    "difficulty_range": ["DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "passive",
+    "block_satisfies": ["TEXT", "DATA_TRACKING"],
+    "concept_type": ["any"],
+    "description": "Data-driven learning insights dashboard with drill-down details",
+    "props_schema": {
+      "insights": "InsightData[]",
+      "period": "lesson | week | unit"
+    }
+  },
+
+  "MnemonicCard": {
+    "modality": ["text", "visual"],
+    "abstraction": "concrete",
+    "difficulty_range": ["EMERGING", "DEVELOPING", "EXPANDING"],
+    "interaction_type": "passive",
+    "block_satisfies": ["MNEMONIC", "TEXT"],
+    "concept_type": ["any"],
+    "description": "Memory device with acronym, visual association, and spacing cue",
+    "props_schema": {
+      "concept": "string",
+      "acronym": "string",
+      "words": "string[]",
+      "tip": "string"
+    }
+  },
+
+  "Flashcard": {
+    "modality": ["text", "visual"],
+    "abstraction": "any",
+    "difficulty_range": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["QUIZ"],
+    "concept_type": ["any"],
+    "description": "CSS 3D flip card for spaced repetition — emits SM-2 quality rating",
+    "props_schema": {
+      "front": "string",
+      "back": "string",
+      "category": "string"
+    }
+  },
+
+  "MindMap": {
+    "modality": ["visual"],
+    "abstraction": "abstract",
+    "difficulty_range": ["DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["MIND_MAP"],
+    "concept_type": ["any"],
+    "description": "Hierarchical concept map with drag-drop nodes and editable connections",
+    "props_schema": {
+      "concept": "string",
+      "root": "MindMapNode"
+    }
+  },
+
+  "FocusReset": {
+    "modality": ["kinesthetic", "visual"],
+    "abstraction": "any",
+    "difficulty_range": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["TEXT"],
+    "concept_type": ["any"],
+    "description": "Purposeful cognitive reset between high-load tasks",
+    "props_schema": {
+      "instruction": "string",
+      "duration_seconds": "number",
+      "visual_stimulus": "string"
+    }
+  },
+
+  "TaskScaffold": {
+    "modality": ["text", "kinesthetic"],
+    "abstraction": "concrete",
+    "difficulty_range": ["EMERGING", "DEVELOPING", "EXPANDING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["LAB_MISSION"],
+    "concept_type": ["any"],
+    "description": "Step-by-step task guidance with a multi-level hint system",
+    "props_schema": {
+      "tasks": "TaskData[]",
+      "currentStep": "number"
+    }
+  },
+
+  "ExperimentCard": {
+    "modality": ["kinesthetic"],
+    "abstraction": "concrete",
+    "difficulty_range": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["LAB_MISSION", "EXPERIMENT"],
+    "concept_type": ["science"],
+    "description": "Hands-on experiment with data tracking and observation validation",
+    "props_schema": {
+      "title": "string",
+      "materials": "string[]",
+      "steps": "string[]",
+      "scientific_concepts": "string[]",
+      "safety_notes": "string"
+    }
+  },
+
+  "LabGuide": {
+    "modality": ["text", "kinesthetic"],
+    "abstraction": "concrete",
+    "difficulty_range": ["EMERGING", "DEVELOPING", "EXPANDING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["LAB_MISSION"],
+    "concept_type": ["science"],
+    "description": "Structured lab procedure with safety callouts and step verification",
+    "props_schema": {
+      "materials": "string[]",
+      "procedures": "string[]",
+      "safety": "string[]",
+      "success_criteria": "string[]"
+    }
+  },
+
+  "CodePlayground": {
+    "modality": ["kinesthetic", "text"],
+    "abstraction": "abstract",
+    "difficulty_range": ["EXPANDING", "MASTERING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["PROBLEM"],
+    "concept_type": ["math"],
+    "description": "In-browser code editor with live execution and test case validation",
+    "props_schema": {
+      "language": "javascript",
+      "starterCode": "string",
+      "instructions": "string",
+      "expectedOutput": "string"
+    }
+  },
+
+  "InteractiveConceptMap": {
+    "modality": ["visual", "kinesthetic"],
+    "abstraction": "abstract",
+    "difficulty_range": ["EXPANDING", "MASTERING"],
+    "interaction_type": "assessment",
+    "block_satisfies": ["MIND_MAP"],
+    "concept_type": ["any"],
+    "description": "Network diagram where students draw and validate conceptual relationships",
+    "props_schema": {
+      "title": "string",
+      "nodes": "ConceptNode[]",
+      "suggestedEdges": "ConceptEdge[]"
+    }
+  },
+
+  "MoleculeSimulator": {
+    "modality": ["visual", "kinesthetic"],
+    "abstraction": "concrete",
+    "difficulty_range": ["DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["INTERACTIVE_SIM", "LAB_MISSION"],
+    "concept_type": ["science"],
+    "description": "3D molecular/particle motion simulator with observation questions",
+    "props_schema": {
+      "title": "string",
+      "description": "string",
+      "substance": "string",
+      "questions": "QuizData[]"
+    }
+  },
+
+  "NarratedSlides": {
+    "modality": ["auditory", "visual"],
+    "abstraction": "any",
+    "difficulty_range": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "passive",
+    "block_satisfies": ["NARRATED_SLIDE", "TEXT"],
+    "concept_type": ["any"],
+    "description": "Narrated slide deck with audio sync and optional transcript",
+    "props_schema": {
+      "total_duration_minutes": "number",
+      "slides": "Slide[]"
+    }
+  },
+
+  "EmbeddedInterrupt": {
+    "modality": ["kinesthetic"],
+    "abstraction": "any",
+    "difficulty_range": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["TEXT"],
+    "concept_type": ["any"],
+    "description": "Cognitive break activity — micro-rest, brain-break, or reflection",
+    "props_schema": {
+      "interruptType": "micro-rest | brain-break | reflection",
+      "duration": "number"
+    }
+  },
+
+  "SimulationEmbed": {
+    "modality": ["visual", "kinesthetic"],
+    "abstraction": "concrete",
+    "difficulty_range": ["DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["INTERACTIVE_SIM"],
+    "concept_type": ["science"],
+    "description": "Embedded external physics/chemistry simulation (PhET, etc.) with data capture",
+    "props_schema": {
+      "simulationUrl": "string",
+      "parameters": "Record<string, any>"
+    }
+  },
+
+  "VirtualManipulative": {
+    "modality": ["kinesthetic", "visual"],
+    "abstraction": "concrete",
+    "difficulty_range": ["EMERGING", "DEVELOPING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["PROBLEM", "INTERACTIVE_SIM"],
+    "concept_type": ["math"],
+    "description": "Virtual math manipulatives — fraction bars, place value blocks, geometry tiles",
+    "props_schema": {
+      "type": "fractions | place_value | geometry",
+      "initialState": "Record<string, any>"
+    }
+  },
+
+  "VideoExplanation": {
+    "modality": ["visual", "auditory"],
+    "abstraction": "concrete",
+    "difficulty_range": ["EMERGING", "DEVELOPING", "EXPANDING"],
+    "interaction_type": "passive",
+    "block_satisfies": ["TEXT", "NARRATIVE"],
+    "concept_type": ["any"],
+    "description": "Embedded video with optional transcript and captions for visual/auditory learners",
+    "props_schema": {
+      "videoUrl": "string",
+      "transcript": "string?",
+      "caption_vtt": "string?"
+    }
+  },
+
+  "TextExplanation": {
+    "modality": ["text"],
+    "abstraction": "any",
+    "difficulty_range": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "passive",
+    "block_satisfies": ["TEXT", "NARRATIVE"],
+    "concept_type": ["any"],
+    "description": "Clean formatted text block — primary channel for text-preference learners",
+    "props_schema": {
+      "explanationText": "string",
+      "complexity": "DifficultyLevel?"
+    }
+  },
+
+  "RealWorldApplication": {
+    "modality": ["text", "kinesthetic"],
+    "abstraction": "concrete",
+    "difficulty_range": ["DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "passive",
+    "block_satisfies": ["TEXT", "NARRATIVE", "LAB_MISSION"],
+    "concept_type": ["any"],
+    "description": "Frames the abstract concept in an authentic real-world scenario",
+    "props_schema": {
+      "applicationText": "string",
+      "examples": "Example[]"
+    }
+  },
+
+  "StealthAssessment": {
+    "modality": ["kinesthetic", "visual"],
+    "abstraction": "any",
+    "difficulty_range": ["DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "assessment",
+    "block_satisfies": ["INTERACTIVE_SIM", "LAB_MISSION"],
+    "concept_type": ["any"],
+    "description": "Hidden assessment — student's choices reveal mastery without a formal test",
+    "props_schema": {
+      "activity": "Record<string, any>",
+      "rubric": "RubricDefinition"
+    }
+  },
+
+  "AdaptiveQuiz": {
+    "modality": ["text"],
+    "abstraction": "any",
+    "difficulty_range": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "assessment",
+    "block_satisfies": ["QUIZ"],
+    "concept_type": ["any"],
+    "description": "Self-adjusting quiz — increases complexity on mastery, pivots to foundations on gaps",
+    "props_schema": {
+      "quizzes": "QuizData[]",
+      "studentLevel": "DifficultyLevel"
+    }
+  },
+
+  "MultiCompetencyWorkspace": {
+    "modality": ["kinesthetic", "text"],
+    "abstraction": "abstract",
+    "difficulty_range": ["EXPANDING", "MASTERING"],
+    "interaction_type": "assessment",
+    "block_satisfies": ["PROBLEM", "WRITING"],
+    "concept_type": ["any"],
+    "description": "Multi-skill evaluation environment assessing overlapping competencies simultaneously",
+    "props_schema": {
+      "competencies": "string[]",
+      "tasks": "Task[]"
+    }
+  },
+
+  "CorrectiveOverlay": {
+    "modality": ["text", "visual"],
+    "abstraction": "any",
+    "difficulty_range": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "interactive",
+    "block_satisfies": ["TEXT"],
+    "concept_type": ["any"],
+    "description": "Error correction that identifies the exact mistake and provides related remediation",
+    "props_schema": {
+      "incorrectAnswer": "any",
+      "explanation": "string",
+      "remediation": "LessonBlock"
+    }
+  },
+
+  "LearningVelocityCard": {
+    "modality": ["visual"],
+    "abstraction": "abstract",
+    "difficulty_range": ["DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "passive",
+    "block_satisfies": ["DATA_TRACKING"],
+    "concept_type": ["any"],
+    "description": "xAPI-derived velocity metric — shows mastery rate and projected completion",
+    "props_schema": {
+      "studentId": "string",
+      "trackId": "Track",
+      "timeWindow": "week | month | semester"
+    }
+  },
+
+  "ProgressMap": {
+    "modality": ["visual"],
+    "abstraction": "abstract",
+    "difficulty_range": ["DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "passive",
+    "block_satisfies": ["DATA_TRACKING"],
+    "concept_type": ["any"],
+    "description": "Visual competency-based mastery progression map",
+    "props_schema": {
+      "skills": "SkillData[]",
+      "currentMastery": "Record<string, number>"
+    }
+  },
+
+  "AutoDiagram": {
+    "modality": ["visual"],
+    "abstraction": "abstract",
+    "difficulty_range": ["DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "passive",
+    "block_satisfies": ["MIND_MAP", "TEXT"],
+    "concept_type": ["any"],
+    "description": "Auto-generated diagram from text description — flowchart, concept map, or network",
+    "props_schema": {
+      "description": "string",
+      "diagramType": "flowchart | concept_map | network"
+    }
+  },
+
+  "PeerTutoringCard": {
+    "modality": ["text", "auditory"],
+    "abstraction": "any",
+    "difficulty_range": ["DEVELOPING", "EXPANDING", "MASTERING"],
+    "interaction_type": "social",
+    "block_satisfies": ["TEXT", "PEER_TUTOR"],
+    "concept_type": ["any"],
+    "description": "Peer tutoring matchup — connects students with complementary knowledge profiles",
+    "props_schema": {
+      "conceptTitle": "string",
+      "conceptTrack": "Track",
+      "difficulty": "DifficultyLevel",
+      "requestingStudentId": "string"
+    }
+  },
+
+  "DiscussionForum": {
+    "modality": ["text"],
+    "abstraction": "abstract",
+    "difficulty_range": ["EXPANDING", "MASTERING"],
+    "interaction_type": "social",
+    "block_satisfies": ["TEXT", "NARRATIVE", "DISCUSSION_FORUM"],
+    "concept_type": ["any"],
+    "description": "Dynamic discussion workspace generated around a challenging concept for collaborative problem-solving",
+    "props_schema": {
+      "prompt": "string",
+      "conceptTitle": "string",
+      "track": "Track",
+      "targetGrade": "string"
+    }
+  }
+}

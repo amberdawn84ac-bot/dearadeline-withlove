@@ -89,6 +89,8 @@ class BlockType(str, Enum):
     BOOK_SUGGESTION  = "BOOK_SUGGESTION"
     ANIMATED_SKETCHNOTE_LESSON = "ANIMATED_SKETCHNOTE_LESSON"
     GENUI_ASSEMBLY   = "GENUI_ASSEMBLY"
+    PEER_TUTOR       = "PEER_TUTOR"
+    DISCUSSION_FORUM = "DISCUSSION_FORUM"
 
 
 # ── Multimodal Data Models ────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 # ── Component Registry (mirrors frontend registry) ─────────────────────────────
 
 COMPONENT_REGISTRY = {
+    # ── Multi-Modal Representation ──────────────────────────────────────────────
     "SimulationEmbed": {
         "category": "multimodal",
         "modalities": ["visual", "kinesthetic"],
@@ -22,6 +23,8 @@ COMPONENT_REGISTRY = {
         "estimated_minutes": 5,
         "stealth_assessment": False,
         "tags": ["science", "math", "exploration", "hands-on"],
+        "concept_types": ["science"],
+        "abstraction": "concrete",
     },
     "VirtualManipulative": {
         "category": "multimodal",
@@ -30,6 +33,8 @@ COMPONENT_REGISTRY = {
         "estimated_minutes": 4,
         "stealth_assessment": False,
         "tags": ["math", "concrete", "hands-on", "spatial"],
+        "concept_types": ["math"],
+        "abstraction": "concrete",
     },
     "VideoExplanation": {
         "category": "multimodal",
@@ -38,70 +43,38 @@ COMPONENT_REGISTRY = {
         "estimated_minutes": 6,
         "stealth_assessment": False,
         "tags": ["explanation", "lecture", "visual-learner", "passive"],
+        "concept_types": ["any"],
+        "abstraction": "concrete",
     },
     "TextExplanation": {
         "category": "multimodal",
-        "modalities": ["reading"],
+        "modalities": ["reading", "text"],
         "difficulties": ["DEVELOPING", "MASTERING"],
         "estimated_minutes": 4,
         "stealth_assessment": False,
         "tags": ["reading", "text", "reference", "key-terms"],
+        "concept_types": ["any"],
+        "abstraction": "any",
     },
     "RealWorldApplication": {
         "category": "multimodal",
-        "modalities": ["reading", "kinesthetic"],
+        "modalities": ["reading", "kinesthetic", "text"],
         "difficulties": ["DEVELOPING", "MASTERING"],
         "estimated_minutes": 7,
         "stealth_assessment": True,
         "tags": ["application", "scenario", "problem-solving", "transfer"],
+        "concept_types": ["any"],
+        "abstraction": "concrete",
     },
-    "StealthAssessment": {
-        "category": "assessment",
-        "modalities": ["reading", "kinesthetic"],
-        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
-        "estimated_minutes": 4,
-        "stealth_assessment": True,
-        "tags": ["assessment", "stealth", "mastery-inference"],
-    },
-    "AdaptiveQuiz": {
-        "category": "assessment",
-        "modalities": ["reading"],
-        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+    "MoleculeSimulator": {
+        "category": "multimodal",
+        "modalities": ["visual", "kinesthetic"],
+        "difficulties": ["DEVELOPING", "EXPANDING", "MASTERING"],
         "estimated_minutes": 5,
         "stealth_assessment": False,
-        "tags": ["quiz", "adaptive", "mastery-check"],
-    },
-    "MultiCompetencyWorkspace": {
-        "category": "assessment",
-        "modalities": ["reading", "kinesthetic"],
-        "difficulties": ["DEVELOPING", "MASTERING"],
-        "estimated_minutes": 8,
-        "stealth_assessment": True,
-        "tags": ["multi-skill", "complex", "synthesis"],
-    },
-    "CorrectiveOverlay": {
-        "category": "feedback",
-        "modalities": ["reading", "visual"],
-        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
-        "estimated_minutes": 2,
-        "stealth_assessment": False,
-        "tags": ["feedback", "error-correction", "scaffolding"],
-    },
-    "LearningVelocityCard": {
-        "category": "visualization",
-        "modalities": ["visual"],
-        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
-        "estimated_minutes": 1,
-        "stealth_assessment": False,
-        "tags": ["dashboard", "metrics", "motivation"],
-    },
-    "ProgressMap": {
-        "category": "visualization",
-        "modalities": ["visual"],
-        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
-        "estimated_minutes": 1,
-        "stealth_assessment": False,
-        "tags": ["navigation", "progress", "path"],
+        "tags": ["science", "chemistry", "physics", "hands-on"],
+        "concept_types": ["science"],
+        "abstraction": "concrete",
     },
     "AutoDiagram": {
         "category": "visualization",
@@ -110,6 +83,131 @@ COMPONENT_REGISTRY = {
         "estimated_minutes": 2,
         "stealth_assessment": False,
         "tags": ["diagram", "concept-map", "relationships"],
+        "concept_types": ["any"],
+        "abstraction": "abstract",
+    },
+    # ── Stealth & Adaptive Assessment ───────────────────────────────────────────
+    "StealthAssessment": {
+        "category": "assessment",
+        "modalities": ["reading", "kinesthetic"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+        "estimated_minutes": 4,
+        "stealth_assessment": True,
+        "tags": ["assessment", "stealth", "mastery-inference"],
+        "concept_types": ["any"],
+        "abstraction": "any",
+    },
+    "AdaptiveQuiz": {
+        "category": "assessment",
+        "modalities": ["reading", "text"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+        "estimated_minutes": 5,
+        "stealth_assessment": False,
+        "tags": ["quiz", "adaptive", "mastery-check"],
+        "concept_types": ["any"],
+        "abstraction": "any",
+    },
+    "MultiCompetencyWorkspace": {
+        "category": "assessment",
+        "modalities": ["reading", "kinesthetic"],
+        "difficulties": ["DEVELOPING", "MASTERING"],
+        "estimated_minutes": 8,
+        "stealth_assessment": True,
+        "tags": ["multi-skill", "complex", "synthesis"],
+        "concept_types": ["any"],
+        "abstraction": "abstract",
+    },
+    "ScaffoldedProblem": {
+        "category": "assessment",
+        "modalities": ["reading", "text", "kinesthetic"],
+        "difficulties": ["DEVELOPING", "EXPANDING", "MASTERING"],
+        "estimated_minutes": 6,
+        "stealth_assessment": False,
+        "tags": ["problem-solving", "scaffolding", "math", "step-by-step"],
+        "concept_types": ["math", "science"],
+        "abstraction": "abstract",
+    },
+    "HardThingChallenge": {
+        "category": "assessment",
+        "modalities": ["text", "reading"],
+        "difficulties": ["EXPANDING", "MASTERING"],
+        "estimated_minutes": 10,
+        "stealth_assessment": False,
+        "tags": ["challenge", "mastery", "misconceptions", "deep-learning"],
+        "concept_types": ["any"],
+        "abstraction": "abstract",
+    },
+    # ── Intelligent Feedback & Scaffolding ──────────────────────────────────────
+    "CorrectiveOverlay": {
+        "category": "feedback",
+        "modalities": ["reading", "visual", "text"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+        "estimated_minutes": 2,
+        "stealth_assessment": False,
+        "tags": ["feedback", "error-correction", "scaffolding"],
+        "concept_types": ["any"],
+        "abstraction": "any",
+    },
+    "GlowGrow": {
+        "category": "feedback",
+        "modalities": ["reading", "text"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+        "estimated_minutes": 2,
+        "stealth_assessment": False,
+        "tags": ["feedback", "formative", "sel", "reflection"],
+        "concept_types": ["any"],
+        "abstraction": "any",
+    },
+    "TaskScaffold": {
+        "category": "scaffolding",
+        "modalities": ["text", "kinesthetic"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING"],
+        "estimated_minutes": 5,
+        "stealth_assessment": False,
+        "tags": ["task", "step-by-step", "guidance", "hints"],
+        "concept_types": ["any"],
+        "abstraction": "concrete",
+    },
+    "LearningVelocityCard": {
+        "category": "visualization",
+        "modalities": ["visual"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+        "estimated_minutes": 1,
+        "stealth_assessment": False,
+        "tags": ["dashboard", "metrics", "motivation", "velocity"],
+        "concept_types": ["any"],
+        "abstraction": "abstract",
+    },
+    "ProgressMap": {
+        "category": "visualization",
+        "modalities": ["visual"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+        "estimated_minutes": 1,
+        "stealth_assessment": False,
+        "tags": ["navigation", "progress", "path", "mastery"],
+        "concept_types": ["any"],
+        "abstraction": "abstract",
+    },
+    # ── Collaborative Learning ───────────────────────────────────────────────────
+    "PeerTutoringCard": {
+        "category": "collaborative",
+        "modalities": ["text", "auditory"],
+        "difficulties": ["DEVELOPING", "EXPANDING", "MASTERING"],
+        "estimated_minutes": 10,
+        "stealth_assessment": False,
+        "tags": ["peer", "social", "tutoring", "collaboration"],
+        "concept_types": ["any"],
+        "abstraction": "any",
+    },
+    "DiscussionForum": {
+        "category": "collaborative",
+        "modalities": ["text"],
+        "difficulties": ["EXPANDING", "MASTERING"],
+        "estimated_minutes": 8,
+        "stealth_assessment": False,
+        "tags": ["discussion", "social", "debate", "synthesis"],
+        "concept_types": ["any"],
+        "abstraction": "abstract",
     },
 }
 
@@ -227,6 +325,119 @@ def select_components(
     )
 
     return results
+
+
+# ── Track → concept_type mapping ─────────────────────────────────────────────
+
+_TRACK_CONCEPT_TYPE: dict[str, str] = {
+    "CREATION_SCIENCE":     "science",
+    "HEALTH_NATUROPATHY":   "science",
+    "HOMESTEADING":         "science",
+    "GOVERNMENT_ECONOMICS": "any",
+    "JUSTICE_CHANGEMAKING": "any",
+    "DISCIPLESHIP":         "any",
+    "TRUTH_HISTORY":        "history",
+    "ENGLISH_LITERATURE":   "writing",
+    "APPLIED_MATHEMATICS":  "math",
+    "CREATIVE_ECONOMY":     "any",
+}
+
+# Modality → preferred supplement component, by concept type.
+# auditory is already served by the animated sketchnote / narrated slide cascade.
+_MODAL_SUPPLEMENT_MAP: dict[str, dict[str, Optional[str]]] = {
+    "kinesthetic": {
+        "math":    "VirtualManipulative",
+        "science": "SimulationEmbed",
+        "history": "TaskScaffold",
+        "writing": "TaskScaffold",
+        "any":     "TaskScaffold",
+    },
+    "visual": {
+        "math":    "AutoDiagram",
+        "science": "AutoDiagram",
+        "history": "AutoDiagram",
+        "writing": "AutoDiagram",
+        "any":     "AutoDiagram",
+    },
+    "text": {
+        "math":    "ScaffoldedProblem",
+        "science": "LabGuide",
+        "history": "HardThingChallenge",
+        "writing": "GlowGrow",
+        "any":     "GlowGrow",
+    },
+    "reading": {
+        "math":    "ScaffoldedProblem",
+        "science": "LabGuide",
+        "history": "HardThingChallenge",
+        "writing": "GlowGrow",
+        "any":     "GlowGrow",
+    },
+    "auditory": {"any": None},
+}
+
+# Components already injected by the cascade or track-specific synthesizers —
+# skip these when choosing a modal supplement to avoid duplication.
+_CASCADE_COMPONENTS: set[str] = {
+    "SocraticDebate",
+    "NarratedSlides",
+    "MindMap",
+    "DragDropTimeline",
+    "InteractiveConceptMap",
+    "MoleculeSimulator",
+    "CodePlayground",
+    "ProjectBuilder",
+}
+
+
+def select_modal_supplement(
+    preferred_modality: str,
+    difficulty: str,
+    track: str,
+    already_emitted: Optional[list[str]] = None,
+) -> Optional[str]:
+    """
+    Pick the best supplement component matched to the student's preferred modality.
+
+    Called by orchestrator._inject_modal_supplement after the main render cascade.
+    Returns a component_type string or None if no supplement is appropriate.
+
+    Args:
+        preferred_modality: "visual" | "auditory" | "kinesthetic" | "text" | "reading"
+        difficulty:         "EMERGING" | "DEVELOPING" | "EXPANDING" | "MASTERING"
+        track:              Track value string (e.g. "APPLIED_MATHEMATICS")
+        already_emitted:    Component types already present in this lesson
+    """
+    if preferred_modality == "auditory":
+        return None
+
+    concept_type = _TRACK_CONCEPT_TYPE.get(track, "any")
+    modality_map = _MODAL_SUPPLEMENT_MAP.get(preferred_modality, {})
+    component = modality_map.get(concept_type) or modality_map.get("any")
+
+    if not component:
+        return None
+
+    skip = set(already_emitted or []) | _CASCADE_COMPONENTS
+    if component in skip:
+        # Fall back: run the scored selector, excluding already-present components
+        context = LearnerContext(
+            difficulty=difficulty,
+            preferred_modalities=[preferred_modality],
+            topic_tags=[concept_type],
+        )
+        fallback = select_components(
+            context,
+            max_results=1,
+            exclude_categories=["visualization"],
+        )
+        if fallback:
+            candidate = fallback[0].component_id
+            if candidate not in skip:
+                return candidate
+        return None
+
+    return component
 
 
 def select_remediation_component(context: LearnerContext) -> ComponentRecommendation:
