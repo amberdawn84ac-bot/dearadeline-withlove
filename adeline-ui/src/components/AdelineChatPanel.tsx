@@ -14,6 +14,9 @@ import { ProjectGuide } from "@/components/projects/ProjectGuide";
 import RenderModeSelector from "@/components/RenderModeSelector";
 import AnimatedSketchnoteRenderer from "@/components/gen-ui/patterns/AnimatedSketchnoteRenderer";
 import type { LessonRenderMode, AnimatedSketchnoteLesson } from "@/lib/brain-client";
+import { useGenUIStream } from "@/hooks/useGenUIStream";
+import { StreamingGenUIRenderer } from "@/components/gen-ui/StreamingGenUIRenderer";
+import { parseDataStreamLine } from "@/lib/stream-protocol";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -205,8 +208,65 @@ export function AdelineChatPanel({
   const [initialPromptSent, setInitialPromptSent] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
+  const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // ── GenUI Stream: progressive rendering + bidirectional remediation ────
+  const {
+    components: streamingComponents,
+    componentOrder: streamingComponentOrder,
+    remediations,
+    statusMessage: streamStatus,
+    isStreaming: isGenUIStreaming,
+    triggerRemediation,
+    processEvent: processGenUIEvent,
+  } = useGenUIStream({ studentId, lessonId: activeLessonId ?? undefined });
+
+  // Handler for student interaction events from streaming GenUI components.
+  // This implements the bidirectional remediation loop: when a student
+  // struggles, the event is piped to the backend which streams back a
+  // remedial component on the same conceptual connection.
+  const handleStreamingComponentEvent = useCallback(
+    async (params: {
+      componentId: string;
+      componentType: string;
+      event: string;
+      state: Record<string, unknown>;
+    }) => {
+      // Fire-and-forget telemetry for all events
+      try {
+        const { fireGenUICallback } = await import("@/lib/genui-callback");
+        await fireGenUICallback({
+          studentId,
+          lessonId: activeLessonId ?? "",
+          componentType: params.componentType,
+          event: params.event,
+          state: params.state,
+          blockId: params.componentId,
+        });
+      } catch {
+        // Non-blocking telemetry
+      }
+
+      // Trigger bidirectional remediation for struggle events
+      const isStruggle =
+        params.event === "onStruggle" ||
+        params.event === "onWrongAnswer" ||
+        (params.event === "onHint" &&
+          (params.state.hintsUsed as number) >= 3);
+
+      if (isStruggle) {
+        await triggerRemediation({
+          sourceComponentId: params.componentId,
+          componentType: params.componentType,
+          event: params.event,
+          studentState: params.state,
+        });
+      }
+    },
+    [studentId, activeLessonId, triggerRemediation],
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -365,7 +425,7 @@ export function AdelineChatPanel({
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, onLessonGenerated, addMessage, conversationHistory]);
+  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, onLessonGenerated, addMessage, conversationHistory, processGenUIEvent]);
 
   // Auto-send initial prompt (e.g. from Daily Bread "Start Deep Dive Study")
   useEffect(() => {
@@ -559,6 +619,26 @@ export function AdelineChatPanel({
             </div>
           </div>
         ))}
+
+        {/* Streaming GenUI components — progressive rendering */}
+        {streamingComponentOrder.length > 0 && (
+          <div className="w-full">
+            {streamStatus && (
+              <div className="flex items-center gap-2 mb-3 px-2">
+                <Loader2 size={12} className="animate-spin text-[#BD6809]" />
+                <span className="text-xs text-[#2F4731]/60 italic">
+                  {streamStatus}
+                </span>
+              </div>
+            )}
+            <StreamingGenUIRenderer
+              components={streamingComponents}
+              componentOrder={streamingComponentOrder}
+              remediations={remediations}
+              onComponentEvent={handleStreamingComponentEvent}
+            />
+          </div>
+        )}
 
         {isLoading && !messages.some((m) => m.streaming) && (
           <div className="flex justify-start">

@@ -3,10 +3,12 @@
  *
  * Next.js → FastAPI SSE translation bridge.
  *
- * Translates FastAPI SSE events into the ai@6 UI Message Stream format
- * (SSE frames: `data: JSON\n\n`) consumed by DefaultChatTransport.
+ * Translates FastAPI SSE events into BOTH:
+ *   1. The ai@6 UI Message Stream format (for backward compatibility)
+ *   2. The Vercel AI SDK Data Stream Protocol with 2: annotations
+ *      for GenUI progressive rendering and bidirectional remediation.
  *
- * Chunk types emitted:
+ * UI Message Stream chunks (existing):
  *   {"type":"start"}
  *   {"type":"text-start","id":"t0"}
  *   {"type":"text-delta","id":"t0","delta":"..."}
@@ -18,6 +20,13 @@
  *   {"type":"tool-input-available","toolCallId":"...","toolName":"...","input":{...},"dynamic":true}
  *   {"type":"tool-output-available","toolCallId":"...","output":{...}}
  *   {"type":"finish","finishReason":"stop"}
+ *
+ * Data Stream Protocol lines (new — for useGenUIStream):
+ *   2:[{"type":"genui_skeleton",...}]   → Component placeholder
+ *   2:[{"type":"genui_complete",...}]   → Full component props
+ *   2:[{"type":"remediation",...}]      → Remediation component injection
+ *   2:[{"type":"status",...}]           → Progress status
+ *   c:{"toolCallId":"...","toolName":"student_needs_remediation",...}
  */
 
 import { NextRequest } from "next/server";
@@ -38,6 +47,25 @@ function chunk(obj: unknown): string {
   return `data: ${JSON.stringify(obj)}\n\n`;
 }
 
+/** Encode a Data Stream Protocol annotation (2: line). */
+function dataAnnotation(payload: Record<string, unknown>): string {
+  return `2:${JSON.stringify([payload])}\n`;
+}
+
+/** Encode a Data Stream Protocol tool-call (c: line). */
+function dataToolCall(
+  toolCallId: string,
+  toolName: string,
+  args: Record<string, unknown>,
+): string {
+  return `c:${JSON.stringify({ toolCallId, toolName, args })}\n`;
+}
+
+/** Encode a Data Stream Protocol finish (d: line). */
+function dataFinish(reason: string): string {
+  return `d:${JSON.stringify({ finishReason: reason })}\n`;
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const lessonRequest = body.lesson_request ?? body;
@@ -52,6 +80,7 @@ export async function POST(req: NextRequest) {
         headers: {
           "Content-Type": "text/event-stream",
           "x-vercel-ai-ui-message-stream": "v1",
+          "x-vercel-ai-data-stream": "v1",
         },
       }
     );
@@ -76,6 +105,7 @@ export async function POST(req: NextRequest) {
         headers: {
           "Content-Type": "text/event-stream",
           "x-vercel-ai-ui-message-stream": "v1",
+          "x-vercel-ai-data-stream": "v1",
         },
       }
     );
@@ -91,6 +121,7 @@ export async function POST(req: NextRequest) {
         headers: {
           "Content-Type": "text/event-stream",
           "x-vercel-ai-ui-message-stream": "v1",
+          "x-vercel-ai-data-stream": "v1",
         },
       }
     );
@@ -121,6 +152,8 @@ export async function POST(req: NextRequest) {
         finished = true;
         if (textStarted) enqueue(chunk({ type: "text-end", id: "t0" }));
         enqueue(chunk({ type: "finish", finishReason }));
+        // Also emit Data Stream Protocol finish
+        enqueue(dataFinish(finishReason));
         enqueue("data: [DONE]\n\n");
       };
 
@@ -160,6 +193,8 @@ export async function POST(req: NextRequest) {
                 ensureTextStarted();
                 enqueue(chunk({ type: "text-delta", id: "t0", delta: msg }));
                 enqueue(chunk({ type: "data-status", data: { message: msg } }));
+                // Data Stream Protocol: status annotation
+                enqueue(dataAnnotation({ type: "status", message: msg }));
                 break;
               }
 
@@ -173,12 +208,59 @@ export async function POST(req: NextRequest) {
                 break;
               }
 
+              // ── GenUI Progressive Rendering events ─────────────────
+              // These are emitted by the brain's lesson_stream.py and
+              // translated into 2: Data Stream Protocol annotations.
+
+              case "genui_skeleton": {
+                enqueue(dataAnnotation({
+                  type: "genui_skeleton",
+                  componentId: String(event.componentId ?? ""),
+                  componentType: String(event.componentType ?? ""),
+                  props: null,
+                  state: "skeleton",
+                  hints: event.hints ?? {},
+                  lessonId: event.lessonId ?? "",
+                  track: event.track ?? "",
+                }));
+                break;
+              }
+
+              case "genui_complete": {
+                enqueue(dataAnnotation({
+                  type: "genui_complete",
+                  componentId: String(event.componentId ?? ""),
+                  componentType: String(event.componentType ?? ""),
+                  props: event.props ?? {},
+                  state: "complete",
+                  callbacks: event.callbacks ?? [],
+                  initialState: event.initialState ?? {},
+                  lessonId: event.lessonId ?? "",
+                  track: event.track ?? "",
+                }));
+                break;
+              }
+
+              case "genui_props": {
+                enqueue(dataAnnotation({
+                  type: "genui_props",
+                  componentId: String(event.componentId ?? ""),
+                  props: event.props ?? {},
+                  state: String(event.state ?? "partial"),
+                }));
+                break;
+              }
+
               case "tool_call": {
-                const toolCallId = crypto.randomUUID();
+                const toolCallId = (event.props as Record<string, unknown>)?.toolCallId as string
+                  ?? crypto.randomUUID();
+                const toolName = String(event.name ?? "unknown");
+
+                // UI Message Stream format (backward compat)
                 enqueue(chunk({
                   type: "tool-input-available",
                   toolCallId,
-                  toolName: String(event.name ?? "unknown"),
+                  toolName,
                   input: event.props,
                   dynamic: true,
                 }));
@@ -187,11 +269,28 @@ export async function POST(req: NextRequest) {
                   toolCallId,
                   output: event.props,
                 }));
+
+                // Data Stream Protocol: tool-call (c: line)
+                enqueue(dataToolCall(
+                  toolCallId,
+                  toolName,
+                  (event.props ?? {}) as Record<string, unknown>,
+                ));
                 break;
               }
 
               case "done": {
                 enqueue(chunk({ type: "data-done", data: { title: event.title } }));
+                // Data Stream Protocol: done annotation
+                enqueue(dataAnnotation({
+                  type: "data-done",
+                  data: {
+                    title: event.title ?? "",
+                    lesson_id: event.lesson_id ?? "",
+                    agent_name: event.agent_name ?? "",
+                    oas_standards: event.oas_standards ?? [],
+                  },
+                }));
                 closeStream("stop");
                 break;
               }
@@ -220,6 +319,7 @@ export async function POST(req: NextRequest) {
     headers: {
       "Content-Type": "text/event-stream",
       "x-vercel-ai-ui-message-stream": "v1",
+      "x-vercel-ai-data-stream": "v1",
       "Cache-Control": "no-cache",
       "X-Accel-Buffering": "no",
     },

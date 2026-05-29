@@ -394,6 +394,170 @@ async def _award_widget_credit(
     logger.info(f"[GENUI] Credit awarded: student={student_id}, track={track}, hours={credit_hours}")
 
 
+# ── Bidirectional Remediation SSE Endpoint ────────────────────────────────────
+
+
+class RemediationRequest(BaseModel):
+    """Request payload for the SSE remediation stream."""
+    student_id: str
+    lesson_id: str
+    source_component_id: str
+    component_type: str
+    event: str  # "student_needs_remediation", "onStruggle", "onWrongAnswer"
+    student_state: dict = {}
+    track: Optional[str] = None
+
+
+@router.post("/remediate")
+async def genui_remediate(
+    request: RemediationRequest,
+    current_user_id: str = Depends(get_current_user_id),
+):
+    """
+    Bidirectional remediation loop — SSE endpoint.
+
+    When a student struggles with a GenUI component, the frontend's
+    onToolCall handler POSTs the struggle event here.  This endpoint
+    streams back a remediation response as SSE using the Data Stream
+    Protocol (2: annotations), so the frontend can inject a remedial
+    component into the existing lesson without a page reload.
+
+    The response is an SSE stream with:
+      - 2: genui_skeleton (placeholder for the remedial component)
+      - 2: genui_complete (full remedial component props)
+      - d: finish
+
+    This keeps the connection conversational — the student sees the
+    remediation component appear smoothly in the same stream context.
+    """
+    from app.api.stream_protocol import DataStreamWriter
+    from fastapi.responses import StreamingResponse
+
+    logger.info(
+        f"[GENUI_REMEDIATE] student={request.student_id} "
+        f"source={request.source_component_id} type={request.component_type} "
+        f"event={request.event} state={request.student_state}"
+    )
+
+    async def _remediation_stream():
+        writer = DataStreamWriter()
+
+        # Determine remediation strategy based on struggle signals
+        wrong_attempts = request.student_state.get("wrongAttempts", 0)
+        hints_used = request.student_state.get("hintsUsed", 0)
+        is_wrong_answer = request.event == "onWrongAnswer"
+
+        remedial_type, remedial_props = await _select_remediation(
+            request=request,
+            wrong_attempts=wrong_attempts,
+            hints_used=hints_used,
+            is_wrong_answer=is_wrong_answer,
+        )
+
+        remedial_id = f"remedial-{request.source_component_id}"
+
+        # Phase 1: Emit skeleton so the UI shows a placeholder immediately
+        yield writer.genui_skeleton(
+            remedial_id,
+            remedial_type,
+            initial_hints={"title": "Let me help you with this..."},
+        )
+
+        # Phase 2: Emit full props
+        yield writer.genui_complete(
+            component_id=remedial_id,
+            component_type=remedial_type,
+            props=remedial_props,
+            callbacks=["onAnswer", "onComplete"],
+        )
+
+        # Phase 3: Also emit as an annotation the frontend can act on
+        yield writer.annotation("remediation", {
+            "remedialId": remedial_id,
+            "sourceComponentId": request.source_component_id,
+            "componentType": remedial_type,
+            "props": remedial_props,
+            "reason": request.event,
+        })
+
+        yield writer.finish("stop")
+
+    return StreamingResponse(
+        _remediation_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "x-vercel-ai-data-stream": "v1",
+        },
+    )
+
+
+async def _select_remediation(
+    request: RemediationRequest,
+    wrong_attempts: int,
+    hints_used: int,
+    is_wrong_answer: bool,
+) -> tuple[str, dict]:
+    """
+    Select the appropriate remediation component and build its props.
+
+    Strategy:
+      - Wrong answer → CorrectiveOverlay (with LLM-synthesized explanation)
+      - 2+ wrong attempts → TaskScaffold (step-by-step breakdown)
+      - 3+ hints → InteractiveConceptMap (visual knowledge map)
+      - Default → Flashcard (quick review of the concept)
+    """
+    track = request.track or "TRUTH_HISTORY"
+
+    if is_wrong_answer:
+        question = request.student_state.get("question", "")
+        wrong_answer = request.student_state.get("wrongAnswer", "")
+        correct_answer = request.student_state.get("correctAnswer", "")
+        overlay_props = await _synthesize_corrective_overlay(
+            question=question,
+            wrong_answer=wrong_answer,
+            correct_answer=correct_answer,
+            track=track,
+        )
+        return ("CorrectiveOverlay", overlay_props)
+
+    if wrong_attempts >= 2:
+        return ("TaskScaffold", {
+            "title": "Let's slow down",
+            "context": "You've made a few attempts. Let's break this down.",
+            "tasks": [
+                {"id": "1", "text": "State the question in your own words", "priority": "now"},
+                {"id": "2", "text": "What do you already know about this?", "priority": "now"},
+                {"id": "3", "text": "What evidence from the source applies?", "priority": "today"},
+                {"id": "4", "text": "Now try the answer again", "priority": "today"},
+            ],
+        })
+
+    if hints_used >= 3:
+        concept = request.student_state.get("concept", "this topic")
+        return ("InteractiveConceptMap", {
+            "title": f"Concept Map: {concept}",
+            "nodes": [
+                {"id": "root", "label": concept, "x": 300, "y": 50, "type": "concept"},
+                {"id": "n1", "label": "Key Idea 1", "x": 150, "y": 200, "type": "concept"},
+                {"id": "n2", "label": "Key Idea 2", "x": 450, "y": 200, "type": "concept"},
+            ],
+            "edges": [
+                {"source": "root", "target": "n1", "label": "relates to"},
+                {"source": "root", "target": "n2", "label": "leads to"},
+            ],
+        })
+
+    # Default: flash review
+    content = request.student_state.get("content", "Review this concept")
+    return ("Flashcard", {
+        "front": request.student_state.get("question", "Key Concept"),
+        "back": content,
+        "category": track.replace("_", " ").title(),
+    })
+
+
 async def _synthesize_corrective_overlay(
     question: str,
     wrong_answer: str,

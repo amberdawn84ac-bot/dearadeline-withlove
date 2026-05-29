@@ -35,6 +35,7 @@ from slowapi.util import get_remote_address
 from app.schemas.api_models import LessonRequest
 from app.api.middleware import get_current_user_id
 from app.api.subscriptions import get_user_tier
+from app.api.stream_protocol import DataStreamWriter
 from app.models.student import load_student_state
 
 # Tracks that require a paid subscription tier.
@@ -636,11 +637,29 @@ async def _stream_lesson(
 
     yield _sse({"type": "status", "message": "Streaming lesson blocks..."})
     logger.info(f"[LessonStream] Emitting {len(state['blocks'])} blocks: {[b.get('block_type', 'UNKNOWN') for b in state['blocks']]}")
-    for block in state["blocks"]:
+
+    # ── Progressive GenUI: emit skeletons first, then full blocks ─────────
+    # Phase A: emit skeleton placeholders for interactive blocks so the
+    # frontend can render loading states immediately.
+    for idx, block in enumerate(state["blocks"]):
+        skeleton_event = _emit_genui_skeleton_for_block(
+            block, idx, lesson_id, request.track.value,
+        )
+        if skeleton_event:
+            yield skeleton_event
+
+    # Phase B: emit full block data + genui_complete events for delta patching.
+    for idx, block in enumerate(state["blocks"]):
         yield _sse({"type": "block", "block": block})
         tool_event = _from_block_tool_call(block, lesson_id, request.track.value)
         if tool_event:
             yield tool_event
+        # Emit genui_complete so the frontend patches the skeleton → full component.
+        genui_events = _emit_genui_props_for_block(
+            block, idx, lesson_id, request.track.value,
+        )
+        for ge in genui_events:
+            yield ge
 
     # ── Phase 2: Neo4j graph context ──────────────────────────────────────────
     try:
@@ -712,6 +731,159 @@ def _from_block_tool_call(block: dict, lesson_id: str, track: str) -> str | None
         })
 
     return None
+
+
+# ── GenUI progressive rendering helpers ──────────────────────────────────────
+# These emit Data Stream Protocol annotations alongside the existing SSE events
+# so the Next.js translation layer can pipe them as 2: annotations to the
+# frontend's useGenUIStream hook.
+
+# Block types that map to interactive GenUI components with skeleton support.
+_GENUI_BLOCK_MAP: dict[str, str] = {
+    "QUIZ":                   "InteractiveQuiz",
+    "FLASHCARD":              "Flashcard",
+    "MIND_MAP":               "MindMap",
+    "TIMELINE":               "DragDropTimeline",
+    "MNEMONIC":               "MnemonicCard",
+    "EXPERIMENT":             "ExperimentCard",
+    "LAB_MISSION":            "LabGuide",
+    "NARRATED_SLIDE":         "NarratedSlides",
+    "SCAFFOLDED_PROBLEM":     "ScaffoldedProblem",
+    "HARD_THING_CHALLENGE":   "HardThingChallenge",
+    "SOCRATIC_DEBATE":        "SocraticDebate",
+    "PROJECT_BUILDER":        "ProjectBuilder",
+    "GENUI_ASSEMBLY":         None,  # resolved from genui_assembly_data
+}
+
+# Components that support bidirectional remediation via onToolCall.
+_REMEDIATION_CAPABLE = {
+    "InteractiveQuiz", "GlowGrow", "AdaptiveQuiz", "ScaffoldedProblem",
+    "HardThingChallenge", "StealthAssessment", "MultiCompetencyWorkspace",
+}
+
+
+def _emit_genui_skeleton_for_block(
+    block: dict, block_index: int, lesson_id: str, track: str,
+) -> str | None:
+    """
+    Emit a genui_skeleton SSE event for a block that maps to a GenUI component.
+
+    Called *before* emitting the full block so the frontend can render a
+    placeholder immediately.  Returns the component_id for later delta patching.
+    """
+    block_type = block.get("blockType") or block.get("block_type", "")
+
+    # GENUI_ASSEMBLY has its own component type in the payload
+    if block_type == "GENUI_ASSEMBLY":
+        assembly = block.get("genui_assembly_data") or {}
+        comp_type = assembly.get("component_type")
+        if not comp_type:
+            return None
+    else:
+        comp_type = _GENUI_BLOCK_MAP.get(block_type)
+        if not comp_type:
+            return None
+
+    component_id = block.get("block_id") or f"genui-{lesson_id}-{block_index}"
+    title_hint = block.get("title") or block.get("content", "")[:80]
+
+    skeleton_event = {
+        "type": "genui_skeleton",
+        "componentId": component_id,
+        "componentType": comp_type,
+        "lessonId": lesson_id,
+        "track": track,
+        "hints": {"title": title_hint} if title_hint else {},
+    }
+    return _sse(skeleton_event)
+
+
+def _emit_genui_props_for_block(
+    block: dict, block_index: int, lesson_id: str, track: str,
+) -> list[str]:
+    """
+    Emit genui_props and optionally genui_complete SSE events for a block.
+
+    Returns a list of SSE strings to yield.  For blocks with full data the
+    list contains a single genui_complete event.  For blocks that support
+    remediation, a tool_call event is also appended.
+    """
+    block_type = block.get("blockType") or block.get("block_type", "")
+    events: list[str] = []
+
+    if block_type == "GENUI_ASSEMBLY":
+        assembly = block.get("genui_assembly_data") or {}
+        comp_type = assembly.get("component_type")
+        if not comp_type:
+            return events
+        props = assembly.get("props", {})
+        callbacks = assembly.get("callbacks", [])
+        initial_state = assembly.get("initial_state", {})
+    else:
+        comp_type = _GENUI_BLOCK_MAP.get(block_type)
+        if not comp_type:
+            return events
+        # Build props from the block's typed data fields
+        props = _extract_block_props(block, block_type)
+        callbacks = ["onAnswer", "onComplete", "onHint", "onStruggle"]
+        initial_state = {}
+
+    component_id = block.get("block_id") or f"genui-{lesson_id}-{block_index}"
+
+    events.append(_sse({
+        "type": "genui_complete",
+        "componentId": component_id,
+        "componentType": comp_type,
+        "props": props,
+        "callbacks": callbacks,
+        "initialState": initial_state,
+        "lessonId": lesson_id,
+        "track": track,
+    }))
+
+    # For remediation-capable components, also emit a tool_call so the
+    # frontend's onToolCall can pipe student struggle events back up.
+    if comp_type in _REMEDIATION_CAPABLE:
+        tc_id = f"remediate-{component_id}"
+        events.append(_sse({
+            "type": "tool_call",
+            "name": "student_needs_remediation",
+            "props": {
+                "toolCallId": tc_id,
+                "sourceComponentId": component_id,
+                "componentType": comp_type,
+                "lessonId": lesson_id,
+                "track": track,
+            },
+        }))
+
+    return events
+
+
+def _extract_block_props(block: dict, block_type: str) -> dict:
+    """Extract component-specific props from a lesson block dict."""
+    props: dict = {
+        "title": block.get("title", ""),
+        "content": block.get("content", ""),
+        "blockId": block.get("block_id", ""),
+    }
+
+    if block_type == "QUIZ" and block.get("quiz_data"):
+        props.update(block["quiz_data"])
+    elif block_type == "FLASHCARD" and block.get("flashcard_data"):
+        props.update(block["flashcard_data"])
+    elif block_type == "MIND_MAP" and block.get("mind_map_data"):
+        props.update(block["mind_map_data"])
+    elif block_type == "TIMELINE" and block.get("timeline_data"):
+        props.update(block["timeline_data"])
+    elif block_type == "MNEMONIC" and block.get("mnemonic_data"):
+        props.update(block["mnemonic_data"])
+    elif block_type == "EXPERIMENT" and block.get("experiment_data"):
+        props.update(block["experiment_data"])
+    elif block_type == "NARRATED_SLIDE" and block.get("narrated_slide_data"):
+        props.update(block["narrated_slide_data"])
+
+    return props
 
 
 async def _run_registrar_background(
