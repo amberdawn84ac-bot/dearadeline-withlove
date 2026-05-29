@@ -2624,6 +2624,32 @@ async def _render_lesson(
 
     await _inject_modal_supplement(state, blocks, synthesis_text[:500])
 
+    # ── LearningStylePicker — inject once for students with no explicit pick ──
+    # Fires when the student has no behavioral data yet (new student).
+    # Once they pick, learningStyle is saved and explicit_modality is set,
+    # so this block is never emitted again.
+    has_explicit_modality = bool(getattr(request, "_explicit_modality_set", False))
+    interaction_count_local = state.get("interaction_count", 0)
+    if not has_explicit_modality and interaction_count_local <= 1:
+        blocks.append({
+            "block_type": BlockType.GENUI_ASSEMBLY.value,
+            "content": "LearningStylePicker",
+            "evidence": [],
+            "is_silenced": False,
+            "homestead_content": None,
+            "genui_assembly_data": {
+                "component_type": "LearningStylePicker",
+                "props": {
+                    "studentId": request.student_id,
+                    "lessonTopic": request.topic,
+                },
+                "initial_state": {},
+                "callbacks": ["onComplete"],
+                "re_render_triggers": [],
+            },
+        })
+        logger.info(f"[Render] LearningStylePicker injected for new student {request.student_id}")
+
 
 def _build_component_props(
     component_id: str,

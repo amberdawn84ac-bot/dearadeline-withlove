@@ -72,6 +72,7 @@ import { ProgressMap } from "@/components/gen-ui/patterns/ProgressMap";
 import { AutoDiagram } from "@/components/gen-ui/patterns/AutoDiagram";
 import { PeerTutoringCard } from "@/components/gen-ui/patterns/PeerTutoringCard";
 import { DiscussionForum } from "@/components/gen-ui/patterns/DiscussionForum";
+import { LearningStylePicker } from "@/components/gen-ui/patterns/LearningStylePicker";
 import { TextSelectionMenu } from "@/components/gen-ui/TextSelectionMenu";
 import { WeightTierBadge } from "@/components/lessons/WeightTierBadge";
 import { DistortionFlag } from "@/components/lessons/DistortionFlag";
@@ -136,6 +137,8 @@ const componentRegistry: Record<string, React.ComponentType<any>> = {
   // Collaborative Learning
   PeerTutoringCard:  PeerTutoringCard,
   DiscussionForum:   DiscussionForum,
+  // Onboarding
+  LearningStylePicker: LearningStylePicker,
 };
 
 // ── DynamicComponent Wrapper ─────────────────────────────────────────────────────

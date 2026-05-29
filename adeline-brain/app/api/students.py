@@ -206,3 +206,54 @@ async def get_student_state(
         is_homestead=is_homestead,
         tracks=tracks_out,
     )
+
+
+# ── POST /students/{student_id}/modality-preference ───────────────────────────
+
+_VALID_MODALITIES = {"visual", "auditory", "kinesthetic", "reading"}
+
+class ModalityPreferenceRequest(BaseModel):
+    modality: str = Field(..., description="visual | auditory | kinesthetic | reading")
+
+
+@router.post("/{student_id}/modality-preference")
+async def save_modality_preference(
+    student_id: str,
+    body: ModalityPreferenceRequest,
+    current_user_id: str = Depends(get_current_user_id),
+):
+    """
+    Save the student's explicit modality preference to the User table.
+
+    This immediately overrides behavioral inference from LearningRecord rows.
+    The learner_profiler will use this as the seed modality on the next lesson,
+    then refine it over time as interaction data accumulates.
+    """
+    await verify_student_access(student_id, current_user_id)
+
+    modality = body.modality.lower().strip()
+    if modality not in _VALID_MODALITIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"modality must be one of: {', '.join(sorted(_VALID_MODALITIES))}",
+        )
+
+    conn = await _get_conn()
+    try:
+        result = await conn.execute(
+            'UPDATE "User" SET "learningStyle" = $1, "updatedAt" = NOW() WHERE "id" = $2',
+            modality,
+            student_id,
+        )
+        if result == "UPDATE 0":
+            raise HTTPException(status_code=404, detail="Student not found")
+        logger.info(f"[Students] Modality preference saved: student={student_id} modality={modality}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Students] Failed to save modality preference: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save preference")
+    finally:
+        await conn.close()
+
+    return {"ok": True, "modality": modality}

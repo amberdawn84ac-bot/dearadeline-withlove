@@ -55,23 +55,35 @@ def _sse(payload: dict) -> str:
 
 # ── AdaptationRequest builder — fetches all personalization signals in parallel ──
 
+_EXPLICIT_MODALITIES = {"visual", "auditory", "kinesthetic", "reading"}
+
 async def _fetch_stream_student_profile(student_id: str) -> dict:
-    """Fetch interests from the User table."""
+    """
+    Fetch interests and explicit modality preference from the User table.
+
+    learningStyle is "EXPEDITION" | "CLASSIC" for curriculum pacing, BUT
+    after the student completes LearningStylePicker it is overwritten with
+    "visual" | "auditory" | "kinesthetic" | "reading". We detect which it is
+    and pass explicit_modality only when it's a real modality value.
+    """
     from app.config import get_db_conn
     try:
         conn = await get_db_conn()
         row = await conn.fetchrow(
-            'SELECT "interests" FROM "User" WHERE "id" = $1',
+            'SELECT "interests", "learningStyle" FROM "User" WHERE "id" = $1',
             student_id,
         )
         await conn.close()
         if row:
+            raw_style = (row["learningStyle"] or "").lower()
+            explicit_modality = raw_style if raw_style in _EXPLICIT_MODALITIES else None
             return {
                 "interests": list(row["interests"]) if row["interests"] else [],
+                "explicit_modality": explicit_modality,
             }
     except Exception as e:
         logger.warning(f"[LessonStream] Profile fetch failed (non-fatal): {e}")
-    return {"interests": []}
+    return {"interests": [], "explicit_modality": None}
 
 
 async def _fetch_learner_interactions(student_id: str, limit: int = 30) -> list:
@@ -245,23 +257,38 @@ async def _build_adaptation_request(
         return_exceptions=True,
     )
 
-    # Interests
+    # Interests + explicit modality preference (set by LearningStylePicker)
     interests: list[str] = []
+    explicit_modality: str | None = None
     if isinstance(profile, dict):
         interests = profile.get("interests", [])
+        explicit_modality = profile.get("explicit_modality")
 
-    # Infer preferred modality from behavior via learner_profiler decision tree.
-    # Falls back to "visual" for new students with no interaction history.
+    # Modality resolution:
+    #   1. Explicit pick from LearningStylePicker   ← highest priority
+    #   2. Behavioral inference from LearningRecord ← adapts over time
+    #   3. Default "visual" for brand new students  ← safe starter
     from app.algorithms.learner_profiler import extract_features, classify_learner_profile
     interactions = learner_interactions if isinstance(learner_interactions, list) else []
     struggle_count = sum(1 for i in interactions if not i.correct)
     features = extract_features(interactions, consecutive_struggles=struggle_count)
+
+    if explicit_modality:
+        features = features.__class__(
+            correct_rate=features.correct_rate,
+            avg_response_velocity=features.avg_response_velocity,
+            modality_entropy=features.modality_entropy,
+            struggle_ratio=features.struggle_ratio,
+            preferred_modality=explicit_modality,
+        )
+
     learner_profile = classify_learner_profile(features)
     preferred_modality = features.preferred_modality
     preferred_components = learner_profile.preferred_components
     logger.info(
         f"[LessonStream] LearnerProfile: {learner_profile.profile_type.value} "
         f"(conf={learner_profile.confidence:.2f}) modality={preferred_modality} "
+        f"explicit={'yes' if explicit_modality else 'no'} "
         f"components={preferred_components} interactions={len(interactions)}"
     )
 
@@ -321,6 +348,11 @@ async def _build_adaptation_request(
         proficiency_map=proficiency,
     )
     req._preferred_components = preferred_components  # type: ignore[attr-defined]
+
+    # Tag the original request so _render_lesson can decide whether to inject
+    # the LearningStylePicker (only for students with no explicit pick yet)
+    request._explicit_modality_set = bool(explicit_modality)  # type: ignore[attr-defined]
+
     return req
 
 
