@@ -26,6 +26,11 @@ class Neo4jClient:
     def __init__(self):
         self._driver = None
 
+    @property
+    def driver(self):
+        """Public accessor for the underlying Neo4j driver instance."""
+        return self._driver
+
     async def connect(self):
         self._driver = AsyncGraphDatabase.driver(
             NEO4J_URI,
