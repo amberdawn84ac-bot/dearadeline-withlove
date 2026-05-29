@@ -63,9 +63,9 @@ class TestRoute:
         state = _make_state(Track.TRUTH_HISTORY)
         assert _route(state) == "historian"
 
-    def test_justice_changemaking_routes_to_historian(self):
+    def test_justice_changemaking_routes_to_justice(self):
         state = _make_state(Track.JUSTICE_CHANGEMAKING)
-        assert _route(state) == "historian"
+        assert _route(state) == "justice"
 
     def test_creation_science_routes_to_science(self):
         state = _make_state(Track.CREATION_SCIENCE)
