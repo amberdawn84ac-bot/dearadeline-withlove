@@ -75,7 +75,7 @@ jobs:
         run: |
           cd adeline-brain
           export POSTGRES_DSN="postgresql""://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}"
-          pytest tests/ -x --tb=short -q \
+          pytest tests/ --tb=short -q \
             --ignore=tests/test_genesis_fetch.py \
             --ignore=tests/test_sefaria_fetch.py \
             --ignore=tests/test_e2e_production_ready.py \

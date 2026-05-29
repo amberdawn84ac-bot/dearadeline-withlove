@@ -117,8 +117,8 @@ class TestTrackToCreditType:
     def test_truth_history_is_core(self):
         assert _track_to_credit_type(Track.TRUTH_HISTORY) == "CORE"
 
-    def test_creation_science_is_core(self):
-        assert _track_to_credit_type(Track.CREATION_SCIENCE) == "CORE"
+    def test_creation_science_is_laboratory_science(self):
+        assert _track_to_credit_type(Track.CREATION_SCIENCE) == "LABORATORY_SCIENCE"
 
     def test_homesteading_is_homestead(self):
         assert _track_to_credit_type(Track.HOMESTEADING) == "HOMESTEAD"
@@ -133,18 +133,18 @@ class TestTrackToCreditType:
 # ── _worldview_wrap() ─────────────────────────────────────────────────────────
 
 class TestWorldviewWrap:
-    def test_discipleship_track_uses_biblical_lens(self):
+    def test_discipleship_track_uses_scripture_lens(self):
         result = _worldview_wrap("Some content here.", Track.DISCIPLESHIP)
-        assert "biblical worldview" in result
+        assert "Scripture" in result
         assert "Some content here." in result
 
     def test_health_track_uses_body_design_lens(self):
         result = _worldview_wrap("Herbs help the body.", Track.HEALTH_NATUROPATHY)
-        assert "God designed the body" in result
+        assert "designed" in result and "YHWH" in result
 
     def test_wrap_includes_reflection_prompt(self):
         result = _worldview_wrap("Content.", Track.ENGLISH_LITERATURE)
-        assert "God's design" in result or "calling" in result
+        assert "truth claim" in result or "believe" in result
 
 
 # ── registrar_agent() ─────────────────────────────────────────────────────────
