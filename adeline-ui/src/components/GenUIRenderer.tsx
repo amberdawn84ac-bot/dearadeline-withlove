@@ -70,6 +70,8 @@ import { CorrectiveOverlay } from "@/components/gen-ui/patterns/CorrectiveOverla
 import { LearningVelocityCard } from "@/components/gen-ui/patterns/LearningVelocityCard";
 import { ProgressMap } from "@/components/gen-ui/patterns/ProgressMap";
 import { AutoDiagram } from "@/components/gen-ui/patterns/AutoDiagram";
+import { PeerTutoringCard } from "@/components/gen-ui/patterns/PeerTutoringCard";
+import { DiscussionForum } from "@/components/gen-ui/patterns/DiscussionForum";
 import { TextSelectionMenu } from "@/components/gen-ui/TextSelectionMenu";
 import { WeightTierBadge } from "@/components/lessons/WeightTierBadge";
 import { DistortionFlag } from "@/components/lessons/DistortionFlag";
@@ -131,6 +133,9 @@ const componentRegistry: Record<string, React.ComponentType<any>> = {
   LearningVelocityCard: LearningVelocityCard,
   ProgressMap:       ProgressMap,
   AutoDiagram:       AutoDiagram,
+  // Collaborative Learning
+  PeerTutoringCard:  PeerTutoringCard,
+  DiscussionForum:   DiscussionForum,
 };
 
 // ── DynamicComponent Wrapper ─────────────────────────────────────────────────────
@@ -981,10 +986,14 @@ function GenUIRenderer({
               blockContent = (
                 <DynamicComponent
                   componentType={assemblyData?.component_type || "InteractiveQuiz"}
-                  props={assemblyData?.props || {}}
+                  props={{ ...(assemblyData?.props || {}), studentId: studentId ?? "", lessonId: _lessonId, blockId: block.block_id, track: block.track }}
                   initialState={assemblyData?.initial_state || {}}
                   callbacks={assemblyData?.callbacks || []}
                   onStateChange={async (newState) => {
+                    if ((newState as any)._scaffold) {
+                      handleScaffoldResponse((newState as any)._scaffold);
+                      return;
+                    }
                     // Send to backend to update BKT/ZPD and check for scaffold triggers
                     try {
                       const response = await fetch("/api/genui/callback", {

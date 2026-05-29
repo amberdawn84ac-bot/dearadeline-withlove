@@ -8,6 +8,7 @@
 
 import { useState, useEffect } from "react";
 import { TrendingUp, TrendingDown, Activity } from "lucide-react";
+import { useGenUITelemetry } from "@/lib/useGenUITelemetry";
 
 interface DataPoint {
   timestamp: string;
@@ -19,6 +20,10 @@ interface LiveChartProps {
   state: Record<string, any>;
   onStateChange: (newState: Record<string, any>) => void;
   callbacks?: string[];
+  studentId?: string;
+  lessonId?: string;
+  blockId?: string;
+  track?: string;
   // Component-specific props
   data: DataPoint[];
   chartType?: "line" | "bar";  // Default: line
@@ -29,10 +34,15 @@ export function LiveChart({
   state,
   onStateChange,
   callbacks = [],
+  studentId,
+  lessonId,
+  blockId,
+  track,
   data,
   chartType = "line",
   showCrossTrack = false,
 }: LiveChartProps) {
+  const { reportInteraction } = useGenUITelemetry({ studentId: studentId ?? "", lessonId: lessonId ?? "" });
   const [chartData, setChartData] = useState<DataPoint[]>(data);
   const [hoveredPoint, setHoveredPoint] = useState<DataPoint | null>(null);
 
@@ -42,6 +52,10 @@ export function LiveChart({
       setChartData(data);
     }
   }, [data]);
+
+  useEffect(() => {
+    if (studentId && lessonId) reportInteraction("LiveChart", { dataPoints: data.length }, blockId);
+  }, []);
 
   const currentMastery = chartData[chartData.length - 1]?.mastery || 0;
   const previousMastery = chartData[chartData.length - 2]?.mastery || currentMastery;

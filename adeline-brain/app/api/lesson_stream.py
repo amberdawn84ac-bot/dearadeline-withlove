@@ -432,6 +432,7 @@ async def _stream_lesson(
         "mastery_score":         mastery_score,
         "mastery_band":          mastery_band,
         "student_message":       None,
+        "preferred_modality":    adaptation_req.preferred_modality,
     }
 
     route = _route(state)

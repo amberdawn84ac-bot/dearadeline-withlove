@@ -35,6 +35,7 @@ export function QuizCard({
 }: QuizCardProps) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [showResult, setShowResult]       = useState(false);
+  const [wrongCount, setWrongCount]       = useState(0);
   const mountedAt = useRef(Date.now());
 
   const handleSelect = (index: number) => {
@@ -61,6 +62,27 @@ export function QuizCard({
           track: track ?? null,
         }),
       }).catch(() => {});
+
+      if (!isCorrect) {
+        const newWrongCount = wrongCount + 1;
+        setWrongCount(newWrongCount);
+        if (newWrongCount >= 3) {
+          fetch(`${brainUrl}/brain/genui/callback`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+              student_id: studentId,
+              lesson_id: lessonId,
+              component_type: "QuizCard",
+              event: "onStruggle",
+              state: { wrongAttempts: newWrongCount },
+              block_id: blockId ?? null,
+              track: track ?? null,
+            }),
+          }).catch(() => {});
+        }
+      }
     }
   };
 

@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Hand, RotateCcw, CheckCircle2 } from "lucide-react";
+import { fireGenUICallback } from "@/lib/genui-callback";
 
 export interface ManipulativeItem {
   id: string;
@@ -25,6 +26,9 @@ export interface VirtualManipulativeProps {
   dropZones: DropZone[];
   manipulativeType?: "fraction-bars" | "base-10-blocks" | "balance-scale" | "generic";
   track?: string;
+  studentId?: string;
+  lessonId?: string;
+  blockId?: string;
   onComplete?: (state: { attempts: number; correct: boolean; timeMs: number }) => void;
   onStateChange?: (state: Record<string, unknown>) => void;
 }
@@ -36,6 +40,9 @@ export function VirtualManipulative({
   dropZones,
   manipulativeType = "generic",
   track,
+  studentId,
+  lessonId,
+  blockId,
   onComplete,
   onStateChange,
 }: VirtualManipulativeProps) {
@@ -91,6 +98,8 @@ export function VirtualManipulative({
       setCompleted(true);
       setFeedback("Excellent! You've placed everything correctly.");
       onComplete?.({ attempts: attempts + 1, correct: true, timeMs: Date.now() - mountedAt.current });
+      fireGenUICallback({ studentId, lessonId, componentType: "VirtualManipulative", event: "onAnswer", state: { isCorrect: true, attempts: attempts + 1 }, blockId, track });
+      fireGenUICallback({ studentId, lessonId, componentType: "VirtualManipulative", event: "onComplete", state: { attempts: attempts + 1, timeMs: Date.now() - mountedAt.current }, blockId, track });
     } else {
       setFeedback("Not quite right. Try rearranging the pieces.");
     }

@@ -11,9 +11,6 @@ Usage:
     from app.agents.persona import GRADE_DESC, TRACK_PERSONA, ADELINE_VOICE, ADELINE_SYSTEM_PROMPT
 """
 
-from app.agents.orchestrator import _GRADE_DESC as GRADE_DESC  # type: ignore[attr-defined]
-from app.agents.orchestrator import _TRACK_PERSONA as TRACK_PERSONA  # type: ignore[attr-defined]
-from app.agents.orchestrator import _ADELINE_VOICE as ADELINE_VOICE  # type: ignore[attr-defined]
 
 # ── Top-level system prompt (educational concierge framing) ──────────────────
 # Used for the /chat route and any new LLM entry points that need the
