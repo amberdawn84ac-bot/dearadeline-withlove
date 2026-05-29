@@ -988,10 +988,13 @@ async def _generate_from_knowledge(
         content = raw.strip()
     except Exception as e:
         logger.warning(f"[KnowledgeGen] Synthesis failed ({e}) — using topic as fallback")
+        track_name = request.track.value.replace("_", " ").title()
         content = (
             f"**{request.topic}**\n\n"
-            f"Adeline is preparing this lesson. Check back shortly — "
-            f"she's gathering what she knows about this topic."
+            f"Today we're exploring *{request.topic}* in the "
+            f"**{track_name}** track.\n\n"
+            "Adeline is building her archive on this topic. In the meantime, "
+            "let's think critically about it together using the questions below."
         )
 
     blocks.append({

@@ -306,7 +306,7 @@ async def health_detailed():
 
     try:
         conn = await get_db_conn()
-        result = await conn.fetchval('SELECT COUNT(*) FROM "HippocampusDocument"')
+        result = await conn.fetchval("SELECT COUNT(*) FROM hippocampus_documents")
         health_status["hippocampus_documents"] = result
         oas_count = await conn.fetchval('SELECT COUNT(*) FROM "OASStandard"')
         health_status["oas_standards"] = oas_count

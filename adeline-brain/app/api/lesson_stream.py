@@ -506,7 +506,12 @@ async def _stream_lesson(
             yield _sse({"type": "status", "message": "Personalizing lesson for you..."})
             canonical_dummy = {"topic": request.topic, "blocks": blocks_data}
             blocks_data = await adapt_canonical_for_student(canonical_dummy, adaptation_req)
-            
+
+            # Ensure every block has a block_id for frontend React keys
+            for idx, block in enumerate(blocks_data):
+                if not block.get("block_id"):
+                    block["block_id"] = f"{lesson_id}-{idx}"
+
             for block in blocks_data:
                 yield _sse({"type": "block", "block": block})
                 tool_event = _from_block_tool_call(block, lesson_id, request.track.value)
@@ -633,6 +638,35 @@ async def _stream_lesson(
         yield _sse({"type": "status", "message": "Personalizing lesson for you..."})
         canonical_dummy = {"topic": request.topic, "blocks": state["blocks"]}
         state["blocks"] = await adapt_canonical_for_student(canonical_dummy, adaptation_req)
+
+    # ── Safety net: if every fallback failed, synthesize a minimal lesson ───
+    if not state["blocks"]:
+        logger.warning(
+            f"[LessonStream] All agents returned 0 blocks for "
+            f"'{request.topic}' ({request.track.value}) — emitting fallback narrative"
+        )
+        state["blocks"] = [{
+            "block_type": "NARRATIVE",
+            "block_id": f"fallback-{lesson_id}",
+            "content": (
+                f"**{request.topic}**\n\n"
+                "Adeline searched the archives but couldn't find verified primary sources "
+                "for this topic yet. Here's what we know:\n\n"
+                f"This topic falls under the "
+                f"**{request.track.value.replace('_', ' ').title()}** track. "
+                "Try asking Adeline a more specific question, or explore a related topic "
+                "from your dashboard recommendations.\n\n"
+                "*Adeline never guesses — she teaches from truth or tells you the archive "
+                "is still being built.*"
+            ),
+            "evidence": [],
+            "is_silenced": False,
+        }]
+
+    # ── Ensure every block has a block_id for frontend React keys ──────────
+    for idx, block in enumerate(state["blocks"]):
+        if not block.get("block_id"):
+            block["block_id"] = f"{lesson_id}-{idx}"
 
     yield _sse({"type": "status", "message": "Streaming lesson blocks..."})
     logger.info(f"[LessonStream] Emitting {len(state['blocks'])} blocks: {[b.get('block_type', 'UNKNOWN') for b in state['blocks']]}")
