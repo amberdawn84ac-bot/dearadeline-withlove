@@ -2330,6 +2330,18 @@ async def _inject_modal_supplement(
             if component_type == "PeerTutoringCard":
                 props["requestingStudentId"] = request.student_id
 
+        elif component_type == "LabGuide":
+            # LabGuide requires a full Experiment object (frontend dereferences
+            # experiment.chaos_level/materials/steps). Reuse the canonical builder
+            # so generic {title, content} props never reach the render path.
+            props = _build_component_props(
+                component_id="LabGuide",
+                topic=request.topic,
+                content=synthesis_text,
+                track=request.track.value,
+                key_phrase=request.topic,
+            )
+
         else:
             # Generic fallback props
             props = {"title": request.topic, "content": synthesis_text[:400]}
