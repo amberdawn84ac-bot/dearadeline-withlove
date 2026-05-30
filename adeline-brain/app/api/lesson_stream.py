@@ -271,7 +271,6 @@ async def _build_adaptation_request(
         cross_bias_result,
         zpd_candidates,
         learner_interactions,
-        component_ratings,
     ) = await _asyncio.gather(
         _fetch_stream_student_profile(student_id),
         _fetch_sm2_quality_scores(student_id, request.track.value),
@@ -280,7 +279,6 @@ async def _build_adaptation_request(
         get_cross_track_bias(student_id, request.track.value),
         tool_get_zpd_candidates(student_id, request.track.value, limit=5),
         _fetch_learner_interactions(student_id, limit=30),
-        _fetch_component_ratings(student_id, limit=100),
         return_exceptions=True,
     )
 
@@ -288,38 +286,18 @@ async def _build_adaptation_request(
     if isinstance(profile, dict):
         interests = profile.get("interests", [])
 
-    # Infer modality from behavior; ratings refine preferred_components
+    # Infer archetype and modality purely from observed performance — no preference surveys
     from app.algorithms.learner_profiler import extract_features, classify_learner_profile
     interactions = learner_interactions if isinstance(learner_interactions, list) else []
     struggle_count = sum(1 for i in interactions if not i.correct)
     features = extract_features(interactions, consecutive_struggles=struggle_count)
     learner_profile = classify_learner_profile(features)
     preferred_modality = features.preferred_modality
-
-    # Merge archetype components with rating signal.
-    # Suppression threshold: score < 0 AND at least 2 ratings — one bad day
-    # doesn't kill a component. Boost threshold: score > 0 with any count.
-    _MIN_BAD_RATINGS = 2
-    ratings: dict = component_ratings if isinstance(component_ratings, dict) else {}
-    archetype_components = learner_profile.preferred_components
-    rated_good = [
-        ct for ct, info in sorted(ratings.items(), key=lambda x: -x[1]["score"])
-        if info["score"] > 0
-    ]
-    rated_bad = {
-        ct for ct, info in ratings.items()
-        if info["score"] < 0 and info["count"] >= _MIN_BAD_RATINGS
-    }
-    preferred_components = (
-        rated_good[:2] + [c for c in archetype_components if c not in rated_bad and c not in rated_good]
-    ) if rated_good else [
-        c for c in archetype_components if c not in rated_bad
-    ]
+    preferred_components = learner_profile.preferred_components
 
     logger.info(
         f"[LessonStream] LearnerProfile: {learner_profile.profile_type.value} "
         f"modality={preferred_modality} "
-        f"rated_good={rated_good[:3]} rated_bad={list(rated_bad)[:3]} "
         f"preferred={preferred_components[:3]} interactions={len(interactions)}"
     )
 
@@ -379,7 +357,6 @@ async def _build_adaptation_request(
         proficiency_map=proficiency,
     )
     req._preferred_components = preferred_components  # type: ignore[attr-defined]
-    req._component_ratings = ratings  # type: ignore[attr-defined]
     return req
 
 

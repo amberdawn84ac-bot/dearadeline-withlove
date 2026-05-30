@@ -86,7 +86,7 @@ COMPONENT_REGISTRY = {
         "concept_types": ["any"],
         "abstraction": "abstract",
     },
-    # ── Multi-Modal First-Class Block Types ─────────────────────────────────────
+    # ── Additional first-class block types ──────────────────────────────────────
     "Simulation": {
         "category": "multimodal",
         "modalities": ["kinesthetic", "visual"],
@@ -378,7 +378,7 @@ _TRACK_CONCEPT_TYPE: dict[str, str] = {
 _MODAL_SUPPLEMENT_MAP: dict[str, dict[str, Optional[str]]] = {
     "kinesthetic": {
         "math":    "VirtualManipulative",
-        "science": "SimulationEmbed",
+        "science": "LabGuide",
         "history": "TaskScaffold",
         "writing": "TaskScaffold",
         "any":     "TaskScaffold",

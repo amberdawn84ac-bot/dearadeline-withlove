@@ -186,6 +186,19 @@ async def load_student_state(student_id: str) -> StudentState:
             mastered_standards=standards_by_track.get(track_name, []),
         )
 
+    # ── 4. Blend BKT posteriors from SpacedRepetitionCard ────────────────────────
+    try:
+        from app.algorithms.bkt_tracker import get_mastery_map
+        for track_name, tm in state.tracks.items():
+            bkt_map = await get_mastery_map(student_id, track_name)
+            if bkt_map:
+                bkt_mastery = min(sum(bkt_map.values()) / len(bkt_map), 1.0)
+                blended = 0.7 * bkt_mastery + 0.3 * tm.mastery_score
+                tm.mastery_score = round(blended, 3)
+                tm.mastery_band = _band(blended)
+    except Exception as e:
+        logger.warning(f"[StudentState] BKT blend failed (non-fatal): {e}")
+
     logger.info(
         f"[StudentState] Loaded student_id={student_id} — "
         f"{len(state.tracks)} active tracks, "

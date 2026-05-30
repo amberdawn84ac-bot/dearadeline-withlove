@@ -315,6 +315,15 @@ async def _persist_mastery_update(
 
     await record_learning(RecordLearningRequest(statements=[xapi_stmt]))
 
+    # Update SpacedRepetitionCard so BKT blend in load_student_state picks up interaction evidence
+    try:
+        from app.algorithms.bkt_tracker import update_bkt
+        is_correct = mastery_score >= 0.5
+        concept_id = block_id or f"{track}-{component_type}"
+        await update_bkt(student_id, concept_id, track, is_correct)
+    except Exception as e:
+        logger.warning(f"[GENUI] bkt_tracker.update_bkt failed (non-fatal): {e}")
+
     # Invalidate student state cache so next load picks up new mastery
     await invalidate_student_state_cache(student_id)
 

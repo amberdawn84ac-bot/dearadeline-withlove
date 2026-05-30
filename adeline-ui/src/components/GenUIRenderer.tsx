@@ -121,9 +121,11 @@ const componentRegistry: Record<string, React.ComponentType<any>> = {
   EmbeddedInterrupt: EmbeddedInterrupt,
   // Adaptive Learning Path — multimodal
   SimulationEmbed:   SimulationEmbed,
+  Simulation:        SimulationEmbed,   // alias
   VirtualManipulative: VirtualManipulative,
   VideoExplanation:  VideoExplanation,
   TextExplanation:   TextExplanation,
+  TextDeep:          TextExplanation,   // alias — deeper reading, same renderer
   RealWorldApplication: RealWorldApplication,
   // Adaptive Learning Path — assessment
   StealthAssessment: StealthAssessment,
@@ -135,11 +137,10 @@ const componentRegistry: Record<string, React.ComponentType<any>> = {
   LearningVelocityCard: LearningVelocityCard,
   ProgressMap:       ProgressMap,
   AutoDiagram:       AutoDiagram,
+  ConceptMap:        AutoDiagram,       // alias — concept map uses same diagram renderer
   // Collaborative Learning
   PeerTutoringCard:  PeerTutoringCard,
   DiscussionForum:   DiscussionForum,
-  // Feedback
-  LessonRatingCard: LessonRatingCard,
 };
 
 // ── DynamicComponent Wrapper ─────────────────────────────────────────────────────

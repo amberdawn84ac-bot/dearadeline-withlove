@@ -2366,7 +2366,7 @@ async def _render_lesson(
     Cascade (first successful format wins):
       1. ANIMATED_SKETCHNOTE_LESSON — full animated whiteboard lesson via Gemini
       2. NARRATED_SLIDE             — slide deck with narration (cheaper fallback)
-      3. GENUI_ASSEMBLY SocraticDebate — Socratic dialogue (always available)
+      3. GENUI_ASSEMBLY — adaptive component via component selector (always available)
 
     Enrichment blocks (_enrichment=True) are SKIPPED — vocab, scripture, and
     journal cards are embedded inside the cohesive format's teaching layers.
@@ -2471,6 +2471,23 @@ async def _render_lesson(
     else:
         target_ages = "14-18"
 
+    # ── Precompute selector context (used in cascade level 3 and modal supplement) ──
+    _TRACK_TAGS = {
+        "TRUTH_HISTORY": ["history", "reading", "exploration"],
+        "CREATION_SCIENCE": ["science", "exploration", "hands-on"],
+        "APPLIED_MATHEMATICS": ["math", "concrete", "spatial"],
+        "ENGLISH_LITERATURE": ["reading", "text", "reference"],
+        "DISCIPLESHIP": ["application", "scenario", "problem-solving"],
+        "JUSTICE_CHANGEMAKING": ["application", "scenario", "problem-solving"],
+        "GOVERNMENT_ECONOMICS": ["reading", "scenario", "problem-solving"],
+        "HOMESTEADING": ["hands-on", "application", "concrete"],
+        "HEALTH_NATUROPATHY": ["science", "application", "hands-on"],
+        "CREATIVE_ECONOMY": ["hands-on", "application", "problem-solving"],
+    }
+    topic_tags = _TRACK_TAGS.get(request.track.value, ["reading", "exploration"])
+    profiler_components: list[str] = state.get("profiler_components", [])
+    recently_used_for_selector = list(set(recently_used + profiler_components[1:]))
+
     # ── CASCADE LEVEL 1: Animated Sketchnote Lesson ───────────────────────────
     cohesive_block: dict | None = None
 
@@ -2520,11 +2537,35 @@ async def _render_lesson(
                 }
                 logger.info(f"[Render] CASCADE-2 NarratedSlide OK for '{request.topic}'")
         except Exception as _e:
-            logger.warning(f"[Render] CASCADE-2 NarratedSlide failed ({_e}) — falling back to SocraticDebate")
+            logger.warning(f"[Render] CASCADE-2 NarratedSlide failed ({_e}) — falling back to component selector")
 
-    # ── CASCADE LEVEL 3: SocraticDebate GENUI_ASSEMBLY (always available) ─────
+    # ── CASCADE LEVEL 3: Component Selector adaptive fallback ─────────────────
     if cohesive_block is None:
-        _topic_title = f"Let's go deeper: {request.topic}"
+        try:
+            from app.algorithms.component_selector import select_components, LearnerContext
+            _ctx = LearnerContext(
+                mastery_score=mastery,
+                difficulty=difficulty,
+                preferred_modalities=[modality, "reading"] if modality != "reading" else ["reading", "visual"],
+                recent_struggle_count=struggle_count,
+                time_available_minutes=15,
+                needs_assessment=(interaction_count >= 3 and mastery < 0.6),
+                topic_tags=topic_tags,
+                recently_used_components=recently_used_for_selector,
+            )
+            _recs = select_components(_ctx, max_results=1)
+            _component_id = _recs[0].component_id if _recs else "AdaptiveQuiz"
+        except Exception as _e:
+            logger.warning(f"[Render] CASCADE-3 selector failed ({_e}) — using AdaptiveQuiz")
+            _component_id = "AdaptiveQuiz"
+
+        _component_props = _build_component_props(
+            component_id=_component_id,
+            topic=request.topic,
+            content=synthesis_text[:1500],
+            track=request.track.value,
+            key_phrase=synthesis_text[:80].split(".")[0] if synthesis_text else request.topic,
+        )
         cohesive_block = {
             "block_type": BlockType.GENUI_ASSEMBLY.value,
             "content": synthesis_text,
@@ -2532,43 +2573,14 @@ async def _render_lesson(
             "is_silenced": False,
             "homestead_content": None,
             "genui_assembly_data": {
-                "component_type": "SocraticDebate",
-                "props": {
-                    "thesis": _topic_title,
-                    "turns": [
-                        {
-                            "question": (
-                                f"Based on what you just learned about {request.topic} — "
-                                "what's the one fact that surprised you most?"
-                            ),
-                            "hint": f"Think about what stands out most to you about {request.topic}.",
-                            "expectedThemes": [request.topic.lower()],
-                        },
-                        {
-                            "question": (
-                                f"How does {request.topic} connect to something you can see "
-                                "or do on your land, in your home, or in your community this week?"
-                            ),
-                            "hint": "Think practical. What would change if you acted on this?",
-                            "expectedThemes": ["application", "real life"],
-                        },
-                        {
-                            "question": (
-                                f"If you had to teach someone younger about {request.topic}, "
-                                "what would you say first?"
-                            ),
-                            "hint": "Teaching is the best way to know if you really understand something.",
-                            "expectedThemes": ["understanding", "synthesis"],
-                        },
-                    ],
-                    "track": request.track.value,
-                },
+                "component_type": _component_id,
+                "props": _component_props,
                 "initial_state": {},
-                "callbacks": ["onComplete"],
+                "callbacks": ["onComplete", "onStateChange"],
                 "re_render_triggers": ["onComplete"],
             },
         }
-        logger.info(f"[Render] CASCADE-3 SocraticDebate fallback for '{request.topic}'")
+        logger.info(f"[Render] CASCADE-3 selector fallback: {_component_id} for '{request.topic}'")
 
     # ── Assemble final block list ──────────────────────────────────────────────
     blocks.clear()
@@ -2576,27 +2588,6 @@ async def _render_lesson(
     blocks.extend(supplements)
 
     # ── Modal supplement (component selector — ONE additional component) ───────
-    _TRACK_TAGS = {
-        "TRUTH_HISTORY": ["history", "reading", "exploration"],
-        "CREATION_SCIENCE": ["science", "exploration", "hands-on"],
-        "APPLIED_MATHEMATICS": ["math", "concrete", "spatial"],
-        "ENGLISH_LITERATURE": ["reading", "text", "reference"],
-        "DISCIPLESHIP": ["application", "scenario", "problem-solving"],
-        "JUSTICE_CHANGEMAKING": ["application", "scenario", "problem-solving"],
-        "GOVERNMENT_ECONOMICS": ["reading", "scenario", "problem-solving"],
-        "HOMESTEADING": ["hands-on", "application", "concrete"],
-        "HEALTH_NATUROPATHY": ["science", "application", "hands-on"],
-        "CREATIVE_ECONOMY": ["hands-on", "application", "problem-solving"],
-    }
-    topic_tags = _TRACK_TAGS.get(request.track.value, ["reading", "exploration"])
-
-    # Pull profiler-recommended components — these are the components the learner
-    # profile classifier says work best for this student's archetype.
-    # We pass them as recently_used so the selector diversifies away from them
-    # unless they are truly the best fit (high score overcomes recency penalty).
-    profiler_components: list[str] = state.get("profiler_components", [])
-    recently_used_for_selector = list(set(recently_used + profiler_components[1:]))  # keep top pick eligible
-
     from app.algorithms.component_selector import select_components, LearnerContext
     learner_ctx = LearnerContext(
         mastery_score=mastery,
@@ -2696,13 +2687,6 @@ def _build_component_props(
             "assessmentType": "comprehension",
             "track": track,
         }
-    elif component_id == "SimulationEmbed":
-        return {
-            "title": f"Explore: {topic}",
-            "description": f"Interactive exploration of {topic}",
-            "sourceType": "generated",
-            "track": track,
-        }
     elif component_id == "VirtualManipulative":
         return {
             "title": f"Hands-on: {topic}",
@@ -2731,6 +2715,138 @@ def _build_component_props(
     elif component_id == "ProgressMap":
         return {
             "topic": topic,
+            "track": track,
+        }
+    elif component_id == "GlowGrow":
+        return {
+            "title": f"Check Your Understanding: {topic}",
+            "topic": topic,
+            "track": track,
+            "questions": [
+                {
+                    "question": f"What is the most important idea about {key_phrase}?",
+                    "options": [
+                        {"text": f"It reveals a key principle within {topic}", "is_correct": True},
+                        {"text": f"It is unrelated to {topic}", "is_correct": False},
+                        {"text": "It has been disproved by modern research", "is_correct": False},
+                    ],
+                    "explanation": f"Understanding {key_phrase} is foundational to {topic}.",
+                    "glow": "You're engaging with real content — keep going.",
+                    "grow": f"Find one primary source that addresses {key_phrase} directly.",
+                },
+                {
+                    "question": f"How does {topic} connect to a biblical worldview?",
+                    "options": [
+                        {"text": "It reflects God's ordered creation", "is_correct": True},
+                        {"text": "It contradicts Scripture", "is_correct": False},
+                        {"text": "It has no spiritual significance", "is_correct": False},
+                    ],
+                    "explanation": f"All knowledge, including {topic}, finds its foundation in God's truth.",
+                    "glow": "Strong thinking about faith and learning.",
+                    "grow": "Dig into a Scripture passage that speaks to this area.",
+                },
+            ],
+        }
+    elif component_id == "TaskScaffold":
+        return {
+            "title": f"Action Plan: {topic}",
+            "context": content[:300],
+            "tasks": [
+                {"id": "t1", "text": f"Review the core ideas from today's lesson on {key_phrase}", "priority": "now", "estimated_minutes": 5},
+                {"id": "t2", "text": f"Find one primary source or real-world example of {topic}", "priority": "today", "estimated_minutes": 10},
+                {"id": "t3", "text": f"Apply what you learned: how does {topic} show up in your life or community?", "priority": "this_week", "estimated_minutes": 15},
+            ],
+        }
+    elif component_id == "HardThingChallenge":
+        return {
+            "principle": f"The principle of {key_phrase}",
+            "challenge": f"Take one concrete action this week that demonstrates your understanding of {topic}. "
+                         f"Document it with a photo, journal entry, or short video.",
+            "commitmentPrompt": f"What specific thing will you do to live out what you learned about {topic}?",
+            "track": track,
+        }
+    elif component_id == "ScaffoldedProblem":
+        return {
+            "question": f"How does {key_phrase} relate to the broader topic of {topic}?",
+            "steps": [
+                {"instruction": f"Read or re-read the material on {topic}", "hint": "Focus on the central argument or evidence"},
+                {"instruction": "Identify the two most important facts or ideas", "hint": "Look for what the author emphasizes most"},
+                {"instruction": f"Explain how {key_phrase} fits into the bigger picture of {topic}", "hint": "Use your own words — no copy-paste"},
+            ],
+            "difficulty": "medium",
+            "track": track,
+        }
+    elif component_id == "PeerTutoringCard":
+        return {
+            "conceptTitle": topic,
+            "conceptTrack": track,
+            "difficulty": "DEVELOPING",
+        }
+    elif component_id == "DiscussionForum":
+        return {
+            "prompt": f"How does {topic} shape the way you think or act? "
+                      f"Share one specific way {key_phrase} connects to your life, faith, or community.",
+            "conceptTitle": key_phrase or topic,
+            "track": track,
+        }
+    elif component_id == "MoleculeSimulator":
+        return {
+            "title": f"Explore: {topic}",
+            "description": content[:400] or f"Observe and interact with {topic} at a molecular level.",
+            "substance": key_phrase or topic,
+            "track": track,
+        }
+    elif component_id == "LabGuide":
+        return {
+            "experiment": {
+                "id": str(uuid.uuid4())[:8],
+                "title": topic,
+                "tagline": f"Explore {key_phrase} hands-on",
+                "chaos_level": 1,
+                "wow_factor": 3,
+                "scientific_concepts": [key_phrase or topic],
+                "science_credits": [],
+                "grade_band": "K-8",
+                "materials": ["Paper", "Pencil", "Observation journal"],
+                "safety_requirements": [],
+                "steps": [
+                    {"step_number": 1, "instruction": f"Read the lesson on {topic} and note the key ideas.", "tip": "Write down anything that surprises you."},
+                    {"step_number": 2, "instruction": "Observe something in your environment that relates to this concept.", "tip": None},
+                    {"step_number": 3, "instruction": "Sketch or describe what you observed and explain the connection.", "tip": "Include a labeled diagram if helpful."},
+                ],
+                "creation_connection": {
+                    "title": f"God's Design in {topic}",
+                    "scripture": "Psalm 19:1",
+                    "explanation": f"The complexity of {key_phrase} reveals God's creative order.",
+                },
+                "social_media_kit": {
+                    "caption_template": f"Just explored {topic}! Here's what I discovered 🔭 #HomeschoolScience",
+                    "filming_tips": ["Show your materials and workspace", "Narrate each step as you go"],
+                    "hashtags": ["#HomeschoolScience", "#CreationScience", "#SovereignLab"],
+                },
+                "estimated_minutes": 20,
+            }
+        }
+    elif component_id in ("Simulation", "SimulationEmbed"):
+        return {
+            "title": f"Explore: {topic}",
+            "description": f"Interactive exploration of {topic}",
+            "sourceType": "generated",
+            "content": content[:500],
+            "track": track,
+        }
+    elif component_id == "TextDeep":
+        return {
+            "title": topic,
+            "content": content[:3000],
+            "keyTerms": [key_phrase] if key_phrase else [],
+            "track": track,
+        }
+    elif component_id == "ConceptMap":
+        return {
+            "title": f"Concept Map: {topic}",
+            "sourceContent": content[:1000],
+            "diagramType": "concept-map",
             "track": track,
         }
     else:
