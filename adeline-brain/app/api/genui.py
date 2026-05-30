@@ -100,6 +100,7 @@ async def genui_callback(
                 mastery_score=updated_mastery,
                 component_type=request.component_type,
                 block_id=request.block_id,
+                is_correct=is_correct,
             )
         except Exception as e:
             logger.warning(f"[GENUI] Failed to persist mastery update (non-fatal): {e}")
@@ -254,6 +255,7 @@ async def genui_telemetry(
                     mastery_score=updated,
                     component_type=request.component_type,
                     block_id=request.block_id,
+                    is_correct=False,
                 )
             # For "interaction", "hint", "timeout" — just log, no mastery update
         except Exception as e:
@@ -273,6 +275,7 @@ async def _persist_mastery_update(
     mastery_score: float,
     component_type: str,
     block_id: Optional[str] = None,
+    is_correct: Optional[bool] = None,
 ) -> None:
     """
     Persist BKT mastery update to LearningRecord (xAPI) and invalidate student cache.
@@ -318,9 +321,13 @@ async def _persist_mastery_update(
     # Update SpacedRepetitionCard so BKT blend in load_student_state picks up interaction evidence
     try:
         from app.algorithms.bkt_tracker import update_bkt
-        is_correct = mastery_score >= 0.5
+        # Use the observed correctness when available; only fall back to the
+        # posterior-mastery heuristic if the caller could not supply it. Inferring
+        # correctness from mastery_score misclassifies early/low-mastery learners
+        # (a first correct answer can yield a posterior < 0.5).
+        observed_correct = is_correct if is_correct is not None else mastery_score >= 0.5
         concept_id = block_id or f"{track}-{component_type}"
-        await update_bkt(student_id, concept_id, track, is_correct)
+        await update_bkt(student_id, concept_id, track, observed_correct)
     except Exception as e:
         logger.warning(f"[GENUI] bkt_tracker.update_bkt failed (non-fatal): {e}")
 
