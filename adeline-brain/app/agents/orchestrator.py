@@ -146,13 +146,13 @@ def apply_cognitive_load_budget(load) -> None:
     from app.algorithms.cognitive_load import should_simplify_content
     if load is not None and should_simplify_content(load):
         if load.level == "CRITICAL":
-            _synthesis_token_ceil.set(1200)
-            _pedagogical_token_ceil.set(800)
-            logger.info("[Orchestrator] CRITICAL cognitive load — token ceiling 1200/800")
+            _synthesis_token_ceil.set(2500)
+            _pedagogical_token_ceil.set(1500)
+            logger.info("[Orchestrator] CRITICAL cognitive load — token ceiling 2500/1500")
         else:  # HIGH
-            _synthesis_token_ceil.set(1800)
-            _pedagogical_token_ceil.set(1200)
-            logger.info("[Orchestrator] HIGH cognitive load — token ceiling 1800/1200")
+            _synthesis_token_ceil.set(3500)
+            _pedagogical_token_ceil.set(2000)
+            logger.info("[Orchestrator] HIGH cognitive load — token ceiling 3500/2000")
 
 
 def _synthesis_client():
@@ -187,7 +187,7 @@ def _synthesis_client():
     )
 
 
-async def _pedagogical_call(system: str, user: str, max_tokens: int = 1000) -> str:
+async def _pedagogical_call(system: str, user: str, max_tokens: int = 2000) -> str:
     """
     Pedagogical synthesis via LearnLM (Google's educationally fine-tuned model).
     Routes narrative voice, Socratic scaffolding, and ZPD-adapted content through
@@ -229,7 +229,7 @@ async def _pedagogical_call(system: str, user: str, max_tokens: int = 1000) -> s
     return await _synthesis_call(system, user, max_tokens)
 
 
-async def _synthesis_call(system: str, user: str, max_tokens: int = 1000) -> str:
+async def _synthesis_call(system: str, user: str, max_tokens: int = 2000) -> str:
     """
     Single synthesis API call — uses Gemini Flash if available, else Claude.
     On Gemini failure, automatically retries once then falls back to Claude.
@@ -527,7 +527,7 @@ async def _synthesize_content(
     try:
         # Pedagogical content routes through LearnLM (educationally fine-tuned)
         # with automatic fallback to Gemini Flash → Claude
-        return (await _pedagogical_call(system_prompt, user_prompt, max_tokens=800)).strip()
+        return (await _pedagogical_call(system_prompt, user_prompt, max_tokens=2000)).strip()
     except Exception as e:
         logger.warning(
             f"[Synthesis] Content synthesis failed ({type(e).__name__}: {e}) "
@@ -983,7 +983,7 @@ async def _generate_from_knowledge(
     blocks: list[dict] = []
 
     try:
-        raw = await _synthesis_call(system_prompt, user_prompt, max_tokens=1200)
+        raw = await _synthesis_call(system_prompt, user_prompt, max_tokens=2000)
         content = raw.strip()
     except Exception as e:
         logger.warning(f"[KnowledgeGen] Synthesis failed ({e}) — using topic as fallback")
@@ -1231,7 +1231,7 @@ RESEARCH_MISSION:
 
     raw_output = ""
     try:
-        raw_output = await _synthesis_call("", investigation_prompt, max_tokens=1200)
+        raw_output = await _synthesis_call("", investigation_prompt, max_tokens=2000)
         raw_output = raw_output.strip()
     except Exception as e:
         logger.warning(f"[JusticeAgent] LLM call failed ({e}) — using fallback NARRATIVE")
@@ -1503,7 +1503,7 @@ async def science_agent(state: AdelineState) -> AdelineState:
                 "Teach this lesson now."
             )
             try:
-                content = (await _synthesis_call(sys_prompt, user_prompt, max_tokens=900)).strip()
+                content = (await _synthesis_call(sys_prompt, user_prompt, max_tokens=2000)).strip()
             except SynthesisSafetyError as e:
                 # Safety filter triggered and no Claude fallback — save for admin review
                 logger.warning(f"[ScienceAgent] Safety filter on '{request.topic}': {e}")
@@ -1744,7 +1744,7 @@ async def _synthesize_literature(
     )
 
     try:
-        return await _synthesis_call(system_prompt, user_prompt, max_tokens=800)
+        return await _synthesis_call(system_prompt, user_prompt, max_tokens=1500)
     except Exception as e:
         logger.error(f"[LiteratureAgent] LLM synthesis failed: {e}")
         if book_title:
@@ -1858,7 +1858,7 @@ async def _synthesize_creative_project_block(request: "LessonRequest", narrative
         "Include real materials they likely have at home and a pricing prompt at the end."
     )
     try:
-        raw = await _synthesis_call(system, user, max_tokens=800)
+        raw = await _synthesis_call(system, user, max_tokens=1200)
         raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
         data = _json.loads(raw)
         if "props" in data and "steps" in data.get("props", {}):
@@ -1904,7 +1904,7 @@ async def _synthesize_code_playground_block(request: "LessonRequest", narrative_
         "Make it feel like running a real computation, not a worksheet."
     )
     try:
-        raw = await _synthesis_call(system, user, max_tokens=600)
+        raw = await _synthesis_call(system, user, max_tokens=1200)
         raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
         data = _json.loads(raw)
         if "props" in data and "starterCode" in data.get("props", {}):
@@ -1958,7 +1958,7 @@ async def _synthesize_molecule_sim_block(request: "LessonRequest", narrative_con
         "and answer questions about what they observe."
     )
     try:
-        raw = await _synthesis_call(system, user, max_tokens=500)
+        raw = await _synthesis_call(system, user, max_tokens=1000)
         raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
         data = _json.loads(raw)
         if "props" in data and "title" in data.get("props", {}):
@@ -2106,7 +2106,7 @@ async def _synthesize_practical(request: LessonRequest) -> str:
     )
 
     try:
-        return await _synthesis_call(system_prompt, user_prompt, max_tokens=800)
+        return await _synthesis_call(system_prompt, user_prompt, max_tokens=1500)
     except Exception as e:
         logger.error(f"[PracticalAgent] LLM synthesis failed: {e}")
         return f"Practical lesson: {request.topic}"
@@ -2167,7 +2167,7 @@ async def _decide_formats(
     )
 
     try:
-        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=120)
+        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=500)
         text = text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         raw = _json.loads(text)
         chosen = [f for f in raw.get("formats", []) if f in available]
@@ -2399,12 +2399,13 @@ async def _render_lesson(
     _SUPPLEMENT_TYPES = {"EXPERIMENT"}
     supplements: list[dict] = []
     content_blocks: list[dict] = []
+    enrichment_blocks: list[dict] = []
 
     for b in blocks:
         block_type = b.get("block_type", "")
         if b.get("_enrichment"):
-            continue  # Enrichment is embedded in cohesive format — skip
-        if block_type in _SUPPLEMENT_TYPES:
+            enrichment_blocks.append(b)
+        elif block_type in _SUPPLEMENT_TYPES:
             supplements.append(b)
         elif block_type == "GENUI_ASSEMBLY":
             supplements.append(b)
@@ -2508,8 +2509,8 @@ async def _render_lesson(
         from app.schemas.api_models import AnimatedLessonRequest as _ALR
         _alr = _ALR(
             topic=request.topic,
-            focus=synthesis_text[:800],
-            duration_seconds=180,
+            focus=synthesis_text[:2500],
+            duration_seconds=300,
             target_ages=target_ages,
             track=request.track.value,
             student_id=request.student_id,
@@ -2595,7 +2596,12 @@ async def _render_lesson(
         logger.info(f"[Render] CASCADE-3 selector fallback: {_component_id} for '{request.topic}'")
 
     # ── Assemble final block list ──────────────────────────────────────────────
+    # Preserve all original agent-produced blocks and append the cohesive format
+    # as a capstone experience. Previously this called blocks.clear() and threw
+    # away all rich content — the single-sketchnote bug.
     blocks.clear()
+    blocks.extend(content_blocks)
+    blocks.extend(enrichment_blocks)
     blocks.append(cohesive_block)
     blocks.extend(supplements)
 
@@ -2899,7 +2905,7 @@ async def _synthesize_mind_map(
         "Extract the concept hierarchy as JSON."
     )
     try:
-        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=800)
+        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=1200)
         return MindMapData.model_validate(json.loads(text.strip()))
     except Exception as e:
         logger.warning(f"[MindMap] synthesis failed: {e}")
@@ -2950,7 +2956,7 @@ async def _synthesize_timeline(
             "Extract the chronological timeline as JSON."
         )
     try:
-        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=800)
+        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=1200)
         return TimelineData.model_validate(json.loads(text.strip()))
     except Exception as e:
         logger.warning(f"[Timeline] synthesis failed: {e}")
@@ -2985,7 +2991,7 @@ async def _synthesize_mnemonic(
         "Create a mnemonic device for the key concepts in this content."
     )
     try:
-        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=400)
+        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=800)
         raw = json.loads(text.strip())
         if raw.get("skip"):
             return None

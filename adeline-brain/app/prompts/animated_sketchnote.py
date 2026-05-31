@@ -166,7 +166,8 @@ Special focus:
 Desired total duration: {duration_seconds} seconds
 Target ages: {target_ages}
 
-Generate at least 5 scenes. Each scene should be 20–60 seconds.
+Generate 6–10 scenes. Each scene should be 30–60 seconds.
+Total duration should fill the requested time — do not produce a rushed 2-scene summary.
 Include at least 5 vocabulary words with pronunciation guides.
 Include at least 3 assessment items (mix of short_answer, discussion, draw_and_explain).
 Include at least 2 extension activities with specific materials lists.
