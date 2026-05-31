@@ -187,7 +187,7 @@ def _synthesis_client():
     )
 
 
-async def _pedagogical_call(system: str, user: str, max_tokens: int = 2000) -> str:
+async def _pedagogical_call(system: str, user: str, max_tokens: int = 4000) -> str:
     """
     Pedagogical synthesis via LearnLM (Google's educationally fine-tuned model).
     Routes narrative voice, Socratic scaffolding, and ZPD-adapted content through
@@ -229,7 +229,7 @@ async def _pedagogical_call(system: str, user: str, max_tokens: int = 2000) -> s
     return await _synthesis_call(system, user, max_tokens)
 
 
-async def _synthesis_call(system: str, user: str, max_tokens: int = 2000) -> str:
+async def _synthesis_call(system: str, user: str, max_tokens: int = 6000) -> str:
     """
     Single synthesis API call — uses Gemini Flash if available, else Claude.
     On Gemini failure, automatically retries once then falls back to Claude.
@@ -2526,7 +2526,11 @@ async def _render_lesson(
         }
         logger.info(f"[Render] CASCADE-1 AnimatedSketchnote OK for '{request.topic}'")
     except Exception as _e:
-        logger.warning(f"[Render] CASCADE-1 AnimatedSketchnote failed ({_e}) — falling back to NarratedSlide")
+        import traceback as _tb
+        logger.warning(
+            f"[Render] CASCADE-1 AnimatedSketchnote failed for '{request.topic}': {_e}\n"
+            f"{_tb.format_exc()}"
+        )
 
     # ── CASCADE LEVEL 2: Narrated Slides ──────────────────────────────────────
     if cohesive_block is None:
@@ -2550,7 +2554,11 @@ async def _render_lesson(
                 }
                 logger.info(f"[Render] CASCADE-2 NarratedSlide OK for '{request.topic}'")
         except Exception as _e:
-            logger.warning(f"[Render] CASCADE-2 NarratedSlide failed ({_e}) — falling back to component selector")
+            import traceback as _tb
+            logger.warning(
+                f"[Render] CASCADE-2 NarratedSlide failed for '{request.topic}': {_e}\n"
+                f"{_tb.format_exc()}"
+            )
 
     # ── CASCADE LEVEL 3: Component Selector adaptive fallback ─────────────────
     if cohesive_block is None:

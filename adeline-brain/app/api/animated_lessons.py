@@ -157,19 +157,22 @@ async def generate_animated_lesson(body: AnimatedLessonRequest):
         logger.error(f"[/lesson/animated] Schema validation failed: {exc}")
         raise HTTPException(status_code=502, detail=f"Lesson schema mismatch: {exc}")
 
-    # ── Synthesize narration audio per scene ──────────────────────────────────
-    narration_tasks = [
-        _synthesize_narration(scene.narration)
-        for scene in lesson.scenes
-        if scene.narration
-    ]
+    # ── Synthesize narration audio per scene (optional — skip if pyttsx3 unavailable) ──
     try:
+        import pyttsx3  # noqa: F401
+        narration_tasks = [
+            _synthesize_narration(scene.narration)
+            for scene in lesson.scenes
+            if scene.narration
+        ]
         audio_filenames = await asyncio.gather(*narration_tasks, return_exceptions=True)
         for scene, result in zip(lesson.scenes, audio_filenames):
             if isinstance(result, Exception):
                 logger.warning(f"[/lesson/animated] TTS failed for scene {scene.sceneNumber}: {result}")
             else:
                 scene.narrationAudioUrl = f"/lesson/narrate/{result}"
+    except ImportError:
+        logger.info("[/lesson/animated] pyttsx3 not installed — skipping narration audio generation")
     except Exception as exc:
         logger.warning(f"[/lesson/animated] TTS batch failed (non-fatal): {exc}")
 
