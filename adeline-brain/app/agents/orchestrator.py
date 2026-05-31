@@ -2238,10 +2238,21 @@ async def _inject_modal_supplement(
         callbacks: list[str] = ["onComplete"]
 
         if component_type == "AutoDiagram":
+            # Build minimal valid nodes/edges so component doesn't crash
             props = {
-                "description": synthesis_text[:500],
-                "diagramType": "concept_map",
                 "title": f"Concept Map: {request.topic}",
+                "description": synthesis_text[:300] if synthesis_text else f"Explore {request.topic}",
+                "diagramType": "concept-map",
+                "track": request.track.value,
+                "nodes": [
+                    {"id": "1", "label": request.topic[:20], "type": "concept", "x": 50, "y": 50},
+                    {"id": "2", "label": "Explore", "type": "process", "x": 150, "y": 100},
+                    {"id": "3", "label": "Learn", "type": "concept", "x": 250, "y": 50},
+                ],
+                "edges": [
+                    {"from": "1", "to": "2", "type": "leads-to"},
+                    {"from": "2", "to": "3", "type": "leads-to"},
+                ],
             }
 
         elif component_type == "VirtualManipulative":
@@ -2255,10 +2266,15 @@ async def _inject_modal_supplement(
             initial_state = {"currentStep": 0}
 
         elif component_type == "SimulationEmbed":
+            # Match SimulationEmbed.tsx props exactly
             props = {
-                "simulationUrl": "https://phet.colorado.edu/en/simulations",
-                "title": f"Interactive Simulation: {request.topic}",
-                "parameters": {"topic": request.topic},
+                "simulationUrl": f"https://phet.colorado.edu/en/simulations/filter?search={request.topic.replace(' ', '+')}",
+                "title": f"Explore: {request.topic}",
+                "description": synthesis_text[:300] if synthesis_text else f"Interactive exploration of {request.topic}",
+                "provider": "phet",
+                "estimatedMinutes": 5,
+                "competencies": [],
+                "track": request.track.value,
             }
 
         elif component_type == "TaskScaffold":
@@ -2693,11 +2709,21 @@ def _build_component_props(
             "track": track,
         }
     elif component_id == "AutoDiagram":
+        # Build minimal valid nodes/edges so component doesn't crash
         return {
             "title": f"Concept Map: {topic}",
-            "sourceContent": content[:1000],
+            "description": content[:300] if content else f"Explore {topic}",
             "diagramType": "concept-map",
             "track": track,
+            "nodes": [
+                {"id": "1", "label": topic[:20], "type": "concept", "x": 50, "y": 50},
+                {"id": "2", "label": "Explore", "type": "process", "x": 150, "y": 100},
+                {"id": "3", "label": "Learn", "type": "concept", "x": 250, "y": 50},
+            ],
+            "edges": [
+                {"from": "1", "to": "2", "type": "leads-to"},
+                {"from": "2", "to": "3", "type": "leads-to"},
+            ],
         }
     elif component_id == "RealWorldApplication":
         return {
