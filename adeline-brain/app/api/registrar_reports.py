@@ -83,7 +83,7 @@ async def get_reading_progress_report(
             u."gradeLevel",
             COUNT(CASE WHEN rs.status = 'finished' THEN 1 END) as "booksCompleted",
             AVG(b.lexile_level) as "averageReadingLevel",
-            COALESCE(SUM(rs."readingMinutes"), 0) as "totalReadingMinutes",
+            COALESCE(SUM(rs."minutesRead"), 0) as "totalReadingMinutes",
             MAX(rrl."adaptiveLexileMin") as "adaptiveLexileMin",
             MAX(rrl."adaptiveLexileMax") as "adaptiveLexileMax",
             MAX(rrl."confidenceScore") as "confidenceScore",

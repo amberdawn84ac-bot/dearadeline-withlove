@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS "Book" (
     "storageKey"   TEXT,
     "isDownloaded" BOOLEAN NOT NULL DEFAULT FALSE,
     format         TEXT NOT NULL DEFAULT 'epub',
-    "coverUrl"     TEXT,
+    "coverImageUrl"     TEXT,
     source_url     TEXT UNIQUE,
     lexile_level   INT,
     grade_band     TEXT,
@@ -134,7 +134,7 @@ async def list_books(track: Optional[str] = Query(None, description="Filter by c
             rows = await conn.fetch(
                 """
                 SELECT id, title, author, "sourceLibrary", "isDownloaded",
-                       format, "coverUrl", track, lexile_level, grade_band, description
+                       format, "coverImageUrl", track, lexile_level, grade_band, description
                 FROM "Book"
                 WHERE track = $1
                 ORDER BY title
@@ -145,7 +145,7 @@ async def list_books(track: Optional[str] = Query(None, description="Filter by c
             rows = await conn.fetch(
                 """
                 SELECT id, title, author, "sourceLibrary", "isDownloaded",
-                       format, "coverUrl", track, lexile_level, grade_band, description
+                       format, "coverImageUrl", track, lexile_level, grade_band, description
                 FROM "Book"
                 ORDER BY title
                 """
@@ -158,7 +158,7 @@ async def list_books(track: Optional[str] = Query(None, description="Filter by c
                 sourceLibrary=r["sourceLibrary"],
                 isDownloaded=r["isDownloaded"],
                 format=r["format"],
-                coverUrl=r["coverUrl"],
+                coverUrl=r["coverImageUrl"],
                 track=r["track"],
                 lexile_level=r["lexile_level"],
                 grade_band=r["grade_band"],
@@ -178,7 +178,7 @@ async def get_book(book_id: str):
         r = await conn.fetchrow(
             """
             SELECT id, title, author, "sourceLibrary", "isDownloaded",
-                   format, "coverUrl", track, lexile_level, grade_band, description
+                   format, "coverImageUrl", track, lexile_level, grade_band, description
             FROM "Book"
             WHERE id = $1
             """,
@@ -193,7 +193,7 @@ async def get_book(book_id: str):
             sourceLibrary=r["sourceLibrary"],
             isDownloaded=r["isDownloaded"],
             format=r["format"],
-            coverUrl=r["coverUrl"],
+            coverUrl=r["coverImageUrl"],
             track=r["track"],
             lexile_level=r["lexile_level"],
             grade_band=r["grade_band"],

@@ -80,29 +80,43 @@ function isErrorDataPart(p: { type: string; data: unknown }): p is ErrorDataPart
   return p.type === 'data-error' && isRecord(p.data) && typeof p.data.message === 'string';
 }
 
-/** Narrows any raw UIPart to one of the four lesson data-part variants. */
-export function isLessonDataPart(p: unknown): p is LessonDataPart {
-  if (!isRecord(p) || typeof p.type !== 'string' || !p.type.startsWith('data-')) return false;
-  const candidate = p as { type: string; data: unknown };
-  return (
-    isStatusDataPart(candidate) ||
-    isBlockDataPart(candidate) ||
-    isDoneDataPart(candidate) ||
-    isErrorDataPart(candidate)
-  );
+/** Unwrap an AI SDK v6 DataUIPart ({ type: "data", data: {...} }) to the inner lesson payload. */
+function unwrapDataPart(p: unknown): { type: string; data: unknown } | null {
+  if (!isRecord(p) || typeof p.type !== 'string') return null;
+
+  // AI SDK v6 wraps custom data as { type: "data", data: <payload> }
+  if (p.type === 'data' && isRecord(p.data) && typeof p.data.type === 'string') {
+    return p.data as { type: string; data: unknown };
+  }
+
+  // Direct lesson data part (fallback)
+  if (p.type.startsWith('data-')) {
+    return p as { type: string; data: unknown };
+  }
+
+  return null;
 }
 
-/** Narrow a raw UIPart[] to the typed LessonDataPart[] then map to LessonAnnotation[]. */
+/** Narrow a raw UIPart[] to LessonAnnotation[].
+ *  Handles AI SDK v6 DataUIPart wrapping ({ type: "data", data: {...} }).
+ */
 export function parseLessonDataParts(parts: unknown[]): LessonAnnotation[] {
   const out: LessonAnnotation[] = [];
   for (const p of parts) {
-    if (!isLessonDataPart(p)) continue;
-    if (isBlockDataPart(p))  { out.push({ type: 'block',  block: p.data.block }); continue; }
-    if (isDoneDataPart(p))   { out.push({ type: 'done',   title: p.data.title }); continue; }
-    if (isStatusDataPart(p)) { out.push({ type: 'status', message: p.data.message }); continue; }
-    if (isErrorDataPart(p))  { out.push({ type: 'error',  message: p.data.message }); continue; }
+    const inner = unwrapDataPart(p);
+    if (!inner) continue;
+
+    if (isBlockDataPart(inner))  { out.push({ type: 'block',  block: inner.data.block }); continue; }
+    if (isDoneDataPart(inner))   { out.push({ type: 'done',   title: inner.data.title }); continue; }
+    if (isStatusDataPart(inner)) { out.push({ type: 'status', message: inner.data.message }); continue; }
+    if (isErrorDataPart(inner))  { out.push({ type: 'error',  message: inner.data.message }); continue; }
   }
   return out;
+}
+
+/** @deprecated Use parseLessonDataParts directly. Kept for backward compat. */
+export function isLessonDataPart(p: unknown): boolean {
+  return unwrapDataPart(p) !== null;
 }
 
 /** Convenience: extract only the text content from a UIMessage parts array. */

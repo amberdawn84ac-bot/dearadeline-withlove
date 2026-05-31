@@ -140,7 +140,7 @@ class BookshelfSearch:
                         lexile_level,
                         grade_band,
                         track,
-                        "coverUrl",
+                        "coverImageUrl",
                         source_url,
                         source_library,
                         (1 - (embedding <-> $1::vector)) AS relevance_score
@@ -164,7 +164,7 @@ class BookshelfSearch:
                         "lexile_level": row["lexile_level"],
                         "grade_band": row["grade_band"],
                         "track": row["track"],
-                        "cover_url": row["coverUrl"],
+                        "cover_url": row["coverImageUrl"],
                         "source_url": row["source_url"],
                         "source_library": row["source_library"],
                         "relevance_score": float(row["relevance_score"]),
@@ -207,7 +207,7 @@ class BookshelfSearch:
                             lexile_level,
                             grade_band,
                             track,
-                            "coverUrl",
+                            "coverImageUrl",
                             source_url,
                             source_library,
                             (1 - (embedding <-> $1::vector)) AS relevance_score
@@ -231,7 +231,7 @@ class BookshelfSearch:
                             "lexile_level": row["lexile_level"],
                             "grade_band": row["grade_band"],
                             "track": row["track"],
-                            "cover_url": row["coverUrl"],
+                            "cover_url": row["coverImageUrl"],
                             "source_url": row["source_url"],
                             "source_library": row["source_library"],
                             "relevance_score": float(row["relevance_score"]),
@@ -284,7 +284,7 @@ class BookshelfSearch:
                         lexile_level,
                         grade_band,
                         track,
-                        "coverUrl",
+                        "coverImageUrl",
                         source_url,
                         source_library,
                         total_pages
@@ -307,7 +307,7 @@ class BookshelfSearch:
                     "lexile_level": row["lexile_level"],
                     "grade_band": row["grade_band"],
                     "track": row["track"],
-                    "cover_url": row["coverUrl"],
+                    "cover_url": row["coverImageUrl"],
                     "source_url": row["source_url"],
                     "source_library": row["source_library"],
                     "total_pages": row["total_pages"],
@@ -399,7 +399,7 @@ class BookshelfSearch:
                         lexile_level,
                         grade_band,
                         track,
-                        "coverUrl",
+                        "coverImageUrl",
                         source_url,
                         source_library
                     FROM "Book"
@@ -420,7 +420,7 @@ class BookshelfSearch:
                         "lexile_level": row["lexile_level"],
                         "grade_band": row["grade_band"],
                         "track": row["track"],
-                        "cover_url": row["coverUrl"],
+                        "cover_url": row["coverImageUrl"],
                         "source_url": row["source_url"],
                         "source_library": row["source_library"],
                     }

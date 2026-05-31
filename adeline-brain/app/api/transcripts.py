@@ -444,7 +444,7 @@ async def download_portfolio(
             try:
                 readings = await conn.fetch(
                     """
-                    SELECT rs."studentReflection", rs.completed_at, rs."readingMinutes",
+                    SELECT rs."studentReflection", rs.completed_at, rs."minutesRead",
                            b.title, b.author, b.track
                     FROM "ReadingSession" rs
                     JOIN "Book" b ON rs."bookId" = b.id
@@ -454,7 +454,7 @@ async def download_portfolio(
                     student_id,
                 )
                 for r in readings:
-                    hours = round((r["readingMinutes"] or 0) / 60, 1)
+                    hours = round((r["minutesRead"] or 0) / 60, 1)
                     portfolio_items.append({
                         "title": f"Read: {r['title']} by {r['author']}",
                         "category": TRACK_LABELS.get(r["track"] or "", r["track"] or "Literature"),

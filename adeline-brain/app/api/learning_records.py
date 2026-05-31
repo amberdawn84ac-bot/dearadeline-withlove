@@ -120,7 +120,10 @@ def _parse_ts(ts: str | None) -> datetime:
     if not ts:
         return _now_dt()
     try:
-        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
     except (ValueError, AttributeError):
         return _now_dt()
 

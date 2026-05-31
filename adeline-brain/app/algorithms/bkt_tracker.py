@@ -293,6 +293,11 @@ async def update_card_after_lesson(
         # SM-2 scheduling
         sm2_result = sm2(quality, prev_interval, prev_ease, prev_reps)
 
+        # Defensive: ensure next_due_at is timezone-aware before DB insert
+        due_at = sm2_result.next_due_at
+        if due_at.tzinfo is None:
+            due_at = due_at.replace(tzinfo=timezone.utc)
+
         # Full UPSERT — all card fields updated
         conn = await get_db_conn()
         try:
@@ -314,7 +319,7 @@ async def update_card_after_lesson(
                 """,
                 student_id, concept_id, concept_name, track, new_pL,
                 sm2_result.ease_factor, sm2_result.repetitions, sm2_result.interval,
-                sm2_result.next_due_at, quality,
+                due_at, quality,
             )
         finally:
             await conn.close()

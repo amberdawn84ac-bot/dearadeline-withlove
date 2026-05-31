@@ -155,7 +155,7 @@ async def create_reading_session(
             ON CONFLICT ("studentId", "bookId") DO NOTHING
             RETURNING id, "studentId", "bookId", status, "startedAt",
                       "completedAt", "pagesRead", "totalPages",
-                      "currentLocation", "studentReflection", "readingMinutes"
+                      "currentLocation", "studentReflection", "minutesRead"
             """,
             session_id, student_id, payload.book_id, payload.status, now, now, now,
         )
@@ -166,7 +166,7 @@ async def create_reading_session(
                 """
                 SELECT id, "studentId", "bookId", status, "startedAt",
                        "completedAt", "pagesRead", "totalPages",
-                       "currentLocation", "studentReflection", "readingMinutes"
+                       "currentLocation", "studentReflection", "minutesRead"
                 FROM "ReadingSession"
                 WHERE "studentId" = $1 AND "bookId" = $2
                 """,
@@ -209,7 +209,7 @@ async def create_reading_session(
         total_pages=result["totalPages"],
         current_location=result["currentLocation"],
         student_reflection=result["studentReflection"],
-        reading_minutes=result["readingMinutes"] or 0,
+        reading_minutes=result["minutesRead"] or 0,
     )
 
 
@@ -318,7 +318,7 @@ async def update_reading_session(
             param_idx += 1
 
         if payload.reading_minutes is not None:
-            update_cols.append(f'"readingMinutes" = ${param_idx}::int')
+            update_cols.append(f'"minutesRead" = ${param_idx}::int')
             params.insert(param_idx - 1, payload.reading_minutes)
             param_idx += 1
 
@@ -349,7 +349,7 @@ async def update_reading_session(
             WHERE id = ${param_idx}::uuid AND "studentId" = ${param_idx + 1}::uuid
             RETURNING id, "studentId", "bookId", status, "startedAt",
                       "completedAt", "pagesRead", "totalPages",
-                      "currentLocation", "studentReflection", "readingMinutes"
+                      "currentLocation", "studentReflection", "minutesRead"
         """
 
         result = await conn.fetchrow(query, *params)
@@ -387,7 +387,7 @@ async def update_reading_session(
                         book_title=book_row["title"],
                         book_track=book_row["track"] or "ELECTIVES",
                         book_lexile=book_row["lexile_level"] or 0,
-                        reading_minutes=result["readingMinutes"] or 0,
+                        reading_minutes=result["minutesRead"] or 0,
                         student_reflection=result["studentReflection"],
                         grade_level=grade_level,
                         completed_at=result["completedAt"],
@@ -413,7 +413,7 @@ async def update_reading_session(
         total_pages=result["totalPages"],
         current_location=result["currentLocation"],
         student_reflection=result["studentReflection"],
-        reading_minutes=result["readingMinutes"] or 0,
+        reading_minutes=result["minutesRead"] or 0,
     )
 
 
@@ -456,7 +456,7 @@ async def get_reading_shelf(
                     SELECT
                         rs.id, rs."studentId", rs."bookId", rs.status,
                         rs."startedAt", rs."completedAt", rs."pagesRead", rs."totalPages",
-                        rs."currentLocation", rs."studentReflection", rs."readingMinutes",
+                        rs."currentLocation", rs."studentReflection", rs."minutesRead",
                         b.id as book_id, b.title, b.author, b."gutenbergId",
                         b."lexileLevel", b.track, b."coverUrl"
                     FROM "ReadingSession" rs
@@ -472,7 +472,7 @@ async def get_reading_shelf(
                     SELECT
                         rs.id, rs."studentId", rs."bookId", rs.status,
                         rs."startedAt", rs."completedAt", rs."pagesRead", rs."totalPages",
-                        rs."currentLocation", rs."studentReflection", rs."readingMinutes",
+                        rs."currentLocation", rs."studentReflection", rs."minutesRead",
                         b.id as book_id, b.title, b.author, b."gutenbergId",
                         b."lexileLevel", b.track, b."coverUrl"
                     FROM "ReadingSession" rs
@@ -506,7 +506,7 @@ async def get_reading_shelf(
                 total_pages=row["totalPages"],
                 current_location=row["currentLocation"],
                 student_reflection=row["studentReflection"],
-                reading_minutes=row["readingMinutes"] or 0,
+                reading_minutes=row["minutesRead"] or 0,
             )
 
             if row["status"] == "reading":
