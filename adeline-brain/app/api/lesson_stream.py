@@ -671,24 +671,30 @@ async def _stream_lesson(
 
     # Phase B: emit full block data wrapped in alu_start / alu_end boundaries.
     # The frontend useALUStream hook consumes these to build its ALU playlist state.
-    for alu_meta, block_group in zip(alu_playlist, _group_blocks_by_alu(state["blocks"])):
+    logger.info(f"[LessonStream] Starting Phase B: emitting {len(alu_playlist)} ALUs")
+    for alu_idx, (alu_meta, block_group) in enumerate(zip(alu_playlist, _group_blocks_by_alu(state["blocks"]))):
+        logger.info(f"[LessonStream] ALU {alu_idx}: slug={alu_meta['unit_slug']} blocks={len(block_group)}")
         # Signal the start of this ALU — frontend starts its friction timer here
         yield _sse({
             "type": "alu_start",
             "unit_slug": alu_meta["unit_slug"],
             "metadata": alu_meta,
         })
+        logger.info(f"[LessonStream]   Emitted alu_start for {alu_meta['unit_slug']}")
 
         for block in block_group:
             idx = state["blocks"].index(block)
+            logger.info(f"[LessonStream]   Emitting block {idx}: type={block.get('block_type')} content_len={len(block.get('content', ''))}")
             yield _sse({"type": "block", "block": block})
             tool_event = _from_block_tool_call(block, lesson_id, request.track.value)
             if tool_event:
+                logger.info(f"[LessonStream]   Emitting tool_call for block {idx}")
                 yield tool_event
             # Emit genui_complete so the frontend patches the skeleton → full component.
             genui_events = _emit_genui_props_for_block(
                 block, idx, lesson_id, request.track.value,
             )
+            logger.info(f"[LessonStream]   Emitting {len(genui_events)} genui events for block {idx}")
             for ge in genui_events:
                 yield ge
 
@@ -697,6 +703,7 @@ async def _stream_lesson(
             "type": "alu_end",
             "unit_slug": alu_meta["unit_slug"],
         })
+        logger.info(f"[LessonStream]   Emitted alu_end for {alu_meta['unit_slug']}")
 
     # ── Phase 2: Neo4j graph context ──────────────────────────────────────────
     try:
@@ -706,6 +713,7 @@ async def _stream_lesson(
         logger.warning(f"[LessonStream] Graph context failed (non-fatal): {e}")
 
     title = f"{request.topic.title()} — {request.track.value.replace('_', ' ').title()}"
+    logger.info(f"[LessonStream] Emitting done event: lesson_id={lesson_id} title='{title}'")
     yield _sse({
         "type": "done",
         "lesson_id": lesson_id,

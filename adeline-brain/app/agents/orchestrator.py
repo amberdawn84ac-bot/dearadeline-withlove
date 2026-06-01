@@ -1040,6 +1040,8 @@ async def historian_agent(state: AdelineState) -> AdelineState:
     state["agent_name"] = "HistorianAgent"
     blocks: list[dict] = []
 
+    logger.info(f"[HistorianAgent] START: topic='{request.topic}' track={request.track.value}")
+
     # Hard guard: Witness Protocol is TRUTH_HISTORY only.
     # evaluate_evidence already handles this, but this ensures no accidental bleed-through.
     _use_witness = request.track.value == "TRUTH_HISTORY"
@@ -1050,9 +1052,11 @@ async def historian_agent(state: AdelineState) -> AdelineState:
         top_k=3,
     )
 
+    logger.info(f"[HistorianAgent] Hippocampus returned {len(raw_results)} results")
+
     silent_sources: list[str] = []
 
-    for result in raw_results:
+    for idx, result in enumerate(raw_results):
         evidence = evaluate_evidence(
             source_id=result["id"],
             source_title=result["source_title"],
@@ -1065,17 +1069,26 @@ async def historian_agent(state: AdelineState) -> AdelineState:
             track=request.track.value,
         )
 
+        logger.info(
+            f"[HistorianAgent] Result {idx}: verdict={evidence.verdict} "
+            f"similarity={float(result['similarity_score']):.3f} "
+            f"source='{result['source_title'][:50]}...'"
+        )
+
         if evidence.verdict == EvidenceVerdict.ARCHIVE_SILENT:
             # Collect silent sources — try researcher once at the end, not per-result
             silent_sources.append(result["source_title"])
+            logger.info(f"[HistorianAgent] Source silent: '{result['source_title'][:50]}...'")
         else:
             raw = result["chunk"]
+            logger.info(f"[HistorianAgent] Synthesizing PRIMARY_SOURCE from chunk (len={len(raw)})")
             content = await _state_synthesize(
                 state,
                 block_type=BlockType.PRIMARY_SOURCE.value,
                 source_chunks=[result],
                 raw_content=raw,
             )
+            logger.info(f"[HistorianAgent] Synthesis complete: content_len={len(content)}")
             blocks.append({
                 "block_type":       BlockType.PRIMARY_SOURCE.value,
                 "content":          content,
@@ -1094,6 +1107,7 @@ async def historian_agent(state: AdelineState) -> AdelineState:
         )
         block = await _researcher_fallback(state, request.track.value)
         if block:
+            logger.info(f"[HistorianAgent] Researcher returned block: type={block.get('block_type')} content_len={len(block.get('content', ''))}")
             blocks.append(block)
         else:
             # Researcher also failed — Adeline teaches from knowledge (Gemini)
@@ -1102,9 +1116,18 @@ async def historian_agent(state: AdelineState) -> AdelineState:
                 "generating lesson from knowledge"
             )
             blocks = await _generate_from_knowledge(state, silent_sources[:3])
+            logger.info(f"[HistorianAgent] Generated from knowledge: {len(blocks)} blocks")
+
+    logger.info(f"[HistorianAgent] PRE-RENDER: {len(blocks)} blocks")
+    for i, b in enumerate(blocks):
+        logger.info(f"[HistorianAgent]   Block {i}: type={b.get('block_type')} content_len={len(b.get('content', ''))}")
 
     # ── Render to cohesive format ──────────────────────────────────────────────
     await _render_lesson(state, blocks)
+
+    logger.info(f"[HistorianAgent] POST-RENDER: {len(blocks)} blocks")
+    for i, b in enumerate(blocks):
+        logger.info(f"[HistorianAgent]   Block {i}: type={b.get('block_type')} content_len={len(b.get('content', ''))}")
 
     state["blocks"] = blocks
     return state
@@ -1311,6 +1334,8 @@ async def science_agent(state: AdelineState) -> AdelineState:
     blocks: list[dict] = []
     is_homesteading = request.track == Track.HOMESTEADING
     is_creation_science = request.track == Track.CREATION_SCIENCE
+
+    logger.info(f"[ScienceAgent] START: topic='{request.topic}' track={request.track.value}")
 
     # ── Step 1: Experiment match (CREATION_SCIENCE only) ──────────────────────
     # Search the experiment catalog for concept keyword overlap with the topic.
@@ -1536,10 +1561,19 @@ async def science_agent(state: AdelineState) -> AdelineState:
     if is_creation_science and blocks:
         mol_block = await _synthesize_molecule_sim_block(request, blocks[0].get("content", ""))
         if mol_block:
+            logger.info(f"[ScienceAgent] Injected MoleculeSimulator block")
             blocks.append(mol_block)
+
+    logger.info(f"[ScienceAgent] PRE-RENDER: {len(blocks)} blocks")
+    for i, b in enumerate(blocks):
+        logger.info(f"[ScienceAgent]   Block {i}: type={b.get('block_type')} content_len={len(b.get('content', ''))}")
 
     # ── Render to cohesive format ──────────────────────────────────────────────
     await _render_lesson(state, blocks)
+
+    logger.info(f"[ScienceAgent] POST-RENDER: {len(blocks)} blocks")
+    for i, b in enumerate(blocks):
+        logger.info(f"[ScienceAgent]   Block {i}: type={b.get('block_type')} content_len={len(b.get('content', ''))}")
 
     state["blocks"] = blocks
     return state
@@ -1770,12 +1804,16 @@ async def practical_agent(state: AdelineState) -> AdelineState:
     state["agent_name"] = "PracticalAgent"
     blocks: list[dict] = []
 
+    logger.info(f"[PracticalAgent] START: topic='{request.topic}' track={request.track.value}")
+
     # Pull any Hippocampus content as reference (no Witness gate)
     raw_results = await hippocampus.similarity_search(
         query_embedding=state["query_embedding"],
         track=request.track.value,
         top_k=3,
     )
+
+    logger.info(f"[PracticalAgent] Hippocampus returned {len(raw_results)} results")
 
     if raw_results:
         # Use Hippocampus results as reference material for synthesis
@@ -1819,18 +1857,34 @@ async def practical_agent(state: AdelineState) -> AdelineState:
 
     # ── CREATIVE_ECONOMY: always inject a ProjectBuilder GenUI block ──────────
     if request.track.value == "CREATIVE_ECONOMY" and blocks:
+        logger.info(f"[PracticalAgent] Injecting ProjectBuilder for CREATIVE_ECONOMY")
         project_block = await _synthesize_creative_project_block(request, blocks[0].get("content", ""))
         if project_block:
+            logger.info(f"[PracticalAgent] ProjectBuilder injection successful")
             blocks.append(project_block)
+        else:
+            logger.warning(f"[PracticalAgent] ProjectBuilder injection failed")
 
     # ── APPLIED_MATHEMATICS: inject a CodePlayground for interactive calculation ──
     if request.track.value == "APPLIED_MATHEMATICS" and blocks:
+        logger.info(f"[PracticalAgent] Injecting CodePlayground for APPLIED_MATHEMATICS")
         code_block = await _synthesize_code_playground_block(request, blocks[0].get("content", ""))
         if code_block:
+            logger.info(f"[PracticalAgent] CodePlayground injection successful")
             blocks.append(code_block)
+        else:
+            logger.warning(f"[PracticalAgent] CodePlayground injection failed")
+
+    logger.info(f"[PracticalAgent] PRE-RENDER: {len(blocks)} blocks")
+    for i, b in enumerate(blocks):
+        logger.info(f"[PracticalAgent]   Block {i}: type={b.get('block_type')} content_len={len(b.get('content', ''))}")
 
     # ── Render to cohesive format ──────────────────────────────────────────────
     await _render_lesson(state, blocks)
+
+    logger.info(f"[PracticalAgent] POST-RENDER: {len(blocks)} blocks")
+    for i, b in enumerate(blocks):
+        logger.info(f"[PracticalAgent]   Block {i}: type={b.get('block_type')} content_len={len(b.get('content', ''))}")
 
     state["blocks"] = blocks
     return state
@@ -2406,7 +2460,10 @@ async def _render_lesson(
     modality-matched supplement (e.g. AutoDiagram for visual, TaskScaffold for
     kinesthetic) via _inject_modal_supplement.
     """
+    logger.info(f"[Render] _render_lesson START: input_blocks={len(blocks)}")
+
     if not blocks:
+        logger.warning("[Render] No blocks to render - returning early")
         return
 
     request = state["request"]
@@ -2428,7 +2485,14 @@ async def _render_lesson(
         else:
             content_blocks.append(b)
 
+    logger.info(
+        f"[Render] Block classification: content={len(content_blocks)} "
+        f"supplements={len(supplements)} enrichment={len(enrichment_blocks)}"
+    )
+
     # ── Gather synthesis text from content blocks ─────────────────────────────
+    # Fixed: Less aggressive placeholder detection - only strip if content is VERY short
+    # and contains placeholder phrases. This prevents stripping legitimate content.
     _PLACEHOLDER_PHRASES = (
         "adeline is preparing",
         "check back shortly",
@@ -2441,29 +2505,42 @@ async def _render_lesson(
 
     def _is_placeholder(text: str) -> bool:
         t = text.strip().lower()
-        return not t or any(p in t for p in _PLACEHOLDER_PHRASES)
+        # Only treat as placeholder if it's very short (< 100 chars) AND contains placeholder phrase
+        # This prevents stripping legitimate content that happens to mention these phrases
+        if len(t) < 100 and any(p in t for p in _PLACEHOLDER_PHRASES):
+            return True
+        # Also treat empty or whitespace-only as placeholder
+        return not t
 
     synthesis_text = "\n\n".join(
         b.get("content", "") for b in content_blocks
         if not _is_placeholder(b.get("content", ""))
     ).strip()
+
+    logger.info(f"[Render] Synthesis text length: {len(synthesis_text)} (before fallback)")
+    logger.info(f"[Render] Synthesis text preview: '{synthesis_text[:200]}...'")
+
     if not synthesis_text:
+        logger.warning("[Render] Synthesis text empty - falling back to topic")
         synthesis_text = request.topic
 
     # ── Clean supplements — strip placeholder text from content & props.description
     def _clean_supplement(b: dict) -> dict:
         content = b.get("content", "")
         if _is_placeholder(content):
+            logger.info(f"[Render] Cleaning placeholder in supplement content: '{content[:50]}...'")
             b["content"] = request.topic
         gdata = b.get("genui_assembly_data", {})
         props = gdata.get("props", {})
         for key in ("description", "title", "thesis"):
             if key in props and _is_placeholder(str(props[key])):
+                logger.info(f"[Render] Cleaning placeholder in supplement prop {key}: '{str(props[key])[:50]}...'")
                 props[key] = request.topic
         gdata["props"] = props
         b["genui_assembly_data"] = gdata
         return b
 
+    logger.info(f"[Render] Cleaning {len(supplements)} supplements for placeholders")
     supplements = [_clean_supplement(b) for b in supplements]
 
     all_evidence = []
@@ -2520,6 +2597,7 @@ async def _render_lesson(
     # ── CASCADE LEVEL 1: Animated Sketchnote Lesson ───────────────────────────
     cohesive_block: dict | None = None
 
+    logger.info(f"[Render] CASCADE-1: Attempting AnimatedSketchnote for '{request.topic}'")
     try:
         from app.api.animated_lessons import generate_animated_lesson
         from app.schemas.api_models import AnimatedLessonRequest as _ALR
@@ -2531,7 +2609,9 @@ async def _render_lesson(
             track=request.track.value,
             student_id=request.student_id,
         )
+        logger.info(f"[Render] CASCADE-1: Calling generate_animated_lesson")
         sketchnote_data = await generate_animated_lesson(_alr)
+        logger.info(f"[Render] CASCADE-1: AnimatedSketchnote SUCCESS - frames={len(sketchnote_data.frames)}")
         cohesive_block = {
             "block_type": BlockType.ANIMATED_SKETCHNOTE_LESSON.value,
             "content": request.topic,
@@ -2550,6 +2630,7 @@ async def _render_lesson(
 
     # ── CASCADE LEVEL 2: Narrated Slides ──────────────────────────────────────
     if cohesive_block is None:
+        logger.info(f"[Render] CASCADE-2: Attempting NarratedSlide for '{request.topic}'")
         try:
             from app.agents.adapter import generate_narrated_slide_data
             from app.agents.adapter import AdaptationRequest as _AR
@@ -2558,8 +2639,10 @@ async def _render_lesson(
                 track=request.track.value,
                 bkt_pL=mastery,
             )
+            logger.info(f"[Render] CASCADE-2: Calling generate_narrated_slide_data")
             slide_data = await generate_narrated_slide_data(synthesis_text, _ar)
             if slide_data:
+                logger.info(f"[Render] CASCADE-2: NarratedSlide SUCCESS - slides={len(slide_data.slides)}")
                 cohesive_block = {
                     "block_type": BlockType.NARRATED_SLIDE.value,
                     "content": request.topic,
@@ -2569,6 +2652,8 @@ async def _render_lesson(
                     "narrated_slide_data": slide_data,
                 }
                 logger.info(f"[Render] CASCADE-2 NarratedSlide OK for '{request.topic}'")
+            else:
+                logger.warning(f"[Render] CASCADE-2: NarratedSlide returned None")
         except Exception as _e:
             import traceback as _tb
             logger.warning(
@@ -2578,6 +2663,7 @@ async def _render_lesson(
 
     # ── CASCADE LEVEL 3: Component Selector adaptive fallback ─────────────────
     if cohesive_block is None:
+        logger.info(f"[Render] CASCADE-3: Attempting Component Selector for '{request.topic}'")
         try:
             from app.algorithms.component_selector import select_components, LearnerContext
             _ctx = LearnerContext(
@@ -2590,8 +2676,10 @@ async def _render_lesson(
                 topic_tags=topic_tags,
                 recently_used_components=recently_used_for_selector,
             )
+            logger.info(f"[Render] CASCADE-3: Calling select_components with mastery={mastery:.2f} modality={modality}")
             _recs = select_components(_ctx, max_results=1)
             _component_id = _recs[0].component_id if _recs else "AdaptiveQuiz"
+            logger.info(f"[Render] CASCADE-3: Selected component={_component_id}")
         except Exception as _e:
             logger.warning(f"[Render] CASCADE-3 selector failed ({_e}) — using AdaptiveQuiz")
             _component_id = "AdaptiveQuiz"
@@ -2603,6 +2691,7 @@ async def _render_lesson(
             track=request.track.value,
             key_phrase=synthesis_text[:80].split(".")[0] if synthesis_text else request.topic,
         )
+        logger.info(f"[Render] CASCADE-3: Built props for {_component_id}: {list(_component_props.keys())}")
         cohesive_block = {
             "block_type": BlockType.GENUI_ASSEMBLY.value,
             "content": synthesis_text,
@@ -2619,15 +2708,48 @@ async def _render_lesson(
         }
         logger.info(f"[Render] CASCADE-3 selector fallback: {_component_id} for '{request.topic}'")
 
+    # ── ULTIMATE FALLBACK: If cascade still failed, generate simple NARRATIVE ─────
+    if cohesive_block is None:
+        logger.error(f"[Render] ALL CASCADE LEVELS FAILED for '{request.topic}' - using ultimate fallback NARRATIVE")
+        # Generate a simple narrative about the topic using the synthesis client
+        try:
+            fallback_content = await _state_synthesize(
+                state,
+                block_type=BlockType.NARRATIVE.value,
+                source_chunks=[],
+                raw_content=f"Teach about {request.topic} in an engaging way suitable for grade {grade_level}.",
+            )
+            cohesive_block = {
+                "block_type": BlockType.NARRATIVE.value,
+                "content": fallback_content,
+                "evidence": all_evidence,
+                "is_silenced": False,
+                "homestead_content": None,
+            }
+            logger.info(f"[Render] Ultimate fallback NARRATIVE generated (len={len(fallback_content)})")
+        except Exception as _e:
+            logger.error(f"[Render] Ultimate fallback also failed: {_e}")
+            # Last resort: use the topic as content
+            cohesive_block = {
+                "block_type": BlockType.NARRATIVE.value,
+                "content": f"**{request.topic}**\n\nThis lesson is about {request.topic}. Adeline is preparing additional content for this topic.",
+                "evidence": [],
+                "is_silenced": False,
+                "homestead_content": None,
+            }
+            logger.warning(f"[Render] Using last-resort placeholder for '{request.topic}'")
+
     # ── Assemble final block list ──────────────────────────────────────────────
     # Preserve all original agent-produced blocks and append the cohesive format
     # as a capstone experience. Previously this called blocks.clear() and threw
     # away all rich content — the single-sketchnote bug.
+    logger.info(f"[Render] Assembling final blocks: content={len(content_blocks)} enrichment={len(enrichment_blocks)} supplements={len(supplements)}")
     blocks.clear()
     blocks.extend(content_blocks)
     blocks.extend(enrichment_blocks)
     blocks.append(cohesive_block)
     blocks.extend(supplements)
+    logger.info(f"[Render] Final block count after assembly: {len(blocks)}")
 
     # ── Modal supplement (component selector — ONE additional component) ───────
     from app.algorithms.component_selector import select_components, LearnerContext
