@@ -648,7 +648,18 @@ async def _stream_lesson(
     yield _sse({"type": "status", "message": "Streaming lesson blocks..."})
     logger.info(f"[LessonStream] Emitting {len(state['blocks'])} blocks: {[b.get('block_type', 'UNKNOWN') for b in state['blocks']]}")
 
-    # ── Progressive GenUI: emit skeletons first, then full blocks ─────────
+    # ── Build ALU playlist metadata ───────────────────────────────────────
+    # Group blocks into Atomic Learning Units. In v1, each block is its own
+    # ALU (1:1 mapping). Future passes can merge related blocks into multi-view
+    # ALUs once the orchestrator emits explicit ALU boundary signals.
+    alu_playlist = _build_alu_playlist(
+        blocks=state["blocks"],
+        lesson_id=lesson_id,
+        track=request.track.value,
+        topic=request.topic,
+    )
+
+    # ── Progressive GenUI: emit skeletons first, then ALU-wrapped blocks ──
     # Phase A: emit skeleton placeholders for interactive blocks so the
     # frontend can render loading states immediately.
     for idx, block in enumerate(state["blocks"]):
@@ -658,18 +669,34 @@ async def _stream_lesson(
         if skeleton_event:
             yield skeleton_event
 
-    # Phase B: emit full block data + genui_complete events for delta patching.
-    for idx, block in enumerate(state["blocks"]):
-        yield _sse({"type": "block", "block": block})
-        tool_event = _from_block_tool_call(block, lesson_id, request.track.value)
-        if tool_event:
-            yield tool_event
-        # Emit genui_complete so the frontend patches the skeleton → full component.
-        genui_events = _emit_genui_props_for_block(
-            block, idx, lesson_id, request.track.value,
-        )
-        for ge in genui_events:
-            yield ge
+    # Phase B: emit full block data wrapped in alu_start / alu_end boundaries.
+    # The frontend useALUStream hook consumes these to build its ALU playlist state.
+    for alu_meta, block_group in zip(alu_playlist, _group_blocks_by_alu(state["blocks"])):
+        # Signal the start of this ALU — frontend starts its friction timer here
+        yield _sse({
+            "type": "alu_start",
+            "unit_slug": alu_meta["unit_slug"],
+            "metadata": alu_meta,
+        })
+
+        for block in block_group:
+            idx = state["blocks"].index(block)
+            yield _sse({"type": "block", "block": block})
+            tool_event = _from_block_tool_call(block, lesson_id, request.track.value)
+            if tool_event:
+                yield tool_event
+            # Emit genui_complete so the frontend patches the skeleton → full component.
+            genui_events = _emit_genui_props_for_block(
+                block, idx, lesson_id, request.track.value,
+            )
+            for ge in genui_events:
+                yield ge
+
+        # Signal the end of this ALU
+        yield _sse({
+            "type": "alu_end",
+            "unit_slug": alu_meta["unit_slug"],
+        })
 
     # ── Phase 2: Neo4j graph context ──────────────────────────────────────────
     try:
@@ -686,6 +713,8 @@ async def _stream_lesson(
         "agent_name": state.get("agent_name", ""),
         "oas_standards": state.get("oas_standards", []),
         "researcher_activated": state.get("researcher_activated", False),
+        # Full ALU playlist for the frontend to hydrate ALUCard from a single payload
+        "alu_playlist": alu_playlist,
         # Pass state for the background registrar task
         "_state_for_registrar": {
             "xapi_statements": state.get("xapi_statements", []),
@@ -894,6 +923,145 @@ def _extract_block_props(block: dict, block_type: str) -> dict:
         props.update(block["narrated_slide_data"])
 
     return props
+
+
+# ── ALU playlist builders ─────────────────────────────────────────────────────
+#
+# v1: 1 ALU per block (1:1 mapping).  Each block becomes its own atomic unit
+# so the frontend can start using ALUCard immediately without schema changes to
+# the orchestrator.  A future upgrade will group related blocks (e.g. a NARRATIVE
+# + QUIZ pair on the same concept) into a single multi-view ALU.
+
+_BLOCK_MODALITY_MAP: dict[str, list[str]] = {
+    "NARRATIVE":        ["reading"],
+    "TEXT":             ["reading"],
+    "PRIMARY_SOURCE":   ["reading"],
+    "RESEARCH_MISSION": ["reading"],
+    "QUIZ":             ["reading", "text"],
+    "FLASHCARD":        ["reading", "text"],
+    "MIND_MAP":         ["visual"],
+    "TIMELINE":         ["visual"],
+    "MNEMONIC":         ["visual", "reading"],
+    "NARRATED_SLIDE":   ["auditory", "visual"],
+    "AUDIO_DIALOGUE":   ["auditory", "visual"],
+    "EXPERIMENT":       ["kinesthetic"],
+    "LAB_MISSION":      ["kinesthetic"],
+    "GENUI_ASSEMBLY":   ["kinesthetic"],
+    "ANIMATED_SKETCHNOTE_LESSON": ["visual", "auditory"],
+    "BOOK_SUGGESTION":  ["reading"],
+    "SIMULATION":       ["kinesthetic", "visual"],
+    "VIDEO":            ["visual", "auditory"],
+    "TEXT_DEEP":        ["reading", "text"],
+    "REAL_WORLD_APP":   ["kinesthetic", "reading"],
+    "CONCEPT_MAP":      ["visual"],
+}
+
+_BLOCK_DIFFICULTY_MAP: dict[str, str] = {
+    "NARRATIVE":        "DEVELOPING",
+    "TEXT":             "DEVELOPING",
+    "PRIMARY_SOURCE":   "EXPANDING",
+    "RESEARCH_MISSION": "EXPANDING",
+    "QUIZ":             "DEVELOPING",
+    "FLASHCARD":        "EMERGING",
+    "MIND_MAP":         "DEVELOPING",
+    "TIMELINE":         "DEVELOPING",
+    "MNEMONIC":         "EMERGING",
+    "NARRATED_SLIDE":   "DEVELOPING",
+    "AUDIO_DIALOGUE":   "DEVELOPING",
+    "EXPERIMENT":       "DEVELOPING",
+    "LAB_MISSION":      "EXPANDING",
+    "GENUI_ASSEMBLY":   "DEVELOPING",
+    "ANIMATED_SKETCHNOTE_LESSON": "EMERGING",
+    "SIMULATION":       "EXPANDING",
+    "REAL_WORLD_APP":   "MASTERING",
+}
+
+_BLOCK_COGNITIVE_LOAD: dict[str, float] = {
+    "NARRATIVE":        4.0,
+    "TEXT":             3.5,
+    "PRIMARY_SOURCE":   6.5,
+    "RESEARCH_MISSION": 7.0,
+    "QUIZ":             5.0,
+    "FLASHCARD":        2.5,
+    "MIND_MAP":         5.5,
+    "TIMELINE":         4.5,
+    "MNEMONIC":         3.0,
+    "NARRATED_SLIDE":   4.0,
+    "AUDIO_DIALOGUE":   3.5,
+    "EXPERIMENT":       6.0,
+    "LAB_MISSION":      7.0,
+    "GENUI_ASSEMBLY":   5.5,
+    "ANIMATED_SKETCHNOTE_LESSON": 3.5,
+    "SIMULATION":       6.5,
+    "REAL_WORLD_APP":   7.5,
+    "CONCEPT_MAP":      5.0,
+}
+
+# Block types that fire their own cognitive interrupt inline — lower friction threshold
+_SELF_INTERRUPTING_TYPES = frozenset({
+    "QUIZ", "GENUI_ASSEMBLY", "EXPERIMENT", "LAB_MISSION", "SIMULATION", "REAL_WORLD_APP",
+})
+
+
+def _slugify(text: str) -> str:
+    """Simple slug builder for ALU unit_slug generation."""
+    import re as _re
+    slug = text.lower().strip()
+    slug = _re.sub(r"[^a-z0-9]+", "-", slug)
+    return slug.strip("-")[:60]
+
+
+def _build_alu_playlist(
+    blocks: list[dict],
+    lesson_id: str,
+    track: str,
+    topic: str,
+) -> list[dict]:
+    """
+    Build an ordered list of AtomicUnitMetadata dicts from the lesson blocks.
+
+    v1 strategy: 1 ALU per block.  Each dict matches the AtomicUnitMetadata
+    Pydantic schema so the frontend can deserialise it directly.
+    """
+    units: list[dict] = []
+    for order, block in enumerate(blocks):
+        block_type = block.get("blockType") or block.get("block_type", "TEXT")
+        title = block.get("title") or topic
+        unit_slug = f"{_slugify(topic)}-{order}-{_slugify(block_type.lower())}"
+        modalities = _BLOCK_MODALITY_MAP.get(block_type, ["reading"])
+        difficulty = _BLOCK_DIFFICULTY_MAP.get(block_type, "DEVELOPING")
+        cognitive_load = _BLOCK_COGNITIVE_LOAD.get(block_type, 5.0)
+        # Self-interrupting blocks already have embedded assessment; give more time
+        friction_threshold = 90 if block_type in _SELF_INTERRUPTING_TYPES else 45
+        units.append({
+            "unit_slug":   unit_slug,
+            "title":       title,
+            "track":       track,
+            "difficulty":  difficulty,
+            "order":       order,
+            "estimated_cognitive_load":    cognitive_load,
+            "target_modalities":           modalities,
+            "prerequisite_unit_slugs":     [],
+            "temporal_friction_threshold_secs": friction_threshold,
+            "max_incorrect_before_scaffold": 1,
+            "scaffold": {
+                "component": "FocusReset",
+                "props": {"mode": "breathe"},
+            },
+            # Internal reference — not part of Pydantic schema but useful for grouping
+            "_block_id": block.get("block_id", f"{lesson_id}-{order}"),
+        })
+    return units
+
+
+def _group_blocks_by_alu(blocks: list[dict]) -> list[list[dict]]:
+    """
+    Return blocks grouped into ALU groups.
+
+    v1: each block is its own group (single-element lists).
+    Returns a list of lists that zips 1:1 with the alu_playlist.
+    """
+    return [[block] for block in blocks]
 
 
 async def _run_registrar_background(

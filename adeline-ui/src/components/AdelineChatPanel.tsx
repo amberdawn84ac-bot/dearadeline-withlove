@@ -14,7 +14,7 @@ import { ProjectGuide } from "@/components/projects/ProjectGuide";
 import RenderModeSelector from "@/components/RenderModeSelector";
 import AnimatedSketchnoteRenderer from "@/components/gen-ui/patterns/AnimatedSketchnoteRenderer";
 import type { LessonRenderMode, AnimatedSketchnoteLesson } from "@/lib/brain-client";
-import { useGenUIStream } from "@/hooks/useGenUIStream";
+import { useALUStream } from "@/hooks/useALUStream";
 import { StreamingGenUIRenderer } from "@/components/gen-ui/StreamingGenUIRenderer";
 import { parseDataStreamLine } from "@/lib/stream-protocol";
 
@@ -212,7 +212,7 @@ export function AdelineChatPanel({
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // ── GenUI Stream: progressive rendering + bidirectional remediation ────
+  // ── ALU Stream: progressive rendering + ALU playlist + temporal friction ─
   const {
     components: streamingComponents,
     componentOrder: streamingComponentOrder,
@@ -221,7 +221,12 @@ export function AdelineChatPanel({
     isStreaming: isGenUIStreaming,
     triggerRemediation,
     processEvent: processGenUIEvent,
-  } = useGenUIStream({ studentId, lessonId: activeLessonId ?? undefined });
+    aluPlaylist,
+    currentALU,
+    scaffolds,
+    advanceALU,
+    processALUEvent,
+  } = useALUStream({ studentId, lessonId: activeLessonId ?? undefined });
 
   // Handler for student interaction events from streaming GenUI components.
   // This implements the bidirectional remediation loop: when a student
@@ -425,7 +430,7 @@ export function AdelineChatPanel({
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, onLessonGenerated, addMessage, conversationHistory, processGenUIEvent]);
+  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, onLessonGenerated, addMessage, conversationHistory, processGenUIEvent, processALUEvent]);
 
   // Auto-send initial prompt (e.g. from Daily Bread "Start Deep Dive Study")
   useEffect(() => {
@@ -451,6 +456,7 @@ export function AdelineChatPanel({
             const blocks: LessonBlockResponse[] = [];
             let title = initialPrompt;
             for await (const event of streamLesson(request)) {
+              processALUEvent(event as Record<string, unknown>);
               if (event.type === 'block') {
                 blocks.push(event.block);
               } else if (event.type === 'done') {

@@ -450,3 +450,78 @@ class ProjectStartRequest(BaseModel):
 class ProjectStartResponse(BaseModel):
     project_id: str
     message:    str
+
+
+# ── Atomic Learning Unit (ALU) models ────────────────────────────────────────
+# An ALU is the smallest teachable unit — one concept, one learning objective.
+# A CanonicalLesson is a playlist of ordered ALUs; each ALU's blocks are its
+# multimodal views (text, slides, audio dialogue, mind map, quiz, etc.).
+
+class ALUScaffoldConfig(BaseModel):
+    """Defines the remediation scaffold injected on overload or failure."""
+    component:  str  = "FocusReset"  # React component name
+    props:      dict = Field(default_factory=dict)
+
+
+class AtomicUnitMetadata(BaseModel):
+    """
+    ALU metadata broadcast to the frontend in alu_start SSE events.
+    Drives the client-side temporal friction timer and prerequisite chips.
+    """
+    unit_slug:                     str
+    title:                         str
+    track:                         str
+    difficulty:                    str                 = "DEVELOPING"
+    order:                         int                 = 0
+    estimated_cognitive_load:      float               = 5.0
+    target_modalities:             list[str]           = Field(default_factory=list)
+    prerequisite_unit_slugs:       list[str]           = Field(default_factory=list)
+    temporal_friction_threshold_secs: int              = 45
+    max_incorrect_before_scaffold: int                 = 1
+    scaffold:                      ALUScaffoldConfig   = Field(default_factory=ALUScaffoldConfig)
+
+
+class ALULessonPayload(BaseModel):
+    """
+    Wraps a lesson response with an ordered ALU playlist.
+    Streamed as the final 'done' SSE event so the frontend can hydrate
+    the ALUCard playlist from a single atomic source of truth.
+    """
+    lesson_id:   str
+    title:       str
+    track:       str
+    alu_playlist: list[AtomicUnitMetadata] = Field(default_factory=list)
+
+
+# ── Audio Dialogue models ────────────────────────────────────────────────────
+# Used by POST /lesson/dialogue and the AUDIO_DIALOGUE block type.
+
+class DialogueLine(BaseModel):
+    """A single line in a podcast-style teacher/student dialogue."""
+    speaker:               str           # "teacher" | "student"
+    speaker_name:          str           = "Adeline"   # Display name
+    text:                  str
+    audio_url:             Optional[str] = None        # Filled after TTS synthesis
+    addresses_misconception: bool        = False        # Flags a common misconception correction
+    pause_after_ms:        int           = 400          # Natural pause between lines
+
+
+class AudioDialogueData(BaseModel):
+    """
+    Full podcast-style dialogue for an AUDIO_DIALOGUE block.
+    The frontend AudioDialogue.tsx renders this as speaker-bubble UI
+    with optional audio playback per line.
+    """
+    topic:    str
+    lines:    list[DialogueLine]
+    total_duration_estimate_secs: float = 0.0
+
+
+class DialogueRequest(BaseModel):
+    """Request body for POST /lesson/dialogue."""
+    topic:          str
+    track:          str           = "TRUTH_HISTORY"
+    alu_unit_slug:  Optional[str] = None
+    grade_level:    str           = "8"
+    num_lines:      int           = Field(default=8, ge=4, le=20)
+    synthesize_audio: bool        = False  # When True, calls TTS for each line

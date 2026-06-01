@@ -86,6 +86,17 @@ COMPONENT_REGISTRY = {
         "concept_types": ["any"],
         "abstraction": "abstract",
     },
+    # ── ALU Multimodal — Audio Dialogue ─────────────────────────────────────────
+    "AudioDialogue": {
+        "category": "multimodal",
+        "modalities": ["auditory", "visual"],
+        "difficulties": ["EMERGING", "DEVELOPING", "EXPANDING", "MASTERING"],
+        "estimated_minutes": 4,
+        "stealth_assessment": False,
+        "tags": ["audio", "dialogue", "misconceptions", "podcast", "listening"],
+        "concept_types": ["any"],
+        "abstraction": "concrete",
+    },
     # ── Additional first-class block types ──────────────────────────────────────
     "Simulation": {
         "category": "multimodal",
@@ -268,11 +279,15 @@ def select_components(
     context: LearnerContext,
     max_results: int = 3,
     exclude_categories: Optional[list[str]] = None,
+    student_id: Optional[str] = None,
 ) -> list[ComponentRecommendation]:
     """
     Select the best components for the given learner context.
 
-    Scoring factors:
+    Uses ML-based collaborative filtering when student_id is provided and
+    sufficient training data exists. Falls back to heuristic scoring otherwise.
+
+    Heuristic scoring factors:
     - Modality alignment (0.25 weight)
     - Difficulty fit (0.15 weight)
     - Time fit (0.10 weight)
@@ -282,6 +297,33 @@ def select_components(
     - Struggle boost (0.05 weight — favor scaffolding if struggling)
     """
     exclude_categories = exclude_categories or []
+
+    # Try ML selector if student_id is provided
+    if student_id:
+        try:
+            from app.algorithms.ml_component_selector import get_ml_selector
+
+            ml_selector = get_ml_selector()
+            available_components = list(COMPONENT_REGISTRY.keys())
+
+            ml_results = ml_selector.select_components(
+                student_id=student_id,
+                learner_context=context,
+                available_components=available_components,
+                max_results=max_results,
+                exclude_categories=exclude_categories,
+            )
+
+            if ml_results:
+                logger.info(
+                    f"[COMPONENT_SELECTOR] ML selector returned {[r.component_id for r in ml_results]} "
+                    f"for student {student_id}"
+                )
+                return ml_results
+        except Exception as e:
+            logger.warning(f"[COMPONENT_SELECTOR] ML selector failed, falling back to heuristic: {e}")
+
+    # Heuristic fallback
     scored: list[ComponentRecommendation] = []
 
     for comp_id, meta in COMPONENT_REGISTRY.items():
@@ -350,7 +392,7 @@ def select_components(
     results = scored[:max_results]
 
     logger.info(
-        f"[COMPONENT_SELECTOR] Selected {[r.component_id for r in results]} "
+        f"[COMPONENT_SELECTOR] Heuristic selected {[r.component_id for r in results]} "
         f"for context: mastery={context.mastery_score}, difficulty={context.difficulty}, "
         f"modalities={context.preferred_modalities}"
     )
@@ -404,7 +446,13 @@ _MODAL_SUPPLEMENT_MAP: dict[str, dict[str, Optional[str]]] = {
         "writing": "GlowGrow",
         "any":     "GlowGrow",
     },
-    "auditory": {"any": None},
+    "auditory": {
+        "any":     "AudioDialogue",
+        "science": "AudioDialogue",
+        "math":    "AudioDialogue",
+        "history": "AudioDialogue",
+        "writing": "AudioDialogue",
+    },
 }
 
 # Components already injected by the cascade or track-specific synthesizers —
@@ -439,9 +487,6 @@ def select_modal_supplement(
         track:              Track value string (e.g. "APPLIED_MATHEMATICS")
         already_emitted:    Component types already present in this lesson
     """
-    if preferred_modality == "auditory":
-        return None
-
     concept_type = _TRACK_CONCEPT_TYPE.get(track, "any")
     modality_map = _MODAL_SUPPLEMENT_MAP.get(preferred_modality, {})
     component = modality_map.get(concept_type) or modality_map.get("any")

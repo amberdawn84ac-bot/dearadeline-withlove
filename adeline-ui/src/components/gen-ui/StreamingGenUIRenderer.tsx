@@ -46,6 +46,7 @@ import { StealthAssessment } from "@/components/gen-ui/patterns/StealthAssessmen
 import { LiveChart } from "@/components/gen-ui/patterns/LiveChart";
 import { CodePlayground } from "@/components/gen-ui/patterns/CodePlayground";
 import { LessonRatingCard } from "@/components/gen-ui/patterns/LessonRatingCard";
+import { AudioDialogue } from "@/components/gen-ui/patterns/AudioDialogue";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const STREAMING_REGISTRY: Record<string, React.ComponentType<any>> = {
@@ -72,6 +73,8 @@ const STREAMING_REGISTRY: Record<string, React.ComponentType<any>> = {
   AdaptiveQuiz,
   StealthAssessment,
   LessonRatingCard,
+  // ALU multimodal — Audio Dialogue
+  AudioDialogue,
 };
 
 // ── Skeleton styles per component category ───────────────────────────────

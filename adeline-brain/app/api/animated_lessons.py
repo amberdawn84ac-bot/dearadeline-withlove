@@ -1,15 +1,16 @@
 """
-Animated Sketchnote Lessons API — /lesson/animated + /lesson/narrate
+Animated Sketchnote Lessons API — /lesson/animated + /lesson/narrate + /lesson/dialogue
 
-POST /lesson/animated — Generate a full AnimatedSketchnoteLesson JSON via Gemini.
-POST /lesson/narrate  — Synthesize scene narration audio with pyttsx3 (offline TTS).
+POST /lesson/animated  — Generate a full AnimatedSketchnoteLesson JSON via Gemini.
+POST /lesson/narrate   — Synthesize scene narration audio with pyttsx3 (offline TTS).
 GET  /lesson/narrate/{filename} — Serve a generated narration audio file.
+POST /lesson/dialogue  — Generate a podcast-style teacher/student dialogue for an ALU.
 
 The Witness Protocol is bypassed for animated lessons (same treatment as NARRATED_SLIDE).
 The RegistrarAgent is NOT called here — credit is awarded when the student seals the lesson
 via POST /journal/seal.
 
-Gemini is used (not Claude) for cost efficiency.
+Gemini is used (not Claude) for cost efficiency on animated + dialogue generation.
 """
 import asyncio
 import json
@@ -27,6 +28,9 @@ from app.schemas.api_models import (
     AnimatedLessonRequest,
     AnimatedSketchnoteLessonData,
     NarrateRequest,
+    DialogueRequest,
+    AudioDialogueData,
+    DialogueLine,
 )
 from app.prompts.animated_sketchnote import (
     ANIMATED_SKETCHNOTE_SYSTEM_PROMPT,
@@ -214,3 +218,138 @@ async def serve_narration(filename: str):
         raise HTTPException(status_code=404, detail="Audio file not found.")
 
     return FileResponse(str(path), media_type="audio/mpeg")
+
+
+# ── POST /lesson/dialogue ──────────────────────────────────────────────────────
+
+_DIALOGUE_SYSTEM = """You are Adeline's dialogue scriptwriter.
+Your job is to write a short, natural podcast-style conversation between a teacher named Adeline
+and a curious student named Alex. The conversation must:
+1. Cover the given topic accurately and completely within the specified number of lines.
+2. Have Adeline proactively address 1–2 common misconceptions a student might hold about this topic.
+   Mark those lines with "addresses_misconception": true.
+3. Sound conversational — contractions, natural rhythm, no lecturing walls of text.
+4. Be appropriate for the given grade level.
+5. Never invent facts. If a claim requires a source, have Adeline cite it naturally in dialogue
+   (e.g. "According to Newton's own notes from 1687...").
+
+Return ONLY a valid JSON object with this structure (no markdown, no explanation):
+{
+  "topic": "<topic string>",
+  "lines": [
+    {
+      "speaker": "teacher",
+      "speaker_name": "Adeline",
+      "text": "...",
+      "addresses_misconception": false,
+      "pause_after_ms": 400
+    },
+    {
+      "speaker": "student",
+      "speaker_name": "Alex",
+      "text": "...",
+      "addresses_misconception": false,
+      "pause_after_ms": 300
+    }
+  ],
+  "total_duration_estimate_secs": 0.0
+}"""
+
+
+@router.post("/lesson/dialogue", response_model=AudioDialogueData)
+async def generate_dialogue(body: DialogueRequest):
+    """
+    Generate a podcast-style teacher/student dialogue for an ALU.
+
+    Uses Gemini (cost-efficient) to produce a structured dialogue script,
+    then optionally synthesizes per-line audio with pyttsx3 when
+    synthesize_audio=True in the request body.
+
+    The response maps directly to the AUDIO_DIALOGUE block type consumed
+    by AudioDialogue.tsx on the frontend.
+    """
+    logger.info(
+        f"[/lesson/dialogue] topic={body.topic!r} track={body.track} "
+        f"grade={body.grade_level} lines={body.num_lines} audio={body.synthesize_audio}"
+    )
+
+    user_prompt = (
+        f"Topic: {body.topic}\n"
+        f"Track: {body.track}\n"
+        f"Grade level: {body.grade_level}\n"
+        f"Number of dialogue lines: {body.num_lines}\n"
+        f"ALU unit slug (for context): {body.alu_unit_slug or 'N/A'}\n\n"
+        "Write the dialogue now."
+    )
+
+    # ── Call Gemini ───────────────────────────────────────────────────────────
+    try:
+        import google.generativeai as genai  # type: ignore
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise RuntimeError("GEMINI_API_KEY is not set.")
+        from app.config import GEMINI_MODEL
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(
+            model_name=GEMINI_MODEL,
+            generation_config={
+                "temperature": 0.7,
+                "max_output_tokens": 4096,
+                "response_mime_type": "application/json",
+            },
+            system_instruction=_DIALOGUE_SYSTEM,
+        )
+        response = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: model.generate_content(user_prompt),
+        )
+        raw_text = response.text.strip()
+    except Exception as exc:
+        logger.error(f"[/lesson/dialogue] Gemini call failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Dialogue generation failed: {exc}")
+
+    # ── Parse JSON ────────────────────────────────────────────────────────────
+    try:
+        raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
+        raw_text = re.sub(r"\s*```$", "", raw_text)
+        raw = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        logger.error(f"[/lesson/dialogue] JSON parse failed: {exc}\nRaw: {raw_text[:400]}")
+        raise HTTPException(status_code=502, detail="Gemini returned invalid JSON.")
+
+    try:
+        dialogue = AudioDialogueData(**raw)
+    except Exception as exc:
+        logger.error(f"[/lesson/dialogue] Schema validation failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Dialogue schema mismatch: {exc}")
+
+    # ── Optionally synthesize per-line audio ──────────────────────────────────
+    if body.synthesize_audio:
+        try:
+            import pyttsx3  # noqa: F401
+            audio_tasks = [
+                _synthesize_narration(line.text)
+                for line in dialogue.lines
+            ]
+            filenames = await asyncio.gather(*audio_tasks, return_exceptions=True)
+            for line, result in zip(dialogue.lines, filenames):
+                if isinstance(result, Exception):
+                    logger.warning(f"[/lesson/dialogue] TTS failed for line '{line.text[:40]}': {result}")
+                else:
+                    line.audio_url = f"/lesson/narrate/{result}"
+        except ImportError:
+            logger.info("[/lesson/dialogue] pyttsx3 not installed — skipping audio synthesis")
+        except Exception as exc:
+            logger.warning(f"[/lesson/dialogue] TTS batch failed (non-fatal): {exc}")
+
+    # ── Estimate total duration ───────────────────────────────────────────────
+    if dialogue.total_duration_estimate_secs == 0.0:
+        # Rough estimate: ~140 words/min average speech rate
+        total_words = sum(len(ln.text.split()) for ln in dialogue.lines)
+        dialogue.total_duration_estimate_secs = round((total_words / 140) * 60, 1)
+
+    logger.info(
+        f"[/lesson/dialogue] Generated {len(dialogue.lines)} lines "
+        f"(~{dialogue.total_duration_estimate_secs}s) for topic={body.topic!r}"
+    )
+    return dialogue

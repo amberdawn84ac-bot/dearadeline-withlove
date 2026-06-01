@@ -232,8 +232,32 @@ async def genui_telemetry(
     # Persist interaction asynchronously
     import asyncio
 
+    # For temporal_friction events, build the scaffold recommendation eagerly
+    # so we can return it in the 202 response body — the client uses it to
+    # inject the pre-authored scaffold locally with zero additional latency.
+    scaffold_recommendation: Optional[dict] = None
+    if request.event == "temporal_friction":
+        duration_ms = request.duration_ms or 0
+        threshold_secs = request.state.get("threshold_secs", 45)
+        scaffold_component = request.state.get("scaffold_component", "FocusReset")
+        scaffold_props = request.state.get("scaffold_props", {})
+        logger.info(
+            f"[GENUI_TELEMETRY] temporal_friction detected: "
+            f"student={request.student_id} block={request.block_id} "
+            f"duration_ms={duration_ms} threshold_secs={threshold_secs} "
+            f"scaffold={scaffold_component}"
+        )
+        scaffold_recommendation = {
+            "component": scaffold_component,
+            "props": scaffold_props if scaffold_props else _default_focus_reset_props(),
+        }
+
     async def _persist_telemetry():
         try:
+            # ── Log to ComponentInteractionLog for ML training ─────────────────
+            await _log_component_interaction(request)
+
+            # ── Existing BKT/mastery logic ───────────────────────────────────────
             if request.event == "completion":
                 await _award_widget_credit(
                     student_id=request.student_id,
@@ -257,16 +281,152 @@ async def genui_telemetry(
                     block_id=request.block_id,
                     is_correct=False,
                 )
+            elif request.event == "temporal_friction":
+                # Apply a soft BKT slip signal — not a full failure, just friction
+                try:
+                    student_state = await load_student_state(request.student_id)
+                    track_mastery = student_state.tracks.get(request.track or "TRUTH_HISTORY")
+                    pL = track_mastery.mastery_score if track_mastery else 0.5
+                except Exception:
+                    pL = 0.5
+                # Soft slip: use elevated slip rate (0.15 vs default 0.05) to model stalling
+                params = BKTParams(pL=pL, pT=0.10, pS=0.15, pG=0.20)
+                updated = bkt_update(params, observed_correct=False)
+                await _persist_mastery_update(
+                    student_id=request.student_id,
+                    track=request.track or "TRUTH_HISTORY",
+                    mastery_score=updated,
+                    component_type=request.component_type,
+                    block_id=request.block_id,
+                    is_correct=None,  # Not a correctness signal — friction only
+                )
             # For "interaction", "hint", "timeout" — just log, no mastery update
         except Exception as e:
             logger.warning(f"[GENUI_TELEMETRY] Background persist failed (non-fatal): {e}")
 
     asyncio.ensure_future(_persist_telemetry())
 
-    return {"status": "accepted"}
+    response_body: dict = {"status": "accepted"}
+    if scaffold_recommendation:
+        response_body["scaffold"] = scaffold_recommendation
+    return response_body
+
+
+def _default_focus_reset_props() -> dict:
+    """
+    Return default FocusReset props for temporal friction pivots when the ALU
+    has not specified custom scaffold props.
+    """
+    return {
+        "mode": "breathe",
+        "message": (
+            "Take a breath — we'll come back to this together in a moment."
+        ),
+    }
 
 
 # ── Internal helpers ─────────────────────────────────────────────────────────
+
+
+async def _log_component_interaction(request: TelemetryEvent) -> None:
+    """
+    Log component interaction to ComponentInteractionLog for ML training.
+
+    Extracts component features from the registry and logs the interaction
+    with student context, mastery before/after, and performance metrics.
+    """
+    from app.algorithms.component_selector import COMPONENT_REGISTRY
+    from app.algorithms.ml_component_selector import get_ml_selector
+    from app.db import prisma
+
+    component_id = request.component_type
+    component_config = COMPONENT_REGISTRY.get(component_id)
+
+    if not component_config:
+        logger.warning(f"[GENUI_TELEMETRY] Unknown component: {component_id}")
+        return
+
+    # Extract features
+    component_modalities = component_config.get("modalities", [])
+    component_category = component_config.get("category", "unknown")
+    component_difficulty = component_config.get("difficulties", ["DEVELOPING"])[0] if component_config.get("difficulties") else "DEVELOPING"
+
+    # Get student's current mastery (before interaction)
+    mastery_before = None
+    try:
+        student_state = await load_student_state(request.student_id)
+        track_mastery = student_state.tracks.get(request.track or "TRUTH_HISTORY")
+        mastery_before = track_mastery.mastery_score if track_mastery else None
+    except Exception:
+        pass
+
+    # Determine interaction type
+    interaction_type = request.event
+    if request.event == "completion":
+        interaction_type = "completed"
+    elif request.event == "struggle":
+        interaction_type = "struggled"
+    elif request.event == "hint":
+        interaction_type = "hint_used"
+    elif request.event == "temporal_friction":
+        interaction_type = "scaffold_triggered"
+
+    # Extract performance metrics from state
+    struggle_count = request.state.get("wrongAttempts", 0) if request.event == "struggle" else 0
+    hints_used = request.state.get("hintsUsed", 0) if request.event == "hint" else 0
+    completed = request.event == "completion"
+
+    # Get student's preferred modality from state or profile
+    student_modality = request.state.get("preferredModality")
+
+    # Log to Prisma
+    try:
+        await prisma.componentinteractionlog.create({
+            "data": {
+                "studentId": request.student_id,
+                "componentId": component_id,
+                "componentType": component_category,
+                "lessonId": request.lesson_id,
+                "aluUnitSlug": request.state.get("unitSlug"),
+                "track": request.track or "TRUTH_HISTORY",
+                "interactionType": interaction_type,
+                "studentModality": student_modality,
+                "componentModalities": component_modalities,
+                "difficulty": component_difficulty,
+                "durationSecs": (request.duration_ms or 0) / 1000.0 if request.duration_ms else None,
+                "completed": completed,
+                "struggleCount": struggle_count,
+                "hintsUsed": hints_used,
+                "masteryBefore": mastery_before,
+                "masteryAfter": None,  # Will be updated on next interaction
+                "context": request.state,
+            }
+        })
+    except Exception as e:
+        logger.warning(f"[GENUI_TELEMETRY] Failed to log component interaction: {e}")
+
+    # Also log to in-memory ML selector for immediate collaborative filtering
+    try:
+        from app.algorithms.ml_component_selector import StudentInteraction
+        ml_selector = get_ml_selector()
+        interaction = StudentInteraction(
+            component_id=component_id,
+            component_type=component_category,
+            interaction_type=interaction_type,
+            student_modality=student_modality,
+            component_modalities=component_modalities,
+            difficulty=component_difficulty,
+            duration_secs=(request.duration_ms or 0) / 1000.0 if request.duration_ms else None,
+            completed=completed,
+            struggle_count=struggle_count,
+            hints_used=hints_used,
+            mastery_before=mastery_before,
+            mastery_after=None,
+            timestamp=datetime.now().timestamp(),
+        )
+        ml_selector.log_interaction(request.student_id, interaction)
+    except Exception as e:
+        logger.warning(f"[GENUI_TELEMETRY] Failed to log to ML selector: {e}")
 
 
 async def _persist_mastery_update(

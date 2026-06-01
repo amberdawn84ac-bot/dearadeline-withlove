@@ -45,6 +45,9 @@ class GenUIBlockType(str, Enum):
     INTERACTIVE_SIM  = "INTERACTIVE_SIM"
     HIGHLIGHT_ASK    = "HIGHLIGHT_ASK"
     GENUI_ASSEMBLY   = "GENUI_ASSEMBLY"
+    # ALU-tier multimodal blocks
+    AUDIO_DIALOGUE          = "AUDIO_DIALOGUE"           # Podcast-style teacher/student conversation
+    EMBEDDED_INTERRUPT_INLINE = "EMBEDDED_INTERRUPT_INLINE"  # Cognitive interrupt anchored mid-text
 
 
 class GenUIComponentType(str, Enum):
@@ -165,6 +168,59 @@ class GenUIAssemblyData(BaseModel):
     re_render_triggers: Optional[list[str]] = Field(None, description="Events that trigger re-render")
 
 
+# ── Audio Dialogue Data ──────────────────────────────────────────────────────
+
+class DialogueLine(BaseModel):
+    """A single line in a podcast-style teacher/student dialogue."""
+    speaker: Literal["teacher", "student"] = Field("teacher", description="Who is speaking")
+    speaker_name: str = Field("Adeline", description="Display name for the speaker")
+    text: str = Field(..., description="The spoken line")
+    audio_url: Optional[str] = Field(None, description="URL of pre-synthesized TTS audio")
+    addresses_misconception: bool = Field(False, description="True when this line corrects a common misconception")
+    pause_after_ms: int = Field(400, description="Natural pause after this line in milliseconds")
+
+
+class AudioDialogueData(BaseModel):
+    """
+    Data for an AUDIO_DIALOGUE block — podcast-style teacher/student dialogue.
+
+    The frontend AudioDialogue.tsx renders this as speaker-bubble UI
+    with sequential line-by-line reveal and optional per-line audio playback.
+    Misconception lines receive a highlighted treatment to make corrections memorable.
+    """
+    topic: str = Field(..., description="Topic of the dialogue (used for header label)")
+    lines: List[DialogueLine] = Field(..., min_length=4, description="Ordered dialogue lines")
+    total_duration_estimate_secs: float = Field(0.0, description="Estimated playback duration")
+
+
+# ── Inline Cognitive Interrupt Data ─────────────────────────────────────────
+
+class InlineInterruptOption(BaseModel):
+    """A single option for an inline cognitive interrupt question."""
+    text: str = Field(..., description="Option text shown to the student")
+    is_correct: bool = Field(False, description="Whether this option is correct")
+
+
+class InlineInterruptData(BaseModel):
+    """
+    Data for an EMBEDDED_INTERRUPT_INLINE block.
+
+    Unlike a standalone QUIZ block, an inline interrupt is anchored to a
+    specific position within a text section — it fires at exactly the moment
+    understanding matters most.  The frontend renders it inline between
+    paragraphs and collapses to a minimal badge after the student answers.
+    """
+    question: str = Field(..., description="The check-in question")
+    options: List[InlineInterruptOption] = Field(..., min_length=2, max_length=4, description="Answer choices")
+    hint: Optional[str] = Field(None, description="Shown after answering; explains the correct reasoning")
+    checkpoint_label: str = Field("Quick Check", description="Label shown in the interrupt header bar")
+    trigger_after_paragraph: int = Field(
+        1,
+        ge=0,
+        description="0-based paragraph index after which this interrupt appears",
+    )
+
+
 # ── Generic UI Block ─────────────────────────────────────────────────────────
 
 class UIBlock(BaseModel):
@@ -184,7 +240,10 @@ class UIBlock(BaseModel):
     book_suggestion_data: Optional[BookSuggestionData] = Field(None, description="Data for BOOK_SUGGESTION blocks")
     interactive_sim_data: Optional[InteractiveSimData] = Field(None, description="Data for INTERACTIVE_SIM blocks")
     genui_assembly_data: Optional[GenUIAssemblyData] = Field(None, description="Data for GENUI_ASSEMBLY blocks")
-    
+    # ALU-tier multimodal block data
+    audio_dialogue_data: Optional[AudioDialogueData] = Field(None, description="Data for AUDIO_DIALOGUE blocks")
+    inline_interrupt_data: Optional[InlineInterruptData] = Field(None, description="Data for EMBEDDED_INTERRUPT_INLINE blocks")
+
     # Evidence and metadata
     is_silenced: bool = Field(False, description="Whether this block should be hidden")
     homestead_content: Optional[str] = Field(None, description="Homestead-adapted version")

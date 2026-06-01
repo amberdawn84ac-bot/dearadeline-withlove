@@ -6,7 +6,6 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 model User {
@@ -89,17 +88,55 @@ model StudentLesson {
 }
 
 model CanonicalLesson {
-  id                  String   @id @default(uuid())
-  topicSlug           String   @unique
+  id                  String        @id @default(uuid())
+  topicSlug           String        @unique
   topic               String
   track               Track
   title               String
   blocksJson          Json
-  oasStandards        Json     @default("[]")
-  researcherActivated Boolean  @default(false)
-  agentName           String   @default("")
-  generatedAt         DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  oasStandards        Json          @default("[]")
+  researcherActivated Boolean       @default(false)
+  agentName           String        @default("")
+  generatedAt         DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  pendingApproval     Boolean       @default(false)
+  atomicUnits         AtomicUnit[]
+}
+
+/// An Atomic Learning Unit — the smallest teachable concept within a CanonicalLesson.
+/// Each ALU contains one learning objective and carries metadata that drives adaptive routing.
+/// A CanonicalLesson is a playlist of ordered ALUs; each ALU's blocks are its multimodal views.
+model AtomicUnit {
+  id                              String   @id @default(uuid())
+  /// Stable slug, e.g. "circular-orbital-velocity" — used as prerequisite reference key
+  unitSlug                        String   @unique
+  title                           String
+  lessonId                        String
+  lesson                          CanonicalLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  track                           Track
+  difficulty                      DifficultyLevel @default(DEVELOPING)
+  /// Ordered position within the parent lesson playlist (0-based)
+  order                           Int      @default(0)
+  /// Estimated cognitive load 0.0–10.0 (used by CognitiveLoadBudget to gate delivery)
+  estimatedCognitiveLoad          Float    @default(5.0)
+  /// Learning modalities this ALU targets, e.g. ["visual","kinesthetic"]
+  targetModalities                String[]
+  /// Slugs of AtomicUnits that must be mastered before this one is unlocked
+  prerequisiteUnitSlugs           String[] @default([])
+  /// Seconds of student inactivity/stalling that triggers a Temporal Friction pivot
+  temporalFrictionThresholdSecs   Int      @default(45)
+  /// Max incorrect attempts before scaffold is injected (0 = inject immediately on first wrong)
+  maxIncorrectBeforeScaffold      Int      @default(1)
+  /// Component type to stream as remediation (e.g. "FocusReset", "TaskScaffold")
+  scaffoldComponent               String   @default("FocusReset")
+  /// JSON props passed to the scaffold component
+  scaffoldProps                   Json     @default("{}")
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
+
+  @@index([lessonId])
+  @@index([track])
+  @@index([unitSlug])
 }
 
 model InviteCode {
@@ -318,6 +355,7 @@ enum XAPIVerb {
   researched
   sealed
   focus_gap_detected
+  assessed
 }
 
 enum CreditType {
@@ -383,4 +421,68 @@ enum OASProficiencyLevel {
   APPROACHING
   UNDERSTANDING
   EXTENDING
+}
+
+/// Component Interaction Log — training data for ML component selector.
+/// Records every student interaction with a GenUI component to build
+/// a collaborative filtering model that predicts optimal component choices.
+model ComponentInteractionLog {
+  id                String   @id @default(uuid())
+  studentId         String
+  componentId       String   // e.g. "AudioDialogue", "MindMap", "QuizCard"
+  componentType     String   // category: "multimodal", "assessment", "scaffolding", etc.
+  lessonId          String?
+  aluUnitSlug       String?  // which ALU this interaction occurred in
+  track             Track
+  /// Interaction type: "viewed", "completed", "struggled", "skipped", "scaffold_triggered"
+  interactionType   String
+  /// Student's preferred modality at time of interaction
+  studentModality   String?  // "visual", "auditory", "kinesthetic", "text", "reading"
+  /// Component's modalities (from registry)
+  componentModalities String[] @default([])
+  /// Difficulty band of the component
+  difficulty        String   @default("DEVELOPING")
+  /// Time spent on this component (seconds)
+  durationSecs      Float?
+  /// Whether the student successfully completed this component
+  completed         Boolean  @default(false)
+  /// Number of incorrect answers / struggles
+  struggleCount     Int      @default(0)
+  /// Hints used
+  hintsUsed         Int      @default(0)
+  /// Mastery score before this interaction (from BKT)
+  masteryBefore     Float?
+  /// Mastery score after this interaction
+  masteryAfter      Float?
+  /// Context metadata (JSON for flexibility)
+  context           Json     @default("{}")
+  timestamp         DateTime @default(now())
+
+  @@index([studentId])
+  @@index([componentId])
+  @@index([track])
+  @@index([aluUnitSlug])
+  @@index([timestamp])
+  @@index([studentId, componentId])
+}
+
+/// Hippocampus Documents — curriculum content seeded for similarity search.
+/// Stores the primary sources, narratives, and other content used by the
+/// Witness Protocol and the knowledge graph.
+model HippocampusDocument {
+  id          String   @id @default(uuid())
+  title       String
+  content     String   @db.Text
+  sourceUrl   String?
+  sourceType  String   @default("PRIMARY_SOURCE")
+  track       Track
+  oasStandard String?
+  embedding   Json?    // pgvector embedding for similarity search
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([track])
+  @@index([oasStandard])
+  @@index([sourceType])
 }

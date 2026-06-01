@@ -73,6 +73,7 @@ import { AutoDiagram } from "@/components/gen-ui/patterns/AutoDiagram";
 import { PeerTutoringCard } from "@/components/gen-ui/patterns/PeerTutoringCard";
 import { DiscussionForum } from "@/components/gen-ui/patterns/DiscussionForum";
 import { LessonRatingCard } from "@/components/gen-ui/patterns/LessonRatingCard";
+import { AudioDialogue } from "@/components/gen-ui/patterns/AudioDialogue";
 import { TextSelectionMenu } from "@/components/gen-ui/TextSelectionMenu";
 import { WeightTierBadge } from "@/components/lessons/WeightTierBadge";
 import { DistortionFlag } from "@/components/lessons/DistortionFlag";
@@ -141,6 +142,8 @@ const componentRegistry: Record<string, React.ComponentType<any>> = {
   // Collaborative Learning
   PeerTutoringCard:  PeerTutoringCard,
   DiscussionForum:   DiscussionForum,
+  // ALU multimodal — Audio Dialogue
+  AudioDialogue:     AudioDialogue,
 };
 
 // ── DynamicComponent Wrapper ─────────────────────────────────────────────────────
@@ -247,7 +250,10 @@ type BrainBlockType =
   | "INTERACTIVE_SIM"
   | "HIGHLIGHT_ASK"
   | "GENUI_ASSEMBLY"
-  | "ANIMATED_SKETCHNOTE_LESSON";
+  | "ANIMATED_SKETCHNOTE_LESSON"
+  // ALU-tier multimodal blocks
+  | "AUDIO_DIALOGUE"
+  | "EMBEDDED_INTERRUPT_INLINE";
 
 // ── OAS Standard entry ────────────────────────────────────────────────────────
 
@@ -363,6 +369,8 @@ const LABEL_STYLES: Record<BrainBlockType, string> = {
   HIGHLIGHT_ASK:             "bg-[#374151] text-white",
   GENUI_ASSEMBLY:            "bg-[#7C3AED] text-white",
   ANIMATED_SKETCHNOTE_LESSON: "bg-[#3D1419] text-[#FFFEF7]",
+  AUDIO_DIALOGUE:              "bg-[#0E7490] text-white",
+  EMBEDDED_INTERRUPT_INLINE:   "bg-[#374151] text-white",
 };
 
 const LABEL_NAMES: Record<BrainBlockType, string> = {
@@ -383,6 +391,8 @@ const LABEL_NAMES: Record<BrainBlockType, string> = {
   HIGHLIGHT_ASK:             "Highlight & Ask",
   GENUI_ASSEMBLY:            "Dynamic Component",
   ANIMATED_SKETCHNOTE_LESSON: "Living Sketchnote",
+  AUDIO_DIALOGUE:              "Audio Dialogue",
+  EMBEDDED_INTERRUPT_INLINE:   "Quick Check",
 };
 
 function BlockLabel({ type }: { type: string }) {
@@ -1026,6 +1036,40 @@ function GenUIRenderer({
             case "BOOK_SUGGESTION":
               blockContent = <BookSuggestionBlock block={block} />;
               break;
+            case "AUDIO_DIALOGUE": {
+              const dialogueData = (block as any).audio_dialogue_data;
+              blockContent = dialogueData ? (
+                <AudioDialogue
+                  data={dialogueData}
+                  track={(block as any).track}
+                />
+              ) : (
+                <TextBlock block={block} />
+              );
+              break;
+            }
+            case "EMBEDDED_INTERRUPT_INLINE": {
+              const interruptData = (block as any).inline_interrupt_data;
+              blockContent = interruptData ? (
+                <DynamicComponent
+                  componentType="EmbeddedInterrupt"
+                  props={{
+                    question: interruptData.question,
+                    options: interruptData.options,
+                    hint: interruptData.hint,
+                    checkpointLabel: interruptData.checkpoint_label ?? "Quick Check",
+                    blockId: block.block_id,
+                    studentId: studentId ?? "",
+                    lessonId: _lessonId,
+                  }}
+                  initialState={{}}
+                  callbacks={["onAnswer", "onComplete"]}
+                />
+              ) : (
+                <TextBlock block={block} />
+              );
+              break;
+            }
             default:
               blockContent = <TextBlock block={block} />;
           }
