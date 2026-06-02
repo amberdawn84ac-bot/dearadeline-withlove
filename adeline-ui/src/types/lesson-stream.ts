@@ -135,7 +135,7 @@ export function parseLessonDataParts(parts: unknown[]): LessonAnnotation[] {
 
 /** @deprecated Use parseLessonDataParts directly. Kept for backward compat. */
 export function isLessonDataPart(p: unknown): boolean {
-  return unwrapDataPart(p) !== null;
+  return unwrapDataParts(p).length > 0;
 }
 
 /** Convenience: extract only the text content from a UIMessage parts array. */
