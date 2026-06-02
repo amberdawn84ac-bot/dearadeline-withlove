@@ -32,8 +32,8 @@ export interface AutoDiagramProps {
 export function AutoDiagram({
   title,
   diagramType,
-  nodes,
-  edges,
+  nodes = [],
+  edges = [],
   description,
   track,
   onNodeClick,
@@ -59,8 +59,8 @@ export function AutoDiagram({
   };
 
   // Scale to viewBox
-  const maxX = Math.max(...nodes.map((n) => n.x), 1);
-  const maxY = Math.max(...nodes.map((n) => n.y), 1);
+  const maxX = nodes.length > 0 ? Math.max(...nodes.map((n) => n.x), 1) : 1;
+  const maxY = nodes.length > 0 ? Math.max(...nodes.map((n) => n.y), 1) : 1;
   const getPos = (n: DiagramNode) => ({
     cx: (n.x / maxX) * 380 + 30,
     cy: (n.y / maxY) * 240 + 30,
