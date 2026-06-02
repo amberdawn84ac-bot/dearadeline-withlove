@@ -534,7 +534,26 @@ def _build_component_props_for_adapter(component_id: str, content: str, req: Ada
     elif component_id == "MultiCompetencyWorkspace":
         return {"title": f"Deep Work: {content[:40]}", "competencies": [content[:40]], "content": content[:800], "track": track}
     elif component_id == "CorrectiveOverlay":
-        return {"topic": content[:60], "misconception": "", "correction": "", "track": track}
+        # CorrectiveOverlay needs live student-answer context; fall back to GlowGrow.
+        short = content[:60].split(".")[0] if content else topic
+        return {
+            "title": f"Check Your Understanding: {short}",
+            "topic": short,
+            "track": track,
+            "questions": [
+                {
+                    "question": f"What is the key idea in what you just learned about {short}?",
+                    "options": [
+                        {"text": "It reveals a foundational principle", "is_correct": True},
+                        {"text": "It is unrelated to this lesson", "is_correct": False},
+                        {"text": "It has been disproved", "is_correct": False},
+                    ],
+                    "explanation": f"Engaging with {short} builds understanding over time.",
+                    "glow": "Keep going — you're doing great.",
+                    "grow": f"Find one primary source that addresses {short} directly.",
+                },
+            ],
+        }
     elif component_id == "LearningVelocityCard":
         return {"topic": content[:60], "track": track}
     elif component_id == "ProgressMap":

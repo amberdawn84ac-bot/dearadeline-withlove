@@ -457,6 +457,8 @@ _MODAL_SUPPLEMENT_MAP: dict[str, dict[str, Optional[str]]] = {
 
 # Components already injected by the cascade or track-specific synthesizers —
 # skip these when choosing a modal supplement to avoid duplication.
+# CorrectiveOverlay is remediation-only (wrong-answer feedback); never pick it
+# as a lesson-content or modal-supplement block.
 _CASCADE_COMPONENTS: set[str] = {
     "SocraticDebate",
     "NarratedSlides",
@@ -466,6 +468,7 @@ _CASCADE_COMPONENTS: set[str] = {
     "MoleculeSimulator",
     "CodePlayground",
     "ProjectBuilder",
+    "CorrectiveOverlay",
 }
 
 

@@ -2883,11 +2883,27 @@ def _build_component_props(
             "track": track,
         }
     elif component_id == "CorrectiveOverlay":
+        # CorrectiveOverlay requires live student-answer context — it cannot be
+        # pre-generated for initial lesson delivery.  Fall back to GlowGrow,
+        # which renders a self-check question that works without prior interaction.
+        short = content[:80].split(".")[0] if content else topic
         return {
+            "title": f"Check Your Understanding: {topic}",
             "topic": topic,
-            "misconception": "",
-            "correction": "",
             "track": track,
+            "questions": [
+                {
+                    "question": f"What is the most important idea in what you just learned about {topic}?",
+                    "options": [
+                        {"text": f"It reveals a key principle within {topic}", "is_correct": True},
+                        {"text": f"It is unrelated to {topic}", "is_correct": False},
+                        {"text": "It has been disproved by research", "is_correct": False},
+                    ],
+                    "explanation": f"Understanding {short} is foundational to {topic}.",
+                    "glow": "You're engaging with real content — keep going.",
+                    "grow": f"Find one primary source that addresses {topic} directly.",
+                },
+            ],
         }
     elif component_id == "LearningVelocityCard":
         return {
