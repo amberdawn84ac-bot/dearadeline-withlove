@@ -9,6 +9,10 @@
  *   GetLessonStubs(track, gradeBand) → LessonStub[]
  *   GetDailyBread(date)              → DailyBread
  *   GetResourceLinks(track)          → ResourceLink[]
+ *   GetLesson(topicSlug)             → Lesson with blocks
+ *   GetLessons(track, gradeBand)     → Lesson[]
+ *   GetProjects(track?, category?)   → Project[]
+ *   GetProject(slug)                 → Project with steps
  *
  * All operations are cached at the Next.js ISR layer (60s revalidation).
  * POST-only. GET requests are rejected.
@@ -20,7 +24,12 @@ import {
   getLessonStubsByTrack,
   getDailyBread,
   getResourceLinks,
+  getLessonBySlug,
+  getLessonsByTrack,
+  getProjects,
+  getProjectBySlug,
   type Track,
+  type ProjectCategory,
 } from "@/lib/hygraph/client";
 
 // ── Allowed operation names (allowlist — never pass arbitrary queries to Hygraph)
@@ -29,13 +38,21 @@ type AllowedOperation =
   | "GetTrackPage"
   | "GetLessonStubs"
   | "GetDailyBread"
-  | "GetResourceLinks";
+  | "GetResourceLinks"
+  | "GetLesson"
+  | "GetLessons"
+  | "GetProjects"
+  | "GetProject";
 
 const ALLOWED_OPERATIONS = new Set<AllowedOperation>([
   "GetTrackPage",
   "GetLessonStubs",
   "GetDailyBread",
   "GetResourceLinks",
+  "GetLesson",
+  "GetLessons",
+  "GetProjects",
+  "GetProject",
 ]);
 
 // ── Request body shape ────────────────────────────────────────────────────────
@@ -43,9 +60,12 @@ const ALLOWED_OPERATIONS = new Set<AllowedOperation>([
 interface GraphQLGatewayRequest {
   operation: AllowedOperation;
   variables?: {
-    track?: Track;
-    gradeBand?: string;
-    date?: string;
+    track?:      Track;
+    gradeBand?:  string;
+    date?:       string;
+    topicSlug?:  string;
+    slug?:       string;
+    category?:   ProjectCategory;
   };
 }
 
@@ -98,6 +118,35 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           return NextResponse.json({ error: "track is required" }, { status: 422 });
         }
         const data = await getResourceLinks(variables.track);
+        return NextResponse.json({ data });
+      }
+
+      case "GetLesson": {
+        if (!variables.topicSlug) {
+          return NextResponse.json({ error: "topicSlug is required" }, { status: 422 });
+        }
+        const data = await getLessonBySlug(variables.topicSlug);
+        return NextResponse.json({ data });
+      }
+
+      case "GetLessons": {
+        if (!variables.track) {
+          return NextResponse.json({ error: "track is required" }, { status: 422 });
+        }
+        const data = await getLessonsByTrack(variables.track, variables.gradeBand);
+        return NextResponse.json({ data });
+      }
+
+      case "GetProjects": {
+        const data = await getProjects(variables.track, variables.category);
+        return NextResponse.json({ data });
+      }
+
+      case "GetProject": {
+        if (!variables.slug) {
+          return NextResponse.json({ error: "slug is required" }, { status: 422 });
+        }
+        const data = await getProjectBySlug(variables.slug);
         return NextResponse.json({ data });
       }
     }

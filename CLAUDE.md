@@ -71,7 +71,7 @@ dearadeline-withlove/
 │   │   │   ├── journal.py           # POST /journal/seal, GET /journal/progress
 │   │   │   ├── transcripts.py       # GET /transcripts/{student_id}
 │   │   │   ├── students.py          # POST /students/register, GET /students/{id}/state
-│   │   │   └── projects.py          # GET /projects — Art/DIY + Farm project catalog ⬜
+│   │   │   └── projects.py          # GET /projects — Art/DIY + Farm project catalog
 │   │   ├── connections/
 │   │   │   ├── pgvector_client.py   # Hippocampus: pgvector similarity search
 │   │   │   ├── neo4j_client.py      # GraphRAG: OASStandard + cross-track queries
@@ -105,13 +105,11 @@ dearadeline-withlove/
         │   │   ├── QuizCard.tsx            # Multiple-choice with reveal
         │   │   └── Flashcard.tsx           # CSS 3D flip card
         │   └── projects/
-        │       ├── ProjectCard.tsx         # Browse project catalog ⬜
-        │       └── ProjectGuide.tsx        # Step-by-step project runner ⬜
+        │       ├── ProjectCard.tsx         # Browse project catalog
+        │       └── ProjectGuide.tsx        # Step-by-step project runner
         └── lib/
             └── brain-client.ts            # Type-safe REST client for adeline-brain
 ```
-
-> ⬜ = not yet implemented
 
 ---
 
@@ -212,16 +210,16 @@ The project catalog (`projects.py`) returns structured `Project` objects — ste
 
 ---
 
-## Known Gaps (as of 2026-04-09)
+## Known Gaps (as of 2026-06-02)
 
 | Gap | Notes |
 |-----|-------|
 | Justice track seeds | Hippocampus needs more JUSTICE_CHANGEMAKING primary sources (lobbying docs, civil rights, regulatory capture) |
 | Content depth | Nightly self-seeding runs, but corpus needs manual expansion across all 10 tracks for launch quality |
-| Learning Path UI | Visual path through year-end (K-8) or graduation (9-12) — not started |
 | Parent dashboard polish | Per-kid recommendations view, co-op teacher bulk management |
 | Custom domain | DearAdeline.co — DNS/SSL needs pointing to Railway |
 | COPPA verification | `coppaConsent` field exists but no formal parent verification flow for under-13 |
+| Stripe env vars | Price IDs, publishable key, secret key, webhook secret — must be set in Vercel (not in .env.local) |
 
 ---
 

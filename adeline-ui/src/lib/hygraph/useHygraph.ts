@@ -14,6 +14,9 @@ import type {
   LessonStub,
   DailyBread,
   ResourceLink,
+  Lesson,
+  Project,
+  ProjectCategory,
 } from "./client";
 
 // ── Core fetch function ───────────────────────────────────────────────────────
@@ -107,5 +110,33 @@ export function useResourceLinks(track: Track | undefined): CMSState<ResourceLin
     "GetResourceLinks",
     track ? { track } : undefined,
     !!track,
+  );
+}
+
+export function useLesson(topicSlug: string | undefined): CMSState<Lesson> {
+  return useCMSQuery<Lesson>(
+    "GetLesson",
+    topicSlug ? { topicSlug } : undefined,
+    !!topicSlug,
+  );
+}
+
+export function useLessons(track: Track | undefined, gradeBand?: string): CMSState<Lesson[]> {
+  return useCMSQuery<Lesson[]>(
+    "GetLessons",
+    track ? { track, gradeBand } : undefined,
+    !!track,
+  );
+}
+
+export function useProjects(track?: Track, category?: ProjectCategory): CMSState<Project[]> {
+  return useCMSQuery<Project[]>("GetProjects", { track, category });
+}
+
+export function useProject(slug: string | undefined): CMSState<Project> {
+  return useCMSQuery<Project>(
+    "GetProject",
+    slug ? { slug } : undefined,
+    !!slug,
   );
 }
