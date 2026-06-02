@@ -69,7 +69,7 @@ def _get_gemini_model():
         model_name=GEMINI_MODEL,
         generation_config={
             "temperature": 0.7,
-            "max_output_tokens": 8192,
+            "max_output_tokens": 16384,
             "response_mime_type": "application/json",
         },
         system_instruction=ANIMATED_SKETCHNOTE_SYSTEM_PROMPT,
@@ -128,6 +128,7 @@ async def generate_animated_lesson(body: AnimatedLessonRequest):
 
     user_prompt = ANIMATED_SKETCHNOTE_USER_PROMPT.format(
         topic=body.topic,
+        track=body.track.value if body.track else "GENERAL",
         focus=body.focus or "General introduction appropriate for the age group.",
         duration_seconds=body.duration_seconds,
         target_ages=body.target_ages,
