@@ -169,7 +169,7 @@ xapi_version           = "1.0.3"
 case_standard          = "IMS Global CASE 1.0"
 activity_base_iri      = "urn:adeline:lesson"
 extension_namespace    = "https://adeline.app/xapi/ext"
-persist_on_generate    = true   # Auto-persist after every /lesson/generate
+persist_on_generate    = true   # Auto-persist after every /lesson/stream
 credit_hours_per_block = 0.1
 max_credit_hours       = 1.0
 

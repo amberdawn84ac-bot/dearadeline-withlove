@@ -3,7 +3,7 @@
 /**
  * HomeLessonDemo — Live "Try Adeline" widget for the marketing homepage.
  *
- * Calls /brain/lesson/generate and streams a real lesson block back to the
+ * Calls /brain/lesson/stream and streams a real lesson block back to the
  * visitor without requiring an account. Uses the demo student.
  */
 import { useState } from "react";

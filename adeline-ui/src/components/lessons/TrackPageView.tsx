@@ -10,7 +10,7 @@
  *  4. Resource links (curated archive sources for this track)
  *
  * The "Start Lesson" button on each stub fires the lesson request to
- * adeline-brain /lesson/generate — bridging CMS metadata into live AI content.
+ * adeline-brain /lesson/stream — bridging CMS metadata into live AI content.
  */
 
 import { useState } from "react";
