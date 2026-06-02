@@ -20,6 +20,8 @@ import type { LessonResponse, Track, LessonSuggestion, ProjectSuggestion, BookRe
 import { RecommendedBooks } from '@/components/dashboard/RecommendedBooks';
 import GenUIRendererWithHighlightAsk from '@/components/GenUIRenderer';
 import { LessonSkeleton } from '@/components/gen-ui/LessonSkeleton';
+import AnimatedSketchnoteRenderer from '@/components/gen-ui/patterns/AnimatedSketchnoteRenderer';
+import type { AnimatedSketchnoteLesson } from '@/lib/brain-client';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -69,6 +71,8 @@ function DashboardContent() {
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const [currentLessonMeta, setCurrentLessonMeta] = useState<{ topic: string; track: Track } | null>(null);
+  const [animatedLesson, setAnimatedLesson] = useState<AnimatedSketchnoteLesson | null>(null);
+  const [animatedLessonLoading, setAnimatedLessonLoading] = useState(false);
   const router = useRouter();
 
   // Stable transport reference — must not be recreated on every render or useChat
@@ -194,30 +198,69 @@ function DashboardContent() {
   const handleBackToSuggestions = useCallback(() => {
     setActiveLesson(null);
     setMessages([]);
+    setAnimatedLesson(null);
   }, [setMessages]);
 
   const handleSuggestionClick = useCallback(
-    (suggestion: LessonSuggestion) => {
-      if (isStreaming || !studentId) return;
+    async (suggestion: LessonSuggestion) => {
+      if (animatedLessonLoading || !studentId) return;
       setActiveLesson(null);
       setMessages([]);
+      setAnimatedLesson(null);
       setCurrentLessonMeta({ topic: suggestion.title, track: suggestion.track as Track });
-      append(
-        { text: suggestion.title },
-        {
-          body: {
-            lesson_request: {
-              student_id: studentId,
-              track: suggestion.track as Track,
-              topic: suggestion.title,
-              is_homestead: false,
-              grade_level: gradeLevel,
+      setAnimatedLessonLoading(true);
+      try {
+        const res = await fetch('/api/adeline/animated-lesson', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            topic: suggestion.title,
+            track: suggestion.track,
+            duration_seconds: 600,
+            target_ages: '10-18',
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAnimatedLesson(data as AnimatedSketchnoteLesson);
+        } else {
+          // Fallback to block stream on animated lesson failure
+          append(
+            { text: suggestion.title },
+            {
+              body: {
+                lesson_request: {
+                  student_id: studentId,
+                  track: suggestion.track as Track,
+                  topic: suggestion.title,
+                  is_homestead: false,
+                  grade_level: gradeLevel,
+                },
+              },
+            },
+          );
+        }
+      } catch {
+        // Network failure — fall back to block stream
+        append(
+          { text: suggestion.title },
+          {
+            body: {
+              lesson_request: {
+                student_id: studentId,
+                track: suggestion.track as Track,
+                topic: suggestion.title,
+                is_homestead: false,
+                grade_level: gradeLevel,
+              },
             },
           },
-        },
-      );
+        );
+      } finally {
+        setAnimatedLessonLoading(false);
+      }
     },
-    [studentId, gradeLevel, isStreaming, setMessages, append],
+    [studentId, gradeLevel, animatedLessonLoading, setMessages, append],
   );
 
   const handleRegenerateLesson = useCallback(() => {
@@ -263,8 +306,31 @@ function DashboardContent() {
           <SpacedRepWidget />
         </div>
 
-        {/* ── Streaming lesson view ── */}
-        {!activeLesson && (isStreaming || lessonBlocks.length > 0 || !!errorEvent) && (
+        {/* ── Animated sketchnote lesson view ── */}
+        {(animatedLesson || animatedLessonLoading) && !activeLesson && (
+          <div className="px-6 pb-8 pt-5">
+            <div className="flex items-center gap-3 mb-4">
+              <button
+                onClick={handleBackToSuggestions}
+                className="flex items-center gap-2 text-[#BD6809] hover:text-[#2F4731] transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="text-sm font-medium">Back to lesson list</span>
+              </button>
+            </div>
+            {animatedLessonLoading ? (
+              <div className="flex items-center gap-3 py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-[#BD6809]" />
+                <p className="text-sm text-[#2F4731]/60 italic">Adeline is building your animated lesson — about 20 seconds…</p>
+              </div>
+            ) : animatedLesson ? (
+              <AnimatedSketchnoteRenderer lesson={animatedLesson} />
+            ) : null}
+          </div>
+        )}
+
+        {/* ── Streaming lesson view (fallback) ── */}
+        {!activeLesson && !animatedLesson && !animatedLessonLoading && (isStreaming || lessonBlocks.length > 0 || !!errorEvent) && (
           <div className="px-6 pb-8 pt-5">
             {!isStreaming && (lessonBlocks.length > 0 || !!errorEvent) && (
               <div className="flex items-center gap-3 mb-4">
@@ -322,7 +388,7 @@ function DashboardContent() {
         )}
 
         {/* ── Idle: suggestion cards ── */}
-        {!activeLesson && !isStreaming && lessonBlocks.length === 0 && (
+        {!activeLesson && !isStreaming && lessonBlocks.length === 0 && !animatedLesson && !animatedLessonLoading && (
           <main className="px-6 pb-8 pt-5">
             {loadingSuggestions && (
               <div className="flex items-center justify-center py-12">
