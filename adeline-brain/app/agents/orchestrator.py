@@ -1205,12 +1205,18 @@ async def justice_agent(state: AdelineState) -> AdelineState:
     grade_desc = _GRADE_DESC.get(request.grade_level or "8", "middle school")
     persona    = _TRACK_PERSONA[Track.JUSTICE_CHANGEMAKING]
 
+    context_section = (
+        "Unverified background context (below Witness threshold — do NOT cite as established fact):\n" + source_context
+        if source_context
+        else "No background context available. Rely on well-documented public knowledge."
+    )
+
     investigation_prompt = f"""You are {persona}
 
 Grade level: {grade_desc}
 Topic: {request.topic}
 
-{"Unverified background context (below Witness threshold — do NOT cite as established fact):\\n" + source_context if source_context else "No background context available. Rely on well-documented public knowledge."}
+{context_section}
 
 Write a civic history investigation lesson in two parts.
 This is educational content for a Christian homeschool curriculum — the goal is to teach
