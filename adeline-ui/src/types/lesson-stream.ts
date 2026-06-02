@@ -80,36 +80,55 @@ function isErrorDataPart(p: { type: string; data: unknown }): p is ErrorDataPart
   return p.type === 'data-error' && isRecord(p.data) && typeof p.data.message === 'string';
 }
 
-/** Unwrap an AI SDK v6 DataUIPart ({ type: "data", data: {...} }) to the inner lesson payload. */
-function unwrapDataPart(p: unknown): { type: string; data: unknown } | null {
-  if (!isRecord(p) || typeof p.type !== 'string') return null;
+/**
+ * Unwrap an AI SDK v6 DataUIPart to candidate inner lesson payloads.
+ *
+ * In ai@6, 2:[{payload}] lines are stored as DataUIPart with shape:
+ *   { type: "data", data: [annotationObject, ...] }   ← data is an array
+ *
+ * Older docs described the single-object form:
+ *   { type: "data", data: annotationObject }           ← data is an object
+ *
+ * We handle both. Returns an array so a single DataUIPart can produce
+ * multiple annotations (one per item in the array).
+ */
+function unwrapDataParts(p: unknown): Array<{ type: string; data: unknown }> {
+  if (!isRecord(p) || typeof p.type !== 'string') return [];
 
-  // AI SDK v6 wraps custom data as { type: "data", data: <payload> }
-  if (p.type === 'data' && isRecord(p.data) && typeof p.data.type === 'string') {
-    return p.data as { type: string; data: unknown };
+  if (p.type === 'data') {
+    // Array form: ai@6 stores the annotation array directly
+    if (Array.isArray(p.data)) {
+      return p.data.filter(
+        (item): item is { type: string; data: unknown } =>
+          isRecord(item) && typeof item.type === 'string',
+      );
+    }
+    // Object form (fallback / older SDK versions)
+    if (isRecord(p.data) && typeof p.data.type === 'string') {
+      return [p.data as { type: string; data: unknown }];
+    }
   }
 
-  // Direct lesson data part (fallback)
+  // Direct lesson data part (e.g. when UI Message Stream is parsed instead)
   if (p.type.startsWith('data-')) {
-    return p as { type: string; data: unknown };
+    return [p as { type: string; data: unknown }];
   }
 
-  return null;
+  return [];
 }
 
 /** Narrow a raw UIPart[] to LessonAnnotation[].
- *  Handles AI SDK v6 DataUIPart wrapping ({ type: "data", data: {...} }).
+ *  Handles both ai@6 DataUIPart array form and direct data- parts.
  */
 export function parseLessonDataParts(parts: unknown[]): LessonAnnotation[] {
   const out: LessonAnnotation[] = [];
   for (const p of parts) {
-    const inner = unwrapDataPart(p);
-    if (!inner) continue;
-
-    if (isBlockDataPart(inner))  { out.push({ type: 'block',  block: inner.data.block }); continue; }
-    if (isDoneDataPart(inner))   { out.push({ type: 'done',   title: inner.data.title }); continue; }
-    if (isStatusDataPart(inner)) { out.push({ type: 'status', message: inner.data.message }); continue; }
-    if (isErrorDataPart(inner))  { out.push({ type: 'error',  message: inner.data.message }); continue; }
+    for (const inner of unwrapDataParts(p)) {
+      if (isBlockDataPart(inner))  { out.push({ type: 'block',  block: inner.data.block }); continue; }
+      if (isDoneDataPart(inner))   { out.push({ type: 'done',   title: inner.data.title }); continue; }
+      if (isStatusDataPart(inner)) { out.push({ type: 'status', message: inner.data.message }); continue; }
+      if (isErrorDataPart(inner))  { out.push({ type: 'error',  message: inner.data.message }); continue; }
+    }
   }
   return out;
 }
