@@ -24,7 +24,6 @@
   --neon-orange: #BD6809;
   --font-handwritten: 'Kalam', 'Caveat', cursive;
   --font-emphasis: 'Permanent Marker', cursive;
-  --font-bold: 'Swanky and Moo Moo', cursive;
   --font-neat: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
@@ -65,9 +64,7 @@
   /* Adeline Brand Fonts - Emilys Candy loaded locally */
   --font-emilys-candy: 'Emilys Candy', cursive;
   --font-kalam: 'Comic Sans MS', 'Chalkboard SE', 'Bradley Hand', cursive;
-  --font-kranky: 'Comic Sans MS', 'Chalkboard SE', 'Bradley Hand', cursive;
   --font-permanent-marker: 'Comic Sans MS', 'Chalkboard SE', 'Bradley Hand', cursive;
-  --font-swanky-and-moo-moo: 'Comic Sans MS', 'Chalkboard SE', 'Bradley Hand', cursive;
 }
 
 .dark {

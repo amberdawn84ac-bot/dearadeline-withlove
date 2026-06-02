@@ -13,7 +13,7 @@ import type {
 // ── Typography style → CSS class mapping ─────────────────────────────────────
 
 const STYLE_CLASS: Record<string, string> = {
-  bold_marker:  "font-kranky text-2xl font-black tracking-tight",
+  bold_marker:  "font-kalam text-2xl font-black tracking-tight",
   block_caps:   "font-mono text-sm font-bold uppercase tracking-widest",
   script_hand:  "font-kalam text-lg italic",
   sketch_print: "font-kalam text-base",
@@ -259,7 +259,7 @@ export default function AnimatedSketchnoteRenderer({ lesson }: Props) {
       {/* Header */}
       <div className="bg-[#3D1419] px-6 py-4 flex items-center justify-between">
         <div>
-          <h2 className="text-[#FFFEF7] font-kranky text-2xl">
+          <h2 className="text-[#FFFEF7] font-kalam text-2xl">
             {lesson.title.text}
           </h2>
           <p className="text-[#BD6809] font-kalam text-sm mt-0.5">
@@ -296,7 +296,7 @@ export default function AnimatedSketchnoteRenderer({ lesson }: Props) {
 
         {/* Teaching layer sidebar */}
         <div className="lg:w-72 bg-[#FFFEF7] border-t lg:border-t-0 lg:border-l border-[#BD6809]/20 p-5 overflow-y-auto max-h-[420px]">
-          <div className="font-kranky text-[#3D1419] text-lg mb-3">
+          <div className="font-kalam text-[#3D1419] text-lg mb-3">
             {scene.sceneTitle.text}
           </div>
           <TeachingLayer scene={scene} />

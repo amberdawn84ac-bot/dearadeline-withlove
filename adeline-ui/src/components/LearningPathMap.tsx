@@ -106,7 +106,7 @@ function NodeDetail({
           </span>
         </div>
 
-        <h3 className="font-kranky text-2xl text-[#3D1419] mb-1">{node.title}</h3>
+        <h3 className="font-kalam text-2xl text-[#3D1419] mb-1">{node.title}</h3>
 
         <div className="flex gap-2 flex-wrap mb-3">
           <span
@@ -205,7 +205,7 @@ function TrackColumn({
         className="rounded-xl px-3 py-2 text-white"
         style={{ backgroundColor: color }}
       >
-        <p className="font-kranky text-sm leading-tight">{TRACK_LABELS[trackName] ?? trackName}</p>
+        <p className="font-kalam text-sm leading-tight">{TRACK_LABELS[trackName] ?? trackName}</p>
         <p className="font-mono text-[10px] opacity-70 mt-0.5">
           {mastered} mastered · {available} ready
         </p>
@@ -299,7 +299,7 @@ export default function LearningPathMap({ studentId, filterTrack }: Props) {
     <div className="rounded-2xl border border-[#BD6809]/30 bg-[#FFFEF7] overflow-hidden shadow">
       {/* Header */}
       <div className="bg-[#3D1419] px-6 py-4">
-        <h2 className="font-kranky text-2xl text-[#FFFEF7]">Learning Path</h2>
+        <h2 className="font-kalam text-2xl text-[#FFFEF7]">Learning Path</h2>
         <p className="font-kalam text-sm text-[#BD6809] mt-0.5">
           Your curriculum concept map — see what you&apos;ve mastered and what&apos;s next.
         </p>

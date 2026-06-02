@@ -475,9 +475,7 @@ function BlockLabel({ type }: { type: string }) {
 // ── Font / color helpers (avoid inline styles) ─────────────────────────────────
 
 function _fontClass(fontFamily: string): string {
-  if (fontFamily.includes("swanky")) return css.fontSwanky;
   if (fontFamily.includes("permanent-marker")) return css.fontPermanentMarker;
-  if (fontFamily.includes("kranky")) return css.fontKranky;
   return css.fontKalam;
 }
 
@@ -571,7 +569,7 @@ function LabMissionBlock({ block }: { block: LessonBlockResponse }) {
         <span className="text-lg">🌱</span>
         <BlockLabel type="LAB_MISSION" />
       </div>
-      <LessonContent content={block.content} fontFamily="var(--font-swanky), cursive" color="#2F4731" />
+      <LessonContent content={block.content} fontFamily="var(--font-kalam), cursive" color="#2F4731" />
       <EvidenceFooter evidence={block.evidence} />
     </div>
   );
@@ -706,7 +704,7 @@ function QuizBlock({ block }: { block: LessonBlockResponse }) {
         <span className="text-lg">❓</span>
         <BlockLabel type="QUIZ" />
       </div>
-      <p className={clsx("text-lg text-[#312E81] leading-[1.7] whitespace-pre-wrap font-bold", css.fontKranky)}>
+      <p className={clsx("text-lg text-[#312E81] leading-[1.7] whitespace-pre-wrap font-bold", css.fontKalam)}>
         {block.content}
       </p>
       <textarea
@@ -1794,9 +1792,6 @@ function EmbeddedInterruptInlineBlock({ block }: { block: LessonBlockResponse })
           </div>
         </div>
       </div>
-    </div>
-  );
-}
     </div>
   );
 }

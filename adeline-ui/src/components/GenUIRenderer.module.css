@@ -139,16 +139,8 @@
   font-family: var(--font-kalam), cursive;
 }
 
-.fontSwanky {
-  font-family: var(--font-swanky), cursive;
-}
-
 .fontPermanentMarker {
   font-family: var(--font-permanent-marker), cursive;
-}
-
-.fontKranky {
-  font-family: var(--font-kranky), cursive;
 }
 
 /* ── Color utilities ─────────────────────────────────────────────────────── */

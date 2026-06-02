@@ -2,9 +2,7 @@ import type { Metadata } from "next";
 import {
   Inter,
   Kalam,
-  Kranky,
   Permanent_Marker,
-  Swanky_and_Moo_Moo,
 } from "next/font/google";
 import localFont from 'next/font/local';
 import "./globals.css";
@@ -21,23 +19,9 @@ const kalam = Kalam({
   subsets: ["latin"],
 });
 
-// Playful headers — fun facts, asides, unexpected delights
-const kranky = Kranky({
-  variable: "--font-kranky",
-  weight: "400",
-  subsets: ["latin"],
-});
-
 // Emphasis — key terms, warnings, things that must be remembered
 const permanentMarker = Permanent_Marker({
   variable: "--font-permanent-marker",
-  weight: "400",
-  subsets: ["latin"],
-});
-
-// Body alt — casual, conversational tone
-const swankyAndMooMoo = Swanky_and_Moo_Moo({
-  variable: "--font-swanky",
   weight: "400",
   subsets: ["latin"],
 });
@@ -76,7 +60,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: `(function(){if(typeof customElements==='undefined')return;var _d=customElements.define.bind(customElements);customElements.define=function(n,c,o){if(!customElements.get(n))_d(n,c,o);};})();` }} />
       </head>
       <body
-        className={`${inter.variable} ${emilysCandy.variable} ${kalam.variable} ${kranky.variable} ${permanentMarker.variable} ${swankyAndMooMoo.variable} antialiased`}
+        className={`${inter.variable} ${emilysCandy.variable} ${kalam.variable} ${permanentMarker.variable} antialiased`}
       >
         {children}
       </body>

@@ -83,9 +83,7 @@ const config: Config = {
         // Adeline's handwritten fonts
         'emilys-candy': ['var(--font-emilys-candy)', 'cursive'],
         'kalam': ['var(--font-kalam)', 'cursive'],
-        'kranky': ['var(--font-kranky)', 'cursive'],
         'permanent-marker': ['var(--font-permanent-marker)', 'cursive'],
-        'swanky': ['var(--font-swanky)', 'cursive'],
       },
       backgroundImage: {
         "sketch-paper": "url('/textures/paper.png')",
