@@ -166,3 +166,50 @@ async def lesson_health():
         "openai_embeddings": openai_status,
         "openai_error": openai_error,
     }
+
+
+@router.get("/health/oas")
+async def oas_health():
+    """Check OAS standards count in Neo4j to verify lesson generation readiness."""
+    from app.connections.neo4j_client import neo4j_client
+    
+    try:
+        await neo4j_client.connect()
+        result = await neo4j_client.run("MATCH (s:OASStandard) RETURN count(s) as count")
+        count = result.single()["count"] if result else 0
+        await neo4j_client.close()
+        
+        expected = 3043
+        minimum = 3000
+        
+        # Get distribution by track
+        await neo4j_client.connect()
+        track_result = await neo4j_client.run(
+            """
+            MATCH (s:OASStandard)-[:MAPS_TO_TRACK]->(t:Track)
+            RETURN t.name as track, count(s) as count
+            ORDER BY track
+            """
+        )
+        track_distribution = {record["track"]: record["count"] for record in track_result}
+        await neo4j_client.close()
+        
+        return {
+            "status": "ok" if count >= minimum else "degraded",
+            "oas_standard_count": count,
+            "expected_count": expected,
+            "minimum_acceptable": minimum,
+            "track_distribution": track_distribution,
+            "message": f"{'✅' if count >= minimum else '❌'} {count}/{expected} OAS standards loaded"
+        }
+    except Exception as e:
+        logger.error(f"[/health/oas] Failed to check OAS standards: {e}")
+        return {
+            "status": "error",
+            "oas_standard_count": 0,
+            "expected_count": 3043,
+            "minimum_acceptable": 3000,
+            "track_distribution": {},
+            "error": str(e),
+            "message": f"❌ Failed to check OAS standards: {e}"
+        }

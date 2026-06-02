@@ -13,16 +13,19 @@ else
     echo "[entrypoint] No DATABASE_URL set — skipping Prisma migrate"
 fi
 
-# Run seeds if RUN_SEEDS env var is set
-if [ "$RUN_SEEDS" = "true" ]; then
-    echo "[entrypoint] Running curriculum seed..."
-    python scripts/seed_curriculum.py || echo "[entrypoint] Curriculum seed failed"
-    
+# Run seeds if RUN_SEEDS env var is set (case-insensitive)
+if [ "$RUN_SEEDS" = "true" ] || [ "$RUN_SEEDS" = "TRUE" ]; then
     echo "[entrypoint] Running knowledge graph seed..."
-    python scripts/seed_knowledge_graph.py || echo "[entrypoint] Knowledge graph seed failed"
+    python scripts/seed_knowledge_graph.py || { echo "[entrypoint] Knowledge graph seed failed - EXITING"; exit 1; }
+
+    echo "[entrypoint] Running OAS standards seed (critical - loads all 3,043 standards)..."
+    python scripts/seed_oas_standards.py || { echo "[entrypoint] OAS standards seed failed - EXITING"; exit 1; }
+
+    echo "[entrypoint] Verifying OAS standards count..."
+    python scripts/verify_oas_count.py || { echo "[entrypoint] OAS verification failed - EXITING"; exit 1; }
 
     echo "[entrypoint] Running scripture seed..."
-    python scripts/seed_scripture.py || echo "[entrypoint] Scripture seed failed"
+    python scripts/seed_scripture.py || echo "[entrypoint] Scripture seed failed (non-fatal)"
 
     echo "[entrypoint] Running bookshelf seed..."
     python scripts/seed_bookshelf.py || echo "[entrypoint] Bookshelf seed failed (non-fatal)"
