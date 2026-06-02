@@ -133,8 +133,39 @@ async def submit_standard_evidence(
     """
     # Security: Only allow submitting for self or parent submitting for child
     if request.student_id != current_user_id:
-        # TODO: Add parent-child relationship check
-        raise HTTPException(status_code=403, detail="Cannot submit evidence for other students")
+        # Check if this is a parent submitting for their child
+        from app.api.middleware import _extract_role, _decode_jwt, _extract_bearer_token, _extract_user_id
+        from app.schemas.api_models import UserRole
+        from fastapi import Header
+
+        # Get the current user's role from the JWT
+        try:
+            # We need to get the authorization header from the request context
+            # Since we're using Depends(get_current_user_id), we need to extract role separately
+            # For now, we'll do a direct DB check for parent-child relationship
+            from app.config import get_db_conn
+            conn = await get_db_conn()
+            try:
+                row = await conn.fetchrow(
+                    'SELECT id FROM "User" WHERE id = $1 AND "parentId" = $2',
+                    request.student_id, current_user_id,
+                )
+                is_parent_of_child = row is not None
+            except Exception as e:
+                logger.warning(f"[Standards] Parent-child check failed: {e}")
+                is_parent_of_child = False
+            finally:
+                await conn.close()
+
+            if not is_parent_of_child:
+                logger.warning(
+                    f"[Standards] Unauthorized evidence submission: user={current_user_id} "
+                    f"target_student={request.student_id}"
+                )
+                raise HTTPException(status_code=403, detail="Cannot submit evidence for other students")
+        except Exception as e:
+            logger.error(f"[Standards] Authorization check failed: {e}")
+            raise HTTPException(status_code=403, detail="Authorization check failed")
     
     mapper = StandardsMapper(db)
     

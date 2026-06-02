@@ -43,6 +43,20 @@ describe("BlockType enum — completeness", () => {
     expect(BlockType.WRITING).toBe("WRITING");
   });
 
+  it("includes collaborative learning block types", () => {
+    expect(BlockType.PEER_TUTOR).toBe("PEER_TUTOR");
+    expect(BlockType.DISCUSSION_FORUM).toBe("DISCUSSION_FORUM");
+  });
+
+  it("includes ALU multimodal block types", () => {
+    expect(BlockType.AUDIO_DIALOGUE).toBe("AUDIO_DIALOGUE");
+    expect(BlockType.EMBEDDED_INTERRUPT_INLINE).toBe("EMBEDDED_INTERRUPT_INLINE");
+  });
+
+  it("includes all 22 block types", () => {
+    expect(Object.values(BlockType)).toHaveLength(22);
+  });
+
   it("LessonBlockSchema accepts NARRATIVE blockType", () => {
     const result = LessonBlockSchema.safeParse({
       id: "00000000-0000-0000-0000-000000000001",

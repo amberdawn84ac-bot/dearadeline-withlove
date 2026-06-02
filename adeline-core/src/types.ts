@@ -252,6 +252,9 @@ export enum BlockType {
   // ── Collaborative Learning ───────────────────────────────────────
   PEER_TUTOR       = "PEER_TUTOR",       // Peer tutoring matchup
   DISCUSSION_FORUM = "DISCUSSION_FORUM", // Dynamic discussion workspace
+  // ── ALU Multimodal Blocks ───────────────────────────────────────────
+  AUDIO_DIALOGUE              = "AUDIO_DIALOGUE",              // Audio with transcript sync and interactive choices
+  EMBEDDED_INTERRUPT_INLINE   = "EMBEDDED_INTERRUPT_INLINE",   // Inline interrupt with reflection prompts
 }
 
 export enum DifficultyLevel {

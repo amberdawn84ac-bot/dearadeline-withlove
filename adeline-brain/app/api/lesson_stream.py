@@ -42,7 +42,9 @@ from app.models.student import load_student_state
 _PREMIUM_TRACKS = {
     "CREATIVE_ECONOMY",
     "HOMESTEADING",
-}  # TODO: expand set as product decides
+    "CREATION_SCIENCE",  # Premium due to lab materials and experiments
+    "GOVERNMENT_ECONOMICS",  # Premium due to advanced civics content
+}  # Expanded based on product requirements
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lesson", tags=["lesson-stream"])

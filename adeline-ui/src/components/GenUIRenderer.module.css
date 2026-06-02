@@ -74,6 +74,48 @@
   border: 1px solid #2F473130;
 }
 
+/* ── New block type styles ───────────────────────────────────────────────────── */
+
+.dataTracking {
+  background: #ECFEFF;
+  border: 1.5px solid #0891B2;
+}
+
+.problem {
+  background: #FFF7ED;
+  border: 1.5px solid #7C2D12;
+}
+
+.writing {
+  background: #EEF2FF;
+  border: 1.5px solid #4338CA;
+}
+
+.highlightAsk {
+  background: #F3F4F6;
+  border: 1.5px solid #374151;
+}
+
+.peerTutor {
+  background: #FDF2F8;
+  border: 1.5px solid #BE185D;
+}
+
+.discussionForum {
+  background: #ECFDF5;
+  border: 1.5px solid #047857;
+}
+
+.audioDialogue {
+  background: #ECFEFF;
+  border: 1.5px solid #0E7490;
+}
+
+.embeddedInterrupt {
+  background: #FEF3C7;
+  border: 2px solid #F59E0B;
+}
+
 /* ── Verdict badges ──────────────────────────────────────────────────────── */
 
 .verdictVerified {

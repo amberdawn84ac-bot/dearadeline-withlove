@@ -11,8 +11,10 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.algorithms.zpd_engine import bkt_update, BKTParams
-from app.api.middleware import get_current_user_id
+from app.api.middleware import get_current_user_id, _extract_role, _decode_jwt, _extract_bearer_token, _extract_user_id
 from app.models.student import load_student_state, invalidate_student_state_cache
+from app.schemas.api_models import UserRole
+from fastapi import Header, HTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +47,7 @@ class GenuiCallbackResponse(BaseModel):
 @router.post("/callback", response_model=GenuiCallbackResponse)
 async def genui_callback(
     request: GenuiCallbackRequest,
-    current_user_id: str = Depends(get_current_user_id),
+    authorization: Optional[str] = Header(default=None),
 ):
     """
     Handle GENUI component callbacks and update BKT/ZPD in real time.
@@ -58,9 +60,44 @@ async def genui_callback(
 
     All callbacks are authenticated and ownership-checked via JWT.
     """
-    # TODO: Implement student ownership check
-    # if current_user.id != request.student_id and not is_admin(current_user):
-    #     raise HTTPException(status_403, "Not authorized")
+    # Security: Verify JWT and extract user info
+    try:
+        token = _extract_bearer_token(authorization)
+        payload = _decode_jwt(token)
+        current_user_id = _extract_user_id(payload)
+        current_role = _extract_role(payload)
+    except Exception as e:
+        logger.error(f"[GENUI] Auth failed: {e}")
+        raise HTTPException(status_code=401, detail="Authentication failed")
+
+    # Security: Student ownership check
+    # Students can only access their own data, parents can access their children's data, admins can access all
+    if current_role != UserRole.ADMIN.value:
+        if current_user_id != request.student_id:
+            # Check if this is a parent accessing their child's data
+            from app.config import get_db_conn
+            conn = await get_db_conn()
+            try:
+                row = await conn.fetchrow(
+                    'SELECT id FROM "User" WHERE id = $1 AND "parentId" = $2',
+                    request.student_id, current_user_id,
+                )
+                is_parent_of_child = row is not None
+            except Exception as e:
+                logger.warning(f"[GENUI] Parent-child check failed: {e}")
+                is_parent_of_child = False
+            finally:
+                await conn.close()
+
+            if not is_parent_of_child:
+                logger.warning(
+                    f"[GENUI] Unauthorized access attempt: user={current_user_id} "
+                    f"role={current_role} target_student={request.student_id}"
+                )
+                raise HTTPException(
+                    status_code=403,
+                    detail="Not authorized to access this student's data"
+                )
 
     # Audit logging for compliance and portfolio tracking
     logger.info(

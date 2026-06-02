@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
 import { CheckoutForm } from '@/components/checkout/CheckoutForm'
+import { useAuth } from '@/lib/useAuth'
 
 type Billing = 'monthly' | 'yearly'
 
@@ -86,15 +87,22 @@ const FOUNDER_CODES = new Set([
   'ADELINE-PREVIEW-2026',
 ])
 
-// TODO: replace with real user from session/auth
-const DEMO_USER = { id: 'demo-user-001', email: 'demo@example.com' }
-
 export default function PricingPage() {
   const router = useRouter()
+  const { user, loading } = useAuth()
   const [billing, setBilling]   = useState<Billing>('monthly')
   const [checkout, setCheckout] = useState<string | null>(null)
   const [promoCode, setPromoCode] = useState('')
   const [promoError, setPromoError] = useState('')
+
+  // Redirect to login if not authenticated and trying to checkout
+  const handleCheckout = (tierId: string) => {
+    if (!user) {
+      router.push('/login?mode=signup')
+      return
+    }
+    setCheckout(tierId)
+  }
 
   const handlePromoRedeem = () => {
     if (FOUNDER_CODES.has(promoCode.trim().toUpperCase())) {
@@ -122,12 +130,24 @@ export default function PricingPage() {
               <X className="w-5 h-5" />
             </button>
             <div className="p-2">
-              <CheckoutForm
-                userId={DEMO_USER.id}
-                userEmail={DEMO_USER.email}
-                tier={checkout}
-                billing={billing}
-              />
+              {user ? (
+                <CheckoutForm
+                  userId={user.id}
+                  userEmail={user.email || ''}
+                  tier={checkout}
+                  billing={billing}
+                />
+              ) : (
+                <div className="p-8 text-center">
+                  <p className="text-gray-600 mb-4">Please log in to continue with checkout</p>
+                  <button
+                    onClick={() => router.push('/login?mode=signup')}
+                    className="px-6 py-2 bg-[#BD6809] text-white rounded-lg hover:bg-[#a05a08]"
+                  >
+                    Go to Login
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

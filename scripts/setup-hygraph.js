@@ -22,11 +22,76 @@ if (!HYGRAPH_ENDPOINT || !HYGRAPH_TOKEN) {
 }
 
 // Management API is at management-{region}.hygraph.com
-// Content API: https://api-us-west-2.hygraph.com/v2/{project}/master
+// Content API formats:
+//   - https://api-us-west-2.hygraph.com/v2/{project}/master
+//   - https://us-west-2.cdn.hygraph.com/content/{project}/master
 // Management API: https://management-us-west-2.hygraph.com/graphql
-const MANAGEMENT_API = HYGRAPH_ENDPOINT
-  .replace('api-', 'management-')
-  .replace(/\/v2\/[^/]+\/master$/, '/graphql');
+let MANAGEMENT_API;
+let ENVIRONMENT_ID = process.env.HYGRAPH_ENVIRONMENT_ID;
+
+if (HYGRAPH_ENDPOINT.includes('cdn.hygraph.com')) {
+  // Extract region from CDN endpoint
+  const regionMatch = HYGRAPH_ENDPOINT.match(/https:\/\/([^.]+)\.cdn\.hygraph\.com/);
+  const region = regionMatch ? regionMatch[1] : 'us-west-2';
+  MANAGEMENT_API = `https://management-${region}.hygraph.com/graphql`;
+} else {
+  MANAGEMENT_API = HYGRAPH_ENDPOINT
+    .replace('api-', 'management-')
+    .replace(/\/v2\/[^/]+\/master$/, '/graphql');
+}
+
+// Function to get environment ID if not provided
+async function getEnvironmentId() {
+  if (ENVIRONMENT_ID) return ENVIRONMENT_ID;
+  
+  console.log('Fetching environment ID from Management API...');
+  
+  // Extract project ID from the endpoint
+  const projectIdMatch = HYGRAPH_ENDPOINT.match(/content\/([^\/]+)\/master/);
+  const projectId = projectIdMatch ? projectIdMatch[1] : null;
+  
+  if (!projectId) {
+    throw new Error('Could not extract project ID from HYGRAPH_ENDPOINT');
+  }
+  
+  console.log(`Project ID: ${projectId}`);
+  
+  const query = `
+    query($projectId: ID!) {
+      project(id: $projectId) {
+        environments {
+          edges {
+            node {
+              id
+              name
+            }
+          }
+        }
+      }
+    }
+  `;
+  
+  try {
+    const data = await managementQuery(query, { projectId });
+    const environments = data.project.environments.edges;
+    
+    // Find the master environment
+    const masterEnv = environments.find(e => e.node.name === 'master');
+    if (masterEnv) {
+      ENVIRONMENT_ID = masterEnv.node.id;
+      console.log(`Found master environment ID: ${ENVIRONMENT_ID}`);
+      return ENVIRONMENT_ID;
+    }
+    
+    // Fallback to first environment
+    ENVIRONMENT_ID = environments[0].node.id;
+    console.log(`Using first environment ID: ${ENVIRONMENT_ID} (${environments[0].node.name})`);
+    return ENVIRONMENT_ID;
+  } catch (err) {
+    console.error('Failed to fetch environment ID:', err.message);
+    throw new Error('Could not determine environment ID. Please set HYGRAPH_ENVIRONMENT_ID environment variable.');
+  }
+}
 
 console.log('Content API:', HYGRAPH_ENDPOINT);
 console.log('Management API:', MANAGEMENT_API);
@@ -63,6 +128,7 @@ async function createEnumeration(apiId, displayName, values) {
   const input = {
     apiId,
     displayName,
+    environmentId: ENVIRONMENT_ID,
     values: values.map(v => ({
       apiId: v.apiId,
       displayName: v.displayName
@@ -95,7 +161,8 @@ async function createModel(apiId, displayName, description = '') {
     apiId,
     apiIdPlural: apiId + 's',
     displayName,
-    description
+    description,
+    environmentId: ENVIRONMENT_ID
   };
 
   try {
@@ -125,6 +192,7 @@ async function createSimpleField(parentApiId, apiId, type, displayName, options 
     apiId,
     type,
     displayName,
+    environmentId: ENVIRONMENT_ID,
     ...options
   };
 
@@ -155,6 +223,7 @@ async function createEnumerableField(parentApiId, apiId, enumerationApiId, displ
     apiId,
     enumerationApiId,
     displayName,
+    environmentId: ENVIRONMENT_ID,
     ...options
   };
 
@@ -186,6 +255,7 @@ async function createRelationalField(parentApiId, apiId, targetModelApiId, displ
     type: 'RELATION',
     displayName,
     isList,
+    environmentId: ENVIRONMENT_ID,
     reverseField: {
       modelApiId: targetModelApiId,
       apiId: isList ? parentApiId.toLowerCase() + 's' : parentApiId.toLowerCase(),
