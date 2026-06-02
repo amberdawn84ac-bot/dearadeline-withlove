@@ -159,6 +159,7 @@ ANIMATED_SKETCHNOTE_USER_PROMPT = """\
 Generate a complete animated sketchnote lesson.
 
 TOPIC: {topic}
+CURRICULUM TRACK: {track}
 
 Special focus:
 {focus}
@@ -166,15 +167,32 @@ Special focus:
 Desired total duration: {duration_seconds} seconds
 Target ages: {target_ages}
 
-Generate 6–10 scenes. Each scene should be 30–60 seconds.
-Total duration should fill the requested time — do not produce a rushed 2-scene summary.
-Include at least 5 vocabulary words with pronunciation guides.
-Include at least 3 assessment items (mix of short_answer, discussion, draw_and_explain).
-Include at least 2 extension activities with specific materials lists.
+SCENE COUNT RULES (non-negotiable):
+- For duration ≤ 240s: generate exactly 6 scenes.
+- For duration 241–480s: generate exactly 8 scenes.
+- For duration ≥ 481s: generate exactly 10 scenes.
+Each scene must be 45–70 seconds so they fill the full requested duration.
+Do NOT produce a rushed 2-scene summary. Every scene must carry new specific knowledge.
 
-This lesson must be THOROUGH — the student should walk away having learned real,
-specific knowledge equivalent to a full class period at a public school.
-Teach real facts, real names, real processes. No filler. No fluff.
+Content requirements:
+- At least 8 vocabulary words, each with a pronunciation guide and a visual cue description.
+- At least 5 assessment items (mix: short_answer, discussion, draw_and_explain, multiple_choice).
+- At least 3 extension activities with specific materials lists.
+- Each scene's deepExplanation must be a full paragraph (3+ sentences) — not a sentence fragment.
+- Each scene's narration must be a complete spoken paragraph (4+ sentences).
+- Every scene must introduce at least one specific fact, name, date, measurement, or primary-source reference.
+
+This lesson must be THOROUGH — the student should walk away with mastery-level knowledge of
+the topic, equivalent to a complete 50-minute class period. Teach real facts, real names, real
+processes, real primary sources. No filler. No fluff. No shallow overviews.
+
+Track-specific guidance:
+- TRUTH_HISTORY / JUSTICE_CHANGEMAKING: cite primary sources inline (documents, speeches, legislation).
+- CREATION_SCIENCE / HOMESTEADING: include observable evidence, measurements, hands-on farm/lab steps.
+- DISCIPLESHIP / ENGLISH_LITERATURE: weave biblical worldview connections naturally, quote scripture properly.
+- APPLIED_MATHEMATICS: show worked examples with real numbers, not abstract formulas alone.
+- CREATIVE_ECONOMY: include cost/revenue examples, portfolio outcome prompts.
+- GOVERNMENT_ECONOMICS: name specific laws, institutions, data sources.
 
 For scripture: use Everett Fox translation, Hebrew names (Moshe, Avraham, Ya'akov,
 Yitzhak, YHWH/HaShem), and cite as [Paradise Scripture: Book Chapter:Verse].

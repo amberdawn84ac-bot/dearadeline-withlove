@@ -203,7 +203,7 @@ class AnimatedSketchnoteLessonData(BaseModel):
 class AnimatedLessonRequest(BaseModel):
     topic: str
     focus: str = ""
-    duration_seconds: int = 180
+    duration_seconds: int = 600
     target_ages: str = "10-15"
     track: Optional[Track] = None
     student_id: Optional[str] = None

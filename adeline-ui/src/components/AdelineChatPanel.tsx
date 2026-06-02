@@ -851,7 +851,7 @@ function BlockBubble({ block }: { block: LessonBlockResponse }) {
 export function LessonBlockChatPanel({ studentId, initialTrack = "TRUTH_HISTORY" }: LessonBlockChatPanelProps) {
   const [topic, setTopic] = useState("");
   const [track, setTrack] = useState<Track>(initialTrack);
-  const [renderMode, setRenderMode] = useState<LessonRenderMode>("standard_lesson");
+  const [renderMode, setRenderMode] = useState<LessonRenderMode>("animated_sketchnote_lesson");
   const [blocks, setBlocks] = useState<LessonBlockResponse[]>([]);
   const [animatedLesson, setAnimatedLesson] = useState<AnimatedSketchnoteLesson | null>(null);
   const [loading, setLoading] = useState(false);
@@ -875,7 +875,7 @@ export function LessonBlockChatPanel({ studentId, initialTrack = "TRUTH_HISTORY"
         const res = await fetch("/api/adeline/animated-lesson", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ topic: topic.trim(), duration_seconds: 180 }),
+          body: JSON.stringify({ topic: topic.trim(), track, duration_seconds: 600, target_ages: "10-18" }),
         });
         if (res.ok) {
           const data = await res.json();
