@@ -209,6 +209,8 @@ export function AdelineChatPanel({
   const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+  const [renderMode, setRenderMode] = useState<LessonRenderMode>("animated_sketchnote_lesson");
+  const [animatedLesson, setAnimatedLesson] = useState<AnimatedSketchnoteLesson | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -306,6 +308,39 @@ export function AdelineChatPanel({
     setInput("");
     addMessage({ role: "user", content: text });
     setIsLoading(true);
+
+    // Animated sketchnote lesson — bypass streaming entirely
+    if (renderMode === "animated_sketchnote_lesson" && !activeLessonContext) {
+      setAnimatedLesson(null);
+      addMessage({ role: "adeline", content: "Building your animated lesson — this takes about 20 seconds…" });
+      try {
+        const res = await fetch("/api/adeline/animated-lesson", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ topic: text, duration_seconds: 600, target_ages: "10-18" }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAnimatedLesson(data as AnimatedSketchnoteLesson);
+          // Replace the "building" message with a success cue
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.content === "Building your animated lesson — this takes about 20 seconds…"
+                ? { ...m, content: `Here's your animated lesson on "${text}":` }
+                : m
+            )
+          );
+        } else {
+          const err = await res.text();
+          addMessage({ role: "adeline", content: `Couldn't generate the animated lesson (${res.status}). Try the Standard mode, or check that GEMINI_API_KEY is set. Detail: ${err.slice(0, 200)}` });
+        }
+      } catch (e) {
+        addMessage({ role: "adeline", content: "Network error reaching the animated-lesson service. Try Standard mode." });
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
 
     try {
       if (activeLessonContext) {
@@ -430,7 +465,7 @@ export function AdelineChatPanel({
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, onLessonGenerated, addMessage, conversationHistory, processGenUIEvent, processALUEvent]);
+  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, onLessonGenerated, addMessage, conversationHistory, processGenUIEvent, processALUEvent, renderMode]);
 
   // Auto-send initial prompt (e.g. from Daily Bread "Start Deep Dive Study")
   useEffect(() => {
@@ -626,6 +661,13 @@ export function AdelineChatPanel({
           </div>
         ))}
 
+        {/* Animated sketchnote lesson output */}
+        {animatedLesson && (
+          <div className="w-full">
+            <AnimatedSketchnoteRenderer lesson={animatedLesson} />
+          </div>
+        )}
+
         {/* Streaming GenUI components — progressive rendering */}
         {streamingComponentOrder.length > 0 && (
           <div className="w-full">
@@ -675,6 +717,9 @@ export function AdelineChatPanel({
         className="shrink-0 px-4 py-3 border-t border-[#E7DAC3]"
         style={{ background: "#FFFDF5" }}
       >
+        <div className="mb-2">
+          <RenderModeSelector value={renderMode} onChange={setRenderMode} disabled={isLoading} />
+        </div>
         <div className="flex items-end gap-2">
           <textarea
             ref={inputRef}
