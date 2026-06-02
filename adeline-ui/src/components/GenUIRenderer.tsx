@@ -794,10 +794,14 @@ function InteractiveSimBlock({ block }: { block: LessonBlockResponse }) {
           <div className="grid grid-cols-2 gap-3">
             {sim.parameters.map((param, i) => (
               <div key={i}>
-                <label className="block text-xs font-semibold text-[#2F4731] mb-1">
+                <label
+                  htmlFor={`param-${param.name}`}
+                  className="block text-xs font-semibold text-[#2F4731] mb-1"
+                >
                   {param.name}
                 </label>
                 <input
+                  id={`param-${param.name}`}
                   type="range"
                   min={param.min || 0}
                   max={param.max || 100}
@@ -1104,8 +1108,8 @@ function DataTrackingBlock({ block }: { block: LessonBlockResponse }) {
                 return (
                   <div
                     key={i}
-                    className="flex-1 bg-[#BD6809] rounded-t hover:bg-[#a05a08] transition-colors relative group"
-                    style={{ height: `${Math.max(height, 5)}%` }}
+                    className={clsx("flex-1 bg-[#BD6809] rounded-t hover:bg-[#a05a08] transition-colors relative group", css.chartBar)}
+                    style={{ '--bar-height': `${Math.max(height, 5)}%` } as React.CSSProperties}
                   >
                     <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#2F4731] text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                       {dp.value} {tracking?.unit}
