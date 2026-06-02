@@ -13,8 +13,9 @@ interface WelcomeFlowProps {
     state: string;
     targetGraduationYear: number;
     coppaConsent: boolean;
+    parentName: string;
+    parentEmail: string;
   }) => void;
-  // learningStyle kept in interface for backend compat — always defaults to 'EXPEDITION'
   isSubmitting?: boolean;
 }
 
@@ -25,6 +26,8 @@ const YEAR_RANGE = Array.from({ length: 21 }, (_, i) => CURRENT_YEAR + i);
 export function WelcomeFlow({ onComplete, isSubmitting = false }: WelcomeFlowProps) {
   const [step, setStep] = useState(0);
   const [coppaConsent, setCoppaConsent] = useState(false);
+  const [parentName, setParentName] = useState('');
+  const [parentEmail, setParentEmail] = useState('');
   const [name, setName] = useState('');
   const [gradeLevel, setGradeLevel] = useState('');
   const [interests, setInterests] = useState<string[]>([]);
@@ -36,8 +39,12 @@ export function WelcomeFlow({ onComplete, isSubmitting = false }: WelcomeFlowPro
     const newErrors: Record<string, string> = {};
 
     if (stepNum === 1) {
+      if (!parentName.trim()) newErrors.parentName = 'Parent/guardian name is required';
+      if (!parentEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail)) {
+        newErrors.parentEmail = 'A valid parent/guardian email is required';
+      }
       if (!coppaConsent) {
-        newErrors.coppaConsent = 'Please provide parent/guardian consent to continue';
+        newErrors.coppaConsent = 'Please check the box to provide consent';
       }
     } else if (stepNum === 2) {
       if (!name.trim()) newErrors.name = 'Child name is required';
@@ -64,6 +71,8 @@ export function WelcomeFlow({ onComplete, isSubmitting = false }: WelcomeFlowPro
           state,
           targetGraduationYear,
           coppaConsent,
+          parentName,
+          parentEmail,
         });
       } else {
         setStep(step + 1);
@@ -126,7 +135,52 @@ export function WelcomeFlow({ onComplete, isSubmitting = false }: WelcomeFlowPro
           {/* Step 1: Parent Consent */}
           {step === 1 && (
             <div className="space-y-4">
-              <h2 className="text-2xl font-bold text-[#2F4731]">Parent/Guardian Consent</h2>
+              <h2 className="text-2xl font-bold text-[#2F4731]">Parent/Guardian Information</h2>
+              <p className="text-[#2F4731]/70 text-sm leading-relaxed">
+                Adeline is designed for families. We collect a parent contact for account security
+                and to comply with federal child privacy law (COPPA) for students under 13.
+              </p>
+
+              {/* Parent Name */}
+              <div>
+                <label className="block text-sm font-semibold text-[#2F4731] mb-1">
+                  Your Name (Parent/Guardian) *
+                </label>
+                <input
+                  type="text"
+                  value={parentName}
+                  onChange={(e) => {
+                    setParentName(e.target.value);
+                    setErrors((prev) => ({ ...prev, parentName: '' }));
+                  }}
+                  placeholder="e.g., Sarah Johnson"
+                  className="w-full px-4 py-2 border-2 border-[#E7DAC3] rounded-lg focus:outline-none focus:border-[#BD6809] text-[#2F4731]"
+                />
+                {errors.parentName && <p className="text-red-600 text-sm mt-1">{errors.parentName}</p>}
+              </div>
+
+              {/* Parent Email */}
+              <div>
+                <label className="block text-sm font-semibold text-[#2F4731] mb-1">
+                  Your Email Address *
+                </label>
+                <input
+                  type="email"
+                  value={parentEmail}
+                  onChange={(e) => {
+                    setParentEmail(e.target.value);
+                    setErrors((prev) => ({ ...prev, parentEmail: '' }));
+                  }}
+                  placeholder="parent@example.com"
+                  className="w-full px-4 py-2 border-2 border-[#E7DAC3] rounded-lg focus:outline-none focus:border-[#BD6809] text-[#2F4731]"
+                />
+                <p className="text-[#2F4731]/50 text-xs mt-1">
+                  If your child is under 13, we will email you to confirm consent before they can begin.
+                </p>
+                {errors.parentEmail && <p className="text-red-600 text-sm mt-1">{errors.parentEmail}</p>}
+              </div>
+
+              {/* Consent checkbox */}
               <div className="bg-[#FFFEF7] border-2 border-[#E7DAC3] rounded-xl p-4">
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
@@ -139,9 +193,8 @@ export function WelcomeFlow({ onComplete, isSubmitting = false }: WelcomeFlowPro
                     className="w-5 h-5 rounded border-[#BD6809] text-[#BD6809] focus:ring-[#BD6809] mt-0.5"
                   />
                   <span className="text-[#2F4731] text-sm leading-relaxed">
-                    I am the parent/guardian. I consent to my child using Adeline and understand that Adeline
-                    is an AI educational tool that helps personalize learning. I have read and agree to the
-                    privacy policy and terms of service.
+                    I am the parent/guardian of the student being registered. I consent to my child
+                    using Adeline and agree to the privacy policy and terms of service.
                   </span>
                 </label>
               </div>

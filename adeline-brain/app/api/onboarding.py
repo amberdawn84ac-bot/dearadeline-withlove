@@ -69,12 +69,17 @@ class UserProfile(BaseModel):
     state: Optional[str] = None
     targetGraduationYear: Optional[int] = None
     onboardingComplete: bool = False
+    coppaVerified: bool = False
+    requiresCoppaVerification: bool = False
 
 
 class OnboardingResponse(BaseModel):
     """Response wrapper for onboarding endpoints."""
     ok: bool
     user: UserProfile
+
+
+UNDER_13_GRADES = {"K", "1", "2", "3", "4", "5", "6", "7"}
 
 
 class OnboardingRequest(BaseModel):
@@ -86,6 +91,8 @@ class OnboardingRequest(BaseModel):
     state: str
     targetGraduationYear: int
     coppaConsent: bool
+    parentName: str
+    parentEmail: str
     inviteCode: Optional[str] = None  # required in Founder Alpha; optional once open
 
     @validator("name")
@@ -242,7 +249,8 @@ async def get_onboarding(authorization: Optional[str] = Header(None)):
                 "id", "name", "gradeLevel",
                 "mathLevel", "elaLevel", "scienceLevel", "historyLevel",
                 "interests", "learningStyle", "pacingMultiplier",
-                "state", "targetGraduationYear", "onboardingComplete"
+                "state", "targetGraduationYear", "onboardingComplete",
+                "coppaVerified"
             FROM "User"
             WHERE "id" = $1
             """,
@@ -260,10 +268,11 @@ async def get_onboarding(authorization: Optional[str] = Header(None)):
     # Convert interests array (PostgreSQL array type) to Python list
     interests = list(row["interests"]) if row["interests"] else []
 
+    grade = row["gradeLevel"] or ""
     user_profile = UserProfile(
         id=str(row["id"]),
         name=row["name"],
-        gradeLevel=row["gradeLevel"],
+        gradeLevel=grade,
         mathLevel=row["mathLevel"],
         elaLevel=row["elaLevel"],
         scienceLevel=row["scienceLevel"],
@@ -274,6 +283,8 @@ async def get_onboarding(authorization: Optional[str] = Header(None)):
         state=row["state"],
         targetGraduationYear=row["targetGraduationYear"],
         onboardingComplete=row["onboardingComplete"],
+        coppaVerified=row["coppaVerified"],
+        requiresCoppaVerification=grade in UNDER_13_GRADES and not row["coppaVerified"],
     )
 
     logger.info(f"[GET /api/onboarding] Fetched profile for user {user_id}")
@@ -325,13 +336,18 @@ async def post_onboarding(
                 if code_row["isUsed"]:
                     raise HTTPException(status_code=403, detail="This invite code has already been used.")
 
+            # For grades K-7, account starts unverified; parent must confirm via email
+            needs_coppa = request.gradeLevel in UNDER_13_GRADES
+            coppa_verified = not needs_coppa  # 8-12 verified immediately
+
             row = await conn.fetchrow(
                 """
                 INSERT INTO "User" (
                     "id", "name", "email", "role", "gradeLevel", "interests", "learningStyle",
-                    "state", "targetGraduationYear", "onboardingComplete", "updatedAt"
+                    "state", "targetGraduationYear", "onboardingComplete",
+                    "parentName", "parentEmail", "coppaVerified", "updatedAt"
                 )
-                VALUES ($1, $2, $3, 'STUDENT', $4, $5::text[], $6, $7, $8, true, NOW())
+                VALUES ($1, $2, $3, 'STUDENT', $4, $5::text[], $6, $7, $8, true, $9, $10, $11, NOW())
                 ON CONFLICT ("id") DO UPDATE SET
                     "name" = EXCLUDED."name",
                     "gradeLevel" = EXCLUDED."gradeLevel",
@@ -340,15 +356,20 @@ async def post_onboarding(
                     "state" = EXCLUDED."state",
                     "targetGraduationYear" = EXCLUDED."targetGraduationYear",
                     "onboardingComplete" = true,
+                    "parentName" = EXCLUDED."parentName",
+                    "parentEmail" = EXCLUDED."parentEmail",
+                    "coppaVerified" = EXCLUDED."coppaVerified",
                     "updatedAt" = NOW()
                 RETURNING
                     "id", "name", "gradeLevel",
                     "mathLevel", "elaLevel", "scienceLevel", "historyLevel",
                     "interests", "learningStyle", "pacingMultiplier",
-                    "state", "targetGraduationYear", "onboardingComplete"
+                    "state", "targetGraduationYear", "onboardingComplete",
+                    "coppaVerified"
                 """,
                 user_id, request.name, email, request.gradeLevel, request.interests,
                 request.learningStyle, request.state, request.targetGraduationYear,
+                request.parentName, request.parentEmail, coppa_verified,
             )
 
             if request.inviteCode:
@@ -389,11 +410,13 @@ async def post_onboarding(
         state=row["state"],
         targetGraduationYear=row["targetGraduationYear"],
         onboardingComplete=row["onboardingComplete"],
+        coppaVerified=row["coppaVerified"],
+        requiresCoppaVerification=needs_coppa,
     )
 
     logger.info(
         f"[Onboarding] User {user_id} completed onboarding: {request.name}, "
-        f"grade {request.gradeLevel}, interests {request.interests}"
+        f"grade {request.gradeLevel}, coppaVerified={coppa_verified}"
     )
 
     return OnboardingResponse(ok=True, user=user_profile)

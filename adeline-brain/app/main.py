@@ -23,6 +23,7 @@ from app.connections.neo4j_client import neo4j_client
 from app.connections.pgvector_client import hippocampus
 from app.connections.bookshelf_search import bookshelf_search
 from app.connections.redis_client import ping as redis_ping
+from app.api.coppa import router as coppa_router
 from app.api.lessons import router as lessons_router
 from app.api.opportunities import router as opportunities_router
 from app.api.journal import router as journal_router
@@ -281,6 +282,7 @@ app.include_router(learning_path_router, prefix="/brain")
 app.include_router(daily_bread_router, prefix="/brain")
 app.include_router(standards_router, prefix="/brain")
 app.include_router(focus_router, prefix="/brain")
+app.include_router(coppa_router, prefix="/brain")
 
 
 @app.get("/health")

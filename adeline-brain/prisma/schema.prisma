@@ -26,6 +26,11 @@ model User {
   targetGraduationYear Int?
   onboardingComplete   Boolean           @default(false)
   parentId             String?
+  parentName           String?
+  parentEmail          String?
+  coppaVerified        Boolean           @default(false)
+  coppaPendingToken    String?           @unique
+  coppaTokenExpiresAt  DateTime?
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   standardMastery      StandardMastery[]
