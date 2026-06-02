@@ -80,7 +80,7 @@ export function CreditDashboardComponent({ studentId }: Props) {
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-gray-900">{bucket.bucket}</span>
                   <span className="text-sm text-gray-600">
-                    {bucket.hoursEarned.toFixed(1)} hours
+                    {bucket.hoursEarned !== undefined ? `${bucket.hoursEarned.toFixed(1)} hours` : '0 hours'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
