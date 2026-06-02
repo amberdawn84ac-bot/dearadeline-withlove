@@ -204,7 +204,10 @@ export async function POST(req: NextRequest) {
                   ensureTextStarted();
                   enqueue(chunk({ type: "text-delta", id: "t0", delta: blockContent + "\n\n" }));
                 }
+                // UI Message Stream format (backward compat)
                 enqueue(chunk({ type: "data-block", data: { block: event.block } }));
+                // Data Stream Protocol 2: annotation — ai@6 useChat reads these, not the data: lines
+                enqueue(dataAnnotation({ type: "data-block", data: { block: event.block } }));
                 break;
               }
 
