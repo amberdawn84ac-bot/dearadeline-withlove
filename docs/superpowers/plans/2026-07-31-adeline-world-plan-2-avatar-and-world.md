@@ -1717,7 +1717,666 @@ git commit -m "feat: wire GameShell - avatar builder first, hub world, rooms, Ad
 
 ---
 
-## Task 11: Smoke Test + Push
+## Task 11: Science Lab Room
+
+**Files:**
+- Create: `src/components/rooms/ScienceLab.tsx`
+- Modify: `src/types/game.ts` — add `'science_lab'` to RoomId and HUB_PORTALS
+- Modify: `src/pages/GameShell.tsx` — add ScienceLab route
+
+- [ ] **Step 1: Add `'science_lab'` to `src/types/game.ts`**
+
+Change the RoomId type:
+```typescript
+export type RoomId = 'math_mines' | 'story_forest' | 'science_lab' | 'homestead_farm' | 'truth_archive'
+```
+
+Add to HUB_PORTALS array (after the story_forest entry):
+```typescript
+  {
+    id: 'science_lab',
+    label: 'Science Lab',
+    description: 'Discover how creation works',
+    x: 50,
+    y: 20,
+    color: '#0e7490',
+    emoji: '🔬'
+  },
+  {
+    id: 'homestead_farm',
+    label: 'Homestead Farm',
+    description: 'Grow, raise, build, and sell',
+    x: 18,
+    y: 65,
+    color: '#65a30d',
+    emoji: '🌾'
+  },
+  {
+    id: 'truth_archive',
+    label: 'Truth Archive',
+    description: 'Primary sources, real history',
+    x: 82,
+    y: 65,
+    color: '#92400e',
+    emoji: '📜'
+  },
+```
+
+- [ ] **Step 2: Create `src/components/rooms/ScienceLab.tsx`**
+
+```typescript
+import { useState, useEffect } from 'react'
+
+interface Props {
+  playerName: string
+  onXpEarned: (amount: number) => void
+  onCoinsEarned: (amount: number) => void
+}
+
+interface Experiment {
+  scenario: string
+  question: string
+  choices: string[]
+  correctIndex: number
+  explanation: string
+  xpReward: number
+  coinReward: number
+}
+
+const FALLBACK_EXPERIMENTS: Experiment[] = [
+  {
+    scenario: "You plant two identical tomato seedlings. One gets 6 hours of sunlight daily, the other gets 1 hour. After 3 weeks, the first plant is tall and flowering. The second is small and pale.",
+    question: "What does this experiment show?",
+    choices: [
+      "Tomatoes prefer cool weather",
+      "Plants need sunlight to grow well",
+      "Watering is more important than sunlight",
+      "Both plants will eventually look the same"
+    ],
+    correctIndex: 1,
+    explanation: "The only difference between the plants was sunlight. Since the plant with more sun grew better, we can conclude sunlight is essential for healthy growth — this is how God designed photosynthesis to work.",
+    xpReward: 30,
+    coinReward: 8
+  },
+  {
+    scenario: "When you mix baking soda and vinegar, the mixture bubbles rapidly and the container feels colder. The bubbles are carbon dioxide gas escaping.",
+    question: "What type of reaction is this?",
+    choices: [
+      "A physical change — no new substance was made",
+      "A chemical reaction — new substances were created",
+      "The baking soda just dissolved in vinegar",
+      "Heat caused the bubbling"
+    ],
+    correctIndex: 1,
+    explanation: "A chemical reaction occurred: the baking soda (sodium bicarbonate) and vinegar (acetic acid) reacted to form carbon dioxide gas, water, and sodium acetate — entirely new substances.",
+    xpReward: 35,
+    coinReward: 10
+  },
+]
+
+export default function ScienceLab({ playerName, onXpEarned, onCoinsEarned }: Props) {
+  const [experiment, setExperiment] = useState<Experiment | null>(null)
+  const [selected, setSelected] = useState<number | null>(null)
+  const [revealed, setRevealed] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [questIndex, setQuestIndex] = useState(0)
+
+  useEffect(() => { loadExperiment() }, [questIndex])
+
+  async function loadExperiment() {
+    setLoading(true)
+    setSelected(null)
+    setRevealed(false)
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `Create a science observation or experiment scenario for a homeschool student. Base it on creation science, nature, farming, chemistry with household items, or animal biology. Write 2-3 sentences describing what happens, then a multiple-choice question with 4 options. Include a faith-friendly explanation grounded in how God designed creation. Respond ONLY with valid JSON: {"scenario":"...","question":"...","choices":["...","...","...","..."],"correctIndex":0,"explanation":"...","xpReward":30,"coinReward":8}`,
+          history: []
+        })
+      })
+      const data = await res.json()
+      const parsed = JSON.parse(data.reply.replace(/```json|```/g, '').trim())
+      if (parsed.scenario && parsed.choices?.length === 4) setExperiment(parsed)
+      else throw new Error('bad format')
+    } catch {
+      setExperiment(FALLBACK_EXPERIMENTS[questIndex % FALLBACK_EXPERIMENTS.length])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function check() {
+    if (selected === null || !experiment) return
+    setRevealed(true)
+    if (selected === experiment.correctIndex) {
+      onXpEarned(experiment.xpReward)
+      onCoinsEarned(experiment.coinReward)
+    }
+  }
+
+  const isCorrect = revealed && selected === experiment?.correctIndex
+
+  return (
+    <div className="h-full flex flex-col" style={{ background: 'linear-gradient(180deg, #0c1a2e 0%, #0e3a4a 50%, #0a2535 100%)' }}>
+      <div className="flex items-center gap-3 p-4 border-b border-white/10">
+        <span className="text-3xl">🔬</span>
+        <div>
+          <h2 className="text-white font-bold text-lg">Science Lab</h2>
+          <p className="text-cyan-300 text-xs">Discover God's design, {playerName}!</p>
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col items-center justify-center p-6 gap-5 overflow-y-auto">
+        {loading ? (
+          <div className="text-center space-y-3">
+            <div className="w-10 h-10 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-cyan-300 text-sm">Preparing your experiment...</p>
+          </div>
+        ) : experiment ? (
+          <>
+            <div className="w-full max-w-lg bg-cyan-900/30 backdrop-blur rounded-2xl p-5 border border-cyan-400/20">
+              <p className="text-xs text-cyan-300 font-semibold uppercase tracking-wider mb-2">🧪 Observe</p>
+              <p className="text-white/90 text-sm leading-relaxed">{experiment.scenario}</p>
+            </div>
+
+            <div className="w-full max-w-lg">
+              <p className="text-white font-semibold text-sm mb-3">{experiment.question}</p>
+              <div className="space-y-2">
+                {experiment.choices.map((choice, i) => {
+                  let cls = 'bg-white/10 border border-white/20 text-white hover:bg-white/20'
+                  if (selected === i && !revealed) cls = 'bg-cyan-600/40 border border-cyan-400 text-white'
+                  if (revealed && i === experiment.correctIndex) cls = 'bg-emerald-500/30 border-2 border-emerald-400 text-emerald-200'
+                  if (revealed && selected === i && i !== experiment.correctIndex) cls = 'bg-red-500/30 border-2 border-red-400 text-red-200'
+                  return (
+                    <button key={i} onClick={() => !revealed && setSelected(i)}
+                      className={`w-full text-left px-4 py-3 rounded-xl text-sm transition-all ${cls}`}>
+                      <span className="font-bold mr-2">{String.fromCharCode(65+i)}.</span>{choice}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {!revealed ? (
+              <button onClick={check} disabled={selected === null}
+                className="w-full max-w-lg py-3 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-bold rounded-xl">
+                Submit Observation →
+              </button>
+            ) : (
+              <div className={`w-full max-w-lg rounded-2xl p-4 space-y-2 ${isCorrect ? 'bg-emerald-500/20 border border-emerald-400' : 'bg-red-500/20 border border-red-400'}`}>
+                <p className={`font-bold ${isCorrect ? 'text-emerald-300' : 'text-red-300'}`}>{isCorrect ? '🎉 Great observation!' : '🔭 Good try!'}</p>
+                <p className="text-white/80 text-sm">{experiment.explanation}</p>
+                {isCorrect && <p className="text-amber-300 text-xs">+{experiment.xpReward} XP · +{experiment.coinReward} AdeCoins</p>}
+                <button onClick={() => setQuestIndex(i => i + 1)}
+                  className={`w-full py-2 rounded-xl text-white font-semibold mt-2 ${isCorrect ? 'bg-emerald-500' : 'bg-white/20'}`}>
+                  Next Experiment →
+                </button>
+              </div>
+            )}
+          </>
+        ) : null}
+      </div>
+
+      <div className="flex justify-center gap-4 p-3 border-t border-white/10">
+        {['🧬','⚗️','🔭','🌡️','💧'].map((e,i) => <span key={i} className="text-xl opacity-40">{e}</span>)}
+      </div>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 3: Add ScienceLab to GameShell imports and room render**
+
+In `src/pages/GameShell.tsx`, add:
+```typescript
+import ScienceLab from '../components/rooms/ScienceLab'
+```
+
+In the room render section, after the story_forest block:
+```typescript
+            {screen === 'room' && currentRoom === 'science_lab' && (
+              <ScienceLab
+                playerName={playerName}
+                onXpEarned={addXP}
+                onCoinsEarned={addCoins}
+              />
+            )}
+```
+
+Also update `roomLabel` to include the new rooms:
+```typescript
+  const roomLabel =
+    currentRoom === 'math_mines'    ? '⛏️ Math Mines' :
+    currentRoom === 'story_forest'  ? '🌲 Story Forest' :
+    currentRoom === 'science_lab'   ? '🔬 Science Lab' :
+    currentRoom === 'homestead_farm'? '🌾 Homestead Farm' :
+    currentRoom === 'truth_archive' ? '📜 Truth Archive' : undefined
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/types/game.ts src/components/rooms/ScienceLab.tsx src/pages/GameShell.tsx
+git commit -m "feat: add Science Lab room with creation science experiments"
+```
+
+---
+
+## Task 12: Homestead Farm Room
+
+**Files:**
+- Create: `src/components/rooms/HomesteadFarm.tsx`
+- Modify: `src/pages/GameShell.tsx` — add HomesteadFarm route
+
+- [ ] **Step 1: Create `src/components/rooms/HomesteadFarm.tsx`**
+
+```typescript
+import { useState, useEffect } from 'react'
+
+interface Props {
+  playerName: string
+  onXpEarned: (amount: number) => void
+  onCoinsEarned: (amount: number) => void
+}
+
+interface FarmTask {
+  scenario: string
+  challenge: string
+  choices: string[]
+  correctIndex: number
+  explanation: string
+  xpReward: number
+  coinReward: number
+}
+
+const FALLBACK_TASKS: FarmTask[] = [
+  {
+    scenario: "Your family wants to sell eggs at the farmer's market. You have 4 hens. Each hen lays about 5 eggs per week. Eggs sell for $0.50 each.",
+    challenge: "How much money could you earn in one week?",
+    choices: ["$5.00", "$8.00", "$10.00", "$20.00"],
+    correctIndex: 2,
+    explanation: "4 hens × 5 eggs = 20 eggs per week. 20 eggs × $0.50 = $10.00. Running a farm stand teaches you real math AND entrepreneurship!",
+    xpReward: 30,
+    coinReward: 10
+  },
+  {
+    scenario: "Your garden has 3 rows of tomatoes. Each row has 8 plants. You want to can all your tomatoes. Each plant gives about 10 tomatoes and each jar needs 6 tomatoes.",
+    challenge: "How many jars can you fill?",
+    choices: ["24 jars", "40 jars", "48 jars", "30 jars"],
+    correctIndex: 1,
+    explanation: "3 rows × 8 plants = 24 plants. 24 plants × 10 tomatoes = 240 tomatoes. 240 ÷ 6 = 40 jars. Preserving your harvest is a real survival skill!",
+    xpReward: 35,
+    coinReward: 12
+  },
+]
+
+export default function HomesteadFarm({ playerName, onXpEarned, onCoinsEarned }: Props) {
+  const [task, setTask] = useState<FarmTask | null>(null)
+  const [selected, setSelected] = useState<number | null>(null)
+  const [revealed, setRevealed] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [questIndex, setQuestIndex] = useState(0)
+
+  useEffect(() => { loadTask() }, [questIndex])
+
+  async function loadTask() {
+    setLoading(true)
+    setSelected(null)
+    setRevealed(false)
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `Create a practical homesteading challenge for a homeschool student. It should involve farming, animals (chickens, sheep, horses, cows), gardening, canning/preserving food, building, selling at a farm stand, or off-grid living. Include real math or decision-making. Write 2 sentences setting the scene, then a multiple-choice question with 4 options. Respond ONLY with valid JSON: {"scenario":"...","challenge":"...","choices":["...","...","...","..."],"correctIndex":0,"explanation":"...","xpReward":30,"coinReward":10}`,
+          history: []
+        })
+      })
+      const data = await res.json()
+      const parsed = JSON.parse(data.reply.replace(/```json|```/g, '').trim())
+      if (parsed.scenario && parsed.choices?.length === 4) setTask(parsed)
+      else throw new Error('bad format')
+    } catch {
+      setTask(FALLBACK_TASKS[questIndex % FALLBACK_TASKS.length])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function check() {
+    if (selected === null || !task) return
+    setRevealed(true)
+    if (selected === task.correctIndex) {
+      onXpEarned(task.xpReward)
+      onCoinsEarned(task.coinReward)
+    }
+  }
+
+  const isCorrect = revealed && selected === task?.correctIndex
+
+  return (
+    <div className="h-full flex flex-col" style={{ background: 'linear-gradient(180deg, #1a2e0a 0%, #2d4a1a 40%, #3d5c1e 100%)' }}>
+      <div className="flex items-center gap-3 p-4 border-b border-white/10">
+        <span className="text-3xl">🌾</span>
+        <div>
+          <h2 className="text-white font-bold text-lg">Homestead Farm</h2>
+          <p className="text-lime-300 text-xs">Grow, raise, build, sell — {playerName}!</p>
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col items-center justify-center p-6 gap-5 overflow-y-auto">
+        {loading ? (
+          <div className="text-center space-y-3">
+            <div className="w-10 h-10 border-4 border-lime-400 border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-lime-300 text-sm">Adeline is checking the farm...</p>
+          </div>
+        ) : task ? (
+          <>
+            <div className="w-full max-w-lg bg-lime-900/30 backdrop-blur rounded-2xl p-5 border border-lime-400/20">
+              <p className="text-xs text-lime-300 font-semibold uppercase tracking-wider mb-2">🐓 Farm Scene</p>
+              <p className="text-white/90 text-sm leading-relaxed">{task.scenario}</p>
+            </div>
+
+            <div className="w-full max-w-lg">
+              <p className="text-white font-semibold text-sm mb-3">{task.challenge}</p>
+              <div className="space-y-2">
+                {task.choices.map((choice, i) => {
+                  let cls = 'bg-white/10 border border-white/20 text-white hover:bg-white/20'
+                  if (selected === i && !revealed) cls = 'bg-lime-600/40 border border-lime-400 text-white'
+                  if (revealed && i === task.correctIndex) cls = 'bg-emerald-500/30 border-2 border-emerald-400 text-emerald-200'
+                  if (revealed && selected === i && i !== task.correctIndex) cls = 'bg-red-500/30 border-2 border-red-400 text-red-200'
+                  return (
+                    <button key={i} onClick={() => !revealed && setSelected(i)}
+                      className={`w-full text-left px-4 py-3 rounded-xl text-sm transition-all ${cls}`}>
+                      <span className="font-bold mr-2">{String.fromCharCode(65+i)}.</span>{choice}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {!revealed ? (
+              <button onClick={check} disabled={selected === null}
+                className="w-full max-w-lg py-3 bg-lime-600 hover:bg-lime-500 disabled:opacity-50 text-white font-bold rounded-xl">
+                Work It Out →
+              </button>
+            ) : (
+              <div className={`w-full max-w-lg rounded-2xl p-4 space-y-2 ${isCorrect ? 'bg-emerald-500/20 border border-emerald-400' : 'bg-red-500/20 border border-red-400'}`}>
+                <p className={`font-bold ${isCorrect ? 'text-emerald-300' : 'text-red-300'}`}>{isCorrect ? '🎉 Great farming!' : '🌱 Keep growing!'}</p>
+                <p className="text-white/80 text-sm">{task.explanation}</p>
+                {isCorrect && <p className="text-amber-300 text-xs">+{task.xpReward} XP · +{task.coinReward} AdeCoins</p>}
+                <button onClick={() => setQuestIndex(i => i + 1)}
+                  className={`w-full py-2 rounded-xl text-white font-semibold mt-2 ${isCorrect ? 'bg-emerald-500' : 'bg-white/20'}`}>
+                  Next Task →
+                </button>
+              </div>
+            )}
+          </>
+        ) : null}
+      </div>
+
+      <div className="flex justify-center gap-4 p-3 border-t border-white/10">
+        {['🐔','🐑','🥕','🍅','🥚'].map((e,i) => <span key={i} className="text-xl opacity-40">{e}</span>)}
+      </div>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 2: Add HomesteadFarm to `src/pages/GameShell.tsx`**
+
+Add import:
+```typescript
+import HomesteadFarm from '../components/rooms/HomesteadFarm'
+```
+
+Add room render block after the science_lab block:
+```typescript
+            {screen === 'room' && currentRoom === 'homestead_farm' && (
+              <HomesteadFarm
+                playerName={playerName}
+                onXpEarned={addXP}
+                onCoinsEarned={addCoins}
+              />
+            )}
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/rooms/HomesteadFarm.tsx src/pages/GameShell.tsx
+git commit -m "feat: add Homestead Farm room with real-world farming and market challenges"
+```
+
+---
+
+## Task 13: Truth Archive Room
+
+**Files:**
+- Create: `src/components/rooms/TruthArchive.tsx`
+- Modify: `src/pages/GameShell.tsx` — add TruthArchive route
+
+- [ ] **Step 1: Create `src/components/rooms/TruthArchive.tsx`**
+
+```typescript
+import { useState, useEffect } from 'react'
+
+interface Props {
+  playerName: string
+  onXpEarned: (amount: number) => void
+  onCoinsEarned: (amount: number) => void
+}
+
+interface HistoryQuest {
+  source: string        // the "primary source" excerpt or paraphrase
+  sourceLabel: string   // e.g. "From a letter by Frederick Douglass, 1845"
+  question: string
+  choices: string[]
+  correctIndex: number
+  explanation: string
+  followMoney?: string  // optional "who profits?" insight
+  xpReward: number
+  coinReward: number
+}
+
+const FALLBACK_QUESTS: HistoryQuest[] = [
+  {
+    source: `"I have no accurate knowledge of my age, never having seen any authentic record containing it. By far the larger part of the slaves know as little of their ages as horses know of theirs."`,
+    sourceLabel: "Frederick Douglass — Narrative of the Life of Frederick Douglass, 1845",
+    question: "Why did enslaved people often not know their own ages?",
+    choices: [
+      "They didn't care about birthdays",
+      "Enslavers deliberately withheld basic personal information as a tool of control",
+      "Record-keeping was too expensive",
+      "It was a cultural tradition to not track ages"
+    ],
+    correctIndex: 1,
+    explanation: "Douglass explains that keeping enslaved people ignorant of even basic facts about themselves — like their own birthday — was a deliberate strategy to strip away identity and humanity.",
+    followMoney: "Enslavers profited from keeping people in ignorance. An enslaved person who didn't know their own history had fewer tools to resist or escape.",
+    xpReward: 40,
+    coinReward: 12
+  },
+  {
+    source: `"We hold these truths to be self-evident, that all men are created equal, that they are endowed by their Creator with certain unalienable Rights, that among these are Life, Liberty and the pursuit of Happiness."`,
+    sourceLabel: "Declaration of Independence — Thomas Jefferson, July 4, 1776",
+    question: "What does 'unalienable Rights' mean in this context?",
+    choices: [
+      "Rights that can be taken away by the government",
+      "Rights that only apply to property owners",
+      "Rights that cannot be taken away because they come from God, not government",
+      "Rights granted by a king or queen"
+    ],
+    correctIndex: 2,
+    explanation: "The founders argued that rights like life and liberty come from the Creator — not from any human government. That means no government has the authority to take them away. This is a foundational idea still argued about today.",
+    followMoney: "Ask: if all men are created equal, who was excluded in 1776? Enslaved people, women, and those without property couldn't vote. The gap between the ideal and the reality is where history gets honest.",
+    xpReward: 35,
+    coinReward: 10
+  },
+]
+
+export default function TruthArchive({ playerName, onXpEarned, onCoinsEarned }: Props) {
+  const [quest, setQuest] = useState<HistoryQuest | null>(null)
+  const [selected, setSelected] = useState<number | null>(null)
+  const [revealed, setRevealed] = useState(false)
+  const [showFollowMoney, setShowFollowMoney] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [questIndex, setQuestIndex] = useState(0)
+
+  useEffect(() => { loadQuest() }, [questIndex])
+
+  async function loadQuest() {
+    setLoading(true)
+    setSelected(null)
+    setRevealed(false)
+    setShowFollowMoney(false)
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `Create a primary source history question for a homeschool student. Use a real quote or paraphrase from an actual historical document, letter, speech, or record (label the source). The content should be honest and unfiltered — never sanitize history. Include a "follow the money" or "who profits?" insight when relevant. Topics: American founding, civil rights, westward expansion, Biblical history, colonial life, or world history. Respond ONLY with valid JSON: {"source":"...","sourceLabel":"...","question":"...","choices":["...","...","...","..."],"correctIndex":0,"explanation":"...","followMoney":"...","xpReward":35,"coinReward":10}`,
+          history: []
+        })
+      })
+      const data = await res.json()
+      const parsed = JSON.parse(data.reply.replace(/```json|```/g, '').trim())
+      if (parsed.source && parsed.choices?.length === 4) setQuest(parsed)
+      else throw new Error('bad format')
+    } catch {
+      setQuest(FALLBACK_QUESTS[questIndex % FALLBACK_QUESTS.length])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function check() {
+    if (selected === null || !quest) return
+    setRevealed(true)
+    if (selected === quest.correctIndex) {
+      onXpEarned(quest.xpReward)
+      onCoinsEarned(quest.coinReward)
+    }
+  }
+
+  const isCorrect = revealed && selected === quest?.correctIndex
+
+  return (
+    <div className="h-full flex flex-col" style={{ background: 'linear-gradient(180deg, #1a0e05 0%, #2d1a08 50%, #3d240a 100%)' }}>
+      <div className="flex items-center gap-3 p-4 border-b border-white/10">
+        <span className="text-3xl">📜</span>
+        <div>
+          <h2 className="text-white font-bold text-lg">Truth Archive</h2>
+          <p className="text-amber-300 text-xs">Primary sources only, {playerName}. No sanitizing.</p>
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col items-center justify-center p-6 gap-5 overflow-y-auto">
+        {loading ? (
+          <div className="text-center space-y-3">
+            <div className="w-10 h-10 border-4 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-amber-300 text-sm">Adeline is opening the archives...</p>
+          </div>
+        ) : quest ? (
+          <>
+            {/* Primary source card */}
+            <div className="w-full max-w-lg bg-amber-950/60 backdrop-blur rounded-2xl p-5 border border-amber-600/40">
+              <p className="text-xs text-amber-400 font-semibold uppercase tracking-wider mb-2">📖 Primary Source</p>
+              <blockquote className="text-amber-100 text-sm leading-relaxed italic border-l-2 border-amber-500 pl-3">
+                "{quest.source}"
+              </blockquote>
+              <p className="text-amber-500 text-xs mt-2">— {quest.sourceLabel}</p>
+            </div>
+
+            {/* Question */}
+            <div className="w-full max-w-lg">
+              <p className="text-white font-semibold text-sm mb-3">{quest.question}</p>
+              <div className="space-y-2">
+                {quest.choices.map((choice, i) => {
+                  let cls = 'bg-white/10 border border-white/20 text-white hover:bg-white/20'
+                  if (selected === i && !revealed) cls = 'bg-amber-700/40 border border-amber-400 text-white'
+                  if (revealed && i === quest.correctIndex) cls = 'bg-emerald-500/30 border-2 border-emerald-400 text-emerald-200'
+                  if (revealed && selected === i && i !== quest.correctIndex) cls = 'bg-red-500/30 border-2 border-red-400 text-red-200'
+                  return (
+                    <button key={i} onClick={() => !revealed && setSelected(i)}
+                      className={`w-full text-left px-4 py-3 rounded-xl text-sm transition-all ${cls}`}>
+                      <span className="font-bold mr-2">{String.fromCharCode(65+i)}.</span>{choice}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {!revealed ? (
+              <button onClick={check} disabled={selected === null}
+                className="w-full max-w-lg py-3 bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white font-bold rounded-xl">
+                Submit Answer →
+              </button>
+            ) : (
+              <div className={`w-full max-w-lg rounded-2xl p-4 space-y-3 ${isCorrect ? 'bg-emerald-500/20 border border-emerald-400' : 'bg-red-500/20 border border-red-400'}`}>
+                <p className={`font-bold ${isCorrect ? 'text-emerald-300' : 'text-red-300'}`}>{isCorrect ? '🎉 You read the source!' : '📚 Read it again!'}</p>
+                <p className="text-white/80 text-sm">{quest.explanation}</p>
+                {isCorrect && <p className="text-amber-300 text-xs">+{quest.xpReward} XP · +{quest.coinReward} AdeCoins</p>}
+
+                {quest.followMoney && (
+                  <button onClick={() => setShowFollowMoney(v => !v)}
+                    className="text-xs text-amber-400 underline">
+                    💰 Follow the money →
+                  </button>
+                )}
+                {showFollowMoney && quest.followMoney && (
+                  <div className="bg-amber-900/40 border border-amber-600/40 rounded-xl p-3">
+                    <p className="text-amber-200 text-xs">{quest.followMoney}</p>
+                  </div>
+                )}
+
+                <button onClick={() => setQuestIndex(i => i + 1)}
+                  className={`w-full py-2 rounded-xl text-white font-semibold mt-1 ${isCorrect ? 'bg-emerald-500' : 'bg-white/20'}`}>
+                  Next Source →
+                </button>
+              </div>
+            )}
+          </>
+        ) : null}
+      </div>
+
+      <div className="flex justify-center gap-4 p-3 border-t border-white/10">
+        {['📜','🖋️','🗺️','⚖️','🏛️'].map((e,i) => <span key={i} className="text-xl opacity-40">{e}</span>)}
+      </div>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 2: Add TruthArchive to `src/pages/GameShell.tsx`**
+
+Add import:
+```typescript
+import TruthArchive from '../components/rooms/TruthArchive'
+```
+
+Add room render block:
+```typescript
+            {screen === 'room' && currentRoom === 'truth_archive' && (
+              <TruthArchive
+                playerName={playerName}
+                onXpEarned={addXP}
+                onCoinsEarned={addCoins}
+              />
+            )}
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/rooms/TruthArchive.tsx src/pages/GameShell.tsx
+git commit -m "feat: add Truth Archive room with primary source history and follow-the-money lens"
+```
+
+---
+
+## Task 14: Smoke Test + Push
 
 - [ ] **Step 1: Kill any existing dev server and restart fresh**
 
@@ -1799,7 +2458,7 @@ Expected: Branch pushed to GitHub ✓
 - ✅ Avatar builder (kid avatars) — Tasks 2, 3
 - ✅ Adeline fixed NPC avatar (portrait photo) — Task 5
 - ✅ Hub world 2D scene — Task 7
-- ✅ 2 Game Rooms (Math Mines + Story Forest) — Tasks 8, 9
+- ✅ 5 Game Rooms (Math Mines, Story Forest, Science Lab, Homestead Farm, Truth Archive) — Tasks 8, 9, 11, 12, 13
 - ✅ Adeline as NPC in hub — Task 5, 7
 - ✅ In-game HUD (XP, AdeCoins, room label) — Task 4
 - ✅ Quest system powered by Gemini — Tasks 8, 9
