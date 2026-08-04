@@ -9,6 +9,7 @@ accepts as its HS256 fallback path. Every other brain endpoint that depends
 on get_current_user_id / verify_student_access therefore works unmodified
 for these tokens.
 """
+import json
 import logging
 import time
 import uuid
@@ -95,7 +96,7 @@ async def load_student_user(conn: asyncpg.Connection, user_id: str) -> StudentUs
         username=row["username"] or "",
         xp=row["xp"],
         ade_coins=row["adeCoins"],
-        avatar_data=row["avatarData"] or {},
+        avatar_data=json.loads(row["avatarData"]) if row["avatarData"] else {},
         grade_level=row["gradeLevel"] or "K-2",
         link_code=row["linkCode"] or "",
         parent_id=row["parentId"],

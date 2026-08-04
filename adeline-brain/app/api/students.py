@@ -397,7 +397,7 @@ async def get_season_pass(
         await conn.close()
     if not row:
         raise HTTPException(status_code=404, detail="Student not found")
-    season_pass = row["seasonPass"] or {}
+    season_pass = json.loads(row["seasonPass"]) if row["seasonPass"] else {}
     return SeasonPassResponse(claimed_tiers=season_pass.get("claimed_tiers", []))
 
 
@@ -417,7 +417,7 @@ async def update_season_pass(
         await conn.close()
     if not row:
         raise HTTPException(status_code=404, detail="Student not found")
-    return SeasonPassResponse(claimed_tiers=row["seasonPass"]["claimed_tiers"])
+    return SeasonPassResponse(claimed_tiers=json.loads(row["seasonPass"])["claimed_tiers"])
 
 
 @router.post("/claim", response_model=ClaimStudentResponse)
@@ -434,10 +434,13 @@ async def claim_student(
         )
         if not student:
             raise HTTPException(status_code=404, detail="Link code not found.")
-        if student["parentId"] and student["parentId"] != parent_id:
-            raise HTTPException(status_code=409, detail="This code is already claimed by another parent.")
 
-        await conn.execute('UPDATE "User" SET "parentId" = $1 WHERE id = $2', parent_id, student["id"])
+        result = await conn.fetchrow(
+            'UPDATE "User" SET "parentId" = $1 WHERE id = $2 AND ("parentId" IS NULL OR "parentId" = $1) RETURNING id',
+            parent_id, student["id"],
+        )
+        if not result:
+            raise HTTPException(status_code=409, detail="This code is already claimed by another parent.")
     finally:
         await conn.close()
 
