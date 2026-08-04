@@ -32,6 +32,7 @@ from app.api.scaffold import router as scaffold_router
 from app.api.daily_bread import router as daily_bread_router
 from app.api.learning_records import router as learning_records_router
 from app.api.students import router as students_router
+from app.api.student_auth import router as student_auth_router
 from app.api.experiments import router as experiments_router
 from app.api.activities import router as activities_router
 from app.api.projects import router as projects_router
@@ -235,6 +236,7 @@ app.include_router(scaffold_router)
 app.include_router(daily_bread_router)
 app.include_router(learning_records_router)
 app.include_router(students_router)
+app.include_router(student_auth_router)
 app.include_router(experiments_router)
 app.include_router(activities_router)
 app.include_router(projects_router)
