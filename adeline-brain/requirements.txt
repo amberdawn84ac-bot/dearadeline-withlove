@@ -28,6 +28,7 @@ neo4j==5.20.0
 redis==5.0.4
 slowapi==0.1.9
 PyJWT[crypto]==2.13.0
+bcrypt==4.2.1
 
 # Background jobs and scheduling
 APScheduler==3.11.2
