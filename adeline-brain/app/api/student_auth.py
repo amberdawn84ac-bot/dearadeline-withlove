@@ -105,24 +105,13 @@ async def load_student_user(conn: asyncpg.Connection, user_id: str) -> StudentUs
 
 async def _ensure_student_profiles_row(conn: asyncpg.Connection, user_id: str, name: str, grade_level: str) -> None:
     """
-    Mirror the row into the legacy `student_profiles` table (see
+    Insert row into the legacy `student_profiles` table (see
     app/api/students.py::_INIT_SQL) so lesson generation / mastery tracking
     (which reads student_profiles, not User) keeps working for kids who
     register through this endpoint instead of the old /students/register.
+
+    The caller must ensure the table exists before calling this.
     """
-    await conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS student_profiles (
-            id           TEXT PRIMARY KEY,
-            name         TEXT NOT NULL DEFAULT '',
-            email        TEXT UNIQUE,
-            grade_level  TEXT NOT NULL DEFAULT 'K',
-            is_homestead BOOLEAN NOT NULL DEFAULT FALSE,
-            created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
-        );
-        """
-    )
     await conn.execute(
         """
         INSERT INTO student_profiles (id, name, grade_level, is_homestead)
@@ -144,21 +133,42 @@ async def register_student_account(body: StudentRegisterRequest):
 
     conn = await get_db_conn()
     try:
-        try:
-            await conn.execute(
-                """
-                INSERT INTO "User"
-                    (id, name, email, role, "isHomestead", "gradeLevel",
-                     username, "pinHash", "linkCode", xp, "adeCoins")
-                VALUES ($1, $2, $3, 'STUDENT', TRUE, $4, $5, $6, $7, 0, 0)
-                """,
-                user_id, body.display_name, placeholder_email, body.grade_level,
-                body.username, pin_hash, link_code,
-            )
-        except asyncpg.UniqueViolationError:
-            raise HTTPException(status_code=409, detail="That username is already taken.")
+        # Ensure table exists (outside transaction, idempotent DDL)
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS student_profiles (
+                id           TEXT PRIMARY KEY,
+                name         TEXT NOT NULL DEFAULT '',
+                email        TEXT UNIQUE,
+                grade_level  TEXT NOT NULL DEFAULT 'K',
+                is_homestead BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+            """
+        )
 
-        await _ensure_student_profiles_row(conn, user_id, body.display_name, body.grade_level)
+        # Both INSERTs in a transaction for atomicity
+        async with conn.transaction():
+            try:
+                await conn.execute(
+                    """
+                    INSERT INTO "User"
+                        (id, name, email, role, "isHomestead", "gradeLevel",
+                         username, "pinHash", "linkCode", xp, "adeCoins")
+                    VALUES ($1, $2, $3, 'STUDENT', TRUE, $4, $5, $6, $7, 0, 0)
+                    """,
+                    user_id, body.display_name, placeholder_email, body.grade_level,
+                    body.username, pin_hash, link_code,
+                )
+            except asyncpg.UniqueViolationError:
+                raise HTTPException(status_code=409, detail="That username is already taken.")
+            except asyncpg.PostgresError as e:
+                logger.exception("Database error during student registration")
+                raise HTTPException(status_code=500, detail="Registration failed.")
+
+            await _ensure_student_profiles_row(conn, user_id, body.display_name, body.grade_level)
+
         user = await load_student_user(conn, user_id)
     finally:
         await conn.close()
