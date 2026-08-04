@@ -31,6 +31,13 @@ model User {
   coppaVerified        Boolean           @default(false)
   coppaPendingToken    String?           @unique
   coppaTokenExpiresAt  DateTime?
+  xp                   Int               @default(0)
+  adeCoins             Int               @default(0)
+  avatarData           Json?
+  seasonPass           Json?
+  username             String?           @unique
+  pinHash              String?
+  linkCode             String?           @unique
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   standardMastery      StandardMastery[]
