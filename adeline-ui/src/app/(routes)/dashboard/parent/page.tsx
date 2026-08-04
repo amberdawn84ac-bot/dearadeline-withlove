@@ -5,6 +5,7 @@ import { Loader2, Users, BookOpen, Trophy, Plus, Settings, TrendingUp, Graduatio
 import { getFamilyDashboard, listStudents, addStudent, type FamilyDashboard, type StudentSummary } from '@/lib/parent-client';
 import { getLearningPlan, type LearningPlanResponse, type BookRecommendation, type LessonSuggestion } from '@/lib/brain-client';
 import { AddStudentDialog } from '@/components/parent/AddStudentDialog';
+import { ClaimStudentDialog } from '@/components/parent/ClaimStudentDialog';
 import { FamilyProgressGrid } from '@/components/parent/FamilyProgressGrid';
 import { StudentSwitcher } from '@/components/parent/StudentSwitcher';
 
@@ -14,6 +15,7 @@ export default function ParentDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddStudent, setShowAddStudent] = useState(false);
+  const [showClaimStudent, setShowClaimStudent] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [studentPlan, setStudentPlan] = useState<LearningPlanResponse | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
@@ -113,13 +115,21 @@ export default function ParentDashboardPage() {
                 Track progress across all your students
               </p>
             </div>
-            <button
-              onClick={() => setShowAddStudent(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#BD6809] text-white rounded-lg hover:bg-[#2F4731] transition-colors font-semibold"
-            >
-              <Plus className="w-4 h-4" />
-              Add Student
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowClaimStudent(true)}
+                className="px-4 py-2 bg-white border border-[#2F4731]/20 hover:border-[#BD6809] text-[#2F4731] rounded-lg font-semibold text-sm"
+              >
+                Link a Mobile Kid
+              </button>
+              <button
+                onClick={() => setShowAddStudent(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#BD6809] text-white rounded-lg hover:bg-[#2F4731] transition-colors font-semibold"
+              >
+                <Plus className="w-4 h-4" />
+                Add Student
+              </button>
+            </div>
           </div>
 
           {/* Student Switcher */}
@@ -324,6 +334,13 @@ export default function ParentDashboardPage() {
         <AddStudentDialog
           onClose={() => setShowAddStudent(false)}
           onAdd={handleAddStudent}
+        />
+      )}
+
+      {showClaimStudent && (
+        <ClaimStudentDialog
+          onClose={() => setShowClaimStudent(false)}
+          onClaimed={fetchData}
         />
       )}
     </div>

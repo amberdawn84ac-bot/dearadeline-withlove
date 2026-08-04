@@ -92,6 +92,28 @@ export async function addStudent(payload: AddStudentRequest): Promise<StudentSum
   return res.json();
 }
 
+export interface ClaimStudentResponse {
+  student_id: string;
+  display_name: string;
+  username: string;
+  xp: number;
+  grade_level: string;
+}
+
+export async function claimStudent(code: string): Promise<ClaimStudentResponse> {
+  const res = await fetch(`${BRAIN_URL}/students/claim`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    credentials: 'include',
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || 'Could not link that code.');
+  }
+  return res.json();
+}
+
 export async function getFamilyDashboard(): Promise<FamilyDashboard> {
   const res = await fetch(`${BRAIN_URL}/api/parent/dashboard`, {
     headers: getAuthHeaders(),
