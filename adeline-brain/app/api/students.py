@@ -11,15 +11,19 @@ import json
 import logging
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from app.api.middleware import get_current_user_id, verify_student_access
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from app.api.middleware import get_current_user_id, verify_student_access, require_role
 from app.api.student_auth import load_student_user, StudentUserOut
+from app.schemas.api_models import UserRole
 
 from app.models.student import load_student_state
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/students", tags=["students"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 
@@ -315,6 +319,9 @@ async def get_student_profile(
     conn = await _get_conn()
     try:
         user = await load_student_user(conn, student_id)
+    except asyncpg.PostgresError as e:
+        logger.exception("[/students/{id}/profile] DB error")
+        raise HTTPException(status_code=500, detail="A database error occurred.")
     finally:
         await conn.close()
     if not user:
@@ -330,16 +337,20 @@ async def update_student_profile(
 ):
     conn = await _get_conn()
     try:
-        if body.display_name is not None:
-            await conn.execute('UPDATE "User" SET name = $1 WHERE id = $2', body.display_name, student_id)
-        if body.avatar_data is not None:
-            await conn.execute(
-                'UPDATE "User" SET "avatarData" = $1::jsonb WHERE id = $2',
-                json.dumps(body.avatar_data), student_id,
-            )
-        if body.grade_level is not None:
-            await conn.execute('UPDATE "User" SET "gradeLevel" = $1 WHERE id = $2', body.grade_level, student_id)
+        async with conn.transaction():
+            if body.display_name is not None:
+                await conn.execute('UPDATE "User" SET name = $1 WHERE id = $2', body.display_name, student_id)
+            if body.avatar_data is not None:
+                await conn.execute(
+                    'UPDATE "User" SET "avatarData" = $1::jsonb WHERE id = $2',
+                    json.dumps(body.avatar_data), student_id,
+                )
+            if body.grade_level is not None:
+                await conn.execute('UPDATE "User" SET "gradeLevel" = $1 WHERE id = $2', body.grade_level, student_id)
         user = await load_student_user(conn, student_id)
+    except asyncpg.PostgresError as e:
+        logger.exception("[/students/{id}/profile PATCH] DB error")
+        raise HTTPException(status_code=500, detail="A database error occurred.")
     finally:
         await conn.close()
     if not user:
@@ -359,6 +370,9 @@ async def patch_xp(
             'UPDATE "User" SET xp = xp + $1 WHERE id = $2 RETURNING xp',
             body.delta, student_id,
         )
+    except asyncpg.PostgresError as e:
+        logger.exception("[/students/{id}/xp] DB error")
+        raise HTTPException(status_code=500, detail="A database error occurred.")
     finally:
         await conn.close()
     if not row:
@@ -378,6 +392,9 @@ async def patch_coins(
             'UPDATE "User" SET "adeCoins" = "adeCoins" + $1 WHERE id = $2 RETURNING "adeCoins"',
             body.delta, student_id,
         )
+    except asyncpg.PostgresError as e:
+        logger.exception("[/students/{id}/coins] DB error")
+        raise HTTPException(status_code=500, detail="A database error occurred.")
     finally:
         await conn.close()
     if not row:
@@ -393,6 +410,9 @@ async def get_season_pass(
     conn = await _get_conn()
     try:
         row = await conn.fetchrow('SELECT "seasonPass" FROM "User" WHERE id = $1', student_id)
+    except asyncpg.PostgresError as e:
+        logger.exception("[/students/{id}/season-pass] DB error")
+        raise HTTPException(status_code=500, detail="A database error occurred.")
     finally:
         await conn.close()
     if not row:
@@ -413,6 +433,9 @@ async def update_season_pass(
             'UPDATE "User" SET "seasonPass" = $1::jsonb WHERE id = $2 RETURNING "seasonPass"',
             json.dumps({"claimed_tiers": body.claimed_tiers}), student_id,
         )
+    except asyncpg.PostgresError as e:
+        logger.exception("[/students/{id}/season-pass PATCH] DB error")
+        raise HTTPException(status_code=500, detail="A database error occurred.")
     finally:
         await conn.close()
     if not row:
@@ -421,9 +444,12 @@ async def update_season_pass(
 
 
 @router.post("/claim", response_model=ClaimStudentResponse)
+@limiter.limit("10/minute")
 async def claim_student(
+    request: Request,
     body: ClaimStudentRequest,
     parent_id: str = Depends(get_current_user_id),
+    _role: str = Depends(require_role(UserRole.PARENT, UserRole.ADMIN)),
 ):
     code = body.code.strip().upper()
     conn = await _get_conn()
@@ -441,6 +467,9 @@ async def claim_student(
         )
         if not result:
             raise HTTPException(status_code=409, detail="This code is already claimed by another parent.")
+    except asyncpg.PostgresError as e:
+        logger.exception("[/students/claim] DB error")
+        raise HTTPException(status_code=500, detail="A database error occurred.")
     finally:
         await conn.close()
 

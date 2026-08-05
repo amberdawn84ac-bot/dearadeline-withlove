@@ -17,13 +17,16 @@ import uuid
 import asyncpg
 import bcrypt
 import jwt
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.config import SUPABASE_JWT_SECRET, get_db_conn
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth/student", tags=["student-auth"])
+limiter = Limiter(key_func=get_remote_address)
 
 TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60  # 30 days
 
@@ -126,7 +129,8 @@ async def _ensure_student_profiles_row(conn: asyncpg.Connection, user_id: str, n
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/register", response_model=StudentAuthResponse)
-async def register_student_account(body: StudentRegisterRequest):
+@limiter.limit("5/minute;30/hour")
+async def register_student_account(request: Request, body: StudentRegisterRequest):
     user_id = str(uuid.uuid4())
     link_code = user_id.replace("-", "")[:6].upper()
     pin_hash = bcrypt.hashpw(body.pin.encode(), bcrypt.gensalt()).decode()
@@ -162,8 +166,11 @@ async def register_student_account(body: StudentRegisterRequest):
                     user_id, body.display_name, placeholder_email, body.grade_level,
                     body.username, pin_hash, link_code,
                 )
-            except asyncpg.UniqueViolationError:
-                raise HTTPException(status_code=409, detail="That username is already taken.")
+            except asyncpg.UniqueViolationError as e:
+                if e.constraint_name == "User_username_key":
+                    raise HTTPException(status_code=409, detail="That username is already taken.")
+                logger.warning(f"Unique violation on {e.constraint_name} during student registration")
+                raise HTTPException(status_code=409, detail="Could not create that account — please try again.")
             except asyncpg.PostgresError as e:
                 logger.exception("Database error during student registration")
                 raise HTTPException(status_code=500, detail="Registration failed.")
@@ -181,12 +188,14 @@ async def register_student_account(body: StudentRegisterRequest):
 
 
 @router.post("/login", response_model=StudentAuthResponse)
-async def login_student(body: StudentLoginRequest):
+@limiter.limit("5/minute;30/hour")
+async def login_student(request: Request, body: StudentLoginRequest):
+    username = body.username.strip().lower()
     conn = await get_db_conn()
     try:
         row = await conn.fetchrow(
             """SELECT id, "pinHash" FROM "User" WHERE username = $1 AND role = 'STUDENT'""",
-            body.username,
+            username,
         )
         if not row or not row["pinHash"] or not bcrypt.checkpw(body.pin.encode(), row["pinHash"].encode()):
             raise HTTPException(status_code=401, detail="Username or PIN is incorrect.")
