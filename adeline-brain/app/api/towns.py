@@ -182,6 +182,11 @@ async def get_town(town_id: str, user_id: str = Depends(get_current_user_id)):
     try:
         await _require_town_member(conn, user_id, town_id)
         town = await _load_town(conn, town_id)
+    except HTTPException:
+        raise
+    except asyncpg.PostgresError:
+        logger.exception("Failed to load town")
+        raise HTTPException(status_code=500, detail="Could not load town.")
     finally:
         await conn.close()
     if not town:
