@@ -56,6 +56,8 @@ class StudentUserOut(BaseModel):
     link_code: str
     parent_id: str | None
     parent_display_name: str | None
+    town_id: str | None
+    reputation: int
 
 
 class StudentAuthResponse(BaseModel):
@@ -84,7 +86,8 @@ async def load_student_user(conn: asyncpg.Connection, user_id: str) -> StudentUs
     row = await conn.fetchrow(
         """
         SELECT u.id, u.name, u.username, u.xp, u."adeCoins", u."avatarData",
-               u."gradeLevel", u."linkCode", u."parentId", p.name AS parent_name
+               u."gradeLevel", u."linkCode", u."parentId", p.name AS parent_name,
+               u."townId", u.reputation
         FROM "User" u
         LEFT JOIN "User" p ON p.id = u."parentId"
         WHERE u.id = $1
@@ -104,6 +107,8 @@ async def load_student_user(conn: asyncpg.Connection, user_id: str) -> StudentUs
         link_code=row["linkCode"] or "",
         parent_id=row["parentId"],
         parent_display_name=row["parent_name"],
+        town_id=row["townId"],
+        reputation=row["reputation"],
     )
 
 
