@@ -38,9 +38,73 @@ model User {
   username             String?           @unique
   pinHash              String?
   linkCode             String?           @unique
+  townId               String?
+  reputation           Int               @default(0)
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   standardMastery      StandardMastery[]
+}
+
+model Town {
+  id        String   @id @default(uuid())
+  name      String
+  joinCode  String   @unique
+  treasury  Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model TownBuilding {
+  id           String   @id @default(uuid())
+  townId       String
+  buildingKey  String
+  createdAt    DateTime @default(now())
+
+  @@unique([townId, buildingKey])
+}
+
+model Item {
+  id          String   @id @default(uuid())
+  name        String
+  type        String
+  description String?
+  iconUrl     String?
+  createdAt   DateTime @default(now())
+}
+
+model TownSupply {
+  id       String @id @default(uuid())
+  townId   String
+  itemId   String
+  quantity Int    @default(0)
+
+  @@unique([townId, itemId])
+}
+
+model PlayerInventory {
+  id        String @id @default(uuid())
+  studentId String
+  itemId    String
+  quantity  Int    @default(0)
+
+  @@unique([studentId, itemId])
+}
+
+model Achievement {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  name        String
+  description String?
+  icon        String?
+  createdAt   DateTime @default(now())
+}
+
+model PlayerAchievement {
+  id            String   @id @default(uuid())
+  studentId     String
+  achievementId String
+  earnedAt      DateTime @default(now())
+
+  @@unique([studentId, achievementId])
 }
 
 model Lesson {
