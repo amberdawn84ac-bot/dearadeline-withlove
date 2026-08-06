@@ -26,6 +26,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/towns", tags=["towns"])
 limiter = Limiter(key_func=get_remote_address)
 
+BUILDING_KEYS = [
+    "adelines_kitchen", "the_library", "the_arena", "the_makers_lab",
+    "the_creek_and_woods", "the_market", "the_chapel",
+]
+
 
 async def _get_conn():
     return await get_db_conn()
@@ -123,7 +128,9 @@ async def create_town(body: CreateTownRequest, user_id: str = Depends(get_curren
     conn = await _get_conn()
     try:
         row = await conn.fetchrow('SELECT "townId" FROM "User" WHERE id = $1', user_id)
-        if row and row["townId"]:
+        if row is None:
+            raise HTTPException(status_code=404, detail="User not found.")
+        if row["townId"]:
             raise HTTPException(status_code=409, detail="You are already in a town.")
 
         code = _generate_join_code()
@@ -133,7 +140,15 @@ async def create_town(body: CreateTownRequest, user_id: str = Depends(get_curren
                     'INSERT INTO "Town" (name, "joinCode") VALUES ($1, $2) RETURNING id',
                     body.name, code,
                 )
-                await conn.execute('UPDATE "User" SET "townId" = $1 WHERE id = $2', town_row["id"], user_id)
+                result = await conn.execute(
+                    'UPDATE "User" SET "townId" = $1 WHERE id = $2', town_row["id"], user_id,
+                )
+                if result == "UPDATE 0":
+                    raise HTTPException(status_code=500, detail="Could not create town.")
+                await conn.executemany(
+                    'INSERT INTO "TownBuilding" ("townId", "buildingKey") VALUES ($1, $2)',
+                    [(town_row["id"], key) for key in BUILDING_KEYS],
+                )
         except asyncpg.UniqueViolationError:
             raise HTTPException(status_code=500, detail="Could not generate a unique join code — please try again.")
 
@@ -156,14 +171,18 @@ async def join_town(request: Request, body: JoinTownRequest, user_id: str = Depe
     conn = await _get_conn()
     try:
         row = await conn.fetchrow('SELECT "townId" FROM "User" WHERE id = $1', user_id)
-        if row and row["townId"]:
+        if row is None:
+            raise HTTPException(status_code=404, detail="User not found.")
+        if row["townId"]:
             raise HTTPException(status_code=409, detail="You are already in a town.")
 
         town_row = await conn.fetchrow('SELECT id FROM "Town" WHERE "joinCode" = $1', code)
         if not town_row:
             raise HTTPException(status_code=404, detail="Join code not found.")
 
-        await conn.execute('UPDATE "User" SET "townId" = $1 WHERE id = $2', town_row["id"], user_id)
+        result = await conn.execute('UPDATE "User" SET "townId" = $1 WHERE id = $2', town_row["id"], user_id)
+        if result == "UPDATE 0":
+            raise HTTPException(status_code=500, detail="Could not join town.")
         town = await _load_town(conn, town_row["id"])
     except asyncpg.PostgresError:
         logger.exception("Failed to join town")
