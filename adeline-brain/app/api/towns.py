@@ -359,17 +359,25 @@ async def get_storm_status(town_id: str, user_id: str = Depends(get_current_user
                 treasury_row = await conn.fetchrow(
                     'UPDATE "Town" SET treasury = GREATEST(treasury - $1, 0), '
                     '"stormPrepCount" = 0, "lastStormCycleEvaluated" = $2 '
-                    'WHERE id = $3 RETURNING treasury, "stormPrepCount"',
-                    STORM_TREASURY_PENALTY, evaluated_cycle, town_id,
+                    'WHERE id = $3 AND "lastStormCycleEvaluated" = $4 '
+                    'RETURNING treasury, "stormPrepCount"',
+                    STORM_TREASURY_PENALTY, evaluated_cycle, town_id, last_evaluated,
                 )
             else:
                 treasury_row = await conn.fetchrow(
                     'UPDATE "Town" SET "stormPrepCount" = 0, "lastStormCycleEvaluated" = $1 '
-                    'WHERE id = $2 RETURNING treasury, "stormPrepCount"',
-                    evaluated_cycle, town_id,
+                    'WHERE id = $2 AND "lastStormCycleEvaluated" = $3 '
+                    'RETURNING treasury, "stormPrepCount"',
+                    evaluated_cycle, town_id, last_evaluated,
                 )
-            treasury = treasury_row["treasury"]
-            prep_count = treasury_row["stormPrepCount"]
+            if treasury_row:
+                treasury = treasury_row["treasury"]
+                prep_count = treasury_row["stormPrepCount"]
+            else:
+                # Another concurrent request already evaluated this cycle — re-read current state.
+                fresh_row = await conn.fetchrow('SELECT treasury, "stormPrepCount" FROM "Town" WHERE id = $1', town_id)
+                treasury = fresh_row["treasury"]
+                prep_count = fresh_row["stormPrepCount"]
     except HTTPException:
         raise
     except asyncpg.PostgresError:
