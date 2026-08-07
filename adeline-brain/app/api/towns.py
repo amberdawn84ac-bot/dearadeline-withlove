@@ -37,7 +37,7 @@ BUILDING_KEYS = [
 # (Adelinemobile repo) for the full design and the "why" behind these numbers.
 STORM_CYCLE_DAYS = 21
 STORM_WARNING_DAYS = 4
-STORM_ANCHOR = date(2026, 8, 1)
+STORM_ANCHOR = date(2026, 10, 1)
 STORM_PREP_THRESHOLD = 10
 STORM_TREASURY_PENALTY = 50
 
@@ -376,6 +376,8 @@ async def get_storm_status(town_id: str, user_id: str = Depends(get_current_user
             else:
                 # Another concurrent request already evaluated this cycle — re-read current state.
                 fresh_row = await conn.fetchrow('SELECT treasury, "stormPrepCount" FROM "Town" WHERE id = $1', town_id)
+                if not fresh_row:
+                    raise HTTPException(status_code=404, detail="Town not found.")
                 treasury = fresh_row["treasury"]
                 prep_count = fresh_row["stormPrepCount"]
     except HTTPException:
@@ -394,13 +396,19 @@ async def get_storm_status(town_id: str, user_id: str = Depends(get_current_user
 
 @router.post("/{town_id}/storm/prep", response_model=StormPrepOut)
 async def add_storm_prep(town_id: str, user_id: str = Depends(get_current_user_id)):
+    today = datetime.now(timezone.utc).date()
+    phase, _, _ = _storm_phase(today)
+
     conn = await _get_conn()
     try:
         await _require_town_member(conn, user_id, town_id)
-        row = await conn.fetchrow(
-            'UPDATE "Town" SET "stormPrepCount" = "stormPrepCount" + 1 WHERE id = $1 RETURNING "stormPrepCount"',
-            town_id,
-        )
+        if phase == "warning":
+            row = await conn.fetchrow(
+                'UPDATE "Town" SET "stormPrepCount" = "stormPrepCount" + 1 WHERE id = $1 RETURNING "stormPrepCount"',
+                town_id,
+            )
+        else:
+            row = await conn.fetchrow('SELECT "stormPrepCount" FROM "Town" WHERE id = $1', town_id)
     except HTTPException:
         raise
     except asyncpg.PostgresError:
