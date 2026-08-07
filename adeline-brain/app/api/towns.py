@@ -12,6 +12,7 @@ file. TownSupply (this file) is the shared item pool; PlayerInventory
 """
 import logging
 import secrets
+from datetime import date, datetime, timezone
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -30,6 +31,37 @@ BUILDING_KEYS = [
     "adelines_kitchen", "the_library", "the_arena", "the_makers_lab",
     "the_creek_and_woods", "the_market", "the_chapel",
 ]
+
+# World Events: The Storm. A fixed, globally-shared calendar — every Town is
+# on the same cycle. See docs/superpowers/specs/2026-08-06-world-events-storm-design.md
+# (Adelinemobile repo) for the full design and the "why" behind these numbers.
+STORM_CYCLE_DAYS = 21
+STORM_WARNING_DAYS = 4
+STORM_ANCHOR = date(2026, 8, 1)
+STORM_PREP_THRESHOLD = 10
+STORM_TREASURY_PENALTY = 50
+
+
+def _storm_phase(today: date) -> tuple[str, int, int]:
+    """Returns (phase, cycle, days_until_hit) for the given date.
+
+    phase is 'hit' on the exact storm day, 'warning' within STORM_WARNING_DAYS
+    of it, otherwise 'calm'. cycle is a 0-indexed count of how many storm
+    cycles have elapsed since STORM_ANCHOR.
+    """
+    days_since_anchor = (today - STORM_ANCHOR).days
+    cycle = days_since_anchor // STORM_CYCLE_DAYS
+    day_in_cycle = days_since_anchor % STORM_CYCLE_DAYS
+    days_until_hit = STORM_CYCLE_DAYS - day_in_cycle if day_in_cycle != 0 else 0
+
+    if day_in_cycle == 0:
+        phase = "hit"
+    elif days_until_hit <= STORM_WARNING_DAYS:
+        phase = "warning"
+    else:
+        phase = "calm"
+
+    return phase, cycle, days_until_hit
 
 
 async def _get_conn():
@@ -91,6 +123,19 @@ class SupplyItemOut(BaseModel):
 
 class SupplyOut(BaseModel):
     items: list[SupplyItemOut]
+
+
+class StormStatusOut(BaseModel):
+    phase: str  # 'calm' | 'warning' | 'hit'
+    cycle: int
+    days_until_hit: int
+    prep_count: int
+    prep_threshold: int
+    treasury: int
+
+
+class StormPrepOut(BaseModel):
+    prep_count: int
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -283,3 +328,78 @@ async def patch_supply(town_id: str, body: SupplyDelta, user_id: str = Depends(g
     finally:
         await conn.close()
     return SupplyItemOut(item_id=item_row["id"], name=item_row["name"], type=item_row["type"], quantity=row["quantity"])
+
+
+@router.get("/{town_id}/storm", response_model=StormStatusOut)
+async def get_storm_status(town_id: str, user_id: str = Depends(get_current_user_id)):
+    today = datetime.now(timezone.utc).date()
+    phase, cycle, days_until_hit = _storm_phase(today)
+
+    conn = await _get_conn()
+    try:
+        await _require_town_member(conn, user_id, town_id)
+
+        row = await conn.fetchrow(
+            'SELECT "stormPrepCount", "lastStormCycleEvaluated", treasury FROM "Town" WHERE id = $1',
+            town_id,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Town not found.")
+
+        prep_count = row["stormPrepCount"]
+        treasury = row["treasury"]
+        last_evaluated = row["lastStormCycleEvaluated"]
+
+        # A full cycle has passed since we last evaluated — settle it now,
+        # regardless of current phase (covers nobody opening the app again
+        # until well after the storm has passed).
+        if cycle - 1 > last_evaluated:
+            evaluated_cycle = cycle - 1
+            if prep_count < STORM_PREP_THRESHOLD:
+                treasury_row = await conn.fetchrow(
+                    'UPDATE "Town" SET treasury = GREATEST(treasury - $1, 0), '
+                    '"stormPrepCount" = 0, "lastStormCycleEvaluated" = $2 '
+                    'WHERE id = $3 RETURNING treasury, "stormPrepCount"',
+                    STORM_TREASURY_PENALTY, evaluated_cycle, town_id,
+                )
+            else:
+                treasury_row = await conn.fetchrow(
+                    'UPDATE "Town" SET "stormPrepCount" = 0, "lastStormCycleEvaluated" = $1 '
+                    'WHERE id = $2 RETURNING treasury, "stormPrepCount"',
+                    evaluated_cycle, town_id,
+                )
+            treasury = treasury_row["treasury"]
+            prep_count = treasury_row["stormPrepCount"]
+    except HTTPException:
+        raise
+    except asyncpg.PostgresError:
+        logger.exception("Failed to load storm status")
+        raise HTTPException(status_code=500, detail="Could not load storm status.")
+    finally:
+        await conn.close()
+
+    return StormStatusOut(
+        phase=phase, cycle=cycle, days_until_hit=days_until_hit,
+        prep_count=prep_count, prep_threshold=STORM_PREP_THRESHOLD, treasury=treasury,
+    )
+
+
+@router.post("/{town_id}/storm/prep", response_model=StormPrepOut)
+async def add_storm_prep(town_id: str, user_id: str = Depends(get_current_user_id)):
+    conn = await _get_conn()
+    try:
+        await _require_town_member(conn, user_id, town_id)
+        row = await conn.fetchrow(
+            'UPDATE "Town" SET "stormPrepCount" = "stormPrepCount" + 1 WHERE id = $1 RETURNING "stormPrepCount"',
+            town_id,
+        )
+    except HTTPException:
+        raise
+    except asyncpg.PostgresError:
+        logger.exception("Failed to record storm prep")
+        raise HTTPException(status_code=500, detail="Could not record storm prep.")
+    finally:
+        await conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Town not found.")
+    return StormPrepOut(prep_count=row["stormPrepCount"])
