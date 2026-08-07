@@ -48,11 +48,13 @@ model User {
 }
 
 model Town {
-  id        String   @id @default(uuid())
-  name      String
-  joinCode  String   @unique
-  treasury  Int      @default(0)
-  createdAt DateTime @default(now())
+  id                      String   @id @default(uuid())
+  name                    String
+  joinCode                String   @unique
+  treasury                Int      @default(0)
+  stormPrepCount          Int      @default(0)
+  lastStormCycleEvaluated Int      @default(-1)
+  createdAt               DateTime @default(now())
 }
 
 model TownBuilding {
