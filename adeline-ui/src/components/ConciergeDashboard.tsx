@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { BookOpen, Compass, FileText, GraduationCap, Hammer, Home, Map, MessageCircle, Send, Sparkles } from 'lucide-react';
-import { listActivities, postJournalEntry, reportActivity, streamConversation } from '@/lib/brain-client';
+import { listActivities, reportActivity, streamConversation } from '@/lib/brain-client';
 import type { ActivityEntry, ActivityReportResponse, ConversationMessage } from '@/lib/brain-client';
 import SketchnoteCard, { type SketchnoteData } from '@/components/SketchnoteCard';
+import { saveSketchnote } from '@/lib/journal-client';
 
 type Props = { studentId: string; studentName: string; gradeLevel: string };
 type ChatMessage = { id: string; role: 'user' | 'adeline'; text: string; credit?: ActivityReportResponse; sketchNote?: SketchnoteData };
@@ -43,11 +44,6 @@ function normalizeSketchnote(block: Record<string, unknown>): SketchnoteData {
   };
 }
 
-function noteAsText(note: SketchnoteData) {
-  const sections = (note.sections ?? []).map((section) => `${section.heading}: ${section.text}`).join('\n');
-  return [note.big_idea, sections, note.keywords?.length ? `Keywords: ${note.keywords.join(', ')}` : '', note.footer].filter(Boolean).join('\n\n');
-}
-
 export default function ConciergeDashboard({ studentId, studentName, gradeLevel }: Props) {
   const firstName = studentName?.trim().split(/\s+/)[0] || 'there';
   const [messages, setMessages] = useState<ChatMessage[]>([{ id: 'welcome', role: 'adeline', text: `Hey ${firstName}. What have you been up to? You can tell me anything.` }]);
@@ -65,16 +61,6 @@ export default function ConciergeDashboard({ studentId, studentName, gradeLevel 
   }, [studentId]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, busy]);
-
-  async function saveNote(note: SketchnoteData) {
-    await postJournalEntry({
-      student_id: studentId,
-      topic: note.title,
-      track: note.track || 'ENGLISH_LITERATURE',
-      learned: noteAsText(note),
-      action: 'Saved from a conversation with Adeline',
-    });
-  }
 
   async function fileActivity(description: string, minutes: number) {
     const result = await reportActivity({ student_id: studentId, grade_level: gradeLevel, description, time_minutes: minutes });
@@ -163,10 +149,10 @@ export default function ConciergeDashboard({ studentId, studentName, gradeLevel 
           </div>
           <nav className="space-y-1 text-sm">
             <Nav href="/dashboard" icon={<Home size={17} />} label="Home" active />
+            <Nav href="/dashboard/journal" icon={<BookOpen size={17} />} label="Daily Journal" />
             <Nav href="/dashboard/portfolio" icon={<FileText size={17} />} label="Portfolio" />
             <Nav href="/dashboard/projects" icon={<Hammer size={17} />} label="Project Library" />
             <Nav href="/dashboard/opportunities" icon={<Compass size={17} />} label="Local Intelligence" />
-            <Nav href="/dashboard/bookshelf" icon={<BookOpen size={17} />} label="Reading Nook" />
             <Nav href="/dashboard/graduation" icon={<GraduationCap size={17} />} label="Graduation" />
           </nav>
           <div className="mt-auto border-t border-white/10 pt-5">
@@ -189,7 +175,7 @@ export default function ConciergeDashboard({ studentId, studentName, gradeLevel 
                 <div className={message.role === 'user' ? 'max-w-[82%] rounded-[22px_22px_5px_22px] bg-[#244a35] px-4 py-3 text-sm leading-relaxed text-[#fffaf0]' : 'max-w-[92%] rounded-[5px_22px_22px_22px] border border-[#ded2bc] bg-[#fffdf7] px-4 py-3 text-sm leading-relaxed text-[#354b3b] shadow-[0_5px_18px_rgba(74,57,35,.05)]'}>
                   {message.text && <p className="whitespace-pre-wrap">{message.text}</p>}
                   {!message.text && busy && <p>…</p>}
-                  {message.sketchNote && <SketchnoteCard note={message.sketchNote} onSave={() => saveNote(message.sketchNote!)} />}
+                  {message.sketchNote && <SketchnoteCard note={message.sketchNote} onSave={() => saveSketchnote(studentId, message.sketchNote!)} />}
                   {message.credit && <CreditReceipt result={message.credit} />}
                 </div>
               </div>)}
