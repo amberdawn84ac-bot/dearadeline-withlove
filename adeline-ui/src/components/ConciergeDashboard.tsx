@@ -1,14 +1,14 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { BookOpen, Compass, FileText, GraduationCap, Hammer, Home, Map, MessageCircle, Send, Sparkles } from 'lucide-react';
-import { listActivities, reportActivity, streamConversation } from '@/lib/brain-client';
+import { listActivities, postJournalEntry, reportActivity, streamConversation } from '@/lib/brain-client';
 import type { ActivityEntry, ActivityReportResponse, ConversationMessage } from '@/lib/brain-client';
+import SketchnoteCard, { type SketchnoteData } from '@/components/SketchnoteCard';
 
 type Props = { studentId: string; studentName: string; gradeLevel: string };
-type ChatMessage = { id: string; role: 'user' | 'adeline'; text: string; credit?: ActivityReportResponse };
+type ChatMessage = { id: string; role: 'user' | 'adeline'; text: string; credit?: ActivityReportResponse; sketchNote?: SketchnoteData };
 
 const ACTIVITY_RE = /\b(i (spent|did|worked|practiced|baked|built|planted|made|helped|cooked|studied|read|drew|painted|sewed|fixed|repaired|cleaned|volunteered)|today i|this (morning|afternoon|evening|week)|i've been|we (built|fixed|made|worked|planted|cooked|repaired))\b/i;
 
@@ -22,6 +22,30 @@ function parseMinutes(text: string): number | null {
   if (hours) total += Number(hours[1]) * 60;
   if (minutes) total += Number(minutes[1]);
   return total > 0 ? Math.round(total) : null;
+}
+
+function normalizeSketchnote(block: Record<string, unknown>): SketchnoteData {
+  const rawSections = Array.isArray(block.sections) ? block.sections : [];
+  return {
+    title: typeof block.title === 'string' ? block.title : 'Something worth keeping',
+    big_idea: typeof block.big_idea === 'string' ? block.big_idea : undefined,
+    sections: rawSections.slice(0, 6).map((item) => {
+      const section = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+      return {
+        heading: typeof section.heading === 'string' ? section.heading : 'Note',
+        text: typeof section.text === 'string' ? section.text : '',
+        symbol: typeof section.symbol === 'string' ? section.symbol : undefined,
+      };
+    }).filter((section) => section.text),
+    keywords: Array.isArray(block.keywords) ? block.keywords.filter((word): word is string => typeof word === 'string').slice(0, 8) : [],
+    footer: typeof block.footer === 'string' ? block.footer : undefined,
+    track: typeof block.track === 'string' ? block.track : undefined,
+  };
+}
+
+function noteAsText(note: SketchnoteData) {
+  const sections = (note.sections ?? []).map((section) => `${section.heading}: ${section.text}`).join('\n');
+  return [note.big_idea, sections, note.keywords?.length ? `Keywords: ${note.keywords.join(', ')}` : '', note.footer].filter(Boolean).join('\n\n');
 }
 
 export default function ConciergeDashboard({ studentId, studentName, gradeLevel }: Props) {
@@ -41,6 +65,16 @@ export default function ConciergeDashboard({ studentId, studentName, gradeLevel 
   }, [studentId]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, busy]);
+
+  async function saveNote(note: SketchnoteData) {
+    await postJournalEntry({
+      student_id: studentId,
+      topic: note.title,
+      track: note.track || 'ENGLISH_LITERATURE',
+      learned: noteAsText(note),
+      action: 'Saved from a conversation with Adeline',
+    });
+  }
 
   async function fileActivity(description: string, minutes: number) {
     const result = await reportActivity({ student_id: studentId, grade_level: gradeLevel, description, time_minutes: minutes });
@@ -94,13 +128,20 @@ export default function ConciergeDashboard({ studentId, studentName, gradeLevel 
       for await (const event of streamConversation({ studentId, message: text, gradeLevel, history })) {
         if (event.type === 'text') {
           responseText += event.delta;
+          setMessages((prev) => prev.map((m) => m.id === streamingId ? { ...m, text: responseText } : m));
         } else if (event.type === 'block') {
-          const addition = [typeof event.title === 'string' ? event.title : '', typeof event.content === 'string' ? event.content : ''].filter(Boolean).join('\n');
-          responseText += `${responseText ? '\n\n' : ''}${addition}`;
+          if (event.block_type === 'SKETCHNOTE_NOTE') {
+            const note = normalizeSketchnote(event as Record<string, unknown>);
+            setMessages((prev) => prev.map((m) => m.id === streamingId ? { ...m, sketchNote: note } : m));
+          } else {
+            const addition = [typeof event.title === 'string' ? event.title : '', typeof event.content === 'string' ? event.content : ''].filter(Boolean).join('\n');
+            responseText += `${responseText ? '\n\n' : ''}${addition}`;
+            setMessages((prev) => prev.map((m) => m.id === streamingId ? { ...m, text: responseText } : m));
+          }
         } else if (event.type === 'error') {
           responseText = 'I lost the thread for a second. Tell me that again?';
+          setMessages((prev) => prev.map((m) => m.id === streamingId ? { ...m, text: responseText } : m));
         }
-        setMessages((prev) => prev.map((m) => m.id === streamingId ? { ...m, text: responseText } : m));
       }
       setHistory((prev) => [...prev, { role: 'user', content: text }, { role: 'adeline', content: responseText }].slice(-12));
     } catch {
@@ -117,7 +158,7 @@ export default function ConciergeDashboard({ studentId, studentName, gradeLevel 
       <div className="grid min-h-screen lg:h-screen lg:grid-cols-[250px_minmax(0,1fr)_300px]">
         <aside className="hidden bg-[#244a35] px-5 py-6 text-[#fbf5e7] lg:flex lg:flex-col">
           <div className="mb-8 flex items-center gap-3">
-            <Image src="/adeline-nav.png" alt="Adeline" width={44} height={44} className="rounded-full border border-white/20" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-[#ead8a8] font-serif text-xl text-[#244a35]">A</div>
             <div><p className="font-serif text-xl leading-none">Dear Adeline</p><p className="mt-1 text-[10px] uppercase tracking-[.2em] text-white/50">with love</p></div>
           </div>
           <nav className="space-y-1 text-sm">
@@ -145,8 +186,10 @@ export default function ConciergeDashboard({ studentId, studentName, gradeLevel 
           <section className="flex-1 overflow-y-auto px-4 py-6 sm:px-8">
             <div className="mx-auto max-w-4xl space-y-6">
               {messages.map((message) => <div key={message.id} className={message.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
-                <div className={message.role === 'user' ? 'max-w-[82%] rounded-[22px_22px_5px_22px] bg-[#244a35] px-4 py-3 text-sm leading-relaxed text-[#fffaf0]' : 'max-w-[88%] rounded-[5px_22px_22px_22px] border border-[#ded2bc] bg-[#fffdf7] px-4 py-3 text-sm leading-relaxed text-[#354b3b] shadow-[0_5px_18px_rgba(74,57,35,.05)]'}>
-                  <p className="whitespace-pre-wrap">{message.text || (busy ? '…' : '')}</p>
+                <div className={message.role === 'user' ? 'max-w-[82%] rounded-[22px_22px_5px_22px] bg-[#244a35] px-4 py-3 text-sm leading-relaxed text-[#fffaf0]' : 'max-w-[92%] rounded-[5px_22px_22px_22px] border border-[#ded2bc] bg-[#fffdf7] px-4 py-3 text-sm leading-relaxed text-[#354b3b] shadow-[0_5px_18px_rgba(74,57,35,.05)]'}>
+                  {message.text && <p className="whitespace-pre-wrap">{message.text}</p>}
+                  {!message.text && busy && <p>…</p>}
+                  {message.sketchNote && <SketchnoteCard note={message.sketchNote} onSave={() => saveNote(message.sketchNote!)} />}
                   {message.credit && <CreditReceipt result={message.credit} />}
                 </div>
               </div>)}
@@ -161,16 +204,16 @@ export default function ConciergeDashboard({ studentId, studentName, gradeLevel 
                 <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }} rows={2} placeholder={placeholder} className="min-h-[52px] flex-1 resize-none bg-transparent px-1 py-2 text-sm outline-none placeholder:text-[#9a8b76]" />
                 <button onClick={() => void send()} disabled={!input.trim() || busy} aria-label="Send" className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#9a4d71] text-white transition hover:scale-[1.03] disabled:opacity-35"><Send size={16} /></button>
               </div>
-              <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10px] text-[#8c7c67]"><span>Tell her about real life.</span><span>Ask for a story, project, lesson, or adventure when you want one.</span></div>
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10px] text-[#8c7c67]"><span>Tell her about real life.</span><span>Ask for a story, project, lesson, note, or adventure when you want one.</span></div>
             </div>
           </div>
         </main>
 
         <aside className="hidden overflow-y-auto border-l border-[#d7cbb7] bg-[#f1eadc] p-5 lg:block">
-          <SideCard title="What Adeline noticed" jewel="#355b84"><p className="text-sm leading-relaxed text-[#526154]">Real work can become transcript evidence. Curiosity can become a lesson. An idea can become a project. You do not have to choose a school mode first.</p></SideCard>
+          <SideCard title="What Adeline noticed" jewel="#355b84"><p className="text-sm leading-relaxed text-[#526154]">Real work can become transcript evidence. Questions can become illustrated notes. Curiosity can become a lesson, project, investigation, or adventure.</p></SideCard>
           <SideCard title="Recently counted" jewel="#8e3f69">{activities.length === 0 ? <p className="text-sm text-[#7e725f]">Tell Adeline what you&apos;ve been doing and this will begin filling itself in.</p> : <div className="space-y-3">{activities.map((activity) => <div key={activity.activity_id} className="border-b border-[#cfc2ac]/60 pb-3 last:border-0 last:pb-0"><p className="font-serif text-sm text-[#2c4c36]">{activity.course_title}</p><p className="mt-1 text-[11px] text-[#7c6d59]">{activity.credit_hours} credit hrs · {activity.credit_type.toLowerCase()}</p></div>)}</div>}</SideCard>
-          <SideCard title="Doors she can open" jewel="#aa7a24"><div className="space-y-2 text-sm text-[#4c5c4f]"><p>“Turn this into a project.”</p><p>“Teach me why that happened.”</p><p>“Make a story out of it.”</p><p>“Give me somewhere to investigate.”</p></div></SideCard>
-          <div className="mt-5 rounded-[24px_17px_24px_18px] bg-[#274d39] p-5 text-[#fbf5e8] shadow-lg"><Sparkles size={18} className="text-[#d7a63f]" /><p className="mt-3 font-serif text-lg">Nothing has to become school.</p><p className="mt-2 text-xs leading-relaxed text-white/65">Sometimes Adeline just talks with you. She only opens another door when the conversation calls for it.</p></div>
+          <SideCard title="Doors she can open" jewel="#aa7a24"><div className="space-y-2 text-sm text-[#4c5c4f]"><p>“Sketch that out for me.”</p><p>“Turn this into a project.”</p><p>“Teach me why that happened.”</p><p>“Give me somewhere to investigate.”</p></div></SideCard>
+          <div className="mt-5 rounded-[24px_17px_24px_18px] bg-[#274d39] p-5 text-[#fbf5e8] shadow-lg"><Sparkles size={18} className="text-[#d7a63f]" /><p className="mt-3 font-serif text-lg">Nothing has to become school.</p><p className="mt-2 text-xs leading-relaxed text-white/65">Sometimes Adeline just talks. When something is worth keeping, she can turn it into a page for the daily journal.</p></div>
         </aside>
       </div>
     </div>
