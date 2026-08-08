@@ -1,108 +1,181 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import { BookOpen, Brain, GraduationCap, Sparkles, Target, MessageCircle } from 'lucide-react'
 
-const RECORD = [
-  'What they actually did',
-  'Skills and subjects Adeline recognized',
-  'Evidence saved in the daily journal and portfolio',
-  'Credits accumulating toward graduation',
-  'Questions and interests worth following next',
+const FEATURES = [
+  {
+    title: 'Student-Led Learning',
+    description: 'Your student tells Adeline what they are doing, building, reading, wondering about, or trying. Curiosity becomes the path.',
+    Icon: MessageCircle,
+    accent: '#7ea06f',
+  },
+  {
+    title: 'Standards Mapping',
+    description: 'Real-life work is quietly mapped to state concepts and standards, creating evidence without turning life into a worksheet.',
+    Icon: Target,
+    accent: '#cc8a7d',
+  },
+  {
+    title: 'Graduation Tracker',
+    description: 'See which concepts are covered, which still need evidence, and how the learner is moving toward graduation.',
+    Icon: GraduationCap,
+    accent: '#d39a36',
+  },
+  {
+    title: 'Portfolio Builder',
+    description: 'Projects, activities, notes, explanations, photos, and real work become a living record of what the learner can actually do.',
+    Icon: BookOpen,
+    accent: '#d08c7a',
+  },
+  {
+    title: 'Gap Detection',
+    description: 'Adeline notices what is still missing and looks for a natural way to fill the gap through the learner’s current interests.',
+    Icon: Brain,
+    accent: '#8b55e9',
+  },
+  {
+    title: 'Stories, Projects & Adventures',
+    description: 'A conversation can become a sketchnote, experiment, story, investigation, build, field adventure, or game-world experience.',
+    Icon: Sparkles,
+    accent: '#e3377b',
+  },
 ]
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-[#eee7d7] text-[#29251f] selection:bg-[#6f4d73]/20">
-      <div className="fixed inset-0 pointer-events-none opacity-[0.13] mix-blend-multiply" style={{ backgroundImage: 'radial-gradient(#332d25 .6px, transparent .7px)', backgroundSize: '6px 6px' }} />
-
-      <nav className="sticky top-0 z-40 border-b border-[#3a332b]/10 bg-[#eee7d7]/92 backdrop-blur-xl">
-        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 sm:px-8">
+    <main className="min-h-screen bg-[#fbf5ea] text-[#294b35] selection:bg-[#bd6809]/20">
+      <nav className="sticky top-0 z-40 border-b border-[#294b35]/10 bg-[#fffdfa]/92 backdrop-blur-xl">
+        <div className="mx-auto flex h-20 max-w-6xl items-center justify-between px-5 sm:px-8">
           <Link href="/" className="flex items-center gap-3">
-            <Image src="/adeline-nav.png" alt="Adeline" width={46} height={46} className="rounded-full border border-[#3a332b]/15 object-cover shadow-sm" />
-            <span className="font-serif text-lg">Dear Adeline</span>
+            <Image
+              src="/adeline-nav.png"
+              alt="Adeline"
+              width={44}
+              height={44}
+              className="rounded-xl border border-[#294b35]/10 object-cover shadow-sm"
+            />
+            <span className="font-serif text-xl font-semibold text-[#294b35]">Dear Adeline</span>
           </Link>
           <div className="flex items-center gap-3">
-            <Link href="/login" className="text-sm text-[#51483d] hover:text-[#29251f]">Sign in</Link>
-            <Link href="/login?mode=signup" className="rounded-full bg-[#315d58] px-5 py-2.5 text-sm font-semibold text-[#fff9ec] shadow-sm hover:bg-[#294f4b]">Start free</Link>
+            <Link href="/login" className="rounded-full border border-[#294b35] px-5 py-2 text-xs font-semibold uppercase tracking-[.16em] text-[#294b35]">
+              Sign in
+            </Link>
+            <Link href="/login?mode=signup" className="rounded-full bg-[#b8114d] px-6 py-2.5 text-xs font-semibold uppercase tracking-[.16em] text-white shadow-lg">
+              Start free
+            </Link>
           </div>
         </div>
       </nav>
 
-      <section className="relative overflow-hidden px-5 pb-24 pt-16 sm:px-8 sm:pt-24 lg:pt-28">
-        <div className="mx-auto max-w-7xl">
-          <div className="max-w-6xl">
-            <h1 className="font-serif text-[clamp(4rem,10vw,9.5rem)] leading-[.84] tracking-[-.045em] text-[#2d2a24]">
-              Education as <span className="text-[#8e3f69] italic">Unique</span><br />as Your Child
-            </h1>
-            <p className="mt-8 max-w-3xl text-lg leading-8 text-[#5b5145] sm:text-xl sm:leading-9">
-              Adeline listens to what a young person is actually doing, making, wondering about, reading, fixing, building, or dreaming up. She follows their curiosity, helps when they want help, and quietly turns real life into a record that can move them toward graduation.
+      <section className="px-5 pb-24 pt-16 sm:px-8 lg:pt-24">
+        <div className="mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[.92fr_1.08fr]">
+          <div>
+            <p className="text-2xl italic text-[#c97825]" style={{ fontFamily: 'var(--font-kalam), cursive' }}>
+              Where Learning Comes Alive
             </p>
-            <div className="mt-8">
-              <Link href="/login?mode=signup" className="inline-flex rounded-full bg-[#315d58] px-7 py-3.5 text-sm font-semibold text-[#fff9ec] shadow-md hover:bg-[#294f4b]">Talk to Adeline</Link>
+            <h1 className="mt-1 font-serif text-[clamp(4rem,8.2vw,8.3rem)] leading-[.79] tracking-[-.045em] text-[#294b35]">
+              Education<br />
+              as<br />
+              <span className="italic text-[#d7892e]">Unique</span><br />
+              as Your<br />
+              Child
+            </h1>
+            <p className="mt-9 max-w-xl text-lg leading-8 text-[#47604e]">
+              Adeline follows your child&apos;s interests, notices what they are already learning in real life, maps that work to state standards, and helps fill the gaps naturally on the way to graduation.
+            </p>
+            <div className="mt-9 flex flex-wrap gap-4">
+              <Link href="/login?mode=signup" className="rounded-full bg-[#b8114d] px-8 py-4 text-xs font-bold uppercase tracking-[.18em] text-white shadow-xl">
+                Talk to Adeline →
+              </Link>
+              <a href="#features" className="rounded-full border border-[#294b35] px-8 py-4 text-xs font-bold uppercase tracking-[.18em] text-[#294b35]">
+                See how it works
+              </a>
+            </div>
+          </div>
+
+          <div className="relative">
+            <div className="mx-auto max-w-xl overflow-hidden rounded-[32px] border-2 border-[#294b35] bg-[#fffdf8] shadow-[0_25px_70px_rgba(51,57,42,.16)]">
+              <div className="flex items-center justify-between bg-[#294b35] px-6 py-5 text-white">
+                <div>
+                  <p className="text-[9px] uppercase tracking-[.2em] text-white/55">Adeline</p>
+                  <p className="font-serif text-lg">Your learning companion</p>
+                </div>
+                <span className="h-3 w-3 rounded-full bg-emerald-400" />
+              </div>
+
+              <div className="space-y-4 px-6 py-7 text-sm leading-6">
+                <Bubble side="adeline">Hi Della! What are you excited to learn about today? 🌿</Bubble>
+                <Bubble side="student">I want to grow my crochet business!</Bubble>
+                <Bubble side="adeline">That&apos;s amazing! 🧶 Do you have a website to sell your products yet?</Bubble>
+                <Bubble side="student">No, not yet...</Bubble>
+                <div className="rounded-2xl border border-[#d7892e] bg-white px-5 py-4 shadow-sm">
+                  <p className="font-semibold text-[#d27a1e]">Perfect! Let&apos;s build one together!</p>
+                  <p className="mt-2 text-xs italic text-[#b8114d]">You&apos;ll learn web design, marketing, AND run your business. Here are the skills you&apos;ll earn:</p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {['Web Design', 'Marketing', 'Entrepreneurship'].map((tag) => (
+                      <span key={tag} className="rounded-full bg-[#eef0e8] px-3 py-1 text-[9px] font-bold uppercase tracking-wide text-[#294b35]">{tag}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-[#294b35]/10 px-6 py-4 text-center text-[9px] uppercase tracking-[.2em] text-[#748176]">
+                Skills and standards are tracked quietly underneath
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="relative border-y border-[#3a332b]/10 bg-[#e3dac7]/70 px-5 py-24 sm:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-12 max-w-3xl">
-            <p className="text-[10px] uppercase tracking-[.3em] text-[#6f4d73]">two children · two different paths</p>
-            <h2 className="mt-4 font-serif text-4xl sm:text-5xl">The learning grows out of their life.</h2>
+      <section id="features" className="border-t border-[#294b35]/8 bg-white px-5 py-24 sm:px-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="text-center">
+            <p className="text-xl italic text-[#d78364]" style={{ fontFamily: 'var(--font-kalam), cursive' }}>Why Dear Adeline?</p>
+            <h2 className="mt-2 font-serif text-4xl font-semibold text-[#2f3f35] sm:text-5xl">
+              Learning That <span className="text-[#7ea06f]">Grows With You</span>
+            </h2>
+            <p className="mx-auto mt-4 max-w-3xl text-lg leading-8 text-[#607066]">
+              Every learner is different. Adeline adapts to interests, recognizes strengths, records real-world evidence, and gently fills learning gaps.
+            </p>
           </div>
 
-          <div className="grid gap-8 lg:grid-cols-2">
-            <article className="rounded-[34px_24px_38px_26px] border border-[#392f27]/15 bg-[#f8f0df] p-6 shadow-lg sm:p-8">
-              <p className="text-[9px] uppercase tracking-[.22em] text-[#8e3f69]">Della · crochet business</p>
-              <div className="mt-6 space-y-4 text-sm leading-6">
-                <Bubble side="adeline">Hi Della! What are you excited to learn about today? 🌿</Bubble>
-                <Bubble side="student">I want to grow my crochet business!</Bubble>
-                <Bubble side="adeline">That&apos;s amazing! 🧶 Do you have a website to sell your products yet?</Bubble>
-                <Bubble side="student">No, not yet...</Bubble>
-                <Bubble side="adeline">
-                  <p>Perfect! Let&apos;s build one together!</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {['Web Design', 'Marketing', 'Entrepreneurship'].map((tag) => (
-                      <span key={tag} className="rounded-full bg-[#BD6809] px-3 py-1 text-[10px] font-bold uppercase text-white">{tag}</span>
-                    ))}
-                  </div>
-                </Bubble>
-              </div>
-              <p className="mt-7 border-l-2 border-[#8e3f69] pl-4 text-xs italic leading-6 text-[#655a4e]">The website becomes the doorway. Writing, design, pricing, business, technology, and marketing become useful because Della wants them.</p>
-            </article>
-
-            <article className="rounded-[30px_38px_26px_34px] border border-[#392f27]/15 bg-[#eef1e7] p-6 shadow-lg sm:p-8">
-              <p className="text-[9px] uppercase tracking-[.22em] text-[#355b84]">another child · creek investigation</p>
-              <div className="mt-6 space-y-4 text-sm leading-6">
-                <Bubble side="student">There were dead fish by the creek and we found an old blue bottle.</Bubble>
-                <Bubble side="adeline">The bottle is interesting, but it doesn&apos;t prove anything by itself. Want to figure out what the water can actually tell us?</Bubble>
-                <Bubble side="student">Yes.</Bubble>
-                <Bubble side="adeline">Then we need comparison samples. Upstream, near the drain, and downstream. I can sketch out what to test, or send you into the creek case in the game world.</Bubble>
-              </div>
-              <p className="mt-7 border-l-2 border-[#355b84] pl-4 text-xs italic leading-6 text-[#596255]">That one conversation can become a sketchnote, a real-world investigation, or a game-world adventure.</p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section className="relative px-5 py-24 sm:px-8">
-        <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[.95fr_1.05fr]">
-          <div>
-            <p className="text-[10px] uppercase tracking-[.3em] text-[#315d58]">what happens underneath</p>
-            <h2 className="mt-4 font-serif text-4xl sm:text-5xl">They live it. Adeline translates it.</h2>
-            <p className="mt-5 max-w-xl text-sm leading-7 text-[#5d5448]">The child should not have to turn every interesting day into school language. Adeline keeps the academic paper trail quietly in the background.</p>
-          </div>
-          <div className="rounded-[30px_22px_34px_26px] border border-[#392f27]/15 bg-[#f7efdd] p-6 shadow-lg">
-            {RECORD.map((item, i) => (
-              <div key={item} className="flex items-center gap-4 border-b border-[#3b3229]/10 py-4 last:border-0">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#315d58]/25 font-serif text-xs text-[#315d58]">{i + 1}</span>
-                <span className="text-sm text-[#4d4439]">{item}</span>
-              </div>
+          <div className="mt-12 grid gap-7 md:grid-cols-2 xl:grid-cols-3">
+            {FEATURES.map(({ title, description, Icon, accent }) => (
+              <article key={title} className="rounded-[28px] border border-black/5 bg-white p-8 shadow-[0_10px_35px_rgba(41,75,53,.07)]">
+                <div className="flex h-16 w-16 items-center justify-center rounded-[20px] text-white" style={{ backgroundColor: accent }}>
+                  <Icon size={28} />
+                </div>
+                <h3 className="mt-6 font-serif text-2xl font-semibold text-[#303d34]">{title}</h3>
+                <p className="mt-2 text-base leading-7 text-[#617067]">{description}</p>
+              </article>
             ))}
           </div>
         </div>
       </section>
 
-      <footer className="relative border-t border-[#3a332b]/10 px-5 py-8 text-center text-[10px] tracking-[.18em] text-[#766c5f]">DEAR ADELINE</footer>
+      <section className="bg-[#f8f1e5] px-5 py-24 sm:px-8">
+        <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[.85fr_1.15fr] lg:items-center">
+          <div>
+            <p className="text-xl italic text-[#c97825]" style={{ fontFamily: 'var(--font-kalam), cursive' }}>Another child, another path</p>
+            <h2 className="mt-2 font-serif text-4xl text-[#294b35] sm:text-5xl">The creek becomes an investigation.</h2>
+            <p className="mt-5 text-base leading-8 text-[#5b685e]">
+              The same system that can help Della build a business can follow another learner into a water-quality mystery, a sketchnote, a real experiment, or the Dear Adeline game world.
+            </p>
+          </div>
+          <div className="rounded-[30px] border border-[#294b35]/12 bg-[#edf2e9] p-7 shadow-lg">
+            <div className="space-y-4 text-sm leading-6">
+              <Bubble side="student">There were dead fish by the creek and we found an old blue bottle.</Bubble>
+              <Bubble side="adeline">The bottle is interesting, but it doesn&apos;t prove anything by itself. Want to figure out what the water can actually tell us?</Bubble>
+              <Bubble side="student">Yes.</Bubble>
+              <Bubble side="adeline">Then we need comparison samples. Upstream, near the drain, and downstream. I can sketch out what to test, or send you into the creek case in the game world.</Bubble>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-[#294b35]/10 bg-[#fffdfa] px-5 py-8 text-center text-[10px] uppercase tracking-[.2em] text-[#758078]">
+        Dear Adeline · Education as Unique as Your Child
+      </footer>
     </main>
   )
 }
@@ -110,7 +183,7 @@ export default function Home() {
 function Bubble({ side, children }: { side: 'student' | 'adeline'; children: React.ReactNode }) {
   return (
     <div className={side === 'student' ? 'flex justify-end' : 'flex justify-start'}>
-      <div className={side === 'student' ? 'max-w-[86%] rounded-[20px_20px_5px_20px] bg-[#315d58] px-4 py-3 text-[#fff9ed]' : 'max-w-[90%] rounded-[5px_20px_20px_20px] border border-[#3c342b]/12 bg-white/65 px-4 py-3 text-[#4c4339]'}>
+      <div className={side === 'student' ? 'max-w-[82%] rounded-[18px_18px_5px_18px] bg-[#5d745d] px-4 py-3 text-white shadow-sm' : 'max-w-[88%] rounded-[5px_18px_18px_18px] border border-[#294b35]/10 bg-white px-4 py-3 text-[#415247] shadow-sm'}>
         {children}
       </div>
     </div>
