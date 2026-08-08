@@ -1,20 +1,9 @@
-"""
-Conversation Stream API — POST /conversation/stream
-
-SSE endpoint. Streams Adeline's response token-by-token with inline block injection.
-Replaces the generate + scaffold pair as the primary student delivery path.
-
-Events emitted:
-  event: text   data: {"delta": "..."}
-  event: block  data: {"block_type": "...", "content": "...", ...}
-  event: zpd    data: {"zone": "IN_ZPD", "mastery_score": 0.42, "mastery_band": "DEVELOPING"}
-  event: done   data: {}
-  event: error  data: {"message": "..."}
-"""
+"""Relationship-first conversation stream for Adeline."""
 from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Optional, AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -25,57 +14,73 @@ from app.api.middleware import get_current_user_id
 from app.algorithms.pedagogical_directives import get_mode_directives, get_quick_directives
 from app.agents.pedagogy import detect_zpd_zone
 from app.models.student import load_student_state, MasteryBand
+from app.services.memory import memory_service
 from app.utils.stream_parser import parse_stream
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/conversation", tags=["conversation"])
 
-_ADELINE_BASE = """You are Adeline — a Truth-First K-12 AI Mentor grounded in the 10-Track Constitution.
+_ADELINE_BASE = """You are Adeline, the relationship-first concierge at the center of Dear Adeline.
 
-CORE RULES:
-- Teach from verified primary sources only. Never invent facts or citations.
-- No asterisk actions, no endearments (sweetie, dear, child), no performance.
-- Warm, direct, a little bookish. Like a trusted older sibling who reads a lot.
-- End every response with a question or an invitation — never a lecture.
-- Keep responses focused: 3–6 sentences unless teaching complex material.
+WHO YOU ARE
+You are the person a young person naturally wants to tell things to. You remember the thread of their life, notice what matters to them, and know how to turn real experiences into useful next steps without making every conversation feel like school.
 
-BLOCK INJECTION:
-When you want to show the student a primary source, lab guide, quiz, timeline, mind map,
-experiment, project builder, or socratic debate — output it as a JSON block tag:
+RELATIONSHIP FIRST
+- Conversation is allowed to be just conversation. Do not force a lesson, project, credit, quiz, or productivity outcome onto every message.
+- Respond to what the student actually said before suggesting anything else.
+- Do not behave like a customer-service bot, teacher dashboard, guidance counselor, or motivational mascot.
+- No asterisk actions, no role-play stage directions, no fake enthusiasm, no endearments such as sweetie/dear/child.
+- Sound observant, direct, curious, calm, and a little bookish.
+- Keep ordinary replies compact. A good conversation should breathe.
 
+YOU NOTICE DOORS
+When the moment genuinely calls for it, you may offer one or two specific doors, never a menu dump:
+- STORY: turn an idea, event, place, object, or memory into a story.
+- PROJECT: make/build/test/create something in the real world.
+- DEEP DIVE: teach the student something they explicitly want to understand.
+- INVESTIGATION: follow evidence, sources, clues, observations, or competing explanations.
+- ADVENTURE: suggest an experience that could happen in the Dear Adeline game world or outside in real life.
+
+Only open a door when the student's curiosity points there or they ask for it.
+
+STANDARDS-AWARE GAP FILLING
+You may receive a backstage section called LEARNING MAP. It contains recent real-world evidence and Oklahoma Academic Standards that still need stronger evidence.
+- Never dump standards codes, proficiency labels, or school jargon into ordinary conversation.
+- Never pretend one activity proves mastery of a whole standard.
+- If something the learner is already doing naturally overlaps a gap, use that overlap to suggest ONE small next observation, question, experiment, explanation, build, comparison, reading, or calculation.
+- Prefer extending the learner's current activity over assigning an unrelated lesson.
+- If no gap fits naturally, ignore the gap list and keep the conversation human.
+- Do not ask how long an activity took. Time is not the learning signal.
+- Focus on what they did, what they noticed, what they can explain, and what evidence could show next.
+
+SKETCHNOTE ANSWERS
+When the student asks an explanatory question and the answer would be easier to remember visually, answer conversationally first, then make a compact SKETCHNOTE_NOTE block. Think hand-drawn field notebook, not slideshow or worksheet.
+Use 2-5 short sections, a strong central big idea, a few memorable keywords, and simple doodle symbols. Do not overfill the page.
+If the student says things like "sketch that", "make me notes", "help me remember this", "show me", or asks a substantial why/how question, prefer a sketchnote unless plain text is clearly better.
+
+Exact shape:
 <BLOCK>
-{"block_type": "PRIMARY_SOURCE", "title": "...", "content": "...", "source_url": "..."}
+{"block_type":"SKETCHNOTE_NOTE","title":"...","big_idea":"...","sections":[{"heading":"...","text":"...","symbol":"..."}],"keywords":["..."],"footer":"...","track":"OPTIONAL_TRACK_NAME"}
 </BLOCK>
 
-Valid block_type values: PRIMARY_SOURCE, LAB_MISSION, NARRATIVE, RESEARCH_MISSION,
-QUIZ, MIND_MAP, TIMELINE, MNEMONIC, NARRATED_SLIDE, LAB_GUIDE, EXPERIMENT,
-SOCRATIC_DEBATE, PROJECT_BUILDER, SCAFFOLDED_PROBLEM, HARD_THING_CHALLENGE.
+LEARNING AND CREDIT
+The application separately recognizes real-life activities and records standards evidence toward graduation. Do not fabricate credit amounts, course titles, standards, or transcript claims inside normal conversation.
 
-You may inject a block mid-sentence. Text before and after the block will render
-separately. After the block, continue your response naturally.
+TRUTH AND SOURCES
+- Never invent facts or citations.
+- When teaching factual or contested material, prefer primary and high-quality sources and distinguish evidence from interpretation.
+- If you do not know, say so.
+
+TEACHING BEHAVIOR
+When a student explicitly wants instruction, teach clearly and richly. Use examples, analogies, source material, experiments, diagrams, projects, sketchnotes, or Socratic questions when they genuinely help. Do not automatically end every reply with a question.
+
+OTHER RICH BLOCKS
+Only when materially useful, you may also use: PRIMARY_SOURCE, LAB_MISSION, NARRATIVE, RESEARCH_MISSION, QUIZ, MIND_MAP, TIMELINE, MNEMONIC, NARRATED_SLIDE, LAB_GUIDE, EXPERIMENT, SOCRATIC_DEBATE, PROJECT_BUILDER, SCAFFOLDED_PROBLEM, HARD_THING_CHALLENGE.
+Do not inject a block just because you can. The default experience is conversation.
 """
 
-# Socratic Reading Co-Pilot persona for Literature discussions
-_SOCRATIC_READING_COPILOT = """You are Adeline — a Socratic Reading Co-Pilot.
-
-READING DISCUSSION RULES:
-1. NEVER give away the answer or summarize the whole book
-2. ALWAYS acknowledge the specific chapter and highlighted passage first
-3. Ask LEADING QUESTIONS to help the student deduce meaning from context:
-   - "What do you think the author meant by...?"
-   - "How does this connect to what happened earlier?"
-   - "What emotions or ideas might this word carry here?"
-4. Connect themes to the student's track/mastery when relevant:
-   - Homesteading track: connect to soil, seasons, stewardship, craftsmanship
-   - Applied Mathematics: patterns, logic, problem-solving in the text
-   - Natural Philosophy: scientific metaphors, observation, wonder
-   - Truth-History: historical context, primary source mindset
-   - Discipleship: character formation, moral choices, wisdom
-5. Guide students to discover layers of meaning through questioning
-6. End EVERY response with a question or invitation — never a lecture
-7. If a student asks for a word definition, give a brief hint first, then ask them to infer from context
-
-TONE: Warm, bookish, like a trusted older sibling who loves stories. Encourage curiosity, not anxiety.
+_SOCRATIC_READING_COPILOT = """You are Adeline, reading alongside the student.
+Start with the specific passage, chapter, character, or thought they brought up. Do not spoil later events unless asked. Help them notice language, structure, motive, context, and competing interpretations. Give direct definitions when asked. Ask a question only when it genuinely advances the conversation. If a compact illustrated note would help them remember the idea, use a SKETCHNOTE_NOTE block with the same schema as normal Adeline conversation.
 """
 
 
@@ -92,11 +97,101 @@ class ConversationRequest(BaseModel):
     student_id: str
     message: str
     track: Optional[str] = None
-    grade_level: Optional[str] = "8"  # Default to middle school
+    grade_level: Optional[str] = "8"
     conversation_history: list[dict] = []
-    # Reading context for Literature Agent
     current_book: Optional[CurrentBookContext] = None
     highlighted_text: Optional[str] = None
+
+
+def _grade_number(grade_level: str) -> int:
+    match = re.search(r"\d+", grade_level or "")
+    if not match:
+        return 8
+    return max(1, min(12, int(match.group())))
+
+
+async def _learning_map_context(student_id: str, grade_level: str) -> str:
+    """Build a compact backstage view of recent evidence + grade-level gaps.
+
+    This intentionally uses the canonical database tables instead of creating a
+    second standards system. Any failure is non-fatal: conversation must still work.
+    """
+    try:
+        from app.config import get_db_conn
+
+        conn = await get_db_conn()
+        try:
+            grade = _grade_number(grade_level)
+
+            recent = await conn.fetch(
+                """
+                SELECT "courseTitle", "activityDescription", "oasStandards"
+                FROM "TranscriptEntry"
+                WHERE "studentId" = $1
+                  AND "lessonId" LIKE 'activity-%'
+                ORDER BY "sealedAt" DESC
+                LIMIT 5
+                """,
+                student_id,
+            )
+
+            gaps = await conn.fetch(
+                """
+                SELECT s.code, s.subject, s.description, s.track,
+                       COALESCE(CAST(m.proficiency AS TEXT), 'UNSEEN') AS proficiency
+                FROM "OASStandard" s
+                LEFT JOIN "StandardMastery" m
+                  ON m."standardId" IN (s.id, s.code)
+                 AND m."studentId" = $1
+                WHERE s.grade = $2
+                  AND (
+                    m."standardId" IS NULL
+                    OR UPPER(CAST(m.proficiency AS TEXT)) IN ('DEVELOPING', 'APPROACHING')
+                  )
+                ORDER BY
+                  CASE WHEN m."standardId" IS NULL THEN 0 ELSE 1 END,
+                  s.subject,
+                  s.code
+                LIMIT 14
+                """,
+                student_id,
+                grade,
+            )
+        finally:
+            await conn.close()
+
+        lines: list[str] = []
+        if recent:
+            lines.append("RECENT REAL-WORLD EVIDENCE:")
+            for row in recent:
+                standards = row["oasStandards"] or []
+                if not isinstance(standards, list):
+                    standards = []
+                short_desc = str(row["activityDescription"] or "")[:180]
+                codes = ", ".join(str(code) for code in standards[:4])
+                suffix = f" | standards: {codes}" if codes else ""
+                lines.append(f"- {row['courseTitle']}: {short_desc}{suffix}")
+
+        if gaps:
+            lines.append("GRADE-LEVEL GAPS / STANDARDS NEEDING STRONGER EVIDENCE:")
+            for row in gaps:
+                description = str(row["description"] or "")[:220]
+                lines.append(
+                    f"- {row['code']} [{row['subject']} / {row['track']}]: {description} "
+                    f"(current: {row['proficiency']})"
+                )
+
+        if not lines:
+            return ""
+
+        return (
+            "LEARNING MAP (BACKSTAGE ONLY)\n"
+            + "\n".join(lines)
+            + "\nUse this only to notice natural bridges. Do not recite it to the learner."
+        )
+    except Exception as exc:
+        logger.warning("[/conversation/stream] learning-map read failed: %s", exc)
+        return ""
 
 
 def _build_conversation_prompt(
@@ -104,87 +199,62 @@ def _build_conversation_prompt(
     tracks: list[str],
     grade_level: str,
     zpd_directives: str,
+    memory_context: str = "",
+    learning_map_context: str = "",
     current_book: Optional[CurrentBookContext] = None,
     highlighted_text: Optional[str] = None,
 ) -> str:
-    """Build the full system prompt for a conversation turn."""
-    # Check if this is a reading discussion (Literature track or has book context)
-    is_reading_discussion = (
-        current_book is not None or 
-        (highlighted_text and "highlighted this passage" in topic)
-    )
-    
-    if is_reading_discussion:
-        # Use Socratic Reading Co-Pilot persona
-        base_prompt = _SOCRATIC_READING_COPILOT
-        
-        # Build reading context section
-        reading_context = ""
+    backstage = "\n\n".join(part for part in [memory_context, learning_map_context] if part)
+
+    if current_book is not None or highlighted_text:
+        context = ""
         if current_book:
-            reading_context += f"\nCURRENT BOOK: '{current_book.title}' by {current_book.author}"
+            context += f"\nCURRENT BOOK: '{current_book.title}' by {current_book.author}"
             if current_book.chapter:
-                reading_context += f"\nCHAPTER: {current_book.chapter}"
+                context += f"\nCHAPTER: {current_book.chapter}"
             if current_book.progress_percent is not None:
-                reading_context += f"\nREADING PROGRESS: {current_book.progress_percent}%"
-        
+                context += f"\nREADING PROGRESS: {current_book.progress_percent}%"
         if highlighted_text:
-            reading_context += f"\n\nSTUDENT HAS HIGHLIGHTED:\"{highlighted_text[:300]}{'...' if len(highlighted_text) > 300 else ''}\""
-        
-        tracks_str = ", ".join(t.replace("_", " ").title() for t in tracks) if tracks else "General"
-        
-        return (
-            f"{base_prompt}\n\n"
-            f"{reading_context}\n\n"
-            f"STUDENT TRACKS: {tracks_str}\n"
-            f"STUDENT GRADE: {grade_level}\n\n"
-            f"{zpd_directives}\n\n"
-            "Remember: Guide through questions, don't give away answers. Connect to their track when relevant."
-        )
-    
-    # Standard conversation prompt for non-reading topics
+            excerpt = highlighted_text[:300] + ("..." if len(highlighted_text) > 300 else "")
+            context += f'\nSTUDENT HIGHLIGHTED: "{excerpt}"'
+        return f"{_ADELINE_BASE}\n\n{_SOCRATIC_READING_COPILOT}\n\n{backstage}\n{context}\nSTUDENT GRADE: {grade_level}\n{zpd_directives}"
+
     mode_section = get_mode_directives(tracks)
     tracks_str = ", ".join(t.replace("_", " ").title() for t in tracks) if tracks else "General"
-
     return (
-        f"{_ADELINE_BASE}\n\n"
-        f"TODAY'S CONVERSATION TOPIC: {topic}\n"
-        f"ACTIVE TRACKS: {tracks_str}\n"
-        f"STUDENT GRADE: {grade_level}\n\n"
-        f"TEACHING VOICES AVAILABLE:\n{mode_section}\n\n"
-        "Follow the conversation. Use whichever voice the moment calls for.\n\n"
-        f"{zpd_directives}"
+        f"{_ADELINE_BASE}\n\n{backstage}\n"
+        f"CURRENT MESSAGE: {topic}\nPOSSIBLE ACADEMIC CONTEXT: {tracks_str}\nSTUDENT GRADE: {grade_level}\n\n"
+        "The following pedagogy is backstage guidance only. Never expose track names, ZPD labels, mastery labels, or teaching-mode jargon unless the student explicitly asks for academic details.\n\n"
+        f"AVAILABLE DEEP-DIVE VOICES:\n{mode_section}\n\n{zpd_directives}"
     )
 
 
 def _infer_tracks(message: str, explicit_track: Optional[str]) -> list[str]:
-    """
-    Return active tracks for this conversation turn.
-    Uses the explicit track if provided; otherwise returns a safe default.
-    DISCIPLESHIP is the fallback — it bypasses the Witness Protocol so Adeline
-    can always respond without hitting ARCHIVE_SILENT on general chat.
-    """
     if explicit_track:
         return [explicit_track]
-    return ["DISCIPLESHIP"]
+    text = message.lower()
+    hints = [
+        ("APPLIED_MATHEMATICS", ("math", "measure", "ratio", "fraction", "percent", "graph")),
+        ("CREATION_SCIENCE", ("science", "sourdough", "ferment", "bread", "plant", "water", "chemical", "biology")),
+        ("ENGLISH_LITERATURE", ("book", "read", "write", "story", "essay", "poem")),
+        ("CREATIVE_ECONOMY", ("business", "website", "sell", "crochet", "design", "code")),
+        ("HOMESTEADING", ("garden", "farm", "chicken", "horse", "canning", "greenhouse")),
+        ("GOVERNMENT_ECONOMICS", ("government", "law", "court", "money", "economy")),
+        ("TRUTH_HISTORY", ("history", "historical", "archive", "primary source")),
+    ]
+    matched = [track for track, words in hints if any(word in text for word in words)]
+    return matched[:2] or ["DISCIPLESHIP"]
 
 
-async def _stream_llm(
-    system_prompt: str,
-    messages: list[dict],
-) -> AsyncIterator[str]:
-    """Yield text using the active synthesis client (Gemini, with Claude fallback)."""
+async def _stream_llm(system_prompt: str, messages: list[dict]) -> AsyncIterator[str]:
     from app.agents.orchestrator import _synthesis_call
 
-    # Build a single user turn: history + current message concatenated
     history_text = ""
     for m in messages[:-1]:
         role = "Student" if m.get("role") == "user" else "Adeline"
         history_text += f"{role}: {m.get('content', '')}\n"
     last = messages[-1].get("content", "") if messages else ""
-    user_prompt = (history_text + last).strip()
-
-    response = await _synthesis_call(system_prompt, user_prompt, max_tokens=2000)
-    yield response
+    yield await _synthesis_call(system_prompt, (history_text + last).strip(), max_tokens=2200)
 
 
 async def _conversation_sse(
@@ -196,75 +266,99 @@ async def _conversation_sse(
     current_book: Optional[CurrentBookContext] = None,
     highlighted_text: Optional[str] = None,
 ) -> AsyncIterator[bytes]:
-    """
-    Core SSE generator. Yields raw SSE bytes.
-    1. Load student state → get ZPD directives
-    2. Build system prompt with mode + ZPD directives
-    3. Stream Claude response
-    4. Parse stream for <BLOCK> tags
-    5. Emit text / block / zpd / done events
-    """
-
     def _sse(event: str, data: dict) -> bytes:
         return f"event: {event}\ndata: {json.dumps(data)}\n\n".encode()
 
     try:
         tracks = _infer_tracks(message, track)
-
-        # Load student mastery for ZPD directives
         try:
             student_state = await load_student_state(student_id)
-            primary_track = tracks[0]
-            track_mastery = student_state.tracks.get(primary_track)
+            track_mastery = student_state.tracks.get(tracks[0])
             mastery_score = track_mastery.mastery_score if track_mastery else 0.3
-            mastery_band  = track_mastery.mastery_band  if track_mastery else MasteryBand.DEVELOPING
+            mastery_band = track_mastery.mastery_band if track_mastery else MasteryBand.DEVELOPING
         except Exception:
             mastery_score = 0.3
-            mastery_band  = MasteryBand.DEVELOPING
+            mastery_band = MasteryBand.DEVELOPING
 
-        zpd_zone       = detect_zpd_zone(message)
+        zpd_zone = detect_zpd_zone(message)
         zpd_directives = get_quick_directives(zpd_zone, mastery_band)
-
-        # Emit ZPD state immediately so the UI updates the badge
-        yield _sse("zpd", {
-            "zone":         zpd_zone.value,
-            "mastery_score": mastery_score,
-            "mastery_band": mastery_band.value,
-        })
-
-        system_prompt = _build_conversation_prompt(
-            topic=message[:120],
-            tracks=tracks,
-            grade_level=grade_level,
-            zpd_directives=zpd_directives,
-            current_book=current_book,
-            highlighted_text=highlighted_text,
+        yield _sse(
+            "zpd",
+            {
+                "zone": zpd_zone.value,
+                "mastery_score": mastery_score,
+                "mastery_band": mastery_band.value,
+            },
         )
 
-        # Build message list (cap history at last 10 turns)
-        llm_messages = []
-        for h in history[-10:]:
-            role = "user" if h.get("role") == "user" else "assistant"
-            llm_messages.append({"role": role, "content": h.get("content", "")})
+        try:
+            memory_context = await memory_service.get_prompt_context(
+                student_id,
+                history_limit=8,
+                mastery_band=mastery_band,
+                mastery_score=mastery_score,
+            )
+        except Exception as memory_err:
+            logger.warning("[/conversation/stream] memory read failed: %s", memory_err)
+            memory_context = ""
+
+        learning_map_context = await _learning_map_context(student_id, grade_level)
+
+        system_prompt = _build_conversation_prompt(
+            message[:180],
+            tracks,
+            grade_level,
+            zpd_directives,
+            memory_context,
+            learning_map_context,
+            current_book,
+            highlighted_text,
+        )
+        llm_messages = [
+            {
+                "role": "user" if h.get("role") == "user" else "assistant",
+                "content": h.get("content", ""),
+            }
+            for h in history[-16:]
+        ]
         llm_messages.append({"role": "user", "content": message})
 
-        # Stream + parse
+        response_text = ""
         try:
             async for event in parse_stream(_stream_llm(system_prompt, llm_messages)):
                 if event["type"] == "text":
-                    yield _sse("text", {"delta": event["delta"]})
+                    delta = event["delta"]
+                    response_text += delta
+                    yield _sse("text", {"delta": delta})
                 elif event["type"] == "block":
-                    yield _sse("block", event["block"])
+                    block = event["block"]
+                    if isinstance(block, dict) and block.get("block_type") != "SKETCHNOTE_NOTE":
+                        block_text = str(block.get("content", ""))
+                        if block_text:
+                            response_text += f"\n{block_text}"
+                    yield _sse("block", block)
         except Exception as llm_err:
-            logger.exception(f"[/conversation/stream] LLM stream failed: {llm_err}")
-            yield _sse("error", {"message": "I ran into a hiccup — give me a moment and try again."})
+            logger.exception("[/conversation/stream] LLM stream failed: %s", llm_err)
+            yield _sse("error", {"message": "I lost the thread for a second. Tell me that again?"})
             return
 
-        yield _sse("done", {})
+        if response_text.strip():
+            try:
+                await memory_service.save_interaction(
+                    student_id=student_id,
+                    user_message=message,
+                    assistant_response=response_text.strip(),
+                    zpd_zone=zpd_zone.value,
+                    mastery_band=mastery_band.value,
+                    track=tracks[0] if tracks else None,
+                )
+            except Exception as memory_err:
+                logger.warning("[/conversation/stream] memory write failed: %s", memory_err)
 
-    except Exception as e:
-        logger.exception(f"[/conversation/stream] Unhandled error: {e}")
-        yield _sse("error", {"message": "I ran into a hiccup — give me a moment and try again."})
+        yield _sse("done", {})
+    except Exception as exc:
+        logger.exception("[/conversation/stream] Unhandled error: %s", exc)
+        yield _sse("error", {"message": "I lost the thread for a second. Tell me that again?"})
 
 
 @router.post("/stream")
@@ -272,32 +366,18 @@ async def conversation_stream(
     body: ConversationRequest,
     current_user_id: str = Depends(get_current_user_id),
 ):
-    """
-    Stream Adeline's response as SSE with inline block injection.
-
-    Track-aware mode voices (Investigator/Lab/Dialogue/Workshop) are injected
-    automatically — no student-facing mode selection needed.
-    
-    For reading discussions (ENGLISH_LITERATURE track with book context),
-    Adeline acts as a Socratic Reading Co-Pilot — guiding through questions
-    rather than giving direct answers.
-    """
     if not body.message.strip():
         raise HTTPException(status_code=422, detail="Message cannot be empty")
-
     return StreamingResponse(
         _conversation_sse(
-            student_id=body.student_id,
-            message=body.message,
-            track=body.track,
-            grade_level=body.grade_level,
-            history=body.conversation_history,
-            current_book=body.current_book,
-            highlighted_text=body.highlighted_text,
+            body.student_id,
+            body.message,
+            body.track,
+            body.grade_level,
+            body.conversation_history,
+            body.current_book,
+            body.highlighted_text,
         ),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

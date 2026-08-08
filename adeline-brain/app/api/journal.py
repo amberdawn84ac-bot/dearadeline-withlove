@@ -1,78 +1,91 @@
-"""
-Journal API — /journal/*
-
-POST /journal/seal      — Seal a completed lesson into the student's journal
-GET  /journal/progress/{student_id} — Fetch track progress counts
-"""
+"""Journal API — sealed learning plus saveable daily notes."""
 import asyncio
 import logging
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field
-from typing import Any
+from typing import Any, Optional
 
-from app.schemas.api_models import Track
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+
 from app.api.middleware import get_current_user_id, verify_student_access
 from app.connections.journal_store import journal_store
 from app.connections.neo4j_client import neo4j_client
+from app.schemas.api_models import Track
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/journal", tags=["journal"])
 
 
-# ── Request / Response models ─────────────────────────────────────────────
-
 class SealRequest(BaseModel):
-    lesson_id:        str
-    track:            Track
+    lesson_id: str
+    track: Track
     completed_blocks: int = Field(default=0, ge=0)
-    oas_standards:    list[dict[str, Any]] = Field(default_factory=list)
+    oas_standards: list[dict[str, Any]] = Field(default_factory=list)
     evidence_sources: list[dict[str, Any]] = Field(default_factory=list)
-    # Optional adaptive learning signals — sent by UI after lesson/quiz completion
-    concept_id:   str | None = None   # ZPD concept_id if known
-    concept_name: str | None = None   # Human-readable concept title
-    quiz_results: list[dict[str, Any]] = Field(default_factory=list)  # [{correct: bool}, ...]
+    concept_id: str | None = None
+    concept_name: str | None = None
+    quiz_results: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class SealResponse(BaseModel):
-    sealed:         bool
-    lesson_id:      str
-    track:          Track
+    sealed: bool
+    lesson_id: str
+    track: Track
     track_progress: dict[str, int]
 
 
 class ProgressResponse(BaseModel):
-    student_id:     str
+    student_id: str
     track_progress: dict[str, int]
 
+
 class RecentEntry(BaseModel):
-    lesson_id:        str
-    track:            str
+    lesson_id: str
+    track: str
     completed_blocks: int
-    sealed_at:        str | None
+    sealed_at: str | None
+
 
 class RecentResponse(BaseModel):
     student_id: str
-    entries:    list[RecentEntry]
+    entries: list[RecentEntry]
 
 
-# ── Routes ───────────────────────────────────────────────
+class DailyNoteRequest(BaseModel):
+    student_id: Optional[str] = None
+    topic: str = Field(min_length=1, max_length=240)
+    track: str = "ENGLISH_LITERATURE"
+    learned: str = Field(min_length=1, max_length=12000)
+    action: str | None = Field(default=None, max_length=1000)
+    note: dict[str, Any] | None = None
+    source: str = "adeline_conversation"
+
+
+class DailyNoteResponse(BaseModel):
+    id: str
+    student_id: str
+    topic: str
+    track: str
+    created_at: str
+
+
+class DailyNoteItem(BaseModel):
+    id: str
+    topic: str
+    track: str
+    learned: str
+    action: str | None
+    note: dict[str, Any] | None
+    source: str
+    created_at: str | None
+
+
+class DailyNotesResponse(BaseModel):
+    student_id: str
+    notes: list[DailyNoteItem]
+
 
 @router.post("/seal", response_model=SealResponse)
-async def seal_journal(
-    body: SealRequest,
-    student_id: str = Depends(get_current_user_id),
-):
-    """
-    Seal a lesson into the student's journal.
-
-    - Upserts (student_id, lesson_id) into student_journal
-    - Returns updated track_progress so the UI can refresh the dashboard
-    """
-    logger.info(
-        f"[/journal/seal] student={student_id} "
-        f"lesson={body.lesson_id} track={body.track.value} "
-        f"blocks={body.completed_blocks}"
-    )
+async def seal_journal(body: SealRequest, student_id: str = Depends(get_current_user_id)):
     try:
         track_progress = await journal_store.seal(
             student_id=student_id,
@@ -81,25 +94,16 @@ async def seal_journal(
             completed_blocks=body.completed_blocks,
             sources=body.evidence_sources or None,
         )
-    except Exception as e:
+    except Exception as exc:
         logger.exception("[/journal/seal] DB error")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(exc))
 
-    # Invalidate student state cache so next lesson sees fresh mastery scores
     from app.models.student import invalidate_student_state_cache
+
     await invalidate_student_state_cache(student_id)
-
-    # Fire-and-forget Neo4j Mastery relationships — never block the seal response
     if body.oas_standards:
-        asyncio.create_task(
-            _record_mastery_safe(student_id, body.track.value, body.oas_standards)
-        )
-
-    # Fire-and-forget BKT + SM-2 card update with quiz-derived quality signal
-    asyncio.create_task(
-        _update_card_safe(student_id, body)
-    )
-
+        asyncio.create_task(_record_mastery_safe(student_id, body.track.value, body.oas_standards))
+    asyncio.create_task(_update_card_safe(student_id, body))
     return SealResponse(
         sealed=True,
         lesson_id=body.lesson_id,
@@ -108,16 +112,49 @@ async def seal_journal(
     )
 
 
+@router.post("/entries", response_model=DailyNoteResponse)
+async def create_daily_note(body: DailyNoteRequest, student_id: str = Depends(get_current_user_id)):
+    try:
+        saved = await journal_store.add_daily_note(
+            student_id=student_id,
+            topic=body.topic,
+            track=body.track,
+            learned=body.learned,
+            action=body.action,
+            note=body.note,
+            source=body.source,
+        )
+        return DailyNoteResponse(**saved)
+    except Exception as exc:
+        logger.exception("[/journal/entries] save failed")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/entries/{student_id}", response_model=DailyNotesResponse)
+async def list_daily_notes(
+    student_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    _user_id: str = Depends(verify_student_access),
+):
+    try:
+        notes = await journal_store.get_daily_notes(student_id, limit=limit)
+        return DailyNotesResponse(
+            student_id=student_id,
+            notes=[DailyNoteItem(**note) for note in notes],
+        )
+    except Exception as exc:
+        logger.exception("[/journal/entries] list failed")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 async def _record_mastery_safe(student_id: str, track: str, oas_standards: list[dict]) -> None:
     try:
         await neo4j_client.record_mastery(student_id, track, oas_standards)
-        logger.info(f"[Neo4j] Mastery recorded for {student_id} — {len(oas_standards)} standards")
     except Exception as exc:
         logger.warning(f"[Neo4j] Mastery write failed (non-fatal): {exc}")
 
 
 def _quiz_quality(quiz_results: list[dict]) -> int:
-    """Map quiz results to SM-2 quality (0–5). Defaults to 3 (lesson-only experience)."""
     if not quiz_results:
         return 3
     correct = sum(1 for q in quiz_results if q.get("correct"))
@@ -134,25 +171,20 @@ def _quiz_quality(quiz_results: list[dict]) -> int:
 
 
 async def _update_card_safe(student_id: str, body: SealRequest) -> None:
-    """Fire-and-forget: update BKT pL + SM-2 schedule after lesson seal."""
     try:
         from app.algorithms.bkt_tracker import update_card_after_lesson
         from app.tools.graph_query import tool_get_zpd_candidates
 
         quality = _quiz_quality(body.quiz_results)
-
-        concept_id   = body.concept_id
+        concept_id = body.concept_id
         concept_name = body.concept_name or ""
-
-        # If no concept_id was sent, resolve from ZPD candidates
         if not concept_id:
             zpd = await tool_get_zpd_candidates(student_id, body.track.value, limit=1)
             if zpd:
-                concept_id   = zpd[0].concept_id
+                concept_id = zpd[0].concept_id
                 concept_name = concept_name or zpd[0].title
             else:
                 concept_id = f"{body.track.value.lower()}-seal"
-
         await update_card_after_lesson(
             student_id=student_id,
             concept_id=concept_id,
@@ -165,17 +197,12 @@ async def _update_card_safe(student_id: str, body: SealRequest) -> None:
 
 
 @router.get("/progress/{student_id}", response_model=ProgressResponse)
-async def get_progress(
-    student_id: str,
-    _user_id: str = Depends(verify_student_access),
-):
-    """Return all track progress counts for a student."""
+async def get_progress(student_id: str, _user_id: str = Depends(verify_student_access)):
     try:
         track_progress = await journal_store.get_track_progress(student_id)
-    except Exception as e:
+    except Exception as exc:
         logger.exception("[/journal/progress] DB error")
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise HTTPException(status_code=500, detail=str(exc))
     return ProgressResponse(student_id=student_id, track_progress=track_progress)
 
 
@@ -185,14 +212,12 @@ async def get_recent(
     limit: int = 10,
     _user_id: str = Depends(verify_student_access),
 ):
-    """Return the most recently sealed lessons for a student."""
     try:
         entries = await journal_store.get_recent(student_id, limit=min(limit, 50))
-    except Exception as e:
+    except Exception as exc:
         logger.exception("[/journal/recent] DB error")
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise HTTPException(status_code=500, detail=str(exc))
     return RecentResponse(
         student_id=student_id,
-        entries=[RecentEntry(**e) for e in entries],
+        entries=[RecentEntry(**entry) for entry in entries],
     )
