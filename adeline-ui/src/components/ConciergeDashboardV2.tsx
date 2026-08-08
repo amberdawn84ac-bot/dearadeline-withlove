@@ -1,9 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { MessageCircle, Send } from 'lucide-react';
-import { reportActivity, streamConversation } from '@/lib/brain-client';
+import { BookOpen, MessageCircle, Send } from 'lucide-react';
+import { reportActivity } from '@/lib/brain-client';
 import type { ActivityReportResponse, ConversationMessage } from '@/lib/brain-client';
+import { streamAdelineConversation } from '@/lib/conversation-client';
 import SketchnoteCard, { type SketchnoteData } from '@/components/SketchnoteCard';
 import { saveSketchnote } from '@/lib/journal-client';
 
@@ -21,9 +23,6 @@ type ChatMessage = {
   sketchNote?: SketchnoteData;
 };
 
-// This is intentionally broad. It only decides whether to send a message to the
-// registrar for a second look. The registrar/standards mapper decides what the
-// activity actually demonstrates.
 const ACTIVITY_RE = /\b(?:i|we)\s+(?:baked|cooked|made|built|fixed|repaired|started|planted|grew|harvested|read|wrote|researched|studied|practiced|helped|volunteered|sewed|crocheted|knitted|painted|drew|tested|measured|mixed|fed|trained|cleaned|worked|designed|coded|created|visited|went|learned|tried|finished|worked on|took care of)\b/i;
 
 function makeId() {
@@ -80,8 +79,6 @@ export default function ConciergeDashboardV2({ studentId, studentName, gradeLeve
         student_id: studentId,
         grade_level: gradeLevel,
         description,
-        // The evidence-first API makes duration optional. Keep this omitted even
-        // if a learner happens to mention time; time is not the value signal.
       } as Parameters<typeof reportActivity>[0])) as ActivityEvidence;
 
       setMessages((prev) => [
@@ -94,7 +91,7 @@ export default function ConciergeDashboardV2({ studentId, studentName, gradeLeve
         },
       ]);
     } catch {
-      // Standards filing is backstage. It must never derail Adeline's conversation.
+      // Recording is backstage. It must never derail the conversation.
     }
   }
 
@@ -110,11 +107,10 @@ export default function ConciergeDashboardV2({ studentId, studentName, gradeLeve
     setMessages((prev) => [...prev, { id: streamingId, role: 'adeline', text: '' }]);
 
     let responseText = '';
+    let hadError = false;
 
     try {
-      // Conversation always gets first right of way. Activity/standards recording
-      // happens after the Brain has kept the conversational thread intact.
-      for await (const event of streamConversation({
+      for await (const event of streamAdelineConversation({
         studentId,
         message: text,
         gradeLevel,
@@ -148,27 +144,30 @@ export default function ConciergeDashboardV2({ studentId, studentName, gradeLeve
             ),
           );
         } else if (event.type === 'error') {
-          responseText = 'I lost the thread for a second. Tell me that again?';
+          hadError = true;
+          const message = /401|403|auth/i.test(event.message)
+            ? 'I lost your sign-in connection. Refresh this page and try me again.'
+            : 'I can’t reach my Brain right now. Try that once more in a moment.';
+          responseText = message;
           setMessages((prev) =>
-            prev.map((message) =>
-              message.id === streamingId ? { ...message, text: responseText } : message,
-            ),
+            prev.map((item) => item.id === streamingId ? { ...item, text: message } : item),
           );
         }
       }
 
-      const turns: ConversationMessage[] = [
-        { role: 'user', content: text },
-        { role: 'adeline', content: responseText },
-      ];
-      setHistory((prev) => [...prev, ...turns].slice(-24));
-
-      void quietlyRecordActivity(text);
+      if (!hadError && responseText.trim()) {
+        const turns: ConversationMessage[] = [
+          { role: 'user', content: text },
+          { role: 'adeline', content: responseText },
+        ];
+        setHistory((prev) => [...prev, ...turns].slice(-24));
+        void quietlyRecordActivity(text);
+      }
     } catch {
       setMessages((prev) =>
         prev.map((message) =>
           message.id === streamingId
-            ? { ...message, text: 'Something tripped over itself. Try that once more.' }
+            ? { ...message, text: 'I can’t reach my Brain right now. Try that once more in a moment.' }
             : message,
         ),
       );
@@ -180,9 +179,14 @@ export default function ConciergeDashboardV2({ studentId, studentName, gradeLeve
   return (
     <main className="flex min-h-[100dvh] flex-col bg-[#fbf7ec] text-[#243a2a] lg:h-screen lg:min-h-0">
       <header className="border-b border-[#d9cfbb] bg-[#f7f1e4]/85 px-5 py-4 backdrop-blur sm:px-8">
-        <div className="mx-auto max-w-5xl">
-          <p className="text-[10px] uppercase tracking-[.22em] text-[#8b7b66]">Adeline</p>
-          <h1 className="font-serif text-2xl text-[#213f2d]">I&apos;m here.</h1>
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-[.22em] text-[#8b7b66]">Adeline</p>
+            <h1 className="text-3xl text-[#213f2d]" style={{ fontFamily: 'var(--font-emilys-candy)' }}>I&apos;m here.</h1>
+          </div>
+          <Link href="/dashboard/daily-bread" className="inline-flex items-center gap-2 rounded-full border border-[#cdbf9e] bg-[#fffdf7] px-4 py-2 text-xs font-semibold text-[#5f513e] shadow-sm hover:bg-white">
+            <BookOpen size={15} /> Daily Bread
+          </Link>
         </div>
       </header>
 
@@ -260,15 +264,9 @@ function EvidenceReceipt({ evidence }: { evidence: ActivityEvidence }) {
     <div className="mt-2 rounded-xl border border-[#cdbf9e] bg-[#f6edd9] px-3 py-2 text-[11px] text-[#6f624f]">
       <p className="font-semibold text-[#355642]">Saved to your learning record</p>
       <p className="mt-1">{evidence.course_title}</p>
-      {concepts.length > 0 && (
-        <p className="mt-1 text-[#796b58]">Evidence: {concepts.slice(0, 4).join(' · ')}</p>
-      )}
-      {standards.length > 0 && (
-        <p className="mt-1 text-[10px] text-[#8b7b67]">{standards.length} state standard{standards.length === 1 ? '' : 's'} connected</p>
-      )}
-      {next.length > 0 && (
-        <p className="mt-1 italic text-[#7a5f45]">A natural next thread: {next[0]}</p>
-      )}
+      {concepts.length > 0 && <p className="mt-1 text-[#796b58]">Evidence: {concepts.slice(0, 4).join(' · ')}</p>}
+      {standards.length > 0 && <p className="mt-1 text-[10px] text-[#8b7b67]">{standards.length} state standard{standards.length === 1 ? '' : 's'} connected</p>}
+      {next.length > 0 && <p className="mt-1 italic text-[#7a5f45]">A natural next thread: {next[0]}</p>}
     </div>
   );
 }
