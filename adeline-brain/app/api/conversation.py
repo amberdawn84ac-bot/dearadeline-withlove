@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Optional, AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -42,6 +43,16 @@ When the moment genuinely calls for it, you may offer one or two specific doors,
 
 Only open a door when the student's curiosity points there or they ask for it.
 
+STANDARDS-AWARE GAP FILLING
+You may receive a backstage section called LEARNING MAP. It contains recent real-world evidence and Oklahoma Academic Standards that still need stronger evidence.
+- Never dump standards codes, proficiency labels, or school jargon into ordinary conversation.
+- Never pretend one activity proves mastery of a whole standard.
+- If something the learner is already doing naturally overlaps a gap, use that overlap to suggest ONE small next observation, question, experiment, explanation, build, comparison, reading, or calculation.
+- Prefer extending the learner's current activity over assigning an unrelated lesson.
+- If no gap fits naturally, ignore the gap list and keep the conversation human.
+- Do not ask how long an activity took. Time is not the learning signal.
+- Focus on what they did, what they noticed, what they can explain, and what evidence could show next.
+
 SKETCHNOTE ANSWERS
 When the student asks an explanatory question and the answer would be easier to remember visually, answer conversationally first, then make a compact SKETCHNOTE_NOTE block. Think hand-drawn field notebook, not slideshow or worksheet.
 Use 2-5 short sections, a strong central big idea, a few memorable keywords, and simple doodle symbols. Do not overfill the page.
@@ -53,7 +64,7 @@ Exact shape:
 </BLOCK>
 
 LEARNING AND CREDIT
-The application separately recognizes real-life activities and can file them toward graduation. Do not fabricate credit amounts, course titles, standards, or transcript claims inside normal conversation.
+The application separately recognizes real-life activities and records standards evidence toward graduation. Do not fabricate credit amounts, course titles, standards, or transcript claims inside normal conversation.
 
 TRUTH AND SOURCES
 - Never invent facts or citations.
@@ -72,6 +83,7 @@ _SOCRATIC_READING_COPILOT = """You are Adeline, reading alongside the student.
 Start with the specific passage, chapter, character, or thought they brought up. Do not spoil later events unless asked. Help them notice language, structure, motive, context, and competing interpretations. Give direct definitions when asked. Ask a question only when it genuinely advances the conversation. If a compact illustrated note would help them remember the idea, use a SKETCHNOTE_NOTE block with the same schema as normal Adeline conversation.
 """
 
+
 class CurrentBookContext(BaseModel):
     id: str
     title: str
@@ -79,6 +91,7 @@ class CurrentBookContext(BaseModel):
     cfi: Optional[str] = None
     chapter: Optional[str] = None
     progress_percent: Optional[int] = None
+
 
 class ConversationRequest(BaseModel):
     student_id: str
@@ -90,7 +103,109 @@ class ConversationRequest(BaseModel):
     highlighted_text: Optional[str] = None
 
 
-def _build_conversation_prompt(topic: str, tracks: list[str], grade_level: str, zpd_directives: str, memory_context: str = "", current_book: Optional[CurrentBookContext] = None, highlighted_text: Optional[str] = None) -> str:
+def _grade_number(grade_level: str) -> int:
+    match = re.search(r"\d+", grade_level or "")
+    if not match:
+        return 8
+    return max(1, min(12, int(match.group())))
+
+
+async def _learning_map_context(student_id: str, grade_level: str) -> str:
+    """Build a compact backstage view of recent evidence + grade-level gaps.
+
+    This intentionally uses the canonical database tables instead of creating a
+    second standards system. Any failure is non-fatal: conversation must still work.
+    """
+    try:
+        from app.config import get_db_conn
+
+        conn = await get_db_conn()
+        try:
+            grade = _grade_number(grade_level)
+
+            recent = await conn.fetch(
+                """
+                SELECT "courseTitle", "activityDescription", "oasStandards"
+                FROM "TranscriptEntry"
+                WHERE "studentId" = $1
+                  AND "lessonId" LIKE 'activity-%'
+                ORDER BY "sealedAt" DESC
+                LIMIT 5
+                """,
+                student_id,
+            )
+
+            gaps = await conn.fetch(
+                """
+                SELECT s.code, s.subject, s.description, s.track,
+                       COALESCE(CAST(m.proficiency AS TEXT), 'UNSEEN') AS proficiency
+                FROM "OASStandard" s
+                LEFT JOIN "StandardMastery" m
+                  ON m."standardId" IN (s.id, s.code)
+                 AND m."studentId" = $1
+                WHERE s.grade = $2
+                  AND (
+                    m."standardId" IS NULL
+                    OR UPPER(CAST(m.proficiency AS TEXT)) IN ('DEVELOPING', 'APPROACHING')
+                  )
+                ORDER BY
+                  CASE WHEN m."standardId" IS NULL THEN 0 ELSE 1 END,
+                  s.subject,
+                  s.code
+                LIMIT 14
+                """,
+                student_id,
+                grade,
+            )
+        finally:
+            await conn.close()
+
+        lines: list[str] = []
+        if recent:
+            lines.append("RECENT REAL-WORLD EVIDENCE:")
+            for row in recent:
+                standards = row["oasStandards"] or []
+                if not isinstance(standards, list):
+                    standards = []
+                short_desc = str(row["activityDescription"] or "")[:180]
+                codes = ", ".join(str(code) for code in standards[:4])
+                suffix = f" | standards: {codes}" if codes else ""
+                lines.append(f"- {row['courseTitle']}: {short_desc}{suffix}")
+
+        if gaps:
+            lines.append("GRADE-LEVEL GAPS / STANDARDS NEEDING STRONGER EVIDENCE:")
+            for row in gaps:
+                description = str(row["description"] or "")[:220]
+                lines.append(
+                    f"- {row['code']} [{row['subject']} / {row['track']}]: {description} "
+                    f"(current: {row['proficiency']})"
+                )
+
+        if not lines:
+            return ""
+
+        return (
+            "LEARNING MAP (BACKSTAGE ONLY)\n"
+            + "\n".join(lines)
+            + "\nUse this only to notice natural bridges. Do not recite it to the learner."
+        )
+    except Exception as exc:
+        logger.warning("[/conversation/stream] learning-map read failed: %s", exc)
+        return ""
+
+
+def _build_conversation_prompt(
+    topic: str,
+    tracks: list[str],
+    grade_level: str,
+    zpd_directives: str,
+    memory_context: str = "",
+    learning_map_context: str = "",
+    current_book: Optional[CurrentBookContext] = None,
+    highlighted_text: Optional[str] = None,
+) -> str:
+    backstage = "\n\n".join(part for part in [memory_context, learning_map_context] if part)
+
     if current_book is not None or highlighted_text:
         context = ""
         if current_book:
@@ -102,12 +217,12 @@ def _build_conversation_prompt(topic: str, tracks: list[str], grade_level: str, 
         if highlighted_text:
             excerpt = highlighted_text[:300] + ("..." if len(highlighted_text) > 300 else "")
             context += f'\nSTUDENT HIGHLIGHTED: "{excerpt}"'
-        return f"{_ADELINE_BASE}\n\n{_SOCRATIC_READING_COPILOT}\n\n{memory_context}\n{context}\nSTUDENT GRADE: {grade_level}\n{zpd_directives}"
+        return f"{_ADELINE_BASE}\n\n{_SOCRATIC_READING_COPILOT}\n\n{backstage}\n{context}\nSTUDENT GRADE: {grade_level}\n{zpd_directives}"
 
     mode_section = get_mode_directives(tracks)
     tracks_str = ", ".join(t.replace("_", " ").title() for t in tracks) if tracks else "General"
     return (
-        f"{_ADELINE_BASE}\n\n{memory_context}\n"
+        f"{_ADELINE_BASE}\n\n{backstage}\n"
         f"CURRENT MESSAGE: {topic}\nPOSSIBLE ACADEMIC CONTEXT: {tracks_str}\nSTUDENT GRADE: {grade_level}\n\n"
         "The following pedagogy is backstage guidance only. Never expose track names, ZPD labels, mastery labels, or teaching-mode jargon unless the student explicitly asks for academic details.\n\n"
         f"AVAILABLE DEEP-DIVE VOICES:\n{mode_section}\n\n{zpd_directives}"
@@ -115,11 +230,25 @@ def _build_conversation_prompt(topic: str, tracks: list[str], grade_level: str, 
 
 
 def _infer_tracks(message: str, explicit_track: Optional[str]) -> list[str]:
-    return [explicit_track] if explicit_track else ["DISCIPLESHIP"]
+    if explicit_track:
+        return [explicit_track]
+    text = message.lower()
+    hints = [
+        ("APPLIED_MATHEMATICS", ("math", "measure", "ratio", "fraction", "percent", "graph")),
+        ("CREATION_SCIENCE", ("science", "sourdough", "ferment", "bread", "plant", "water", "chemical", "biology")),
+        ("ENGLISH_LITERATURE", ("book", "read", "write", "story", "essay", "poem")),
+        ("CREATIVE_ECONOMY", ("business", "website", "sell", "crochet", "design", "code")),
+        ("HOMESTEADING", ("garden", "farm", "chicken", "horse", "canning", "greenhouse")),
+        ("GOVERNMENT_ECONOMICS", ("government", "law", "court", "money", "economy")),
+        ("TRUTH_HISTORY", ("history", "historical", "archive", "primary source")),
+    ]
+    matched = [track for track, words in hints if any(word in text for word in words)]
+    return matched[:2] or ["DISCIPLESHIP"]
 
 
 async def _stream_llm(system_prompt: str, messages: list[dict]) -> AsyncIterator[str]:
     from app.agents.orchestrator import _synthesis_call
+
     history_text = ""
     for m in messages[:-1]:
         role = "Student" if m.get("role") == "user" else "Adeline"
@@ -128,7 +257,15 @@ async def _stream_llm(system_prompt: str, messages: list[dict]) -> AsyncIterator
     yield await _synthesis_call(system_prompt, (history_text + last).strip(), max_tokens=2200)
 
 
-async def _conversation_sse(student_id: str, message: str, track: Optional[str], grade_level: str, history: list[dict], current_book: Optional[CurrentBookContext] = None, highlighted_text: Optional[str] = None) -> AsyncIterator[bytes]:
+async def _conversation_sse(
+    student_id: str,
+    message: str,
+    track: Optional[str],
+    grade_level: str,
+    history: list[dict],
+    current_book: Optional[CurrentBookContext] = None,
+    highlighted_text: Optional[str] = None,
+) -> AsyncIterator[bytes]:
     def _sse(event: str, data: dict) -> bytes:
         return f"event: {event}\ndata: {json.dumps(data)}\n\n".encode()
 
@@ -145,16 +282,45 @@ async def _conversation_sse(student_id: str, message: str, track: Optional[str],
 
         zpd_zone = detect_zpd_zone(message)
         zpd_directives = get_quick_directives(zpd_zone, mastery_band)
-        yield _sse("zpd", {"zone": zpd_zone.value, "mastery_score": mastery_score, "mastery_band": mastery_band.value})
+        yield _sse(
+            "zpd",
+            {
+                "zone": zpd_zone.value,
+                "mastery_score": mastery_score,
+                "mastery_band": mastery_band.value,
+            },
+        )
 
         try:
-            memory_context = await memory_service.get_prompt_context(student_id, history_limit=8, mastery_band=mastery_band, mastery_score=mastery_score)
+            memory_context = await memory_service.get_prompt_context(
+                student_id,
+                history_limit=8,
+                mastery_band=mastery_band,
+                mastery_score=mastery_score,
+            )
         except Exception as memory_err:
-            logger.warning(f"[/conversation/stream] memory read failed: {memory_err}")
+            logger.warning("[/conversation/stream] memory read failed: %s", memory_err)
             memory_context = ""
 
-        system_prompt = _build_conversation_prompt(message[:180], tracks, grade_level, zpd_directives, memory_context, current_book, highlighted_text)
-        llm_messages = [{"role": "user" if h.get("role") == "user" else "assistant", "content": h.get("content", "")} for h in history[-10:]]
+        learning_map_context = await _learning_map_context(student_id, grade_level)
+
+        system_prompt = _build_conversation_prompt(
+            message[:180],
+            tracks,
+            grade_level,
+            zpd_directives,
+            memory_context,
+            learning_map_context,
+            current_book,
+            highlighted_text,
+        )
+        llm_messages = [
+            {
+                "role": "user" if h.get("role") == "user" else "assistant",
+                "content": h.get("content", ""),
+            }
+            for h in history[-16:]
+        ]
         llm_messages.append({"role": "user", "content": message})
 
         response_text = ""
@@ -172,28 +338,46 @@ async def _conversation_sse(student_id: str, message: str, track: Optional[str],
                             response_text += f"\n{block_text}"
                     yield _sse("block", block)
         except Exception as llm_err:
-            logger.exception(f"[/conversation/stream] LLM stream failed: {llm_err}")
+            logger.exception("[/conversation/stream] LLM stream failed: %s", llm_err)
             yield _sse("error", {"message": "I lost the thread for a second. Tell me that again?"})
             return
 
         if response_text.strip():
             try:
-                await memory_service.save_interaction(student_id=student_id, user_message=message, assistant_response=response_text.strip(), zpd_zone=zpd_zone.value, mastery_band=mastery_band.value, track=tracks[0] if tracks else None)
+                await memory_service.save_interaction(
+                    student_id=student_id,
+                    user_message=message,
+                    assistant_response=response_text.strip(),
+                    zpd_zone=zpd_zone.value,
+                    mastery_band=mastery_band.value,
+                    track=tracks[0] if tracks else None,
+                )
             except Exception as memory_err:
-                logger.warning(f"[/conversation/stream] memory write failed: {memory_err}")
+                logger.warning("[/conversation/stream] memory write failed: %s", memory_err)
 
         yield _sse("done", {})
     except Exception as exc:
-        logger.exception(f"[/conversation/stream] Unhandled error: {exc}")
+        logger.exception("[/conversation/stream] Unhandled error: %s", exc)
         yield _sse("error", {"message": "I lost the thread for a second. Tell me that again?"})
 
 
 @router.post("/stream")
-async def conversation_stream(body: ConversationRequest, current_user_id: str = Depends(get_current_user_id)):
+async def conversation_stream(
+    body: ConversationRequest,
+    current_user_id: str = Depends(get_current_user_id),
+):
     if not body.message.strip():
         raise HTTPException(status_code=422, detail="Message cannot be empty")
     return StreamingResponse(
-        _conversation_sse(body.student_id, body.message, body.track, body.grade_level, body.conversation_history, body.current_book, body.highlighted_text),
+        _conversation_sse(
+            body.student_id,
+            body.message,
+            body.track,
+            body.grade_level,
+            body.conversation_history,
+            body.current_book,
+            body.highlighted_text,
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
