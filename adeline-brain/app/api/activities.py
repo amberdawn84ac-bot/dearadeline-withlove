@@ -1,32 +1,29 @@
-"""
-Activities API — /activities/*
+"""Life activity evidence API.
 
-Students tell Adeline what they did at home and receive academic credit.
-This is the life_to_credit engine: baking becomes Chemistry, gardening becomes
-Biology, building becomes Engineering, etc.
-
-No Witness Protocol — these are student-reported real-world activities, not
-lesson content. Adeline trusts the student and records what they did.
-
-POST /activities/report           — submit a home activity, receive credit
-GET  /activities/{student_id}     — list a student's credited activities
+A learner tells Adeline what they actually did. We record the activity immediately,
+map it to relevant Oklahoma Academic Standards, and treat it as evidence toward
+those standards. Duration is optional metadata, never the basis for learning value.
 """
 import json
 import logging
 import os
+import re
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import create_llm, GOOGLE_API_KEY, ANTHROPIC_API_KEY
-from app.schemas.api_models import Track
 from app.api.middleware import get_current_user_id, verify_student_access
+from app.config import ANTHROPIC_API_KEY, GOOGLE_API_KEY, create_llm
 from app.connections.journal_store import journal_store
-from contextlib import asynccontextmanager
+from app.connections.postgres import get_db_session
+from app.schemas.api_models import Track
+from app.services.standards_mapper import MasteryEvidence, StandardsMapper
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/activities", tags=["activities"])
@@ -34,7 +31,6 @@ router = APIRouter(prefix="/activities", tags=["activities"])
 
 @asynccontextmanager
 async def _get_conn():
-    """Get an asyncpg connection via config helper (SSL + Supabase pooler compatible)."""
     from app.config import get_db_conn
     conn = await get_db_conn()
     try:
@@ -43,355 +39,187 @@ async def _get_conn():
         await conn.close()
 
 
-# ── Life-to-Credit mapping (mirrors adeline.config.toml [life_to_credit]) ─────
-#
-# Keys are activity categories. Values list the academic subjects + tracks
-# that activity earns credit in.
-
-LIFE_TO_CREDIT: dict[str, dict] = {
-    "baking": {
-        "subjects":    ["Chemistry: Thermodynamics & Fermentation", "Math: Ratios & Measurement"],
-        "tracks":      [Track.CREATION_SCIENCE, Track.APPLIED_MATHEMATICS],
-        "credit_type": "CORE",
-    },
-    "cooking": {
-        "subjects":    ["Chemistry: Applied Chemistry", "Math: Measurement & Fractions", "Health: Nutrition"],
-        "tracks":      [Track.CREATION_SCIENCE, Track.APPLIED_MATHEMATICS, Track.HEALTH_NATUROPATHY],
-        "credit_type": "CORE",
-    },
-    "gardening": {
-        "subjects":    ["Biology: Botany & Ecology", "Chemistry: Soil Science"],
-        "tracks":      [Track.HOMESTEADING, Track.CREATION_SCIENCE],
-        "credit_type": "HOMESTEAD",
-    },
-    "building": {
-        "subjects":    ["Engineering: Structural Design", "Math: Geometry & Budgeting"],
-        "tracks":      [Track.HOMESTEADING, Track.APPLIED_MATHEMATICS],
-        "credit_type": "HOMESTEAD",
-    },
-    "woodworking": {
-        "subjects":    ["Engineering: Materials Science", "Math: Measurement & Geometry", "Art: Design"],
-        "tracks":      [Track.HOMESTEADING, Track.APPLIED_MATHEMATICS, Track.CREATIVE_ECONOMY],
-        "credit_type": "HOMESTEAD",
-    },
-    "sewing": {
-        "subjects":    ["Math: Measurement & Geometry", "Art: Textile Design", "History: Cultural Studies"],
-        "tracks":      [Track.APPLIED_MATHEMATICS, Track.CREATIVE_ECONOMY, Track.TRUTH_HISTORY],
-        "credit_type": "CORE",
-    },
-    "coding": {
-        "subjects":    ["Computer Science: Programming", "Math: Logic & Algorithms"],
-        "tracks":      [Track.CREATIVE_ECONOMY, Track.APPLIED_MATHEMATICS],
-        "credit_type": "CORE",
-    },
-    "reading": {
-        "subjects":    ["Language Arts: Narrative Structure & Comprehension"],
-        "tracks":      [Track.ENGLISH_LITERATURE],
-        "credit_type": "CORE",
-    },
-    "writing": {
-        "subjects":    ["Language Arts: Composition & Rhetoric"],
-        "tracks":      [Track.ENGLISH_LITERATURE],
-        "credit_type": "CORE",
-    },
-    "volunteering": {
-        "subjects":    ["Civics: Community Service", "Social Studies: Community Organization"],
-        "tracks":      [Track.GOVERNMENT_ECONOMICS, Track.JUSTICE_CHANGEMAKING],
-        "credit_type": "CORE",
-    },
-    "animals": {
-        "subjects":    ["Biology: Zoology & Animal Husbandry", "Ethics: Stewardship"],
-        "tracks":      [Track.HOMESTEADING, Track.DISCIPLESHIP],
-        "credit_type": "HOMESTEAD",
-    },
-    "soap_making": {
-        "subjects":    ["Chemistry: Saponification", "Entrepreneurship: Product Development"],
-        "tracks":      [Track.CREATION_SCIENCE, Track.CREATIVE_ECONOMY],
-        "credit_type": "ELECTIVE",
-    },
-    "debate": {
-        "subjects":    ["Language Arts: Rhetoric & Argumentation", "Civics: Democratic Participation"],
-        "tracks":      [Track.ENGLISH_LITERATURE, Track.GOVERNMENT_ECONOMICS],
-        "credit_type": "CORE",
-    },
-    "farming": {
-        "subjects":    ["Biology: Soil & Crop Science", "Chemistry: Soil Amendments", "Math: Yield Estimation"],
-        "tracks":      [Track.HOMESTEADING, Track.CREATION_SCIENCE, Track.APPLIED_MATHEMATICS],
-        "credit_type": "HOMESTEAD",
-    },
-    "canning": {
-        "subjects":    ["Chemistry: Preservation Science", "Health: Food Safety", "Math: Ratios"],
-        "tracks":      [Track.HOMESTEADING, Track.HEALTH_NATUROPATHY, Track.APPLIED_MATHEMATICS],
-        "credit_type": "HOMESTEAD",
-    },
-    "animal_care": {
-        "subjects":    ["Biology: Veterinary Science", "Ethics: Animal Stewardship"],
-        "tracks":      [Track.HOMESTEADING, Track.DISCIPLESHIP],
-        "credit_type": "HOMESTEAD",
-    },
-    "drawing": {
-        "subjects":    ["Art: Visual Design", "Math: Proportion & Geometry"],
-        "tracks":      [Track.CREATIVE_ECONOMY, Track.APPLIED_MATHEMATICS],
-        "credit_type": "ELECTIVE",
-    },
-    "music": {
-        "subjects":    ["Music: Theory & Performance", "Math: Rhythm & Fractions"],
-        "tracks":      [Track.CREATIVE_ECONOMY, Track.APPLIED_MATHEMATICS],
-        "credit_type": "ELECTIVE",
-    },
-    "nature_study": {
-        "subjects":    ["Biology: Field Naturalism", "Science: Observation & Classification"],
-        "tracks":      [Track.CREATION_SCIENCE, Track.HOMESTEADING],
-        "credit_type": "CORE",
-    },
-    "research": {
-        "subjects":    ["Language Arts: Research Methods", "Civics: Information Literacy"],
-        "tracks":      [Track.ENGLISH_LITERATURE, Track.TRUTH_HISTORY],
-        "credit_type": "CORE",
-    },
-    "entrepreneurship": {
-        "subjects":    ["Economics: Business Planning", "Math: Profit & Loss"],
-        "tracks":      [Track.CREATIVE_ECONOMY, Track.GOVERNMENT_ECONOMICS],
-        "credit_type": "CORE",
-    },
-    "health_wellness": {
-        "subjects":    ["Health: Natural Medicine & Wellness", "Biology: Human Body Systems"],
-        "tracks":      [Track.HEALTH_NATUROPATHY, Track.CREATION_SCIENCE],
-        "credit_type": "ELECTIVE",
-    },
-    "field_trip": {
-        "subjects":    ["Social Studies: Experiential Learning"],
-        "tracks":      [Track.TRUTH_HISTORY, Track.GOVERNMENT_ECONOMICS],
-        "credit_type": "CORE",
-    },
+TRACK_SUBJECTS: dict[str, list[str]] = {
+    "CREATION_SCIENCE": ["science", "chemistry", "biology", "physics", "earth science"],
+    "HEALTH_NATUROPATHY": ["health", "nutrition", "human biology"],
+    "HOMESTEADING": ["agriculture", "ecology", "applied science"],
+    "GOVERNMENT_ECONOMICS": ["civics", "government", "economics"],
+    "JUSTICE_CHANGEMAKING": ["civics", "social studies", "argument"],
+    "DISCIPLESHIP": ["ethics", "culture", "social studies"],
+    "TRUTH_HISTORY": ["history", "research", "primary sources"],
+    "ENGLISH_LITERATURE": ["reading", "writing", "language arts"],
+    "APPLIED_MATHEMATICS": ["math", "measurement", "ratios", "data"],
+    "CREATIVE_ECONOMY": ["design", "entrepreneurship", "communication"],
 }
 
+_SYSTEM_PROMPT = """You are Adeline's standards registrar. Read a learner's real-world activity and identify what concepts it genuinely demonstrates or begins to demonstrate.
 
-# ── Credit hour calculation ────────────────────────────────────────────────────
-#
-# Carnegie unit: 120 hours = 1 credit.
-# We use a homeschool-generous ratio: 20 hours of real activity = 1 credit hour.
-# So 1 hour = 0.05 credit hours. Capped at 1.0 per single activity report.
+Do not award learning based on time. Do not inflate mastery. A single activity is evidence, not proof that an entire standard is mastered.
 
-HOURS_PER_CREDIT = 20.0
-
-
-def _calc_credit_hours(time_minutes: int) -> float:
-    hours = time_minutes / 60.0
-    raw   = hours / HOURS_PER_CREDIT
-    return round(min(raw, 1.0), 3)
-
-
-# ── Claude mapping prompt ──────────────────────────────────────────────────────
-
-_SYSTEM_PROMPT = """You are Adeline's Registrar — a warm, precise academic credentialing engine for a
-Christian homeschool family. Your job is to look at what a student did and map it to academic credit
-categories from the life_to_credit table.
-
-Available activity categories:
-baking, cooking, gardening, building, woodworking, sewing, coding, reading, writing,
-volunteering, animals, soap_making, debate, farming, canning, animal_care, drawing,
-music, nature_study, research, entrepreneurship, health_wellness, field_trip
-
-Available tracks:
-CREATION_SCIENCE, HEALTH_NATUROPATHY, HOMESTEADING, GOVERNMENT_ECONOMICS,
-JUSTICE_CHANGEMAKING, DISCIPLESHIP, TRUTH_HISTORY, ENGLISH_LITERATURE,
-APPLIED_MATHEMATICS, CREATIVE_ECONOMY
-
-Rules:
-- Pick the 1–3 BEST activity categories that match what the student described.
-- Write a course_title that sounds like a real academic course (e.g. "Applied Chemistry: Bread Fermentation"
-  not just "Baking Bread").
-- Write a short activity_description (1–2 sentences) that describes what was learned, not just what was done.
-- If the activity doesn't fit any category well, pick the closest match and note it.
-- Do NOT invent categories. Choose from the list.
-
-Respond with JSON only:
+Return JSON only:
 {
-  "categories": ["category1", "category2"],
-  "course_title": "...",
-  "activity_description": "...",
-  "primary_track": "TRACK_NAME"
-}"""
+  "course_title": "short human-readable title",
+  "activity_description": "1-2 sentences describing what the learner did and the learning evidence present",
+  "tracks": ["TRACK_NAME"],
+  "concepts_demonstrated": ["specific concept"],
+  "concepts_to_explore": ["natural next concept or gap"],
+  "standard_codes": ["only codes from the supplied candidate standards that are genuinely supported"]
+}
+
+Choose no more than 3 tracks and no more than 6 standards. Prefer a small, defensible mapping over a broad one."""
 
 
-async def _map_activity_with_claude(description: str, grade_level: str) -> dict:
-    """
-    Use the active LLM to map a free-text activity description to academic credit categories.
-    Falls back to a generic mapping if no LLM key is available.
-    """
+def _grade_number(grade_level: str) -> int:
+    match = re.search(r"\d+", grade_level or "")
+    if not match:
+        return 9
+    return max(1, min(12, int(match.group())))
+
+
+async def _candidate_standards(grade: int) -> list[dict]:
+    mapper = StandardsMapper()
+    candidates: list[dict] = []
+    for track in TRACK_SUBJECTS:
+        try:
+            standards = await mapper.get_standards_for_track(track, (grade, grade))
+        except Exception:
+            standards = []
+        for standard in standards[:30]:
+            candidates.append({
+                "code": standard.code,
+                "track": track,
+                "description": standard.description,
+            })
+    return candidates
+
+
+async def _map_activity(description: str, grade_level: str) -> dict:
     if not ANTHROPIC_API_KEY and not GOOGLE_API_KEY and not os.getenv("GEMINI_API_KEY"):
         raise RuntimeError("No LLM API key set — cannot map activity")
 
-    llm = create_llm(max_tokens=512)
-    lc_messages = [
+    grade = _grade_number(grade_level)
+    candidates = await _candidate_standards(grade)
+    candidate_text = "\n".join(
+        f"- {item['code']} [{item['track']}]: {item['description']}" for item in candidates[:180]
+    )
+    if not candidate_text:
+        candidate_text = "No candidate standards were available. Return an empty standard_codes list."
+
+    llm = create_llm(max_tokens=900)
+    response = await llm.ainvoke([
         SystemMessage(content=_SYSTEM_PROMPT),
         HumanMessage(content=(
-            f"Grade level: {grade_level}\n\n"
-            f"Student says: \"{description}\"\n\n"
-            "Map this to credit categories."
+            f"Grade: {grade_level}\n\n"
+            f"Learner said: {description}\n\n"
+            f"Candidate Oklahoma standards:\n{candidate_text}"
         )),
-    ]
-
+    ])
+    text = response.content.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
     try:
-        response = await llm.ainvoke(lc_messages)
-        text = response.content.strip()
-        # Strip markdown code fences if present
-        if text.startswith("```"):
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-        return json.loads(text)
-    except json.JSONDecodeError as e:
-        logger.warning(f"[activities] LLM returned non-JSON: {e}")
-        raise HTTPException(status_code=500, detail="Credit mapping failed — invalid response from AI")
-    except Exception as e:
-        logger.warning(f"[activities] LLM API error: {e}")
-        raise HTTPException(status_code=503, detail=f"AI unavailable: {e}")
+        result = json.loads(text)
+    except json.JSONDecodeError as exc:
+        logger.warning("[activities] invalid mapper JSON: %s", exc)
+        raise HTTPException(status_code=500, detail="Activity mapping failed") from exc
 
+    valid_codes = {item["code"] for item in candidates}
+    result["standard_codes"] = [
+        code for code in result.get("standard_codes", []) if code in valid_codes
+    ][:6]
+    valid_tracks = {track.value for track in Track}
+    result["tracks"] = [track for track in result.get("tracks", []) if track in valid_tracks][:3]
+    return result
 
-# ── Request / Response models ─────────────────────────────────────────────────
 
 class ActivityReportRequest(BaseModel):
-    student_id:   str
-    grade_level:  str
-    description:  str = Field(
-        min_length=10,
-        max_length=2000,
-        description="What did you do? Be specific — include what you made, learned, or accomplished.",
-    )
-    time_minutes: int = Field(
-        ge=5,
-        le=1440,
-        description="How many minutes did you spend on this activity?",
-    )
-    activity_date: Optional[str] = Field(
-        default=None,
-        description="ISO date string (YYYY-MM-DD). Defaults to today.",
-    )
+    student_id: str
+    grade_level: str
+    description: str = Field(min_length=3, max_length=3000)
+    time_minutes: Optional[int] = Field(default=None, ge=1, le=1440)
+    activity_date: Optional[str] = None
 
 
 class CreditedTrack(BaseModel):
-    track:       str
-    subjects:    list[str]
+    track: str
+    subjects: list[str]
     credit_type: str
 
 
 class ActivityReportResponse(BaseModel):
-    activity_id:         str
-    course_title:        str
+    activity_id: str
+    course_title: str
     activity_description: str
-    credit_hours:        float
-    credited_tracks:     list[CreditedTrack]
-    sealed:              bool
-    adeline_note:        str
+    credit_hours: float
+    credited_tracks: list[CreditedTrack]
+    standard_codes: list[str] = []
+    concepts_demonstrated: list[str] = []
+    concepts_to_explore: list[str] = []
+    sealed: bool
+    adeline_note: str
 
 
 class ActivityEntry(BaseModel):
-    activity_id:         str
-    course_title:        str
+    activity_id: str
+    course_title: str
     activity_description: str
-    credit_hours:        float
-    primary_track:       str
-    credit_type:         str
-    activity_date:       str
-    sealed_at:           str
+    credit_hours: float
+    primary_track: str
+    credit_type: str
+    activity_date: str
+    sealed_at: str
 
 
 class ActivityListResponse(BaseModel):
-    student_id:    str
-    activities:    list[ActivityEntry]
-    total:         int
+    student_id: str
+    activities: list[ActivityEntry]
+    total: int
     total_credits: float
 
-
-# ── POST /activities/report ───────────────────────────────────────────────────
 
 @router.post("/report", response_model=ActivityReportResponse)
 async def report_activity(
     body: ActivityReportRequest,
     student_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db_session),
 ):
-    """
-    Student tells Adeline what they did. Adeline maps it to academic credit
-    and seals a TranscriptEntry.
+    mapped = await _map_activity(body.description, body.grade_level)
+    tracks = mapped.get("tracks", []) or ["ENGLISH_LITERATURE"]
+    primary_track = tracks[0]
+    course_title = mapped.get("course_title") or "Real-World Learning"
+    activity_desc = mapped.get("activity_description") or body.description
+    standards = mapped.get("standard_codes", [])
+    concepts = mapped.get("concepts_demonstrated", [])[:8]
+    next_concepts = mapped.get("concepts_to_explore", [])[:6]
 
-    No Witness Protocol — this is student-reported real-world activity.
-    Adeline trusts it and records it.
-    """
-    logger.info(
-        f"[/activities/report] student={student_id} "
-        f"grade={body.grade_level} time={body.time_minutes}min"
-    )
-
-    # ── 1. Map activity to academic credit via Claude ──────────────────────────
-    mapped = await _map_activity_with_claude(body.description, body.grade_level)
-
-    categories    = mapped.get("categories", [])
-    course_title  = mapped.get("course_title", "Independent Study")
-    activity_desc = mapped.get("activity_description", body.description[:200])
-    primary_track = mapped.get("primary_track", "DISCIPLESHIP")
-
-    # Validate primary_track against enum
-    try:
-        Track(primary_track)
-    except ValueError:
-        primary_track = "DISCIPLESHIP"
-
-    # ── 2. Build credited tracks list from category mapping ────────────────────
-    seen_tracks: set[str] = set()
-    credited_tracks: list[CreditedTrack] = []
-    dominant_credit_type = "ELECTIVE"
-
-    for cat in categories:
-        cat_lower = cat.lower().replace(" ", "_")
-        mapping   = LIFE_TO_CREDIT.get(cat_lower)
-        if not mapping:
-            continue
-        for track in mapping["tracks"]:
-            if track.value not in seen_tracks:
-                seen_tracks.add(track.value)
-                credited_tracks.append(CreditedTrack(
-                    track=track.value,
-                    subjects=mapping["subjects"],
-                    credit_type=mapping["credit_type"],
-                ))
-                if mapping["credit_type"] == "CORE":
-                    dominant_credit_type = "CORE"
-                elif mapping["credit_type"] == "HOMESTEAD" and dominant_credit_type != "CORE":
-                    dominant_credit_type = "HOMESTEAD"
-
-    # If Claude returned no recognized categories, fall back to primary_track
-    if not credited_tracks:
-        credited_tracks.append(CreditedTrack(
-            track=primary_track,
-            subjects=["Independent Study"],
-            credit_type="ELECTIVE",
-        ))
-        dominant_credit_type = "ELECTIVE"
-
-    # ── 3. Calculate credit hours ──────────────────────────────────────────────
-    credit_hours = _calc_credit_hours(body.time_minutes)
-
-    # ── 4. Generate activity ID and date ──────────────────────────────────────
-    activity_id   = f"activity-{uuid.uuid4()}"
+    activity_id = f"activity-{uuid.uuid4()}"
     activity_date = body.activity_date or datetime.now(timezone.utc).date().isoformat()
-    now_iso       = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
 
-    # ── 5. Seal to student_journal (makes it show on dashboard) ───────────────
+    credited_tracks = [
+        CreditedTrack(
+            track=track,
+            subjects=TRACK_SUBJECTS.get(track, ["interdisciplinary learning"]),
+            credit_type="CORE" if track in {
+                "CREATION_SCIENCE", "APPLIED_MATHEMATICS", "ENGLISH_LITERATURE",
+                "GOVERNMENT_ECONOMICS", "TRUTH_HISTORY"
+            } else "ELECTIVE",
+        )
+        for track in tracks
+    ]
+
     try:
         await journal_store.seal(
             student_id=student_id,
             lesson_id=activity_id,
             track=primary_track,
-            completed_blocks=max(1, body.time_minutes // 30),
+            completed_blocks=1,
             sources=[],
         )
-    except Exception as e:
-        logger.warning(f"[activities] Journal seal failed (non-fatal): {e}")
-
-    # ── 6. Seal TranscriptEntry for each credited track ────────────────────────
-    transcript_entry_id = str(uuid.uuid4())
+    except Exception as exc:
+        logger.warning("[activities] Journal seal failed: %s", exc)
 
     try:
         async with _get_conn() as conn:
@@ -399,68 +227,72 @@ async def report_activity(
                 """
                 INSERT INTO "TranscriptEntry" (
                     id, "studentId", "lessonId", "courseTitle", track,
-                    "oasStandards", "activityDescription",
-                    "creditHours", "creditType",
-                    "gradeLetter", "percentScore",
-                    "isHomesteadCredit", "agentName", "researcherActivated",
-                    "completedAt", "sealedAt", "xapiStatementId"
+                    "oasStandards", "activityDescription", "creditHours", "creditType",
+                    "gradeLetter", "percentScore", "isHomesteadCredit", "agentName",
+                    "researcherActivated", "completedAt", "sealedAt", "xapiStatementId"
                 ) VALUES (
-                    $1, $2, $3, $4, $5::"Track",
-                    $6, $7,
-                    $8, $9::"CreditType",
-                    NULL, NULL,
-                    $10, 'RegistrarAgent'::"AgentName", false,
-                    $11::date, $12::timestamptz, NULL
+                    $1, $2, $3, $4, $5::"Track", $6, $7, 0, $8::"CreditType",
+                    NULL, NULL, false, 'RegistrarAgent'::"AgentName", false,
+                    $9::date, $10::timestamptz, NULL
                 )
                 ON CONFLICT ("studentId", "lessonId") DO UPDATE SET
-                    "courseTitle"         = EXCLUDED."courseTitle",
-                    "creditHours"         = EXCLUDED."creditHours",
-                    "creditType"          = EXCLUDED."creditType",
+                    "courseTitle" = EXCLUDED."courseTitle",
+                    "oasStandards" = EXCLUDED."oasStandards",
                     "activityDescription" = EXCLUDED."activityDescription",
-                    "sealedAt"            = EXCLUDED."sealedAt"
+                    "sealedAt" = EXCLUDED."sealedAt"
                 """,
-                transcript_entry_id,
-                student_id,
-                activity_id,
-                course_title,
-                primary_track,
-                [],                      # oasStandards — none for life activities
-                activity_desc,
-                credit_hours,
-                dominant_credit_type,
-                dominant_credit_type == "HOMESTEAD",
-                activity_date,
-                now_iso,
+                str(uuid.uuid4()), student_id, activity_id, course_title, primary_track,
+                standards, activity_desc, credited_tracks[0].credit_type, activity_date, now_iso,
             )
-    except Exception as e:
+    except Exception as exc:
         logger.exception("[activities] TranscriptEntry write failed")
-        raise HTTPException(status_code=500, detail=f"Failed to seal activity: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to record activity: {exc}") from exc
 
-    logger.info(
-        f"[/activities/report] Sealed '{course_title}' — "
-        f"{credit_hours} {dominant_credit_type} credits for student={student_id}"
-    )
+    # Activity evidence starts as developing. It counts as evidence without pretending
+    # a single real-world mention proves full mastery of a standard.
+    mapper = StandardsMapper(db)
+    recorded_standards: list[str] = []
+    for standard_id in standards:
+        try:
+            await mapper.record_mastery_evidence(
+                student_id=student_id,
+                standard_id=standard_id,
+                evidence=MasteryEvidence(
+                    evidence_type="quiz",
+                    score=40,
+                    description=f"Real-world activity evidence: {activity_desc}",
+                ),
+                pg_session=db,
+            )
+            recorded_standards.append(standard_id)
+        except Exception as exc:
+            logger.warning("[activities] standard evidence failed for %s: %s", standard_id, exc)
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
 
-    # ── 7. Build Adeline's response note ──────────────────────────────────────
-    time_display   = f"{body.time_minutes} minutes" if body.time_minutes < 60 else f"{body.time_minutes // 60} hour{'s' if body.time_minutes >= 120 else ''}"
-    tracks_display = ", ".join(t.track.replace("_", " ").title() for t in credited_tracks[:2])
-    adeline_note   = (
-        f"{time_display} of real work. That goes on your transcript as {course_title}. "
-        f"Credit filed under {tracks_display}."
-    )
+    concept_text = ", ".join(concepts[:3])
+    next_text = next_concepts[0] if next_concepts else ""
+    adeline_note = "I saved that."
+    if concept_text:
+        adeline_note += f" It gives us evidence around {concept_text}."
+    if next_text:
+        adeline_note += f" A natural next thread is {next_text}."
 
     return ActivityReportResponse(
         activity_id=activity_id,
         course_title=course_title,
         activity_description=activity_desc,
-        credit_hours=credit_hours,
+        credit_hours=0.0,
         credited_tracks=credited_tracks,
+        standard_codes=recorded_standards or standards,
+        concepts_demonstrated=concepts,
+        concepts_to_explore=next_concepts,
         sealed=True,
         adeline_note=adeline_note,
     )
 
-
-# ── GET /activities/{student_id} ──────────────────────────────────────────────
 
 @router.get("/{student_id}", response_model=ActivityListResponse)
 async def list_activities(
@@ -468,44 +300,35 @@ async def list_activities(
     limit: int = Query(50, le=200),
     _user_id: str = Depends(verify_student_access),
 ):
-    """
-    List all activity-based transcript entries for a student.
-    These are entries where lessonId starts with 'activity-'.
-    """
     async with _get_conn() as conn:
         rows = await conn.fetch(
             """
-            SELECT id, "lessonId", "courseTitle", track,
-                   "creditHours", "creditType",
-                   "activityDescription",
-                   "completedAt", "sealedAt"
+            SELECT "lessonId", "courseTitle", track, "creditHours", "creditType",
+                   "activityDescription", "completedAt", "sealedAt"
             FROM "TranscriptEntry"
-            WHERE "studentId" = $1
-              AND "lessonId" LIKE 'activity-%'
+            WHERE "studentId" = $1 AND "lessonId" LIKE 'activity-%'
             ORDER BY "completedAt" DESC
             LIMIT $2
             """,
             student_id, limit,
         )
 
-    entries = []
-    for r in rows:
-        entries.append(ActivityEntry(
-            activity_id=str(r["lessonId"]),
-            course_title=str(r["courseTitle"]),
-            activity_description=str(r["activityDescription"] or ""),
-            credit_hours=float(r["creditHours"] or 0),
-            primary_track=str(r["track"]),
-            credit_type=str(r["creditType"]),
-            activity_date=r["completedAt"].isoformat() if r["completedAt"] else "",
-            sealed_at=r["sealedAt"].isoformat() if r["sealedAt"] else "",
-        ))
-
-    total_credits = sum(e.credit_hours for e in entries)
-
+    entries = [
+        ActivityEntry(
+            activity_id=str(row["lessonId"]),
+            course_title=str(row["courseTitle"]),
+            activity_description=str(row["activityDescription"] or ""),
+            credit_hours=float(row["creditHours"] or 0),
+            primary_track=str(row["track"]),
+            credit_type=str(row["creditType"]),
+            activity_date=row["completedAt"].isoformat() if row["completedAt"] else "",
+            sealed_at=row["sealedAt"].isoformat() if row["sealedAt"] else "",
+        )
+        for row in rows
+    ]
     return ActivityListResponse(
         student_id=student_id,
         activities=entries,
         total=len(entries),
-        total_credits=round(total_credits, 3),
+        total_credits=round(sum(item.credit_hours for item in entries), 3),
     )
