@@ -8,29 +8,26 @@ import SketchnoteCard, { type SketchnoteData } from '@/components/SketchnoteCard
 import { saveSketchnote } from '@/lib/journal-client';
 
 type Props = { studentId: string; studentName: string; gradeLevel: string };
+type ActivityEvidence = ActivityReportResponse & {
+  standard_codes?: string[];
+  concepts_demonstrated?: string[];
+  concepts_to_explore?: string[];
+};
 type ChatMessage = {
   id: string;
   role: 'user' | 'adeline';
   text: string;
-  credit?: ActivityReportResponse;
+  evidence?: ActivityEvidence;
   sketchNote?: SketchnoteData;
 };
 
-const ACTIVITY_RE = /\b(i (spent|did|worked|practiced|baked|built|planted|made|helped|cooked|studied|read|drew|painted|sewed|fixed|repaired|cleaned|volunteered)|today i|this (morning|afternoon|evening|week)|i've been|we (built|fixed|made|worked|planted|cooked|repaired))\b/i;
+// This is intentionally broad. It only decides whether to send a message to the
+// registrar for a second look. The registrar/standards mapper decides what the
+// activity actually demonstrates.
+const ACTIVITY_RE = /\b(?:i|we)\s+(?:baked|cooked|made|built|fixed|repaired|started|planted|grew|harvested|read|wrote|researched|studied|practiced|helped|volunteered|sewed|crocheted|knitted|painted|drew|tested|measured|mixed|fed|trained|cleaned|worked|designed|coded|created|visited|went|learned|tried|finished|worked on|took care of)\b/i;
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function parseMinutes(text: string): number | null {
-  const hours = text.match(/(\d+(?:\.\d+)?)\s*hour/i);
-  const minutes = text.match(/(\d+)\s*min/i);
-  if (/\ban hour\b/i.test(text) && !hours) return 60;
-  if (/half.{0,5}hour/i.test(text) && !minutes) return 30;
-  let total = 0;
-  if (hours) total += Number(hours[1]) * 60;
-  if (minutes) total += Number(minutes[1]);
-  return total > 0 ? Math.round(total) : null;
 }
 
 function normalizeSketchnote(block: Record<string, unknown>): SketchnoteData {
@@ -75,29 +72,29 @@ export default function ConciergeDashboardV2({ studentId, studentName, gradeLeve
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, busy]);
 
-  async function quietlyFileActivity(description: string) {
-    const minutes = parseMinutes(description);
-    if (!ACTIVITY_RE.test(description) || !minutes) return;
+  async function quietlyRecordActivity(description: string) {
+    if (!ACTIVITY_RE.test(description)) return;
 
     try {
-      const result = await reportActivity({
+      const result = (await reportActivity({
         student_id: studentId,
         grade_level: gradeLevel,
         description,
-        time_minutes: minutes,
-      });
+        // The evidence-first API makes duration optional. Keep this omitted even
+        // if a learner happens to mention time; time is not the value signal.
+      } as Parameters<typeof reportActivity>[0])) as ActivityEvidence;
 
       setMessages((prev) => [
         ...prev,
         {
           id: makeId(),
           role: 'adeline',
-          text: 'I saved that to your learning record.',
-          credit: result,
+          text: '',
+          evidence: result,
         },
       ]);
     } catch {
-      // Filing is secondary. A record problem must never derail the conversation.
+      // Standards filing is backstage. It must never derail Adeline's conversation.
     }
   }
 
@@ -115,6 +112,8 @@ export default function ConciergeDashboardV2({ studentId, studentName, gradeLeve
     let responseText = '';
 
     try {
+      // Conversation always gets first right of way. Activity/standards recording
+      // happens after the Brain has kept the conversational thread intact.
       for await (const event of streamConversation({
         studentId,
         message: text,
@@ -164,7 +163,7 @@ export default function ConciergeDashboardV2({ studentId, studentName, gradeLeve
       ];
       setHistory((prev) => [...prev, ...turns].slice(-24));
 
-      void quietlyFileActivity(text);
+      void quietlyRecordActivity(text);
     } catch {
       setMessages((prev) =>
         prev.map((message) =>
@@ -202,18 +201,14 @@ export default function ConciergeDashboardV2({ studentId, studentName, gradeLeve
                 }
               >
                 {message.text && <p className="whitespace-pre-wrap">{message.text}</p>}
-                {!message.text && busy && <p>…</p>}
+                {!message.text && busy && !message.evidence && <p>…</p>}
                 {message.sketchNote && (
                   <SketchnoteCard
                     note={message.sketchNote}
                     onSave={() => saveSketchnote(studentId, message.sketchNote!)}
                   />
                 )}
-                {message.credit && (
-                  <div className="mt-3 rounded-xl border border-[#cdbf9e] bg-[#f6edd9] px-3 py-2 text-[11px] text-[#6f624f]">
-                    {message.credit.course_title} · {message.credit.credit_hours} credit hrs
-                  </div>
-                )}
+                {message.evidence && <EvidenceReceipt evidence={message.evidence} />}
               </div>
             </div>
           ))}
@@ -248,10 +243,32 @@ export default function ConciergeDashboardV2({ studentId, studentName, gradeLeve
             </button>
           </div>
           <p className="mt-2 text-center text-[10px] text-[#8c7c67]">
-            Conversation first. Adeline keeps the learning record quietly underneath.
+            Conversation first. Adeline maps real life to standards quietly underneath.
           </p>
         </div>
       </div>
     </main>
+  );
+}
+
+function EvidenceReceipt({ evidence }: { evidence: ActivityEvidence }) {
+  const concepts = evidence.concepts_demonstrated ?? [];
+  const standards = evidence.standard_codes ?? [];
+  const next = evidence.concepts_to_explore ?? [];
+
+  return (
+    <div className="mt-2 rounded-xl border border-[#cdbf9e] bg-[#f6edd9] px-3 py-2 text-[11px] text-[#6f624f]">
+      <p className="font-semibold text-[#355642]">Saved to your learning record</p>
+      <p className="mt-1">{evidence.course_title}</p>
+      {concepts.length > 0 && (
+        <p className="mt-1 text-[#796b58]">Evidence: {concepts.slice(0, 4).join(' · ')}</p>
+      )}
+      {standards.length > 0 && (
+        <p className="mt-1 text-[10px] text-[#8b7b67]">{standards.length} state standard{standards.length === 1 ? '' : 's'} connected</p>
+      )}
+      {next.length > 0 && (
+        <p className="mt-1 italic text-[#7a5f45]">A natural next thread: {next[0]}</p>
+      )}
+    </div>
   );
 }
