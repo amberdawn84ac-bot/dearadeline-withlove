@@ -1,31 +1,18 @@
-import Link from 'next/link';
-import Image from 'next/image';
-
-const PLACES = [
-  ['The creek', 'Investigate what changed, gather evidence, test a theory.'],
-  ['The workshop', 'Build, repair, measure, prototype, and try again.'],
-  ['The courthouse', 'Read records, weigh claims, understand power and law.'],
-  ['The market', 'Price things, negotiate, run numbers, understand tradeoffs.'],
-  ['The archives', 'Follow primary sources instead of tidy summaries.'],
-  ['Adeline’s place', 'Talk, plan, make sense of what happened, decide what comes next.'],
-];
+import Link from 'next/link'
+import Image from 'next/image'
 
 const RECORD = [
-  'Skills demonstrated',
-  'Standards and competencies touched',
-  'Projects and evidence saved',
+  'What they actually did',
+  'Skills and subjects Adeline recognized',
+  'Evidence saved in the daily journal and portfolio',
   'Credits accumulating toward graduation',
-  'Gaps that still need attention',
-  'A transcript a parent can actually understand',
-];
+  'Questions and interests worth following next',
+]
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-[#eee7d7] text-[#29251f] selection:bg-[#5d3b70]/20">
-      <div
-        className="fixed inset-0 pointer-events-none opacity-[0.14] mix-blend-multiply"
-        style={{ backgroundImage: 'radial-gradient(#332d25 .6px, transparent .7px)', backgroundSize: '6px 6px' }}
-      />
+    <main className="min-h-screen bg-[#eee7d7] text-[#29251f] selection:bg-[#6f4d73]/20">
+      <div className="fixed inset-0 pointer-events-none opacity-[0.13] mix-blend-multiply" style={{ backgroundImage: 'radial-gradient(#332d25 .6px, transparent .7px)', backgroundSize: '6px 6px' }} />
 
       <nav className="sticky top-0 z-40 border-b border-[#3a332b]/10 bg-[#eee7d7]/90 backdrop-blur-xl">
         <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 sm:px-8">
@@ -38,90 +25,85 @@ export default function Home() {
           </Link>
           <div className="flex items-center gap-2">
             <Link href="/login" className="rounded-full border border-[#3a332b]/20 px-4 py-2 text-[11px] font-semibold text-[#433b32] hover:bg-[#f7f0df]">sign in</Link>
-            <Link href="/pricing" className="rounded-full bg-[#5b3769] px-4 py-2 text-[11px] font-semibold text-[#fff8eb] shadow-sm hover:bg-[#4d2f59]">see plans</Link>
+            <Link href="/login?mode=signup" className="rounded-full bg-[#5b3769] px-4 py-2 text-[11px] font-semibold text-[#fff8eb] shadow-sm hover:bg-[#4d2f59]">start free</Link>
           </div>
         </div>
       </nav>
 
-      <section className="relative overflow-hidden px-5 pb-24 pt-20 sm:px-8 sm:pt-28">
-        <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1.05fr_.95fr]">
+      <section className="relative overflow-hidden px-5 pb-20 pt-20 sm:px-8 sm:pt-28">
+        <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1.02fr_.98fr]">
           <div>
-            <p className="text-[10px] uppercase tracking-[.34em] text-[#6f4d73]">not school with prettier buttons</p>
-            <h1 className="mt-5 max-w-4xl font-serif text-5xl leading-[.98] sm:text-7xl lg:text-[88px]">Give them a world worth getting curious about.</h1>
-            <p className="mt-7 max-w-2xl text-base leading-8 text-[#595044] sm:text-lg">
-              Dear Adeline turns learning into places, problems, investigations, conversations, builds, and real decisions. The student experiences an adventure. Underneath it, the system keeps the academic record needed to move toward graduation.
-            </p>
+            <p className="text-[10px] uppercase tracking-[.34em] text-[#6f4d73]">Dear Adeline</p>
+            <h1 className="mt-5 max-w-4xl font-serif text-6xl leading-[.94] sm:text-7xl lg:text-[86px]">Education as <span className="text-[#8e3f69] italic">Unique</span> as Your Child.</h1>
+            <p className="mt-7 max-w-2xl text-base leading-8 text-[#595044] sm:text-lg">Adeline listens to what a young person is actually doing, making, wondering about, reading, fixing, building, or dreaming up. She helps when they want help, teaches when curiosity opens the door, and quietly turns real life into a record that can move them toward graduation.</p>
             <div className="mt-9 flex flex-wrap gap-3">
-              <Link href="/login" className="rounded-full bg-[#315d58] px-6 py-3 text-sm font-semibold text-[#fff9ec] shadow-md">open Dear Adeline</Link>
-              <a href="#how" className="rounded-full border border-[#3a332b]/20 bg-[#f5edda]/55 px-6 py-3 text-sm text-[#4c4338]">see how it works</a>
+              <Link href="/login?mode=signup" className="rounded-full bg-[#315d58] px-6 py-3 text-sm font-semibold text-[#fff9ec] shadow-md">talk to Adeline</Link>
+              <a href="#examples" className="rounded-full border border-[#3a332b]/20 bg-[#f5edda]/55 px-6 py-3 text-sm text-[#4c4338]">see what that looks like</a>
             </div>
           </div>
 
-          <div className="relative min-h-[480px]">
-            <div className="absolute left-[4%] top-[10%] h-[360px] w-[78%] rotate-[-3deg] rounded-[42px_28px_46px_32px] border border-[#382f27]/18 bg-[#f5edda] shadow-2xl">
-              <div className="p-7">
-                <p className="text-[9px] uppercase tracking-[.25em] text-[#776b5d]">field note · creek road</p>
-                <h2 className="mt-3 font-serif text-3xl">The creek is wrong.</h2>
-                <p className="mt-4 max-w-sm font-serif text-sm leading-7 text-[#554b3f]">Fish are floating near the bend. There is a cobalt bottle in the roots and an old drain under the road. Nothing tells the learner what subject this is.</p>
-                <div className="mt-8 grid grid-cols-3 gap-3">
-                  {['water sample', 'delivery slip', 'old drain'].map((item, i) => (
-                    <div key={item} className="rounded-2xl border border-[#3d342c]/12 bg-white/35 p-3 text-center">
-                      <div className={`mx-auto h-8 w-8 rounded-full ${i === 0 ? 'bg-[#315f70]' : i === 1 ? 'bg-[#6f4d73]' : 'bg-[#9a4e35]'} opacity-80`} />
-                      <p className="mt-2 text-[9px] text-[#655b4e]">{item}</p>
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-7 border-l-2 border-[#315f70] pl-4 text-xs italic leading-6 text-[#63594c]">Find out what the evidence supports before deciding who or what caused it.</p>
+          <div className="relative min-h-[500px]">
+            <div className="absolute left-[2%] top-[5%] w-[80%] rotate-[-2deg] rounded-[34px_24px_38px_26px] border border-[#382f27]/15 bg-[#f7efdf] p-7 shadow-2xl">
+              <p className="text-[9px] uppercase tracking-[.24em] text-[#7c6e5d]">a conversation, not a course</p>
+              <p className="mt-4 font-serif text-2xl">“I want to grow my crochet business.”</p>
+              <p className="mt-4 text-sm leading-7 text-[#5e5549]">Adeline notices the missing website, not because “web design” is scheduled, but because Della has somewhere she wants to go.</p>
+              <div className="mt-5 flex flex-wrap gap-2 text-[10px]">
+                {['web design', 'marketing', 'entrepreneurship'].map((tag) => <span key={tag} className="rounded-full border border-[#8e3f69]/20 bg-[#8e3f69]/10 px-3 py-1 text-[#733858]">{tag}</span>)}
               </div>
             </div>
-            <div className="absolute bottom-[4%] right-[2%] w-[54%] rotate-[4deg] rounded-[24px_32px_20px_30px] border border-[#3b3229]/18 bg-[#3e614f] p-5 text-[#fff7e8] shadow-2xl">
-              <p className="text-[8px] uppercase tracking-[.25em] text-white/60">what the system quietly records</p>
-              <p className="mt-3 font-serif text-xl">Science · math · evidence · writing</p>
-              <p className="mt-3 text-[11px] leading-5 text-white/70">The child gets a mystery. The parent gets a defensible learning record.</p>
+            <div className="absolute bottom-[2%] right-[1%] w-[70%] rotate-[3deg] rounded-[26px_34px_24px_30px] border border-[#3b3229]/16 bg-[#355b84] p-6 text-[#fff9ed] shadow-2xl">
+              <p className="text-[8px] uppercase tracking-[.24em] text-white/55">another child, another door</p>
+              <p className="mt-3 font-serif text-2xl">“The creek looks wrong.”</p>
+              <p className="mt-3 text-xs leading-6 text-white/72">That can become an investigation, a sketchnote, a game-world adventure, a real water test, or simply a conversation. Adeline follows the child, not a template.</p>
             </div>
           </div>
         </div>
       </section>
 
-      <section id="how" className="relative border-y border-[#3a332b]/10 bg-[#e3dac7]/70 px-5 py-24 sm:px-8">
+      <section id="examples" className="relative border-y border-[#3a332b]/10 bg-[#e3dac7]/70 px-5 py-24 sm:px-8">
         <div className="mx-auto max-w-7xl">
-          <div className="grid gap-10 lg:grid-cols-2">
-            <div>
-              <p className="text-[10px] uppercase tracking-[.3em] text-[#6f4d73]">what the learner sees</p>
-              <h2 className="mt-4 font-serif text-4xl sm:text-5xl">A town, not a course catalog.</h2>
-              <p className="mt-5 max-w-xl text-sm leading-7 text-[#5d5448]">The ten Dear Adeline tracks run underneath believable places and problems. A single adventure can cross science, writing, math, history, economics, government, health, stewardship, justice, and discipleship without announcing each transition.</p>
-              <div className="mt-8 grid gap-3 sm:grid-cols-2">
-                {PLACES.map(([title, desc]) => (
-                  <div key={title} className="rounded-[22px_17px_24px_19px] border border-[#392f27]/12 bg-[#f4eddd]/70 p-5">
-                    <h3 className="font-serif text-lg">{title}</h3>
-                    <p className="mt-2 text-xs leading-6 text-[#665c4f]">{desc}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+          <div className="mb-12 max-w-3xl">
+            <p className="text-[10px] uppercase tracking-[.3em] text-[#6f4d73]">two children · two completely different paths</p>
+            <h2 className="mt-4 font-serif text-4xl sm:text-5xl">This is what “unique” actually means.</h2>
+          </div>
 
-            <div className="lg:pl-12">
-              <p className="text-[10px] uppercase tracking-[.3em] text-[#315d58]">what the parent sees</p>
-              <h2 className="mt-4 font-serif text-4xl sm:text-5xl">The paper trail behind the wonder.</h2>
-              <p className="mt-5 max-w-xl text-sm leading-7 text-[#5d5448]">Fun is not enough if nobody can show what the learner actually mastered. Dear Adeline keeps evidence underneath the experience so curiosity can still lead somewhere concrete.</p>
-              <div className="mt-8 rounded-[30px_22px_34px_26px] border border-[#392f27]/15 bg-[#f7efdd] p-6 shadow-lg">
-                {RECORD.map((item, i) => (
-                  <div key={item} className="flex items-center gap-4 border-b border-[#3b3229]/10 py-4 last:border-0">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#315d58]/25 font-serif text-xs text-[#315d58]">{i + 1}</span>
-                    <span className="text-sm text-[#4d4439]">{item}</span>
-                  </div>
-                ))}
+          <div className="grid gap-8 lg:grid-cols-2">
+            <article className="rounded-[34px_24px_38px_26px] border border-[#392f27]/15 bg-[#f8f0df] p-6 shadow-lg sm:p-8">
+              <p className="text-[9px] uppercase tracking-[.22em] text-[#8e3f69]">Della · crochet business</p>
+              <div className="mt-6 space-y-4 text-sm leading-6">
+                <Bubble side="adeline">What have you been thinking about lately?</Bubble>
+                <Bubble side="student">I want to grow my crochet business.</Bubble>
+                <Bubble side="adeline">Do you have a website where people can see and buy what you make?</Bubble>
+                <Bubble side="student">No, not yet.</Bubble>
+                <Bubble side="adeline">Then that might be our next build. We can make one together and figure out the design, photos, pricing, writing, and how people will find it.</Bubble>
               </div>
-            </div>
+              <p className="mt-7 border-l-2 border-[#8e3f69] pl-4 text-xs italic leading-6 text-[#655a4e]">The learning appears because it serves Della&apos;s goal. Adeline can record the work toward writing, design, business, math, technology, and career evidence as it happens.</p>
+            </article>
+
+            <article className="rounded-[30px_38px_26px_34px] border border-[#392f27]/15 bg-[#eef1e7] p-6 shadow-lg sm:p-8">
+              <p className="text-[9px] uppercase tracking-[.22em] text-[#355b84]">an investigation · the creek</p>
+              <div className="mt-6 space-y-4 text-sm leading-6">
+                <Bubble side="student">There were dead fish by the creek and we found an old blue bottle.</Bubble>
+                <Bubble side="adeline">The bottle is interesting, but it doesn&apos;t prove anything by itself. Want to figure out what the water can actually tell us?</Bubble>
+                <Bubble side="student">Yes.</Bubble>
+                <Bubble side="adeline">Then we need comparison samples. Upstream, near the drain, and downstream. I can sketch out what to test, or I can send you into the creek case in the game world.</Bubble>
+              </div>
+              <p className="mt-7 border-l-2 border-[#355b84] pl-4 text-xs italic leading-6 text-[#596255]">The same conversation can become a sketchnote, a real project, or an adventure. Science, evidence, writing, math, and environmental reasoning are recorded underneath.</p>
+            </article>
           </div>
         </div>
       </section>
 
       <section className="relative px-5 py-24 sm:px-8">
-        <div className="mx-auto max-w-5xl text-center">
-          <p className="text-[10px] uppercase tracking-[.32em] text-[#6f4d73]">where the Brain belongs</p>
-          <h2 className="mx-auto mt-4 max-w-4xl font-serif text-4xl leading-tight sm:text-6xl">AI should run backstage, not stand in the middle of the room waving its arms.</h2>
-          <p className="mx-auto mt-7 max-w-2xl text-sm leading-7 text-[#5e5549]">The Brain can adapt difficulty, suggest the next useful challenge, help an NPC respond, evaluate evidence, and connect work to academic goals. The interface should still feel like Dear Adeline, not a chatbot product.</p>
+        <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[.95fr_1.05fr]">
+          <div>
+            <p className="text-[10px] uppercase tracking-[.3em] text-[#315d58]">what Adeline quietly keeps track of</p>
+            <h2 className="mt-4 font-serif text-4xl sm:text-5xl">A real life on the front. A graduation record underneath.</h2>
+            <p className="mt-5 max-w-xl text-sm leading-7 text-[#5d5448]">The child should not have to translate every interesting day into school language. Adeline does that work backstage.</p>
+          </div>
+          <div className="rounded-[30px_22px_34px_26px] border border-[#392f27]/15 bg-[#f7efdd] p-6 shadow-lg">
+            {RECORD.map((item, i) => <div key={item} className="flex items-center gap-4 border-b border-[#3b3229]/10 py-4 last:border-0"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#315d58]/25 font-serif text-xs text-[#315d58]">{i + 1}</span><span className="text-sm text-[#4d4439]">{item}</span></div>)}
+          </div>
         </div>
       </section>
 
@@ -130,15 +112,18 @@ export default function Home() {
           <div className="grid items-end gap-8 md:grid-cols-[1fr_auto]">
             <div>
               <p className="text-[9px] uppercase tracking-[.3em] text-white/55">Dear Adeline</p>
-              <h2 className="mt-3 max-w-3xl font-serif text-4xl leading-tight sm:text-6xl">Keep the wonder. Keep the receipts.</h2>
-              <p className="mt-5 max-w-2xl text-sm leading-7 text-white/70">A learner can spend the afternoon solving a problem in town. Their family can still see exactly what that afternoon accomplished.</p>
+              <h2 className="mt-3 max-w-3xl font-serif text-4xl leading-tight sm:text-6xl">Tell her what you&apos;re doing. Tell her what you&apos;re wondering. See where it goes.</h2>
             </div>
-            <Link href="/login" className="rounded-full bg-[#f5ead4] px-6 py-3 text-sm font-semibold text-[#4b3157]">sign in</Link>
+            <Link href="/login?mode=signup" className="rounded-full bg-[#f5ead4] px-6 py-3 text-sm font-semibold text-[#4b3157]">start free</Link>
           </div>
         </div>
       </section>
 
-      <footer className="relative border-t border-[#3a332b]/10 px-5 py-10 text-center text-[10px] tracking-[.18em] text-[#766c5f] sm:px-8">DEAR ADELINE · BUILT AROUND THE LEARNER</footer>
+      <footer className="relative border-t border-[#3a332b]/10 px-5 py-10 text-center text-[10px] tracking-[.18em] text-[#766c5f] sm:px-8">DEAR ADELINE · EDUCATION AS UNIQUE AS YOUR CHILD</footer>
     </main>
-  );
+  )
+}
+
+function Bubble({ side, children }: { side: 'student' | 'adeline'; children: React.ReactNode }) {
+  return <div className={side === 'student' ? 'flex justify-end' : 'flex justify-start'}><div className={side === 'student' ? 'max-w-[86%] rounded-[20px_20px_5px_20px] bg-[#315d58] px-4 py-3 text-[#fff9ed]' : 'max-w-[90%] rounded-[5px_20px_20px_20px] border border-[#3c342b]/12 bg-white/65 px-4 py-3 text-[#4c4339]'}>{children}</div></div>
 }
