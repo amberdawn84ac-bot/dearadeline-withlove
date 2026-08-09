@@ -160,19 +160,27 @@ SUPABASE_PROJECT_REF = os.getenv("SUPABASE_PROJECT_REF", "gyxowttfwqbajoapfebf")
 SUPABASE_JWKS_URL = f"https://{SUPABASE_PROJECT_REF}.supabase.co/auth/v1/.well-known/jwks.json"
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 
-# Adelinemobile student accounts use locally minted HS256 sessions. Prefer a
-# dedicated secret, then the legacy Supabase secret. Older Railway environments
-# may have neither, so derive a stable private fallback from the database DSN
-# (which already contains high-entropy production credentials and never leaves
-# the server). Supabase-issued ES256 sessions continue to use JWKS unchanged.
+# Adelinemobile student accounts use locally minted HS256 sessions. Supabase
+# sometimes exposes its signing material as a JWK JSON object; PyJWT must not
+# receive that object as an HMAC secret. Only reuse the legacy value when it is
+# actually a plain shared secret. Otherwise derive a stable private student key
+# from the production database credential, which never leaves the server.
 import hashlib as _hashlib
+_student_jwt_env = os.getenv("STUDENT_JWT_SECRET", "").strip()
+_legacy_hs256_secret = SUPABASE_JWT_SECRET.strip()
+_legacy_is_jwk = (
+    _legacy_hs256_secret.startswith("{")
+    or '"kty"' in _legacy_hs256_secret
+    or '"keys"' in _legacy_hs256_secret
+)
 STUDENT_JWT_SECRET = (
-    os.getenv("STUDENT_JWT_SECRET")
-    or SUPABASE_JWT_SECRET
+    _student_jwt_env
+    or (_legacy_hs256_secret if _legacy_hs256_secret and not _legacy_is_jwk else "")
     or _hashlib.sha256(
         f"dear-adeline-student-session:{POSTGRES_DSN}".encode("utf-8")
     ).hexdigest()
 )
+
 
 # ── Internal API Key (server-to-server calls from lesson pipeline) ──────────
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "dev-internal-key-not-for-production")
