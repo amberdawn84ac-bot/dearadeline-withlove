@@ -54,21 +54,31 @@ export function DailyBreadWidget({ onStudy, gradeLevel = '8' }: DailyBreadWidget
 
   const handleStudy = () => {
     if (!data) return;
-    const prompt = `Daily Bread deep-dive study on ${data.reference}. The key word is "${data.original}" — ${data.originalMeaning}. Teach me what this passage actually says in the original language, the historical context, and what it means for how I live today.`;
+
+    const prompt = [
+      `Let’s do a Daily Bread deep dive on ${data.reference}.`,
+      `Today’s text: “${data.verse}”`,
+      `Key original-language word: ${data.original}.`,
+      `Meaning: ${data.originalMeaning}`,
+      data.translationNote ? `Translation note: ${data.translationNote}` : '',
+      data.context ? `Historical context: ${data.context}` : '',
+      `I’m in grade ${gradeLevel}. Walk me through what the passage actually says in the original language, what English translations can flatten, the historical setting, important connections elsewhere in Scripture, and what it could mean in real life. Keep this as a conversation with Adeline, and use a sketchnote if it would help me remember it.`,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
     onStudy?.(prompt);
   };
 
-  // Loading state
   if (status === 'loading') {
     return (
       <div className="bg-[#FFFDF5] rounded-2xl border-2 border-[#E7DAC3] p-6 flex flex-col items-center justify-center min-h-64">
         <Loader2 className="w-6 h-6 animate-spin text-[#BD6809] mb-3" />
-        <p className="text-[#2F4731]/60 text-sm">Loading today's verse…</p>
+        <p className="text-[#2F4731]/60 text-sm">Loading today&apos;s verse…</p>
       </div>
     );
   }
 
-  // Error state
   if (status === 'error') {
     return (
       <div className="bg-[#FFFDF5] rounded-2xl border-2 border-[#E7DAC3] p-6">
@@ -92,11 +102,9 @@ export function DailyBreadWidget({ onStudy, gradeLevel = '8' }: DailyBreadWidget
     );
   }
 
-  // Ready state
   if (status === 'ready' && data) {
     return (
       <div className="bg-[#FFFDF5] rounded-2xl border-2 border-[#E7DAC3] p-6">
-        {/* Header */}
         <div className="flex items-start gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-[#BD6809]/10 flex items-center justify-center flex-shrink-0">
             <BookOpen className="w-5 h-5 text-[#BD6809]" />
@@ -107,13 +115,9 @@ export function DailyBreadWidget({ onStudy, gradeLevel = '8' }: DailyBreadWidget
           </div>
         </div>
 
-        {/* Verse */}
-        <p className="text-[#2F4731] text-sm italic mb-2 leading-relaxed">"{data.verse}"</p>
-
-        {/* Reference */}
+        <p className="text-[#2F4731] text-sm italic mb-2 leading-relaxed">&quot;{data.verse}&quot;</p>
         <p className="text-[#BD6809] font-semibold text-xs mb-4">{data.reference}</p>
 
-        {/* Original language section */}
         {data.original && (
           <div className="mb-4 p-3 bg-white rounded-lg border border-[#E7DAC3]">
             <p className="text-xs text-[#2F4731]/60 mb-1">Original Language</p>
@@ -124,7 +128,6 @@ export function DailyBreadWidget({ onStudy, gradeLevel = '8' }: DailyBreadWidget
           </div>
         )}
 
-        {/* Translation note */}
         {data.translationNote && (
           <div className="mb-4 p-3 bg-[#F5E6D3] rounded-lg border border-[#E7DAC3]">
             <p className="text-xs text-[#2F4731]/60 mb-1">Translation Note</p>
@@ -132,7 +135,6 @@ export function DailyBreadWidget({ onStudy, gradeLevel = '8' }: DailyBreadWidget
           </div>
         )}
 
-        {/* CTA Button */}
         <button
           onClick={handleStudy}
           className="w-full px-4 py-2 bg-[#2F4731] text-white rounded-lg text-sm font-semibold hover:bg-[#1F3321] transition-colors flex items-center justify-center gap-2 group"
