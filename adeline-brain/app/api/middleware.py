@@ -17,7 +17,7 @@ import jwt
 from jwt import PyJWKClient
 from fastapi import Header, HTTPException, Cookie
 from app.schemas.api_models import UserRole
-from app.config import SUPABASE_JWT_SECRET, SUPABASE_JWKS_URL
+from app.config import STUDENT_JWT_SECRET, SUPABASE_JWKS_URL
 
 logger = logging.getLogger(__name__)
 
@@ -57,18 +57,18 @@ def _decode_jwt(token: str) -> dict:
                 algorithms=[alg],
                 audience="authenticated",
             )
-        elif SUPABASE_JWT_SECRET:
-            # HS256 path — verify with shared secret
+        elif STUDENT_JWT_SECRET:
+            # HS256 path — verify Adelinemobile student sessions
             payload = jwt.decode(
                 token,
-                SUPABASE_JWT_SECRET,
+                STUDENT_JWT_SECRET,
                 algorithms=["HS256"],
                 audience="authenticated",
             )
         else:
             raise HTTPException(
                 status_code=500,
-                detail="Server misconfiguration: no JWKS kid and no JWT secret.",
+                detail="Server misconfiguration: no student JWT secret.",
             )
         return payload
     except jwt.ExpiredSignatureError:
