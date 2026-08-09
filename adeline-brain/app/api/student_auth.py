@@ -241,17 +241,35 @@ async def login_student(request: Request, body: StudentLoginRequest):
     conn = await get_db_conn()
     try:
         row = await conn.fetchrow(
-            """SELECT id, "pinHash" FROM "User" WHERE username = $1 AND role = 'STUDENT'""",
+            """
+            SELECT id, name, username, xp, "adeCoins", "gradeLevel",
+                   "linkCode", "pinHash"
+            FROM "User"
+            WHERE username = $1 AND role = 'STUDENT'
+            """,
             username,
         )
         if not row or not row["pinHash"] or not bcrypt.checkpw(body.pin.encode(), row["pinHash"].encode()):
             raise HTTPException(status_code=401, detail="Username or PIN is incorrect.")
 
-        user = await load_student_user(conn, row["id"])
+        # A successful sign-in must not depend on optional profile columns or
+        # migration state. Rich avatar/town/parent data loads after authentication.
+        user = StudentUserOut(
+            id=str(row["id"]),
+            display_name=str(row["name"] or username),
+            username=str(row["username"] or username),
+            xp=int(row["xp"] or 0),
+            ade_coins=int(row["adeCoins"] or 0),
+            avatar_data={},
+            grade_level=str(row["gradeLevel"] or "K-2"),
+            link_code=str(row["linkCode"] or ""),
+            parent_id=None,
+            parent_display_name=None,
+            town_id=None,
+            reputation=0,
+        )
     finally:
         await conn.close()
 
-    if not user:
-        raise HTTPException(status_code=401, detail="Username or PIN is incorrect.")
-    token = mint_student_token(row["id"])
-    return StudentAuthResponse(token=token, student_id=row["id"], user=user)
+    token = mint_student_token(str(row["id"]))
+    return StudentAuthResponse(token=token, student_id=str(row["id"]), user=user)
