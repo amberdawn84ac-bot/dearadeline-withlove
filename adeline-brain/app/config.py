@@ -160,6 +160,20 @@ SUPABASE_PROJECT_REF = os.getenv("SUPABASE_PROJECT_REF", "gyxowttfwqbajoapfebf")
 SUPABASE_JWKS_URL = f"https://{SUPABASE_PROJECT_REF}.supabase.co/auth/v1/.well-known/jwks.json"
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 
+# Adelinemobile student accounts use locally minted HS256 sessions. Prefer a
+# dedicated secret, then the legacy Supabase secret. Older Railway environments
+# may have neither, so derive a stable private fallback from the database DSN
+# (which already contains high-entropy production credentials and never leaves
+# the server). Supabase-issued ES256 sessions continue to use JWKS unchanged.
+import hashlib as _hashlib
+STUDENT_JWT_SECRET = (
+    os.getenv("STUDENT_JWT_SECRET")
+    or SUPABASE_JWT_SECRET
+    or _hashlib.sha256(
+        f"dear-adeline-student-session:{POSTGRES_DSN}".encode("utf-8")
+    ).hexdigest()
+)
+
 # ── Internal API Key (server-to-server calls from lesson pipeline) ──────────
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "dev-internal-key-not-for-production")
 
