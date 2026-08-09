@@ -234,42 +234,40 @@ async def register_student_account(request: Request, body: StudentRegisterReques
     return StudentAuthResponse(token=token, student_id=user_id, user=user)
 
 
-@router.post("/login", response_model=StudentAuthResponse)
+@router.post("/login")
 @limiter.limit("5/minute;30/hour")
 async def login_student(request: Request, body: StudentLoginRequest):
     username = body.username.strip().lower()
     conn = await get_db_conn()
     try:
         row = await conn.fetchrow(
-            """
-            SELECT id, name, username, xp, "adeCoins", "gradeLevel",
-                   "linkCode", "pinHash"
-            FROM "User"
-            WHERE username = $1 AND role = 'STUDENT'
-            """,
+            """SELECT id, "pinHash" FROM "User" WHERE username = $1 AND role = 'STUDENT'""",
             username,
         )
         if not row or not row["pinHash"] or not bcrypt.checkpw(body.pin.encode(), row["pinHash"].encode()):
             raise HTTPException(status_code=401, detail="Username or PIN is incorrect.")
-
-        # A successful sign-in must not depend on optional profile columns or
-        # migration state. Rich avatar/town/parent data loads after authentication.
-        user = StudentUserOut(
-            id=str(row["id"]),
-            display_name=str(row["name"] or username),
-            username=str(row["username"] or username),
-            xp=int(row["xp"] or 0),
-            ade_coins=int(row["adeCoins"] or 0),
-            avatar_data={},
-            grade_level=str(row["gradeLevel"] or "K-2"),
-            link_code=str(row["linkCode"] or ""),
-            parent_id=None,
-            parent_display_name=None,
-            town_id=None,
-            reputation=0,
-        )
+        student_id = str(row["id"])
     finally:
         await conn.close()
 
-    token = mint_student_token(str(row["id"]))
-    return StudentAuthResponse(token=token, student_id=str(row["id"]), user=user)
+    # Keep authentication independent from optional User columns and response
+    # model coercion. Rich profile data is loaded after the session exists.
+    token = mint_student_token(student_id)
+    return {
+        "token": token,
+        "student_id": student_id,
+        "user": {
+            "id": student_id,
+            "display_name": username,
+            "username": username,
+            "xp": 0,
+            "ade_coins": 0,
+            "avatar_data": {},
+            "grade_level": "K-2",
+            "link_code": "",
+            "parent_id": None,
+            "parent_display_name": None,
+            "town_id": None,
+            "reputation": 0,
+        },
+    }
