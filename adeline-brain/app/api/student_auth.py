@@ -83,21 +83,38 @@ def mint_student_token(user_id: str) -> str:
 
 
 async def load_student_user(conn: asyncpg.Connection, user_id: str) -> StudentUserOut | None:
+    """
+    Load a student through a JSON snapshot of the User row.
+
+    Adelinemobile databases may be at different migration levels. Reading the
+    row as JSON keeps optional profile fields from turning a valid login into a
+    500 response when an older database does not have one of those columns yet.
+    """
     row = await conn.fetchrow(
         """
-        SELECT u.id, u.name, u.username, u.xp, u."adeCoins", u."avatarData",
-               u."gradeLevel", u."linkCode", u."parentId", p.name AS parent_name,
-               to_jsonb(u) ->> 'townId' AS town_id,
-               COALESCE((to_jsonb(u) ->> 'reputation')::int, 0) AS reputation
+        SELECT to_jsonb(u) AS profile
         FROM "User" u
-        LEFT JOIN "User" p ON p.id = u."parentId"
         WHERE u.id = $1
         """,
         user_id,
     )
     if not row:
         return None
-    avatar_raw = row["avatarData"]
+
+    profile_raw = row["profile"]
+    if isinstance(profile_raw, dict):
+        profile = profile_raw
+    elif isinstance(profile_raw, str):
+        try:
+            profile = json.loads(profile_raw)
+        except (TypeError, ValueError):
+            logger.exception("Invalid User JSON for student %s", user_id)
+            return None
+    else:
+        logger.error("Unexpected User JSON type for student %s: %s", user_id, type(profile_raw).__name__)
+        return None
+
+    avatar_raw = profile.get("avatarData")
     if isinstance(avatar_raw, dict):
         avatar_data = avatar_raw
     elif isinstance(avatar_raw, str) and avatar_raw:
@@ -109,19 +126,33 @@ async def load_student_user(conn: asyncpg.Connection, user_id: str) -> StudentUs
     else:
         avatar_data = {}
 
+    parent_id_raw = profile.get("parentId")
+    parent_display_name = None
+    if parent_id_raw:
+        parent_display_name = await conn.fetchval(
+            """SELECT name FROM "User" WHERE id = $1""",
+            str(parent_id_raw),
+        )
+
+    def as_int(value, default=0):
+        try:
+            return int(value) if value is not None else default
+        except (TypeError, ValueError):
+            return default
+
     return StudentUserOut(
-        id=str(row["id"]),
-        display_name=row["name"],
-        username=row["username"] or "",
-        xp=row["xp"] or 0,
-        ade_coins=row["adeCoins"] or 0,
+        id=str(profile.get("id") or user_id),
+        display_name=str(profile.get("name") or ""),
+        username=str(profile.get("username") or ""),
+        xp=as_int(profile.get("xp")),
+        ade_coins=as_int(profile.get("adeCoins")),
         avatar_data=avatar_data,
-        grade_level=row["gradeLevel"] or "K-2",
-        link_code=row["linkCode"] or "",
-        parent_id=str(row["parentId"]) if row["parentId"] is not None else None,
-        parent_display_name=row["parent_name"],
-        town_id=row["town_id"],
-        reputation=row["reputation"] or 0,
+        grade_level=str(profile.get("gradeLevel") or "K-2"),
+        link_code=str(profile.get("linkCode") or ""),
+        parent_id=str(parent_id_raw) if parent_id_raw else None,
+        parent_display_name=parent_display_name,
+        town_id=str(profile.get("townId")) if profile.get("townId") is not None else None,
+        reputation=as_int(profile.get("reputation")),
     )
 
 
