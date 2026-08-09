@@ -1,11 +1,14 @@
 'use client';
 
 import { Loader2 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import ConciergeDashboard from '@/components/ConciergeDashboard';
 import { useStudent } from '@/lib/useStudent';
 
 export default function DashboardPage() {
   const { student, loading } = useStudent();
+  const searchParams = useSearchParams();
+  const studyPrompt = searchParams.get('study');
 
   if (loading) {
     return (
@@ -31,6 +34,7 @@ export default function DashboardPage() {
       studentId={student.id}
       studentName={student.name}
       gradeLevel={student.gradeLevel}
+      initialPrompt={studyPrompt}
     />
   );
 }
