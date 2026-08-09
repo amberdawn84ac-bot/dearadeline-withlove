@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.config import SUPABASE_JWT_SECRET, get_db_conn
+from app.config import STUDENT_JWT_SECRET, get_db_conn
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth/student", tags=["student-auth"])
@@ -69,8 +69,6 @@ class StudentAuthResponse(BaseModel):
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def mint_student_token(user_id: str) -> str:
-    if not SUPABASE_JWT_SECRET:
-        raise HTTPException(status_code=500, detail="Server misconfiguration: SUPABASE_JWT_SECRET not set.")
     now = int(time.time())
     payload = {
         "sub": user_id,
@@ -79,7 +77,7 @@ def mint_student_token(user_id: str) -> str:
         "exp": now + TOKEN_TTL_SECONDS,
         "app_metadata": {"role": "STUDENT"},
     }
-    return jwt.encode(payload, SUPABASE_JWT_SECRET, algorithm="HS256")
+    return jwt.encode(payload, STUDENT_JWT_SECRET, algorithm="HS256")
 
 
 async def load_student_user(conn: asyncpg.Connection, user_id: str) -> StudentUserOut | None:
