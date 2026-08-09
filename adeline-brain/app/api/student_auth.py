@@ -87,7 +87,8 @@ async def load_student_user(conn: asyncpg.Connection, user_id: str) -> StudentUs
         """
         SELECT u.id, u.name, u.username, u.xp, u."adeCoins", u."avatarData",
                u."gradeLevel", u."linkCode", u."parentId", p.name AS parent_name,
-               u."townId", u.reputation
+               to_jsonb(u) ->> 'townId' AS town_id,
+               COALESCE((to_jsonb(u) ->> 'reputation')::int, 0) AS reputation
         FROM "User" u
         LEFT JOIN "User" p ON p.id = u."parentId"
         WHERE u.id = $1
@@ -96,19 +97,31 @@ async def load_student_user(conn: asyncpg.Connection, user_id: str) -> StudentUs
     )
     if not row:
         return None
+    avatar_raw = row["avatarData"]
+    if isinstance(avatar_raw, dict):
+        avatar_data = avatar_raw
+    elif isinstance(avatar_raw, str) and avatar_raw:
+        try:
+            avatar_data = json.loads(avatar_raw)
+        except (TypeError, ValueError):
+            logger.warning("Invalid avatarData JSON for student %s; using empty avatar", user_id)
+            avatar_data = {}
+    else:
+        avatar_data = {}
+
     return StudentUserOut(
-        id=row["id"],
+        id=str(row["id"]),
         display_name=row["name"],
         username=row["username"] or "",
-        xp=row["xp"],
-        ade_coins=row["adeCoins"],
-        avatar_data=json.loads(row["avatarData"]) if row["avatarData"] else {},
+        xp=row["xp"] or 0,
+        ade_coins=row["adeCoins"] or 0,
+        avatar_data=avatar_data,
         grade_level=row["gradeLevel"] or "K-2",
         link_code=row["linkCode"] or "",
-        parent_id=row["parentId"],
+        parent_id=str(row["parentId"]) if row["parentId"] is not None else None,
         parent_display_name=row["parent_name"],
-        town_id=row["townId"],
-        reputation=row["reputation"],
+        town_id=row["town_id"],
+        reputation=row["reputation"] or 0,
     )
 
 
