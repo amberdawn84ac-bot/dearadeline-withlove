@@ -1,20 +1,26 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { BookOpen, MessageCircle, Send } from 'lucide-react';
+import { MessageCircle, Send } from 'lucide-react';
 import { reportActivity } from '@/lib/brain-client';
 import type { ActivityReportResponse, ConversationMessage } from '@/lib/brain-client';
 import { streamAdelineConversation } from '@/lib/conversation-client';
 import SketchnoteCard, { type SketchnoteData } from '@/components/SketchnoteCard';
 import { saveSketchnote } from '@/lib/journal-client';
 
-type Props = { studentId: string; studentName: string; gradeLevel: string };
+type Props = {
+  studentId: string;
+  studentName: string;
+  gradeLevel: string;
+  initialPrompt?: string | null;
+};
+
 type ActivityEvidence = ActivityReportResponse & {
   standard_codes?: string[];
   concepts_demonstrated?: string[];
   concepts_to_explore?: string[];
 };
+
 type ChatMessage = {
   id: string;
   role: 'user' | 'adeline';
@@ -53,7 +59,12 @@ function normalizeSketchnote(block: Record<string, unknown>): SketchnoteData {
   };
 }
 
-export default function ConciergeDashboardV2({ studentId, studentName, gradeLevel }: Props) {
+export default function ConciergeDashboardV2({
+  studentId,
+  studentName,
+  gradeLevel,
+  initialPrompt,
+}: Props) {
   const firstName = studentName?.trim().split(/\s+/)[0] || 'there';
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -66,6 +77,7 @@ export default function ConciergeDashboardV2({ studentId, studentName, gradeLeve
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const handledInitialPrompt = useRef<string | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -95,12 +107,12 @@ export default function ConciergeDashboardV2({ studentId, studentName, gradeLeve
     }
   }
 
-  async function send() {
-    const text = input.trim();
-    if (!text || busy) return;
+  async function sendText(text: string) {
+    const cleanText = text.trim();
+    if (!cleanText || busy) return;
 
     setInput('');
-    setMessages((prev) => [...prev, { id: makeId(), role: 'user', text }]);
+    setMessages((prev) => [...prev, { id: makeId(), role: 'user', text: cleanText }]);
     setBusy(true);
 
     const streamingId = makeId();
@@ -112,7 +124,7 @@ export default function ConciergeDashboardV2({ studentId, studentName, gradeLeve
     try {
       for await (const event of streamAdelineConversation({
         studentId,
-        message: text,
+        message: cleanText,
         gradeLevel,
         history,
       })) {
@@ -145,23 +157,23 @@ export default function ConciergeDashboardV2({ studentId, studentName, gradeLeve
           );
         } else if (event.type === 'error') {
           hadError = true;
-          const message = /401|403|auth/i.test(event.message)
+          const errorText = /401|403|auth/i.test(event.message)
             ? 'I lost your sign-in connection. Refresh this page and try me again.'
             : 'I can’t reach my Brain right now. Try that once more in a moment.';
-          responseText = message;
+          responseText = errorText;
           setMessages((prev) =>
-            prev.map((item) => item.id === streamingId ? { ...item, text: message } : item),
+            prev.map((item) => item.id === streamingId ? { ...item, text: errorText } : item),
           );
         }
       }
 
       if (!hadError && responseText.trim()) {
         const turns: ConversationMessage[] = [
-          { role: 'user', content: text },
+          { role: 'user', content: cleanText },
           { role: 'adeline', content: responseText },
         ];
         setHistory((prev) => [...prev, ...turns].slice(-24));
-        void quietlyRecordActivity(text);
+        void quietlyRecordActivity(cleanText);
       }
     } catch {
       setMessages((prev) =>
@@ -176,17 +188,28 @@ export default function ConciergeDashboardV2({ studentId, studentName, gradeLeve
     }
   }
 
+  useEffect(() => {
+    if (!initialPrompt || handledInitialPrompt.current === initialPrompt) return;
+    handledInitialPrompt.current = initialPrompt;
+
+    // The sidebar Daily Bread widget routes here with ?study=. Consume it once,
+    // clean the URL, and let the study unfold in the normal Adeline conversation.
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({}, '', '/dashboard');
+    }
+    void sendText(initialPrompt);
+  }, [initialPrompt]);
+
+  async function send() {
+    await sendText(input);
+  }
+
   return (
     <main className="flex min-h-[100dvh] flex-col bg-[#fbf7ec] text-[#243a2a] lg:h-screen lg:min-h-0">
       <header className="border-b border-[#d9cfbb] bg-[#f7f1e4]/85 px-5 py-4 backdrop-blur sm:px-8">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
-          <div>
-            <p className="text-[10px] uppercase tracking-[.22em] text-[#8b7b66]">Adeline</p>
-            <h1 className="text-3xl text-[#213f2d]" style={{ fontFamily: 'var(--font-emilys-candy)' }}>I&apos;m here.</h1>
-          </div>
-          <Link href="/dashboard/daily-bread" className="inline-flex items-center gap-2 rounded-full border border-[#cdbf9e] bg-[#fffdf7] px-4 py-2 text-xs font-semibold text-[#5f513e] shadow-sm hover:bg-white">
-            <BookOpen size={15} /> Daily Bread
-          </Link>
+        <div className="mx-auto max-w-5xl">
+          <p className="text-[10px] uppercase tracking-[.22em] text-[#8b7b66]">Adeline</p>
+          <h1 className="text-3xl text-[#213f2d]" style={{ fontFamily: 'var(--font-emilys-candy)' }}>I&apos;m here.</h1>
         </div>
       </header>
 
