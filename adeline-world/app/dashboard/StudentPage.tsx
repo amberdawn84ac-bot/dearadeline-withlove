@@ -69,7 +69,15 @@ function RecordContent({ kind, data }: { kind: PageKind; data: RecordItem }) {
     const lessons = Array.isArray(data.suggestions) ? data.suggestions as RecordItem[] : [];
     const projects = Array.isArray(data.projects) ? data.projects as RecordItem[] : [];
     const all = [...lessons.map((x) => ({...x, _type: "Lesson mission"})), ...projects.map((x) => ({...x, _type: "Project mission"}))];
-    return all.length ? <div className="record-grid">{all.map((item, index) => <RecordCard key={text(item.id, String(index))} title={text(item.title, "New mission")} description={text(item.description, text(item.tagline))} tag={text(item._type)} meta={trackNames[text(item.track)] ?? text(item.track)} icon={text(item.emoji, "✦")} />)}</div> : <Empty title="No missions are queued yet." text="Talk with Adeline about what you want to learn or build, and she will shape the next missions around you."/>;
+    return all.length ? <div className="record-grid">{all.map((item, index) => {
+      const id = text(item.id, String(index));
+      const title = text(item.title, "New mission");
+      const description = text(item.description, text(item.tagline));
+      const track = text(item.track);
+      const missionType = text(item._type).startsWith("Project") ? "project" : "lesson";
+      const href = `/dashboard/missions/${encodeURIComponent(id)}?type=${missionType}&title=${encodeURIComponent(title)}&description=${encodeURIComponent(description)}&track=${encodeURIComponent(track)}`;
+      return <RecordCard key={id} href={href} title={title} description={description} tag={text(item._type)} meta={`${trackNames[track] ?? track} · Open mission →`} icon={text(item.emoji, "✦")} />;
+    })}</div> : <Empty title="No missions are queued yet." text="Talk with Adeline about what you want to learn or build, and she will shape the next missions around you."/>;
   }
   if (kind === "journal") {
     const entries = Array.isArray(data.entries) ? data.entries as RecordItem[] : [];
@@ -85,7 +93,10 @@ function RecordContent({ kind, data }: { kind: PageKind; data: RecordItem }) {
 }
 
 function Stat({ value, label }: { value: string | number; label: string }) { return <article><b>{value}</b><span>{label}</span></article>; }
-function RecordCard({ title, description, tag, meta, icon }: { title: string; description: string; tag: string; meta: string; icon: string }) { return <article className="record-card"><b>{icon}</b><div><small>{tag}</small><h2>{title}</h2>{description && <p>{description}</p>}<span>{meta}</span></div></article>; }
+function RecordCard({ title, description, tag, meta, icon, href }: { title: string; description: string; tag: string; meta: string; icon: string; href?: string }) {
+  const card = <article className="record-card"><b>{icon}</b><div><small>{tag}</small><h2>{title}</h2>{description && <p>{description}</p>}<span>{meta}</span></div></article>;
+  return href ? <a className="record-card-link" href={href}>{card}</a> : card;
+}
 function Empty({ title, text: body }: { title: string; text: string }) { return <div className="record-empty"><b>🌱</b><h2>{title}</h2><p>{body}</p><a href="/dashboard#talk-to-adeline">Talk to Adeline →</a></div>; }
 function humanize(value: string) { return value.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 function formatDate(value: unknown) { const raw = text(value); if (!raw) return "Saved to your record"; const date = new Date(raw); return Number.isNaN(date.getTime()) ? raw : date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); }
