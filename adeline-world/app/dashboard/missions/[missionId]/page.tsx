@@ -15,20 +15,18 @@ type AnimatedLesson = {
   extensionActivities?: Item[];
 };
 type MissionQuery = { type: string; title: string; description: string; track: string };
+type PlayerSession = NonNullable<ReturnType<typeof getPlayerSession>>;
 function asText(value: unknown, fallback = "") { return typeof value === "string" || typeof value === "number" ? String(value) : fallback; }
 function asList(value: unknown) { return Array.isArray(value) ? value : []; }
 
-function adelineFocus(query: MissionQuery) {
-  return [
-    query.description,
-    "Teach the subject itself thoroughly before asking the learner to research, write, build, or respond.",
-    "Use Adeline's real voice: warm, sharp-witted, conversational, and never formulaic or childish.",
-    "Ground factual claims in specific evidence. Name the real people, dates, documents, laws, experiments, measurements, institutions, and incentives involved.",
-    "For history and justice: do not sanitize. Show how events unfolded, who held power, who profited, who suffered, what the original records show, and how people created change.",
-    "Distinguish verified evidence from interpretation. Cite primary sources inline whenever possible and say plainly when the record is uncertain.",
-    "Work comes after instruction. Activities must have purpose: help someone, solve a real problem, reveal understanding, or create a portfolio-worthy accomplishment. No busywork.",
-    "Maintain a Biblical worldview naturally: every person has inherent worth, knowledge without love is empty, power needs accountability, and truth does not fear examination.",
-  ].filter(Boolean).join("\n");
+function blockToScene(block: Item, index: number): Scene {
+  const kind = asText(block.block_type, "LESSON").replaceAll("_", " ");
+  const title = asText(block.title, kind.toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()));
+  return {
+    sceneTitle: { text: title || `Lesson part ${index + 1}` },
+    narration: asText(block.content, "This lesson block is being prepared."),
+    teachingLayer: block.teachingLayer && typeof block.teachingLayer === "object" ? block.teachingLayer as Item : {},
+  };
 }
 
 function childrenWhoChangedHistory(): AnimatedLesson {
@@ -138,28 +136,6 @@ function childrenWhoChangedHistory(): AnimatedLesson {
   };
 }
 
-function readyMission(query: MissionQuery): AnimatedLesson {
-  const topic = query.title || "Your mission";
-  if (/children|kids|young people/i.test(topic) && /changed|change|history/i.test(topic)) {
-    return childrenWhoChangedHistory();
-  }
-  const focus = query.description || `Investigate ${topic}, explain what you discover, and create evidence of your learning.`;
-  return {
-    title: { text: topic },
-    learningGoals: [
-      `Explain the central ideas behind ${topic}.`,
-      "Separate strong evidence from assumptions or unsupported claims.",
-      "Create something that demonstrates what you learned.",
-    ],
-    scenes: [
-      { sceneTitle: { text: "Start with what you notice" }, narration: focus, teachingLayer: { visualSummary: [{ text: `Write three things you already think you know about ${topic}.` }, { text: "Circle the one idea you most need to verify." }], whyItMatters: { text: "Naming your starting beliefs makes it easier to notice when evidence changes your mind." }, activity: { text: "Make a quick sketchnote: What I know, What I suspect, and What I need to find out." } } },
-      { sceneTitle: { text: "Investigate the evidence" }, narration: `Now dig beneath the surface of ${topic}. Look for causes, effects, people affected, and the evidence behind each claim.`, teachingLayer: { visualSummary: [{ text: "Find at least two useful sources or real-world examples." }, { text: "Record the source beside every important fact." }, { text: "Notice who benefits, who carries the cost, and what may be missing." }], deepExplanation: { text: "Strong investigation compares evidence instead of accepting the first confident answer. Primary sources, direct observations, original data, and real results deserve special attention." }, activity: { text: "Build an evidence map with four branches: facts, causes, effects, and unanswered questions." } } },
-      { sceneTitle: { text: "Make meaning" }, narration: `Use the evidence to explain ${topic} in your own words—not copied language.`, teachingLayer: { visualSummary: [{ text: "State your main conclusion in one clear sentence." }, { text: "Support it with the strongest evidence you found." }, { text: "Name one limit, disagreement, or question that remains." }], whyItMatters: { text: "Real learning means you can explain an idea, defend it with evidence, and stay honest about what you do not yet know." }, activity: { text: "Teach the idea aloud to someone, or record a two-minute explanation. Revise any part that is hard to explain." } } },
-      { sceneTitle: { text: "Create your proof" }, narration: "Turn your learning into something worth keeping in your portfolio.", teachingLayer: { visualSummary: [{ text: "Choose a product: illustrated page, model, experiment, letter, video, presentation, or another fitting creation." }, { text: "Include your conclusion and supporting evidence." }, { text: "Add a short reflection about what changed in your thinking." }], activity: { text: `Create and finish your evidence piece for ${topic}. Photograph, upload, or save the finished work before sealing the mission.` } } },
-    ],
-  };
-}
-
 export default function MissionPage({ params }: { params: Promise<{ missionId: string }> }) {
   const [missionId, setMissionId] = useState("");
   const [query, setQuery] = useState({ type: "lesson", title: "Mission", description: "", track: "TRUTH_HISTORY" });
@@ -171,6 +147,73 @@ export default function MissionPage({ params }: { params: Promise<{ missionId: s
   const [started, setStarted] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [error, setError] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [streamStatus, setStreamStatus] = useState("");
+  const [canonicalNote, setCanonicalNote] = useState("");
+
+  async function openCanonicalLesson(missionQuery: MissionQuery, activeSession: PlayerSession, activePlayer: PlayerProfile) {
+    if (loading) return;
+    setLoading(true); setStreaming(true); setStarted(true); setError(""); setStreamStatus("Checking the curriculum library…"); setCanonicalNote(""); setSceneIndex(0);
+    setLesson({ title: { text: missionQuery.title }, learningGoals: [], scenes: [] });
+    let receivedBlocks = 0;
+    try {
+      const response = await fetch("/api/brain/lesson/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${activeSession.token}` },
+        body: JSON.stringify({
+          student_id: activeSession.studentId,
+          track: missionQuery.track,
+          topic: missionQuery.title,
+          grade_level: activePlayer.grade_level ? String(activePlayer.grade_level) : "8",
+          is_homestead: false,
+          render_mode: "sketchnote",
+          force_regenerate: false,
+        }),
+      });
+      if (!response.ok || !response.body) throw new Error("Adeline could not open the curriculum lesson.");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+        const events = buffer.split(/\r?\n\r?\n/);
+        buffer = events.pop() ?? "";
+        for (const event of events) {
+          const dataLine = event.split(/\r?\n/).find((line) => line.startsWith("data:"));
+          if (!dataLine) continue;
+          const payload = JSON.parse(dataLine.slice(5).trim()) as Item;
+          if (payload.type === "status") setStreamStatus(asText(payload.message, "Preparing the next lesson part…"));
+          if (payload.type === "block" && payload.block && typeof payload.block === "object") {
+            const scene = blockToScene(payload.block as Item, receivedBlocks);
+            receivedBlocks += 1;
+            setLesson((current) => ({ ...(current ?? {}), scenes: [...(current?.scenes ?? []), scene] }));
+            setLoading(false);
+            setStreamStatus("Adding the next part…");
+          }
+          if (payload.type === "done") {
+            const fromCanonical = payload.from_canonical === true;
+            setCanonicalNote(fromCanonical ? "✓ Verified canonical lesson · adapted for this learner" : "✓ New master lesson created · saved to the canonical curriculum");
+            setLesson((current) => ({ ...(current ?? {}), title: { text: asText(payload.title, missionQuery.title) } }));
+          }
+        }
+        if (done) break;
+      }
+      if (receivedBlocks === 0) throw new Error("This curriculum lesson opened without teaching blocks.");
+    } catch (cause) {
+      const isChildrenLesson = /children|kids|young people/i.test(missionQuery.title) && /changed|change|history/i.test(missionQuery.title);
+      if (isChildrenLesson) {
+        setLesson(childrenWhoChangedHistory());
+        setCanonicalNote("Saved teaching copy · canonical service temporarily unavailable");
+      } else {
+        setLesson(null);
+        setError(cause instanceof Error ? cause.message : "Adeline could not open this curriculum lesson.");
+      }
+    } finally {
+      setLoading(false); setStreaming(false); setStreamStatus("");
+    }
+  }
 
   useEffect(() => {
     const session = getPlayerSession();
@@ -188,12 +231,7 @@ export default function MissionPage({ params }: { params: Promise<{ missionId: s
           .then((payload) => setProject(payload as Item)).catch((cause) => setError(cause instanceof Error ? cause.message : "Adeline could not open this project yet."))
           .finally(() => setLoading(false));
       } else {
-        setLoading(true); setStarted(true);
-        fetch("/api/brain/brain/lesson/animated", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ topic: nextQuery.title, focus: adelineFocus(nextQuery), duration_seconds: 600, target_ages: session.player.grade_level ? `grade ${session.player.grade_level}` : "10-18", track: nextQuery.track, student_id: session.studentId }) })
-          .then(async (response) => response.ok ? response.json() as Promise<AnimatedLesson> : readyMission(nextQuery))
-          .then((payload) => setLesson(payload))
-          .catch(() => setLesson(readyMission(nextQuery)))
-          .finally(() => setLoading(false));
+        void openCanonicalLesson(nextQuery, session, session.player);
       }
     });
   }, [params]);
@@ -202,11 +240,8 @@ export default function MissionPage({ params }: { params: Promise<{ missionId: s
   const initials = player?.display_name ? player.display_name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() : "DA";
 
   async function beginLesson() {
-    if (!session || loading) return; setLoading(true); setError(""); setStarted(true);
-    try {
-      const response = await fetch("/api/brain/brain/lesson/animated", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ topic: query.title, focus: adelineFocus(query), duration_seconds: 600, target_ages: player?.grade_level ? `grade ${player.grade_level}` : "10-18", track: query.track, student_id: session.studentId }) });
-      setLesson(response.ok ? await response.json() as AnimatedLesson : readyMission(query));
-    } catch { setLesson(readyMission(query)); } finally { setLoading(false); }
+    if (!session || !player || loading) return;
+    await openCanonicalLesson(query, session, player);
   }
 
   async function beginProject() {
@@ -231,9 +266,9 @@ export default function MissionPage({ params }: { params: Promise<{ missionId: s
   return <main className="dashboard-page"><header className="dashboard-header"><a href="/">Dear Adeline</a><span>Mission</span><button type="button" aria-label="Learner profile">{initials}</button></header><div className="dashboard-layout"><DashboardNav active="missions" /><section className="mission-page">
     <a className="mission-back" href="/dashboard/missions">← My Missions</a><header className="mission-brief"><p>{query.type === "project" ? "PROJECT MISSION" : "LEARNING MISSION"} · {query.track.replaceAll("_", " ")}</p><h1>{asText(project?.title, query.title)}</h1><span>{asText(project?.tagline, query.description)}</span></header>
     {error && <div className="record-state error">{error}<button type="button" onClick={() => query.type === "project" ? beginProject() : beginLesson()}>Try again</button></div>}
-    {loading && <div className="mission-loading"><b>✦</b><h2>{query.type === "project" ? "Opening your workshop…" : "Adeline is drawing your mission…"}</h2><p>She is shaping it around this learner—not pulling a generic worksheet from a filing cabinet.</p></div>}
+    {loading && <div className="mission-loading"><b>✦</b><h2>{query.type === "project" ? "Opening your workshop…" : "Opening your lesson…"}</h2><p>{query.type === "project" ? "Adeline is gathering the complete project." : streamStatus || "Checking the verified curriculum and adapting it for this learner…"}</p></div>}
     {!loading && query.type === "project" && project && <ProjectMission project={project} started={started} completed={completed} onStart={beginProject} onFinish={finishMission} />}
-    {!loading && lesson && <LessonMission lesson={lesson} sceneIndex={sceneIndex} setSceneIndex={setSceneIndex} completed={completed} onFinish={finishMission} />}
+    {!loading && lesson && <LessonMission lesson={lesson} sceneIndex={sceneIndex} setSceneIndex={setSceneIndex} completed={completed} onFinish={finishMission} streaming={streaming} streamStatus={streamStatus} canonicalNote={canonicalNote} />}
   </section></div></main>;
 }
 
@@ -247,11 +282,11 @@ function ProjectMission({ project, started, completed, onStart, onFinish }: { pr
     <div className="mission-finish">{completed ? <strong>✓ Mission sealed in your portfolio and transcript.</strong> : <button type="button" disabled={!started} onClick={onFinish}>I finished this mission — save my work</button>}</div></div>;
 }
 
-function LessonMission({ lesson, sceneIndex, setSceneIndex, completed, onFinish }: { lesson: AnimatedLesson; sceneIndex: number; setSceneIndex: (index: number) => void; completed: boolean; onFinish: () => void }) {
+function LessonMission({ lesson, sceneIndex, setSceneIndex, completed, onFinish, streaming, streamStatus, canonicalNote }: { lesson: AnimatedLesson; sceneIndex: number; setSceneIndex: (index: number) => void; completed: boolean; onFinish: () => void; streaming: boolean; streamStatus: string; canonicalNote: string }) {
   const scenes = lesson.scenes ?? [], scene = scenes[sceneIndex]; if (!scene) return <div className="record-state error">This mission opened without any scenes.</div>;
   const layer = scene.teachingLayer ?? {}, points = asList(layer.visualSummary) as Item[];
   const isLastScene = sceneIndex === scenes.length - 1;
-  return <div className="lesson-mission"><div className="lesson-goals"><span>Mission goals</span><ul>{(lesson.learningGoals ?? []).map((goal, index) => <li key={index}>{goal}</li>)}</ul></div>
+  return <div className="lesson-mission">{(streaming || canonicalNote) && <div className="canonical-note">{streaming ? `✦ ${streamStatus || "Adding the next lesson part…"}` : canonicalNote}</div>}{(lesson.learningGoals ?? []).length > 0 && <div className="lesson-goals"><span>Mission goals</span><ul>{(lesson.learningGoals ?? []).map((goal, index) => <li key={index}>{goal}</li>)}</ul></div>}
     <article className="lesson-scene"><header><span>Scene {sceneIndex + 1} of {scenes.length}</span><h2>{asText(scene.sceneTitle?.text, asText(lesson.title?.text, "Mission scene"))}</h2></header><p className="scene-narration">{scene.narration}</p>{points.length > 0 && <ul className="scene-points">{points.map((point, index) => <li key={index}>{asText(point.text)}</li>)}</ul>}{layer.deepExplanation ? <div className="scene-deep"><b>Look closer</b><p>{asText((layer.deepExplanation as Item).text)}</p></div> : null}{layer.whyItMatters ? <div className="scene-matters"><b>Why it matters</b><p>{asText((layer.whyItMatters as Item).text)}</p></div> : null}{layer.activity ? <div className="scene-activity"><b>Your move</b><p>{asText((layer.activity as Item).text)}</p></div> : null}</article>
     {isLastScene && <LessonExtras lesson={lesson} />}
     <div className="scene-controls"><button disabled={sceneIndex === 0} onClick={() => setSceneIndex(sceneIndex - 1)}>← Back</button><div>{scenes.map((_, index) => <button aria-label={`Scene ${index + 1}`} className={index === sceneIndex ? "active" : ""} key={index} onClick={() => setSceneIndex(index)} />)}</div>{!isLastScene ? <button onClick={() => setSceneIndex(sceneIndex + 1)}>Next →</button> : completed ? <strong>✓ Mission saved</strong> : <button onClick={onFinish}>Finish & save →</button>}</div></div>;
