@@ -255,6 +255,7 @@ app.include_router(admin_router)
 app.include_router(learning_plan_router)
 app.include_router(genui_router)
 app.include_router(standards_router)
+app.include_router(animated_lessons_router)
 # ── /brain/* prefix mounts (Vercel proxy: /brain/:path* → Railway /:path*) ──
 # Auth endpoints (for cookie-based auth)
 app.include_router(auth_router, prefix="/brain")
