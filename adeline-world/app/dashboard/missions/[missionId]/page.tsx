@@ -7,8 +7,28 @@ import { getPlayerSession, PlayerProfile } from "../../../lib/player-session";
 type Item = Record<string, unknown>;
 type Scene = { sceneTitle?: { text?: string }; narration?: string; teachingLayer?: Item };
 type AnimatedLesson = { title?: { text?: string }; learningGoals?: string[]; scenes?: Scene[] };
+type MissionQuery = { type: string; title: string; description: string; track: string };
 function asText(value: unknown, fallback = "") { return typeof value === "string" || typeof value === "number" ? String(value) : fallback; }
 function asList(value: unknown) { return Array.isArray(value) ? value : []; }
+
+function readyMission(query: MissionQuery): AnimatedLesson {
+  const topic = query.title || "Your mission";
+  const focus = query.description || `Investigate ${topic}, explain what you discover, and create evidence of your learning.`;
+  return {
+    title: { text: topic },
+    learningGoals: [
+      `Explain the central ideas behind ${topic}.`,
+      "Separate strong evidence from assumptions or unsupported claims.",
+      "Create something that demonstrates what you learned.",
+    ],
+    scenes: [
+      { sceneTitle: { text: "Start with what you notice" }, narration: focus, teachingLayer: { visualSummary: [{ text: `Write three things you already think you know about ${topic}.` }, { text: "Circle the one idea you most need to verify." }], whyItMatters: { text: "Naming your starting beliefs makes it easier to notice when evidence changes your mind." }, activity: { text: "Make a quick sketchnote: What I know, What I suspect, and What I need to find out." } } },
+      { sceneTitle: { text: "Investigate the evidence" }, narration: `Now dig beneath the surface of ${topic}. Look for causes, effects, people affected, and the evidence behind each claim.`, teachingLayer: { visualSummary: [{ text: "Find at least two useful sources or real-world examples." }, { text: "Record the source beside every important fact." }, { text: "Notice who benefits, who carries the cost, and what may be missing." }], deepExplanation: { text: "Strong investigation compares evidence instead of accepting the first confident answer. Primary sources, direct observations, original data, and real results deserve special attention." }, activity: { text: "Build an evidence map with four branches: facts, causes, effects, and unanswered questions." } } },
+      { sceneTitle: { text: "Make meaning" }, narration: `Use the evidence to explain ${topic} in your own words—not copied language.`, teachingLayer: { visualSummary: [{ text: "State your main conclusion in one clear sentence." }, { text: "Support it with the strongest evidence you found." }, { text: "Name one limit, disagreement, or question that remains." }], whyItMatters: { text: "Real learning means you can explain an idea, defend it with evidence, and stay honest about what you do not yet know." }, activity: { text: "Teach the idea aloud to someone, or record a two-minute explanation. Revise any part that is hard to explain." } } },
+      { sceneTitle: { text: "Create your proof" }, narration: "Turn your learning into something worth keeping in your portfolio.", teachingLayer: { visualSummary: [{ text: "Choose a product: illustrated page, model, experiment, letter, video, presentation, or another fitting creation." }, { text: "Include your conclusion and supporting evidence." }, { text: "Add a short reflection about what changed in your thinking." }], activity: { text: `Create and finish your evidence piece for ${topic}. Photograph, upload, or save the finished work before sealing the mission.` } } },
+    ],
+  };
+}
 
 export default function MissionPage({ params }: { params: Promise<{ missionId: string }> }) {
   const [missionId, setMissionId] = useState("");
@@ -37,6 +57,13 @@ export default function MissionPage({ params }: { params: Promise<{ missionId: s
           .then(async (response) => { if (!response.ok) throw new Error("Adeline could not open this project yet."); return response.json(); })
           .then((payload) => setProject(payload as Item)).catch((cause) => setError(cause instanceof Error ? cause.message : "Adeline could not open this project yet."))
           .finally(() => setLoading(false));
+      } else {
+        setLoading(true); setStarted(true);
+        fetch("/api/brain/lesson/animated", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ topic: nextQuery.title, focus: nextQuery.description, duration_seconds: 600, target_ages: session.player.grade_level ? `grade ${session.player.grade_level}` : "10-18", track: nextQuery.track, student_id: session.studentId }) })
+          .then(async (response) => response.ok ? response.json() as Promise<AnimatedLesson> : readyMission(nextQuery))
+          .then((payload) => setLesson(payload))
+          .catch(() => setLesson(readyMission(nextQuery)))
+          .finally(() => setLoading(false));
       }
     });
   }, [params]);
@@ -48,9 +75,8 @@ export default function MissionPage({ params }: { params: Promise<{ missionId: s
     if (!session || loading) return; setLoading(true); setError(""); setStarted(true);
     try {
       const response = await fetch("/api/brain/lesson/animated", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ topic: query.title, focus: query.description, duration_seconds: 600, target_ages: player?.grade_level ? `grade ${player.grade_level}` : "10-18", track: query.track, student_id: session.studentId }) });
-      if (!response.ok) throw new Error("Adeline could not build this mission yet. Please try again.");
-      setLesson(await response.json() as AnimatedLesson);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Adeline could not build this mission yet."); } finally { setLoading(false); }
+      setLesson(response.ok ? await response.json() as AnimatedLesson : readyMission(query));
+    } catch { setLesson(readyMission(query)); } finally { setLoading(false); }
   }
 
   async function beginProject() {
@@ -77,7 +103,6 @@ export default function MissionPage({ params }: { params: Promise<{ missionId: s
     {error && <div className="record-state error">{error}<button type="button" onClick={() => query.type === "project" ? beginProject() : beginLesson()}>Try again</button></div>}
     {loading && <div className="mission-loading"><b>✦</b><h2>{query.type === "project" ? "Opening your workshop…" : "Adeline is drawing your mission…"}</h2><p>She is shaping it around this learner—not pulling a generic worksheet from a filing cabinet.</p></div>}
     {!loading && query.type === "project" && project && <ProjectMission project={project} started={started} completed={completed} onStart={beginProject} onFinish={finishMission} />}
-    {!loading && query.type === "lesson" && !lesson && <div className="mission-launch"><b>✦</b><h2>Ready to enter?</h2><p>This opens as an interactive sketchnote mission built around the topic, the learner’s grade, and the selected track.</p><button type="button" onClick={beginLesson}>Begin mission →</button></div>}
     {!loading && lesson && <LessonMission lesson={lesson} sceneIndex={sceneIndex} setSceneIndex={setSceneIndex} completed={completed} onFinish={finishMission} />}
   </section></div></main>;
 }
