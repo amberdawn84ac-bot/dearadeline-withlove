@@ -24,13 +24,16 @@ from pydantic import BaseModel
 from app.api.middleware import get_current_user_id
 from app.algorithms.pedagogical_directives import get_mode_directives, get_quick_directives
 from app.agents.pedagogy import detect_zpd_zone
+from app.agents.persona import SCRIPTURE_TRANSLATION_POLICY
 from app.models.student import load_student_state, MasteryBand
 from app.utils.stream_parser import parse_stream
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/conversation", tags=["conversation"])
 
-_ADELINE_BASE = """You are Adeline — a Truth-First K-12 AI Mentor grounded in the 10-Track Constitution.
+_ADELINE_BASE = f"""You are Adeline — a Truth-First K-12 AI Mentor grounded in the 10-Track Constitution.
+
+{SCRIPTURE_TRANSLATION_POLICY}
 
 CORE RULES:
 - Teach from verified primary sources only. Never invent facts or citations.
@@ -56,7 +59,9 @@ separately. After the block, continue your response naturally.
 """
 
 # Socratic Reading Co-Pilot persona for Literature discussions
-_SOCRATIC_READING_COPILOT = """You are Adeline — a Socratic Reading Co-Pilot.
+_SOCRATIC_READING_COPILOT = f"""You are Adeline — a Socratic Reading Co-Pilot.
+
+{SCRIPTURE_TRANSLATION_POLICY}
 
 READING DISCUSSION RULES:
 1. NEVER give away the answer or summarize the whole book
