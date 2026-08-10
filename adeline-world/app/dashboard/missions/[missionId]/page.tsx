@@ -156,6 +156,7 @@ export default function MissionPage({ params }: { params: Promise<{ missionId: s
     setLoading(true); setStreaming(true); setStarted(true); setError(""); setStreamStatus("Checking the curriculum library…"); setCanonicalNote(""); setSceneIndex(0);
     setLesson({ title: { text: missionQuery.title }, learningGoals: [], scenes: [] });
     let receivedBlocks = 0;
+    const isChildrenLesson = /children|kids|young people/i.test(missionQuery.title) && /changed|change|history/i.test(missionQuery.title);
     try {
       const response = await fetch("/api/brain/lesson/stream", {
         method: "POST",
@@ -185,8 +186,14 @@ export default function MissionPage({ params }: { params: Promise<{ missionId: s
           if (!dataLine) continue;
           const payload = JSON.parse(dataLine.slice(5).trim()) as Item;
           if (payload.type === "status") setStreamStatus(asText(payload.message, "Preparing the next lesson part…"));
+          if (payload.type === "error") throw new Error(asText(payload.message, "Adeline could not open this curriculum lesson."));
           if (payload.type === "block" && payload.block && typeof payload.block === "object") {
-            const scene = blockToScene(payload.block as Item, receivedBlocks);
+            const block = payload.block as Item;
+            const content = asText(block.content);
+            if (/being carefully prepared by our teaching team|status:\s*awaiting review/i.test(content)) {
+              throw new Error("This lesson is still under review and does not contain the teaching yet.");
+            }
+            const scene = blockToScene(block, receivedBlocks);
             receivedBlocks += 1;
             setLesson((current) => ({ ...(current ?? {}), scenes: [...(current?.scenes ?? []), scene] }));
             setLoading(false);
@@ -194,7 +201,7 @@ export default function MissionPage({ params }: { params: Promise<{ missionId: s
           }
           if (payload.type === "done") {
             const fromCanonical = payload.from_canonical === true;
-            setCanonicalNote(fromCanonical ? "✓ Verified canonical lesson · adapted for this learner" : "✓ New master lesson created · saved to the canonical curriculum");
+            setCanonicalNote(fromCanonical ? "✓ Verified canonical lesson · adapted for this learner" : "✓ New master lesson prepared for the canonical curriculum");
             setLesson((current) => ({ ...(current ?? {}), title: { text: asText(payload.title, missionQuery.title) } }));
           }
         }
@@ -202,7 +209,6 @@ export default function MissionPage({ params }: { params: Promise<{ missionId: s
       }
       if (receivedBlocks === 0) throw new Error("This curriculum lesson opened without teaching blocks.");
     } catch (cause) {
-      const isChildrenLesson = /children|kids|young people/i.test(missionQuery.title) && /changed|change|history/i.test(missionQuery.title);
       if (isChildrenLesson) {
         setLesson(childrenWhoChangedHistory());
         setCanonicalNote("Saved teaching copy · canonical service temporarily unavailable");
