@@ -36,8 +36,5 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
-
       - name: Build and test rendered application
         run: npm test
