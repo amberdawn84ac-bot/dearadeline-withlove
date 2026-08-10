@@ -11,8 +11,118 @@ type MissionQuery = { type: string; title: string; description: string; track: s
 function asText(value: unknown, fallback = "") { return typeof value === "string" || typeof value === "number" ? String(value) : fallback; }
 function asList(value: unknown) { return Array.isArray(value) ? value : []; }
 
+function childrenWhoChangedHistory(): AnimatedLesson {
+  return {
+    title: { text: "Children Who Changed History" },
+    learningGoals: [
+      "Describe how young people have changed laws, public opinion, education, and human rights.",
+      "Compare the courage, strategies, and lasting impact of five young changemakers.",
+      "Explain why history sometimes celebrates one person while nearly forgetting another.",
+    ],
+    scenes: [
+      {
+        sceneTitle: { text: "History has never belonged only to adults" },
+        narration: "Children are often described as the people who will change the future. History shows something stronger: children have already changed their own present. They challenged segregation, invented a new reading system, confronted fear between nations, and forced adults to face injustice.",
+        teachingLayer: {
+          visualSummary: [
+            { text: "A child can recognize an injustice before having the legal power to fix it." },
+            { text: "Change usually requires courage plus a useful action: refusing, writing, creating, speaking, or enduring." },
+            { text: "Young changemakers rarely acted alone; families, teachers, lawyers, journalists, and communities helped turn courage into lasting change." },
+          ],
+          whyItMatters: { text: "Age affects a person's power, but it does not erase their insight, responsibility, or ability to influence the world." },
+          activity: { text: "As you meet each person, keep three sketchnote symbols: the barrier they faced, the action they took, and the change that followed." },
+        },
+      },
+      {
+        sceneTitle: { text: "Louis Braille: turning darkness into language" },
+        narration: "Louis Braille was born in France in 1809 and lost his sight after a childhood accident. At school, the few raised-letter books available to blind students were enormous and slow to read. At age twelve, Louis learned about a military code of raised dots called “night writing.” He simplified and rebuilt the idea. By age fifteen, in 1824, he had developed the six-dot system that became braille.",
+        teachingLayer: {
+          visualSummary: [
+            { text: "Problem: blind readers had very few practical books and could not easily write for themselves." },
+            { text: "Action: Louis redesigned a twelve-dot military code into compact six-dot cells readable by touch." },
+            { text: "Impact: braille gave blind people a powerful way to read, write, study music, and participate independently." },
+          ],
+          deepExplanation: { text: "Braille was not immediately accepted by authorities. The school where Louis taught officially adopted it only after his death. A good invention can be resisted when institutions are attached to familiar methods—even when the people using the new method know it works better." },
+          activity: { text: "Feel the logic: a braille cell has six possible dot positions. Sketch a 2-by-3 cell and invent three tactile symbols. What makes a symbol easy or difficult to distinguish by touch?" },
+        },
+      },
+      {
+        sceneTitle: { text: "Claudette Colvin: nine months before Rosa Parks" },
+        narration: "On March 2, 1955, fifteen-year-old Claudette Colvin refused to surrender her bus seat to a white passenger in Montgomery, Alabama. Police arrested her. This happened nine months before Rosa Parks made a similar refusal. Colvin later became one of four plaintiffs in Browder v. Gayle, the federal case that struck down segregation on Montgomery buses.",
+        teachingLayer: {
+          visualSummary: [
+            { text: "Problem: Jim Crow laws enforced racial separation and denied Black citizens equal treatment." },
+            { text: "Action: Claudette refused to cooperate with an unjust rule and later gave testimony in federal court." },
+            { text: "Impact: Browder v. Gayle ended legal segregation on Montgomery's public buses in 1956." },
+          ],
+          deepExplanation: { text: "Movement leaders did not make Colvin the public face of the bus boycott. They believed an adult with Rosa Parks's reputation would be harder for segregationists to attack. That strategy helped the campaign, but it also meant Colvin's role was minimized for decades. History is shaped both by what happened and by which stories institutions choose to repeat." },
+          whyItMatters: { text: "Colvin shows that a young person can be central to legal change even when the simplified version of history leaves her out." },
+          activity: { text: "Compare two kinds of power: Colvin's personal refusal and her later courtroom testimony. Which challenged the system directly, and which helped change the law?" },
+        },
+      },
+      {
+        sceneTitle: { text: "Ruby Bridges: six years old at the schoolhouse door" },
+        narration: "On November 14, 1960, six-year-old Ruby Bridges entered William Frantz Elementary School in New Orleans. A federal court had ordered the school to integrate. Federal marshals escorted Ruby past an angry crowd. Many white parents removed their children, and for a time teacher Barbara Henry taught Ruby alone in a classroom.",
+        teachingLayer: {
+          visualSummary: [
+            { text: "Problem: schools remained segregated even after the Supreme Court ruled school segregation unconstitutional in Brown v. Board of Education." },
+            { text: "Action: Ruby and her family followed the court order despite threats, isolation, and public hostility." },
+            { text: "Impact: her attendance became a visible step in enforcing school integration in the South." },
+          ],
+          deepExplanation: { text: "Ruby did not create the court case or command the marshals, but the law meant little until a real child walked through the door. Legal victories and lived reality are different stages of change. Enforcement, personal courage, and supportive adults were all necessary." },
+          activity: { text: "Make a cause-and-effect chain using these pieces: Brown decision → federal court order → marshals → Ruby enters → school integration becomes real. Add one obstacle at each step." },
+        },
+      },
+      {
+        sceneTitle: { text: "Samantha Smith: a letter across the Cold War" },
+        narration: "In 1982, ten-year-old Samantha Smith of Maine wrote to Soviet leader Yuri Andropov. The United States and Soviet Union possessed nuclear weapons, and many families feared nuclear war. Samantha asked why the Soviet Union wanted to conquer the world—or whether that accusation was false—and asked what Andropov would do to prevent war. He replied and invited her to visit the Soviet Union in 1983.",
+        teachingLayer: {
+          visualSummary: [
+            { text: "Problem: Cold War propaganda and fear made people on each side imagine the other only as an enemy." },
+            { text: "Action: Samantha asked a direct, human question instead of accepting frightening claims without examination." },
+            { text: "Impact: her visit received international attention and made ordinary Soviet and American families more visible to one another." },
+          ],
+          deepExplanation: { text: "Samantha did not end the Cold War, and governments also used public relations for their own purposes. Her importance was different: she demonstrated citizen diplomacy—the power of ordinary people to create contact when leaders speak mainly through threats." },
+          activity: { text: "Write one serious question you would ask a powerful leader today. Make it specific enough that a vague slogan would not answer it." },
+        },
+      },
+      {
+        sceneTitle: { text: "Malala Yousafzai: insisting that girls belong in school" },
+        narration: "Malala Yousafzai grew up in Pakistan's Swat Valley. When the Pakistani Taliban restricted girls' education, she spoke publicly and, at age eleven, wrote an anonymous BBC Urdu diary about life under their rule. In 2012, when she was fifteen, a gunman shot her on a school bus. She survived and continued advocating for education. In 2014, at seventeen, she became the youngest Nobel Peace Prize laureate.",
+        teachingLayer: {
+          visualSummary: [
+            { text: "Problem: armed extremists tried to remove girls from public education through rules, threats, and violence." },
+            { text: "Action: Malala documented what was happening and continued speaking after an attempt to silence her." },
+            { text: "Impact: her story strengthened international attention and funding for girls' education, including through the Malala Fund." },
+          ],
+          deepExplanation: { text: "Malala's fame did not single-handedly solve unequal access to education. Millions of local students, parents, and teachers do less visible work. A responsible history lesson honors the symbol while remembering the wider movement." },
+          activity: { text: "Explain the difference between awareness and structural change. What can a famous speech accomplish, and what still requires schools, safety, money, laws, and local leadership?" },
+        },
+      },
+      {
+        sceneTitle: { text: "The pattern: courage becomes change through a pathway" },
+        narration: "These children did different things in different centuries, but their stories share a pattern. Each encountered a barrier. Each chose an action available to them. Other people or institutions carried that action farther. The result became a tool, legal ruling, integrated school, human connection, or worldwide movement.",
+        teachingLayer: {
+          visualSummary: [
+            { text: "Louis Braille: exclusion → invention → literacy system." },
+            { text: "Claudette Colvin: segregation → refusal and testimony → court victory." },
+            { text: "Ruby Bridges: ignored ruling → brave attendance → enforced integration." },
+            { text: "Samantha Smith: nuclear fear → honest letter → citizen diplomacy." },
+            { text: "Malala Yousafzai: denied education → testimony and advocacy → global movement." },
+          ],
+          whyItMatters: { text: "The lesson is not that every child must become famous. It is that noticing clearly, acting faithfully, and joining with others can move something that looked immovable." },
+          activity: { text: "Choose two of the five. Create a side-by-side sketchnote showing barrier, action, allies, risk, and lasting change. Finish with one paragraph: Which part of change depends on individual courage, and which part depends on community or law?" },
+        },
+      },
+    ],
+  };
+}
+
 function readyMission(query: MissionQuery): AnimatedLesson {
   const topic = query.title || "Your mission";
+  if (/children|kids|young people/i.test(topic) && /changed|change|history/i.test(topic)) {
+    return childrenWhoChangedHistory();
+  }
   const focus = query.description || `Investigate ${topic}, explain what you discover, and create evidence of your learning.`;
   return {
     title: { text: topic },
