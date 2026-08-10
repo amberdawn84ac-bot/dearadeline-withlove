@@ -24,7 +24,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
       headers,
       body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.text(),
       cache: "no-store",
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(120_000),
     });
     const responseHeaders = new Headers();
     const upstreamType = upstream.headers.get("content-type");
