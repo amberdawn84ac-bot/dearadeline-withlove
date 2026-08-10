@@ -6,10 +6,30 @@ import { getPlayerSession, PlayerProfile } from "../../../lib/player-session";
 
 type Item = Record<string, unknown>;
 type Scene = { sceneTitle?: { text?: string }; narration?: string; teachingLayer?: Item };
-type AnimatedLesson = { title?: { text?: string }; learningGoals?: string[]; scenes?: Scene[] };
+type AnimatedLesson = {
+  title?: { text?: string };
+  learningGoals?: string[];
+  scenes?: Scene[];
+  vocabulary?: Item[];
+  assessment?: Item[];
+  extensionActivities?: Item[];
+};
 type MissionQuery = { type: string; title: string; description: string; track: string };
 function asText(value: unknown, fallback = "") { return typeof value === "string" || typeof value === "number" ? String(value) : fallback; }
 function asList(value: unknown) { return Array.isArray(value) ? value : []; }
+
+function adelineFocus(query: MissionQuery) {
+  return [
+    query.description,
+    "Teach the subject itself thoroughly before asking the learner to research, write, build, or respond.",
+    "Use Adeline's real voice: warm, sharp-witted, conversational, and never formulaic or childish.",
+    "Ground factual claims in specific evidence. Name the real people, dates, documents, laws, experiments, measurements, institutions, and incentives involved.",
+    "For history and justice: do not sanitize. Show how events unfolded, who held power, who profited, who suffered, what the original records show, and how people created change.",
+    "Distinguish verified evidence from interpretation. Cite primary sources inline whenever possible and say plainly when the record is uncertain.",
+    "Work comes after instruction. Activities must have purpose: help someone, solve a real problem, reveal understanding, or create a portfolio-worthy accomplishment. No busywork.",
+    "Maintain a Biblical worldview naturally: every person has inherent worth, knowledge without love is empty, power needs accountability, and truth does not fear examination.",
+  ].filter(Boolean).join("\n");
+}
 
 function childrenWhoChangedHistory(): AnimatedLesson {
   return {
@@ -169,7 +189,7 @@ export default function MissionPage({ params }: { params: Promise<{ missionId: s
           .finally(() => setLoading(false));
       } else {
         setLoading(true); setStarted(true);
-        fetch("/api/brain/lesson/animated", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ topic: nextQuery.title, focus: nextQuery.description, duration_seconds: 600, target_ages: session.player.grade_level ? `grade ${session.player.grade_level}` : "10-18", track: nextQuery.track, student_id: session.studentId }) })
+        fetch("/api/brain/brain/lesson/animated", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ topic: nextQuery.title, focus: adelineFocus(nextQuery), duration_seconds: 600, target_ages: session.player.grade_level ? `grade ${session.player.grade_level}` : "10-18", track: nextQuery.track, student_id: session.studentId }) })
           .then(async (response) => response.ok ? response.json() as Promise<AnimatedLesson> : readyMission(nextQuery))
           .then((payload) => setLesson(payload))
           .catch(() => setLesson(readyMission(nextQuery)))
@@ -184,7 +204,7 @@ export default function MissionPage({ params }: { params: Promise<{ missionId: s
   async function beginLesson() {
     if (!session || loading) return; setLoading(true); setError(""); setStarted(true);
     try {
-      const response = await fetch("/api/brain/lesson/animated", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ topic: query.title, focus: query.description, duration_seconds: 600, target_ages: player?.grade_level ? `grade ${player.grade_level}` : "10-18", track: query.track, student_id: session.studentId }) });
+      const response = await fetch("/api/brain/brain/lesson/animated", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ topic: query.title, focus: adelineFocus(query), duration_seconds: 600, target_ages: player?.grade_level ? `grade ${player.grade_level}` : "10-18", track: query.track, student_id: session.studentId }) });
       setLesson(response.ok ? await response.json() as AnimatedLesson : readyMission(query));
     } catch { setLesson(readyMission(query)); } finally { setLoading(false); }
   }
@@ -230,7 +250,19 @@ function ProjectMission({ project, started, completed, onStart, onFinish }: { pr
 function LessonMission({ lesson, sceneIndex, setSceneIndex, completed, onFinish }: { lesson: AnimatedLesson; sceneIndex: number; setSceneIndex: (index: number) => void; completed: boolean; onFinish: () => void }) {
   const scenes = lesson.scenes ?? [], scene = scenes[sceneIndex]; if (!scene) return <div className="record-state error">This mission opened without any scenes.</div>;
   const layer = scene.teachingLayer ?? {}, points = asList(layer.visualSummary) as Item[];
+  const isLastScene = sceneIndex === scenes.length - 1;
   return <div className="lesson-mission"><div className="lesson-goals"><span>Mission goals</span><ul>{(lesson.learningGoals ?? []).map((goal, index) => <li key={index}>{goal}</li>)}</ul></div>
     <article className="lesson-scene"><header><span>Scene {sceneIndex + 1} of {scenes.length}</span><h2>{asText(scene.sceneTitle?.text, asText(lesson.title?.text, "Mission scene"))}</h2></header><p className="scene-narration">{scene.narration}</p>{points.length > 0 && <ul className="scene-points">{points.map((point, index) => <li key={index}>{asText(point.text)}</li>)}</ul>}{layer.deepExplanation ? <div className="scene-deep"><b>Look closer</b><p>{asText((layer.deepExplanation as Item).text)}</p></div> : null}{layer.whyItMatters ? <div className="scene-matters"><b>Why it matters</b><p>{asText((layer.whyItMatters as Item).text)}</p></div> : null}{layer.activity ? <div className="scene-activity"><b>Your move</b><p>{asText((layer.activity as Item).text)}</p></div> : null}</article>
-    <div className="scene-controls"><button disabled={sceneIndex === 0} onClick={() => setSceneIndex(sceneIndex - 1)}>← Back</button><div>{scenes.map((_, index) => <button aria-label={`Scene ${index + 1}`} className={index === sceneIndex ? "active" : ""} key={index} onClick={() => setSceneIndex(index)} />)}</div>{sceneIndex < scenes.length - 1 ? <button onClick={() => setSceneIndex(sceneIndex + 1)}>Next →</button> : completed ? <strong>✓ Mission saved</strong> : <button onClick={onFinish}>Finish & save →</button>}</div></div>;
+    {isLastScene && <LessonExtras lesson={lesson} />}
+    <div className="scene-controls"><button disabled={sceneIndex === 0} onClick={() => setSceneIndex(sceneIndex - 1)}>← Back</button><div>{scenes.map((_, index) => <button aria-label={`Scene ${index + 1}`} className={index === sceneIndex ? "active" : ""} key={index} onClick={() => setSceneIndex(index)} />)}</div>{!isLastScene ? <button onClick={() => setSceneIndex(sceneIndex + 1)}>Next →</button> : completed ? <strong>✓ Mission saved</strong> : <button onClick={onFinish}>Finish & save →</button>}</div></div>;
+}
+
+function LessonExtras({ lesson }: { lesson: AnimatedLesson }) {
+  const vocabulary = lesson.vocabulary ?? [], assessment = lesson.assessment ?? [], extensions = lesson.extensionActivities ?? [];
+  if (!vocabulary.length && !assessment.length && !extensions.length) return null;
+  return <section className="lesson-extras">
+    {vocabulary.length > 0 && <div><h2>Words worth keeping</h2><dl>{vocabulary.map((item, index) => <div key={index}><dt>{asText(item.word)}</dt><dd>{asText(item.definition)}{item.pronunciation ? <small>Say it: {asText(item.pronunciation)}</small> : null}</dd></div>)}</dl></div>}
+    {assessment.length > 0 && <div><h2>Check your understanding</h2><ol>{assessment.map((item, index) => <li key={index}><p>{asText(item.question)}</p>{item.answer ? <details><summary>Check the answer</summary><span>{asText(item.answer)}</span></details> : null}</li>)}</ol></div>}
+    {extensions.length > 0 && <div><h2>Take it into the real world</h2>{extensions.map((item, index) => <article key={index}><h3>{asText(item.title, `Extension ${index + 1}`)}</h3><p>{asText(item.instructions)}</p>{asList(item.materials).length > 0 && <small>Materials: {asList(item.materials).map((material) => asText(material)).join(", ")}</small>}</article>)}</div>}
+  </section>;
 }
