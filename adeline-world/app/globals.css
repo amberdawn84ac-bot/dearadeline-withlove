@@ -540,7 +540,17 @@ body { margin: 0; background: var(--paper); color: var(--ink); font-family: 'Nun
 .scene-deep,.scene-matters,.scene-activity { margin-top: 15px; padding: 17px 19px; border-radius: 17px; background: #edf3e9; }.scene-matters { background: #fff1db; }.scene-activity { background: #f7e9ef; }.lesson-scene p { margin-bottom: 0; line-height: 1.55; }
 .scene-controls { padding: 24px 4px 0; display: flex; align-items: center; justify-content: space-between; gap: 15px; }.scene-controls>button { padding: 10px 15px; border: 1px solid #cfc2ab; border-radius: 12px; background: white; color: var(--forest); font-weight: 900; cursor: pointer; }.scene-controls>button:disabled { opacity: .35; }
 .scene-controls>div { display: flex; gap: 6px; }.scene-controls>div button { width: 10px; height: 10px; padding: 0; border: 0; border-radius: 50%; background: #d7d1c5; cursor: pointer; }.scene-controls>div button.active { width: 22px; border-radius: 99px; background: var(--gold); }.scene-controls strong { color: var(--forest); }
+.lesson-extras { margin-top: 28px; display: grid; gap: 20px; }
+.lesson-extras>div { padding: 25px 27px; border: 1px solid #e3d8c6; border-radius: 22px; background: #fffdf8; }
+.lesson-extras h2 { margin: 0 0 16px; color: var(--forest); font: 400 29px 'Emilys Candy',cursive; }
+.lesson-extras dl { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.lesson-extras dl>div { padding: 12px 14px; border-radius: 14px; background: #eef4ea; }
+.lesson-extras dt { color: #8c533f; font-weight: 900; }.lesson-extras dd { margin: 4px 0 0; color: #4d5e51; line-height: 1.45; }
+.lesson-extras dd small { display: block; margin-top: 4px; color: #7d817c; }
+.lesson-extras ol { margin: 0; padding-left: 22px; }.lesson-extras ol li { margin: 13px 0; padding-left: 5px; color: #435247; }.lesson-extras ol p { margin: 0 0 5px; font-weight: 800; }
+.lesson-extras details { padding: 8px 11px; border-radius: 10px; background: #f4ead9; }.lesson-extras summary { color: #765837; font-size: 12px; font-weight: 900; cursor: pointer; }.lesson-extras details span { display: block; margin-top: 7px; line-height: 1.5; }
+.lesson-extras article { margin-top: 11px; padding: 15px 17px; border-left: 4px solid var(--gold); border-radius: 5px 15px 15px 5px; background: #fff5e5; }.lesson-extras h3 { margin: 0; color: var(--forest); }.lesson-extras article p { margin: 7px 0; line-height: 1.5; }.lesson-extras article small { color: #7d6648; font-weight: 800; }
 
 @media (max-width: 560px) {
-  .mission-brief { padding: 22px 24px 30px; }.mission-back { margin-left: 24px; }.mission-body,.lesson-mission { padding: 22px 18px 32px; }.mission-actions { align-items: flex-start; flex-direction: column; }.lesson-scene { min-height: 360px; padding: 24px 19px; }.scene-controls>div { display: none; }
+  .mission-brief { padding: 22px 24px 30px; }.mission-back { margin-left: 24px; }.mission-body,.lesson-mission { padding: 22px 18px 32px; }.mission-actions { align-items: flex-start; flex-direction: column; }.lesson-scene { min-height: 360px; padding: 24px 19px; }.scene-controls>div { display: none; }.lesson-extras>div { padding: 20px 18px; }.lesson-extras dl { grid-template-columns: 1fr; }
 }
