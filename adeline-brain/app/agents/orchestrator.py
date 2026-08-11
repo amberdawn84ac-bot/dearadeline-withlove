@@ -47,6 +47,7 @@ from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL, GOOGLE_API
 from app.algorithms.pedagogical_directives import generate_pedagogical_directives, get_quick_directives
 from app.agents.pedagogy import ZPDZone
 from app.models.student import MasteryBand
+from app.curriculum.family_style import FAMILY_CANONICAL_AUTHORING_RULES
 
 _ANTHROPIC_MODEL = ADELINE_MODEL
 logger = logging.getLogger(__name__)
@@ -479,7 +480,6 @@ async def _synthesize_content(
     if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return raw_content
 
-    grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
     persona    = _TRACK_PERSONA.get(request.track, "a knowledgeable mentor")
     track_name = request.track.value.replace("_", " ").title()
 
@@ -494,8 +494,10 @@ async def _synthesize_content(
     # Build base system prompt
     system_prompt = (
         f"You are Adeline — {persona}\n\n"
-        f"You are writing for a {grade_desc} student in a Christian homeschool family.\n\n"
+        "You are authoring durable canonical teaching at full adult/high-school depth "
+        "for a Christian homeschool family. A separate adapter will scaffold it for each learner.\n\n"
         f"{_ADELINE_VOICE}\n"
+        f"{FAMILY_CANONICAL_AUTHORING_RULES}\n\n"
         "CONTENT RULES:\n"
         "• Use ONLY the provided source text — never invent facts\n"
         "• 2–3 paragraphs maximum\n"
@@ -1752,7 +1754,6 @@ async def _synthesize_literature(
             return f"Literary analysis of '{topic}' in the context of *{book_title}* by {book_author}."
         return f"Literary analysis: {topic}"
 
-    grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
     persona = _TRACK_PERSONA.get(Track.ENGLISH_LITERATURE, "a literary mentor")
 
     if book_title:
@@ -1773,8 +1774,10 @@ async def _synthesize_literature(
 
     system_prompt = (
         f"You are Adeline — {persona}\n\n"
-        f"You are writing for a {grade_desc} student in a Christian homeschool family.\n\n"
+        "You are authoring durable canonical teaching at full adult/high-school depth "
+        "for a Christian homeschool family. A separate adapter will scaffold it for each learner.\n\n"
         f"{_ADELINE_VOICE}\n"
+        f"{FAMILY_CANONICAL_AUTHORING_RULES}\n\n"
         "CONTENT RULES:\n"
         "• 2-3 paragraphs maximum\n"
         "• Discuss the text as literature — themes, craft, truth claims, worldview\n"
@@ -2141,13 +2144,14 @@ async def _synthesize_practical(request: LessonRequest) -> str:
     if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return f"Practical lesson: {request.topic}"
 
-    grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
     persona = _TRACK_PERSONA.get(request.track, "a practical mentor")
 
     system_prompt = (
         f"You are Adeline — {persona}\n\n"
-        f"You are writing for a {grade_desc} student in a Christian homeschool family.\n\n"
+        "You are authoring durable canonical teaching at full adult/high-school depth "
+        "for a Christian homeschool family. A separate adapter will scaffold it for each learner.\n\n"
         f"{_ADELINE_VOICE}\n"
+        f"{FAMILY_CANONICAL_AUTHORING_RULES}\n\n"
         "CONTENT RULES:\n"
         "• 2-3 paragraphs maximum\n"
         "• Use REAL numbers, REAL scenarios, REAL materials\n"
