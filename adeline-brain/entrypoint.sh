@@ -3,8 +3,6 @@ set -e
 
 _DB="${DIRECT_DATABASE_URL:-${POSTGRES_DSN:-$DATABASE_URL}}"
 if [ -n "$_DB" ]; then
-    echo "[entrypoint] Inspecting complete Prisma migration state..."
-    python scripts/inspect_migration_state.py
     echo "[entrypoint] Verifying initial Prisma migration state..."
     if python scripts/repair_initial_migration.py; then
         echo "[entrypoint] Initial migration is already resolved"
