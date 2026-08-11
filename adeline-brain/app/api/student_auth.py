@@ -218,7 +218,7 @@ async def register_student_account(request: Request, body: StudentRegisterReques
                     raise HTTPException(status_code=409, detail="That username is already taken.")
                 logger.warning(f"Unique violation on {e.constraint_name} during student registration")
                 raise HTTPException(status_code=409, detail="Could not create that account — please try again.")
-            except asyncpg.PostgresError as e:
+            except asyncpg.PostgresError:
                 logger.exception("Database error during student registration")
                 raise HTTPException(status_code=500, detail="Registration failed.")
 
