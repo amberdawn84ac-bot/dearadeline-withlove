@@ -26,7 +26,7 @@ from typing import Optional
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.schemas.api_models import Track
 from app.api.middleware import verify_student_access
@@ -83,6 +83,14 @@ class LessonSuggestion(BaseModel):
     standard_code: Optional[str] = None
     grade_band: Optional[str] = None
     agent: Optional[str] = None  # Which agent will handle this: Historian, Science, Discipleship
+    canonical_ready: bool = False
+    canonical_slug: Optional[str] = None
+    mission_kind: str = "learning_mission"
+    success_criteria: list[str] = Field(default_factory=list)
+    portfolio_prompt: Optional[str] = None
+    next_action: Optional[str] = None
+    personalization_reason: Optional[str] = None
+    game_blueprint: Optional[dict] = None
 
 
 class ProjectSuggestion(BaseModel):
@@ -1155,27 +1163,16 @@ async def get_learning_plan(
                 if not any(s.title == suggestion.title for s in suggestions):
                     suggestions.append(suggestion)
 
-    # 9. Sort by priority and limit
-    suggestions.sort(key=lambda s: s.priority, reverse=True)
-    suggestions = suggestions[:limit * 2]  # Keep extra for variety filtering
-
-    # 10. Ensure variety — don't show more than 2 from the same track
-    final_suggestions: list[LessonSuggestion] = []
-    track_counts: dict[str, int] = {}
-    for s in suggestions:
-        if track_counts.get(s.track, 0) < 2:
-            final_suggestions.append(s)
-            track_counts[s.track] = track_counts.get(s.track, 0) + 1
-        if len(final_suggestions) >= limit:
-            break
-
-    # If we still need more, add from remaining suggestions
-    if len(final_suggestions) < limit:
-        for s in suggestions:
-            if s not in final_suggestions:
-                final_suggestions.append(s)
-            if len(final_suggestions) >= limit:
-                break
+    # Mission Architect owns final selection and handoff: priority, variety,
+    # canonical reuse, finish line, portfolio contribution, and rationale.
+    try:
+        from app.agents.mission_team import mission_architect
+        final_suggestions = mission_architect.select_balanced(suggestions[:limit * 2], limit)
+        final_suggestions = await mission_architect.compose(final_suggestions, grade_level, interests)
+    except Exception as e:
+        logger.warning(f"[LearningPlan] Mission Architect enrichment failed (non-fatal): {e}")
+        suggestions.sort(key=lambda s: s.priority, reverse=True)
+        final_suggestions = suggestions[:limit]
 
     # 11. Fetch grade-level standards for K-8 students
     grade_standards = []
