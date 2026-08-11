@@ -61,7 +61,7 @@ def test_mission_architect_owns_priority_and_track_variety():
 
 def test_gamesmith_uses_constrained_declarative_blueprints():
     game = GameSmithAgent().blueprint_for(suggestion(), "canonical-slug", "8")
-    assert game["template"] == "route_builder"
+    assert game["template"] == "maze_quest"
     assert game["content_source"] == {"type": "canonical_lesson", "slug": "canonical-slug"}
     assert game["runtime"] == "declarative_only"
     assert game["play_time_minutes"] == 6
