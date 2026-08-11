@@ -1006,23 +1006,22 @@ async def _generate_from_knowledge(
         ),
     })
 
-    sources_text = "\n".join(f"- {s}" for s in silent_sources[:3]) if silent_sources else ""
-    enrichment = (
-        "**Dig Deeper (Optional Research Mission):**\n"
-        "Adeline taught this from her own knowledge. Want to go further? "
-        "Find a primary source document on this topic and bring it back — "
-        "she'll verify it and add it to the archive so future students benefit too."
+    # Missing archive material is Adeline's responsibility, never the learner's.
+    # The Researcher has already run before this fallback. Give the child a
+    # curiosity doorway only after substantial teaching; never ask them to
+    # complete or repair Adeline's source archive.
+    curiosity_doorway = (
+        "**Where might your curiosity lead next?**\n"
+        "Now that you have the story and context, notice which person, choice, "
+        "piece of evidence, or unanswered question you genuinely want to follow. "
+        "Bring that curiosity into the conversation and Adeline will keep teaching."
     )
-    if sources_text:
-        enrichment += f"\n\nStart by looking for:\n{sources_text}"
-
     blocks.append({
-        "block_type":  BlockType.RESEARCH_MISSION.value,
-        "content":     enrichment,
+        "block_type":  BlockType.NARRATIVE.value,
+        "content":     curiosity_doorway,
         "evidence":    [],
         "is_silenced": False,
     })
-    state["has_research_missions"] = True
 
     return blocks
 
@@ -1218,34 +1217,32 @@ Topic: {request.topic}
 
 {context_section}
 
-Write a civic history investigation lesson in two parts.
-This is educational content for a Christian homeschool curriculum — the goal is to teach
-students to read primary sources and understand how civic change happens historically.
+Write a civic history learning experience as a knowledgeable mentor responding to a curious learner.
 
-PART 1 — HISTORICAL OVERVIEW (NARRATIVE block):
-Give a clear, factual account of the historical event or policy. Include:
-• What happened, and when. Use documented facts from public records or established history.
-• Who was affected — name real historical figures where the record is clear.
-• What the documented record shows about decisions made and by whom (cite specific documents,
-  hearings, or rulings by name where possible).
-• What changed as a result — legislation passed, court ruling issued, policy reformed.
-Keep the tone of an educator presenting documented history, not an advocate.
+PART 1 — TEACH THE STORY (NARRATIVE block):
+Give a substantial, vivid, factual account before asking the learner to do anything. Include:
+• What happened, when, and what conditions made it possible.
+• The real people involved, their choices, risks, limitations, and consequences.
+• Who held power, who benefited, who carried the cost, and what the primary record shows.
+• The laws, institutions, money, lobbying, or incentives that materially shaped events.
+• How people resisted, repaired harm, or created change.
+Distinguish documented fact from interpretation. Name specific documents, testimony,
+hearings, court rulings, data, or original records where possible.
 
-PART 2 — THE CIVIC INVESTIGATION (RESEARCH_MISSION block):
-Give the student ONE specific primary-source task. Not "research the topic."
-A real, doable task using a public archive or database:
-  • "Find [specific document] at [specific archive URL] and read [specific section]."
-  • "Search [public database] for [specific filing type] related to [historical event]."
-  • "Read the congressional testimony of [historical figure] from [year] at [archive]."
-  • "Look up [landmark court case] and read the court's holding — what did the court find?"
+PART 2 — CURIOSITY DOORWAY (EXPERIENCE_INVITATION):
+Only after the teaching, invite the learner into ONE meaningful encounter with the subject:
+examine a primary source Adeline has already located and explained, reenact a decision,
+compare two real pieces of evidence, test a claim, build a model, or create something useful.
+The learner is exploring from informed curiosity. They are never repairing Adeline's archive
+or being asked to research material that Adeline failed to teach.
 
 Format your response as:
 
 NARRATIVE:
-[The investigation brief — plain, direct, no academic language]
+[Complete mentor-led teaching — plain, vivid, specific, and substantial]
 
-RESEARCH_MISSION:
-[The specific task — one concrete action with a real URL or database name]
+EXPERIENCE_INVITATION:
+[One meaningful informed experience connected to what was just taught]
 
 {_ADELINE_VOICE}
 """
@@ -1275,11 +1272,11 @@ RESEARCH_MISSION:
         state["blocks"] = blocks
         return state
 
-    # Parse NARRATIVE and RESEARCH_MISSION sections
+    # Parse complete teaching followed by an informed experience invitation.
     narrative_text = ""
     mission_text   = ""
-    if "RESEARCH_MISSION:" in raw_output:
-        parts          = raw_output.split("RESEARCH_MISSION:", 1)
+    if "EXPERIENCE_INVITATION:" in raw_output:
+        parts          = raw_output.split("EXPERIENCE_INVITATION:", 1)
         narrative_text = parts[0].replace("NARRATIVE:", "").strip()
         mission_text   = parts[1].strip()
     else:
@@ -1295,12 +1292,12 @@ RESEARCH_MISSION:
 
     if mission_text:
         blocks.append({
-            "block_type":  BlockType.RESEARCH_MISSION.value,
+            "block_type":  BlockType.NARRATIVE.value,
+            "title":       "Follow your curiosity",
             "content":     mission_text,
             "evidence":    [],
             "is_silenced": False,
         })
-        state["has_research_missions"] = True
 
     if not blocks:
         logger.info(
@@ -1569,7 +1566,7 @@ async def science_agent(state: AdelineState) -> AdelineState:
     if is_creation_science and blocks:
         mol_block = await _synthesize_molecule_sim_block(request, blocks[0].get("content", ""))
         if mol_block:
-            logger.info(f"[ScienceAgent] Injected MoleculeSimulator block")
+            logger.info("[ScienceAgent] Injected MoleculeSimulator block")
             blocks.append(mol_block)
 
     logger.info(f"[ScienceAgent] PRE-RENDER: {len(blocks)} blocks")
@@ -1865,23 +1862,23 @@ async def practical_agent(state: AdelineState) -> AdelineState:
 
     # ── CREATIVE_ECONOMY: always inject a ProjectBuilder GenUI block ──────────
     if request.track.value == "CREATIVE_ECONOMY" and blocks:
-        logger.info(f"[PracticalAgent] Injecting ProjectBuilder for CREATIVE_ECONOMY")
+        logger.info("[PracticalAgent] Injecting ProjectBuilder for CREATIVE_ECONOMY")
         project_block = await _synthesize_creative_project_block(request, blocks[0].get("content", ""))
         if project_block:
-            logger.info(f"[PracticalAgent] ProjectBuilder injection successful")
+            logger.info("[PracticalAgent] ProjectBuilder injection successful")
             blocks.append(project_block)
         else:
-            logger.warning(f"[PracticalAgent] ProjectBuilder injection failed")
+            logger.warning("[PracticalAgent] ProjectBuilder injection failed")
 
     # ── APPLIED_MATHEMATICS: inject a CodePlayground for interactive calculation ──
     if request.track.value == "APPLIED_MATHEMATICS" and blocks:
-        logger.info(f"[PracticalAgent] Injecting CodePlayground for APPLIED_MATHEMATICS")
+        logger.info("[PracticalAgent] Injecting CodePlayground for APPLIED_MATHEMATICS")
         code_block = await _synthesize_code_playground_block(request, blocks[0].get("content", ""))
         if code_block:
-            logger.info(f"[PracticalAgent] CodePlayground injection successful")
+            logger.info("[PracticalAgent] CodePlayground injection successful")
             blocks.append(code_block)
         else:
-            logger.warning(f"[PracticalAgent] CodePlayground injection failed")
+            logger.warning("[PracticalAgent] CodePlayground injection failed")
 
     logger.info(f"[PracticalAgent] PRE-RENDER: {len(blocks)} blocks")
     for i, b in enumerate(blocks):
@@ -2617,7 +2614,7 @@ async def _render_lesson(
             track=request.track.value,
             student_id=request.student_id,
         )
-        logger.info(f"[Render] CASCADE-1: Calling generate_animated_lesson")
+        logger.info("[Render] CASCADE-1: Calling generate_animated_lesson")
         sketchnote_data = await generate_animated_lesson(_alr)
         logger.info(f"[Render] CASCADE-1: AnimatedSketchnote SUCCESS - frames={len(sketchnote_data.frames)}")
         cohesive_block = {
@@ -2647,7 +2644,7 @@ async def _render_lesson(
                 track=request.track.value,
                 bkt_pL=mastery,
             )
-            logger.info(f"[Render] CASCADE-2: Calling generate_narrated_slide_data")
+            logger.info("[Render] CASCADE-2: Calling generate_narrated_slide_data")
             slide_data = await generate_narrated_slide_data(synthesis_text, _ar)
             if slide_data:
                 logger.info(f"[Render] CASCADE-2: NarratedSlide SUCCESS - slides={len(slide_data.slides)}")
@@ -2661,7 +2658,7 @@ async def _render_lesson(
                 }
                 logger.info(f"[Render] CASCADE-2 NarratedSlide OK for '{request.topic}'")
             else:
-                logger.warning(f"[Render] CASCADE-2: NarratedSlide returned None")
+                logger.warning("[Render] CASCADE-2: NarratedSlide returned None")
         except Exception as _e:
             import traceback as _tb
             logger.warning(

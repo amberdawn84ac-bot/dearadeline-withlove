@@ -319,7 +319,7 @@ async def get_student_profile(
     conn = await _get_conn()
     try:
         user = await load_student_user(conn, student_id)
-    except asyncpg.PostgresError as e:
+    except asyncpg.PostgresError:
         logger.exception("[/students/{id}/profile] DB error")
         raise HTTPException(status_code=500, detail="A database error occurred.")
     finally:
@@ -348,7 +348,7 @@ async def update_student_profile(
             if body.grade_level is not None:
                 await conn.execute('UPDATE "User" SET "gradeLevel" = $1 WHERE id = $2', body.grade_level, student_id)
         user = await load_student_user(conn, student_id)
-    except asyncpg.PostgresError as e:
+    except asyncpg.PostgresError:
         logger.exception("[/students/{id}/profile PATCH] DB error")
         raise HTTPException(status_code=500, detail="A database error occurred.")
     finally:
@@ -370,7 +370,7 @@ async def patch_xp(
             'UPDATE "User" SET xp = xp + $1 WHERE id = $2 RETURNING xp',
             body.delta, student_id,
         )
-    except asyncpg.PostgresError as e:
+    except asyncpg.PostgresError:
         logger.exception("[/students/{id}/xp] DB error")
         raise HTTPException(status_code=500, detail="A database error occurred.")
     finally:
@@ -392,7 +392,7 @@ async def patch_coins(
             'UPDATE "User" SET "adeCoins" = "adeCoins" + $1 WHERE id = $2 RETURNING "adeCoins"',
             body.delta, student_id,
         )
-    except asyncpg.PostgresError as e:
+    except asyncpg.PostgresError:
         logger.exception("[/students/{id}/coins] DB error")
         raise HTTPException(status_code=500, detail="A database error occurred.")
     finally:
@@ -410,7 +410,7 @@ async def get_season_pass(
     conn = await _get_conn()
     try:
         row = await conn.fetchrow('SELECT "seasonPass" FROM "User" WHERE id = $1', student_id)
-    except asyncpg.PostgresError as e:
+    except asyncpg.PostgresError:
         logger.exception("[/students/{id}/season-pass] DB error")
         raise HTTPException(status_code=500, detail="A database error occurred.")
     finally:
@@ -433,7 +433,7 @@ async def update_season_pass(
             'UPDATE "User" SET "seasonPass" = $1::jsonb WHERE id = $2 RETURNING "seasonPass"',
             json.dumps({"claimed_tiers": body.claimed_tiers}), student_id,
         )
-    except asyncpg.PostgresError as e:
+    except asyncpg.PostgresError:
         logger.exception("[/students/{id}/season-pass PATCH] DB error")
         raise HTTPException(status_code=500, detail="A database error occurred.")
     finally:
@@ -467,7 +467,7 @@ async def claim_student(
         )
         if not result:
             raise HTTPException(status_code=409, detail="This code is already claimed by another parent.")
-    except asyncpg.PostgresError as e:
+    except asyncpg.PostgresError:
         logger.exception("[/students/claim] DB error")
         raise HTTPException(status_code=500, detail="A database error occurred.")
     finally:

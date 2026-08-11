@@ -5,8 +5,9 @@ Reads from environment variables with a clear priority chain.
 In production (ADELINE_ENV=production), missing database credentials
 cause an immediate startup failure instead of silent fallback.
 """
-import os
+import hashlib as _hashlib
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +166,6 @@ SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 # receive that object as an HMAC secret. Only reuse the legacy value when it is
 # actually a plain shared secret. Otherwise derive a stable private student key
 # from the production database credential, which never leaves the server.
-import hashlib as _hashlib
 _student_jwt_env = os.getenv("STUDENT_JWT_SECRET", "").strip()
 _legacy_hs256_secret = SUPABASE_JWT_SECRET.strip()
 _legacy_is_jwk = (

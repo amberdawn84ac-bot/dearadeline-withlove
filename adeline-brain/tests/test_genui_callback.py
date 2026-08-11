@@ -4,27 +4,14 @@ from httpx import AsyncClient, ASGITransport
 from unittest.mock import patch, AsyncMock
 
 from app.main import app
-from app.api.middleware import get_current_user_id
+from app.api.student_auth import mint_student_token
 from app.models.student import StudentState
-
-
-def _override_auth():
-    """Dependency override: bypass JWT verification, return a fixed user ID."""
-    return "student-123"
-
-
-@pytest.fixture(autouse=True)
-def override_auth():
-    """Override get_current_user_id for all tests in this module."""
-    app.dependency_overrides[get_current_user_id] = _override_auth
-    yield
-    app.dependency_overrides.pop(get_current_user_id, None)
 
 
 @pytest.fixture
 def auth_headers():
-    """Dummy auth headers — auth is bypassed via dependency override."""
-    return {"Authorization": "Bearer test-token"}
+    """Authenticate exactly as an Adelinemobile student session does."""
+    return {"Authorization": f"Bearer {mint_student_token('student-123')}"}
 
 
 @pytest.mark.asyncio

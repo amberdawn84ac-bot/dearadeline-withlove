@@ -134,9 +134,6 @@ async def submit_standard_evidence(
     # Security: Only allow submitting for self or parent submitting for child
     if request.student_id != current_user_id:
         # Check if this is a parent submitting for their child
-        from app.api.middleware import _extract_role, _decode_jwt, _extract_bearer_token, _extract_user_id
-        from app.schemas.api_models import UserRole
-        from fastapi import Header
 
         # Get the current user's role from the JWT
         try:

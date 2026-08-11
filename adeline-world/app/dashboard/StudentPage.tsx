@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { getPlayerSession, PlayerProfile } from "../lib/player-session";
 import DashboardNav from "./DashboardNav";
 
@@ -34,7 +35,7 @@ export default function StudentPage({ kind }: { kind: PageKind }) {
   useEffect(() => {
     const session = getPlayerSession();
     if (!session) { window.location.assign("/sign-in"); return; }
-    setPlayer(session.player);
+    queueMicrotask(() => setPlayer(session.player));
     fetch(page.endpoint(session.studentId), { headers: { Authorization: `Bearer ${session.token}` }, cache: "no-store" })
       .then(async (response) => { if (!response.ok) throw new Error("This record could not be loaded yet."); return response.json(); })
       .then((payload) => setData(payload as RecordItem))
@@ -46,7 +47,7 @@ export default function StudentPage({ kind }: { kind: PageKind }) {
 
   return (
     <main className="dashboard-page">
-      <header className="dashboard-header"><a href="/">Dear Adeline</a><span>{page.title}</span><button type="button" aria-label="Learner profile">{initials}</button></header>
+      <header className="dashboard-header"><Link href="/">Dear Adeline</Link><span>{page.title}</span><button type="button" aria-label="Learner profile">{initials}</button></header>
       <div className="dashboard-layout"><DashboardNav active={kind} />
         <section className="record-page">
           <header className="record-hero"><p>{page.eyebrow}</p><h1>{page.title}</h1><span>{page.intro}</span></header>
