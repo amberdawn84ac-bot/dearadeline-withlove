@@ -1007,22 +1007,22 @@ async def _generate_from_knowledge(
     })
 
     sources_text = "\n".join(f"- {s}" for s in silent_sources[:3]) if silent_sources else ""
-    enrichment = (
-        "**Dig Deeper (Optional Research Mission):**\n"
-        "Adeline taught this from her own knowledge. Want to go further? "
-        "Find a primary source document on this topic and bring it back — "
-        "she'll verify it and add it to the archive so future students benefit too."
+    # Missing archive material is Adeline's responsibility, never the learner's.
+    # The Researcher has already run before this fallback. Give the child a
+    # curiosity doorway only after substantial teaching; never ask them to
+    # complete or repair Adeline's source archive.
+    curiosity_doorway = (
+        "**Where might your curiosity lead next?**\n"
+        "Now that you have the story and context, notice which person, choice, "
+        "piece of evidence, or unanswered question you genuinely want to follow. "
+        "Bring that curiosity into the conversation and Adeline will keep teaching."
     )
-    if sources_text:
-        enrichment += f"\n\nStart by looking for:\n{sources_text}"
-
     blocks.append({
-        "block_type":  BlockType.RESEARCH_MISSION.value,
-        "content":     enrichment,
+        "block_type":  BlockType.NARRATIVE.value,
+        "content":     curiosity_doorway,
         "evidence":    [],
         "is_silenced": False,
     })
-    state["has_research_missions"] = True
 
     return blocks
 
