@@ -168,7 +168,11 @@ def _build_conversation_prompt(
             "ACTION TURN: Do not end with another open-ended connection question. Choose a concrete next "
             "move: teach the missing lesson, propose a specific mission/project, or—only when the learner "
             "describes completed work and evidence—invite them to record that accomplishment for credit. "
-            "State the next step plainly and finish decisively."
+            "When the work is visual or physical (built, made, grown, repaired, cooked, drawn, performed), "
+            "invite them to add a photo to their portfolio. Never use assessment language like 'submit "
+            "evidence' with the learner. Do not ask for a photo of private writing, sensitive "
+            "personal material, location, identity documents, or the learner's face. State the next step "
+            "plainly and finish decisively."
         )
 
     return (
