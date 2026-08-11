@@ -30,7 +30,6 @@ from app.schemas.api_models import (
     NarrateRequest,
     DialogueRequest,
     AudioDialogueData,
-    DialogueLine,
 )
 from app.prompts.animated_sketchnote import (
     ANIMATED_SKETCHNOTE_SYSTEM_PROMPT,
