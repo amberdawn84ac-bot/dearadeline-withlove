@@ -18,6 +18,12 @@ if [ -n "$_DB" ]; then
             exit "$_REPAIR_STATUS"
         fi
     fi
+    echo "[entrypoint] Verifying historical migration baseline..."
+    _BASELINE_MIGRATIONS=$(python scripts/repair_migration_history.py --list)
+    for _MIGRATION in $_BASELINE_MIGRATIONS; do
+        echo "[entrypoint] Recording verified migration as applied: $_MIGRATION"
+        HOME=/tmp DIRECT_DATABASE_URL="$_DB" DATABASE_URL="$_DB" prisma migrate resolve --applied "$_MIGRATION" --schema /app/prisma/schema.prisma
+    done
     echo "[entrypoint] Running Prisma migrations..."
     HOME=/tmp DIRECT_DATABASE_URL="$_DB" DATABASE_URL="$_DB" timeout 120 prisma migrate deploy --schema /app/prisma/schema.prisma
 else
