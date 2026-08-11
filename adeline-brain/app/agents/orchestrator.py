@@ -1218,34 +1218,32 @@ Topic: {request.topic}
 
 {context_section}
 
-Write a civic history investigation lesson in two parts.
-This is educational content for a Christian homeschool curriculum — the goal is to teach
-students to read primary sources and understand how civic change happens historically.
+Write a civic history learning experience as a knowledgeable mentor responding to a curious learner.
 
-PART 1 — HISTORICAL OVERVIEW (NARRATIVE block):
-Give a clear, factual account of the historical event or policy. Include:
-• What happened, and when. Use documented facts from public records or established history.
-• Who was affected — name real historical figures where the record is clear.
-• What the documented record shows about decisions made and by whom (cite specific documents,
-  hearings, or rulings by name where possible).
-• What changed as a result — legislation passed, court ruling issued, policy reformed.
-Keep the tone of an educator presenting documented history, not an advocate.
+PART 1 — TEACH THE STORY (NARRATIVE block):
+Give a substantial, vivid, factual account before asking the learner to do anything. Include:
+• What happened, when, and what conditions made it possible.
+• The real people involved, their choices, risks, limitations, and consequences.
+• Who held power, who benefited, who carried the cost, and what the primary record shows.
+• The laws, institutions, money, lobbying, or incentives that materially shaped events.
+• How people resisted, repaired harm, or created change.
+Distinguish documented fact from interpretation. Name specific documents, testimony,
+hearings, court rulings, data, or original records where possible.
 
-PART 2 — THE CIVIC INVESTIGATION (RESEARCH_MISSION block):
-Give the student ONE specific primary-source task. Not "research the topic."
-A real, doable task using a public archive or database:
-  • "Find [specific document] at [specific archive URL] and read [specific section]."
-  • "Search [public database] for [specific filing type] related to [historical event]."
-  • "Read the congressional testimony of [historical figure] from [year] at [archive]."
-  • "Look up [landmark court case] and read the court's holding — what did the court find?"
+PART 2 — CURIOSITY DOORWAY (EXPERIENCE_INVITATION):
+Only after the teaching, invite the learner into ONE meaningful encounter with the subject:
+examine a primary source Adeline has already located and explained, reenact a decision,
+compare two real pieces of evidence, test a claim, build a model, or create something useful.
+The learner is exploring from informed curiosity. They are never repairing Adeline's archive
+or being asked to research material that Adeline failed to teach.
 
 Format your response as:
 
 NARRATIVE:
-[The investigation brief — plain, direct, no academic language]
+[Complete mentor-led teaching — plain, vivid, specific, and substantial]
 
-RESEARCH_MISSION:
-[The specific task — one concrete action with a real URL or database name]
+EXPERIENCE_INVITATION:
+[One meaningful informed experience connected to what was just taught]
 
 {_ADELINE_VOICE}
 """
@@ -1275,11 +1273,11 @@ RESEARCH_MISSION:
         state["blocks"] = blocks
         return state
 
-    # Parse NARRATIVE and RESEARCH_MISSION sections
+    # Parse complete teaching followed by an informed experience invitation.
     narrative_text = ""
     mission_text   = ""
-    if "RESEARCH_MISSION:" in raw_output:
-        parts          = raw_output.split("RESEARCH_MISSION:", 1)
+    if "EXPERIENCE_INVITATION:" in raw_output:
+        parts          = raw_output.split("EXPERIENCE_INVITATION:", 1)
         narrative_text = parts[0].replace("NARRATIVE:", "").strip()
         mission_text   = parts[1].strip()
     else:
@@ -1295,12 +1293,12 @@ RESEARCH_MISSION:
 
     if mission_text:
         blocks.append({
-            "block_type":  BlockType.RESEARCH_MISSION.value,
+            "block_type":  BlockType.NARRATIVE.value,
+            "title":       "Follow your curiosity",
             "content":     mission_text,
             "evidence":    [],
             "is_silenced": False,
         })
-        state["has_research_missions"] = True
 
     if not blocks:
         logger.info(
