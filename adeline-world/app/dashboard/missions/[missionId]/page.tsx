@@ -5,7 +5,7 @@ import DashboardNav from "../../DashboardNav";
 import { getPlayerSession, PlayerProfile } from "../../../lib/player-session";
 
 type Item = Record<string, unknown>;
-type Scene = { sceneTitle?: { text?: string }; narration?: string; teachingLayer?: Item };
+type Scene = { sceneTitle?: { text?: string }; narration?: string; teachingLayer?: Item; blockType?: string };
 type AnimatedLesson = {
   title?: { text?: string };
   learningGoals?: string[];
@@ -23,6 +23,7 @@ function blockToScene(block: Item, index: number): Scene {
   const kind = asText(block.block_type, "LESSON").replaceAll("_", " ");
   const title = asText(block.title, kind.toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()));
   return {
+    blockType: asText(block.block_type, "NARRATIVE"),
     sceneTitle: { text: title || `Lesson part ${index + 1}` },
     narration: asText(block.content, "This lesson block is being prepared."),
     teachingLayer: block.teachingLayer && typeof block.teachingLayer === "object" ? block.teachingLayer as Item : {},
@@ -190,6 +191,10 @@ export default function MissionPage({ params }: { params: Promise<{ missionId: s
           if (payload.type === "block" && payload.block && typeof payload.block === "object") {
             const block = payload.block as Item;
             const content = asText(block.content);
+            if (asText(block.block_type) === "RESEARCH_MISSION") {
+              setStreamStatus("Adeline is handling the research behind the lesson…");
+              continue;
+            }
             if (/being carefully prepared by our teaching team|status:\s*awaiting review/i.test(content)) {
               throw new Error("This lesson is still under review and does not contain the teaching yet.");
             }
@@ -292,8 +297,9 @@ function LessonMission({ lesson, sceneIndex, setSceneIndex, completed, onFinish,
   const scenes = lesson.scenes ?? [], scene = scenes[sceneIndex]; if (!scene) return <div className="record-state error">This mission opened without any scenes.</div>;
   const layer = scene.teachingLayer ?? {}, points = asList(layer.visualSummary) as Item[];
   const isLastScene = sceneIndex === scenes.length - 1;
-  return <div className="lesson-mission">{(streaming || canonicalNote) && <div className="canonical-note">{streaming ? `✦ ${streamStatus || "Adding the next lesson part…"}` : canonicalNote}</div>}{(lesson.learningGoals ?? []).length > 0 && <div className="lesson-goals"><span>Mission goals</span><ul>{(lesson.learningGoals ?? []).map((goal, index) => <li key={index}>{goal}</li>)}</ul></div>}
-    <article className="lesson-scene"><header><span>Scene {sceneIndex + 1} of {scenes.length}</span><h2>{asText(scene.sceneTitle?.text, asText(lesson.title?.text, "Mission scene"))}</h2></header><p className="scene-narration">{scene.narration}</p>{points.length > 0 && <ul className="scene-points">{points.map((point, index) => <li key={index}>{asText(point.text)}</li>)}</ul>}{layer.deepExplanation ? <div className="scene-deep"><b>Look closer</b><p>{asText((layer.deepExplanation as Item).text)}</p></div> : null}{layer.whyItMatters ? <div className="scene-matters"><b>Why it matters</b><p>{asText((layer.whyItMatters as Item).text)}</p></div> : null}{layer.activity ? <div className="scene-activity"><b>Your move</b><p>{asText((layer.activity as Item).text)}</p></div> : null}</article>
+  const stage = scene.blockType === "PRIMARY_SOURCE" ? "Examine the evidence" : scene.blockType === "EXPERIMENT" || scene.blockType === "LAB_MISSION" ? "Try it in the real world" : sceneIndex === 0 ? "Come notice this" : isLastScene ? "Make meaning" : "Learn from the story";
+  return <div className="lesson-mission">{(streaming || canonicalNote) && <div className="canonical-note">{streaming ? `✦ ${streamStatus || "Adding the next lesson part…"}` : canonicalNote}</div>}<div className="mentor-note"><b>Adeline’s invitation</b><span>{sceneIndex === 0 ? "Come look at this with me. You don’t need to know the answer yet—notice what catches your attention." : "Keep following what makes you curious. I’ll supply the knowledge and context as we go."}</span></div>{(lesson.learningGoals ?? []).length > 0 && <div className="lesson-goals"><span>What this experience will help you understand</span><ul>{(lesson.learningGoals ?? []).map((goal, index) => <li key={index}>{goal}</li>)}</ul></div>}
+    <article className="lesson-scene"><header><span>{stage} · Part {sceneIndex + 1} of {scenes.length}</span><h2>{asText(scene.sceneTitle?.text, asText(lesson.title?.text, "Mission scene"))}</h2></header><p className="scene-narration">{scene.narration}</p>{points.length > 0 && <ul className="scene-points">{points.map((point, index) => <li key={index}>{asText(point.text)}</li>)}</ul>}{layer.deepExplanation ? <div className="scene-deep"><b>Here’s what experience teaches us</b><p>{asText((layer.deepExplanation as Item).text)}</p></div> : null}{layer.whyItMatters ? <div className="scene-matters"><b>Why this matters beyond school</b><p>{asText((layer.whyItMatters as Item).text)}</p></div> : null}{layer.activity ? <div className="scene-activity"><b>Try it now that you know enough</b><p>{asText((layer.activity as Item).text)}</p></div> : null}</article>
     {isLastScene && <LessonExtras lesson={lesson} />}
     <div className="scene-controls"><button disabled={sceneIndex === 0} onClick={() => setSceneIndex(sceneIndex - 1)}>← Back</button><div>{scenes.map((_, index) => <button aria-label={`Scene ${index + 1}`} className={index === sceneIndex ? "active" : ""} key={index} onClick={() => setSceneIndex(index)} />)}</div>{!isLastScene ? <button onClick={() => setSceneIndex(sceneIndex + 1)}>Next →</button> : completed ? <strong>✓ Mission saved</strong> : <button onClick={onFinish}>Finish & save →</button>}</div></div>;
 }
