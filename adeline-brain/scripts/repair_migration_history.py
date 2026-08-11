@@ -26,7 +26,6 @@ MIGRATIONS = [
     "20260523_add_book_table",
     "20260523_backfill_student_subscriptions",
     "20260525_fix_hippocampus_dedup",
-    "20260602_add_coppa_verification",
     "20260804_add_student_mobile_fields",
     "20260805_add_town_player_systems",
     "20260806_add_storm_fields",
@@ -40,8 +39,7 @@ TABLE_COLUMNS = {
     "HippocampusDocument": {"id", "source_url", "source_title", "chunk", "embedding", "track"},
     "User": {
         "mathLevel", "elaLevel", "scienceLevel", "historyLevel", "interests", "learningStyle",
-        "pacingMultiplier", "state", "targetGraduationYear", "onboardingComplete", "parentName",
-        "parentEmail", "coppaVerified", "coppaPendingToken", "coppaTokenExpiresAt", "xp",
+        "pacingMultiplier", "state", "targetGraduationYear", "onboardingComplete", "xp",
         "adeCoins", "avatarData", "seasonPass", "username", "pinHash", "linkCode", "townId",
         "reputation",
     },
@@ -79,8 +77,7 @@ REQUIRED_INDEXES = {
     "User_onboardingComplete_idx", "Book_embedding_idx", "ReadingSession_studentId_bookId_key",
     "ReadingRecommendationsLog_studentId_idx", "CanonicalLesson_track_idx",
     "CanonicalLesson_pending_idx", "Subscription_userId_key",
-    "hippocampus_document_source_url_chunk_key", "User_coppaPendingToken_key",
-    "User_username_key", "User_linkCode_key", "User_townId_idx",
+    "hippocampus_document_source_url_chunk_key", "User_username_key", "User_linkCode_key", "User_townId_idx",
 }
 REQUIRED_ENUMS = {
     "Track": {"APPLIED_MATHEMATICS", "CREATIVE_ECONOMY"},
