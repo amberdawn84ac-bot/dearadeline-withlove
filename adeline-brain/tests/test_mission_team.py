@@ -1,0 +1,81 @@
+import pytest
+
+from app.agents.mission_team import (
+    CurriculumAvailability,
+    GameSmithAgent,
+    MissionArchitectAgent,
+    PortfolioCuratorAgent,
+)
+from app.api.learning_plan import LessonSuggestion
+
+
+def suggestion(**updates):
+    values = {
+        "id": "mission-1",
+        "title": "Build a Garden Irrigation Plan",
+        "track": "APPLIED_MATHEMATICS",
+        "description": "Use ratios and measurement in a real plan.",
+        "emoji": "📐",
+        "priority": 0.9,
+        "source": "interest",
+    }
+    values.update(updates)
+    return LessonSuggestion(**values)
+
+
+def test_portfolio_curator_uses_portfolio_language_for_visual_work():
+    prompt = PortfolioCuratorAgent().contribution_for(
+        "Build a Garden Irrigation Plan", "APPLIED_MATHEMATICS", "interest"
+    )
+    assert "Add a photo" in prompt
+    assert "portfolio" in prompt
+    assert "submit evidence" not in prompt.lower()
+
+
+def test_mission_contract_has_a_finish_line_and_reuses_canonical():
+    agent = MissionArchitectAgent()
+    item = suggestion()
+    update = agent._mission_contract(
+        item,
+        CurriculumAvailability(slug="abc123", ready=True),
+        "8",
+        ["gardening"],
+    )
+    assert update["canonical_ready"] is True
+    assert update["next_action"] == "Open the saved lesson"
+    assert len(update["success_criteria"]) == 2
+    assert "portfolio" in update["portfolio_prompt"]
+
+
+def test_mission_architect_owns_priority_and_track_variety():
+    agent = MissionArchitectAgent()
+    candidates = [
+        suggestion(id="math-1", priority=.99),
+        suggestion(id="math-2", priority=.98),
+        suggestion(id="math-3", priority=.97),
+        suggestion(id="history", track="TRUTH_HISTORY", priority=.90),
+    ]
+    chosen = agent.select_balanced(candidates, 3)
+    assert [item.id for item in chosen] == ["math-1", "math-2", "history"]
+
+
+def test_gamesmith_uses_constrained_declarative_blueprints():
+    game = GameSmithAgent().blueprint_for(suggestion(), "canonical-slug", "8")
+    assert game["template"] == "route_builder"
+    assert game["content_source"] == {"type": "canonical_lesson", "slug": "canonical-slug"}
+    assert game["runtime"] == "declarative_only"
+    assert game["play_time_minutes"] == 6
+
+
+@pytest.mark.asyncio
+async def test_compose_preserves_ranking_and_enriches_each_mission(monkeypatch):
+    agent = MissionArchitectAgent()
+
+    async def ready(topic, track):
+        return CurriculumAvailability(slug=f"{track}:{topic}", ready=True)
+
+    monkeypatch.setattr(agent.librarian, "lookup", ready)
+    ranked = [suggestion(id="first"), suggestion(id="second", title="Measure a Tiny House")]
+    composed = await agent.compose(ranked, "8", ["gardening"])
+    assert [item.id for item in composed] == ["first", "second"]
+    assert all(item.canonical_ready for item in composed)
