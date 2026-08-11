@@ -535,7 +535,7 @@ def _build_component_props_for_adapter(component_id: str, content: str, req: Ada
         return {"title": f"Deep Work: {content[:40]}", "competencies": [content[:40]], "content": content[:800], "track": track}
     elif component_id == "CorrectiveOverlay":
         # CorrectiveOverlay needs live student-answer context; fall back to GlowGrow.
-        short = content[:60].split(".")[0] if content else topic
+        short = content[:60].split(".")[0] if content else "this lesson"
         return {
             "title": f"Check Your Understanding: {short}",
             "topic": short,
