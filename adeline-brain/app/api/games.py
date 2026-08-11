@@ -1,9 +1,9 @@
 """Curriculum-grounded mini-game API."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
 from app.agents.mission_team import GameSmithAgent
-from app.api.middleware import get_current_user_id
+from app.api.middleware import verify_student_access
 
 router = APIRouter(prefix="/games", tags=["games"])
 
@@ -16,9 +16,8 @@ class GameBuildRequest(BaseModel):
 
 
 @router.post("/build")
-async def build_game(body: GameBuildRequest, current_user_id: str = Depends(get_current_user_id)):
-    if body.student_id != current_user_id:
-        raise HTTPException(status_code=403, detail="Cannot build a game for another student")
+async def build_game(body: GameBuildRequest, authorization: str | None = Header(default=None)):
+    await verify_student_access(body.student_id, authorization)
     game = await GameSmithAgent().build_playable(body.topic, body.track, body.grade_level)
     if not game.get("canonical_ready"):
         raise HTTPException(status_code=409, detail="The canonical lesson must be ready before GameSmith can build this game")
