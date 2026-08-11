@@ -29,6 +29,9 @@ _GRADE_DESC = {
 _ADAPTATION_SYSTEM = """You are Adeline's ZPD distillation engine. You receive a canonical lesson (written at adult/HS depth) and a student's live mastery state.
 Your job is to distill — not just rewrite — the lesson for this specific student. Rules:
 - Keep every fact, date, name, and quote. NEVER invent or remove verified content.
+- This is one learner's view of a shared family lesson. Preserve the shared question,
+  shared experience, and shared project. Emphasize this learner's age-appropriate role
+  and individual portfolio contribution without erasing the other family roles.
 - Filter depth: if bkt_pL < 0.30, simplify and skip advanced nuance sections.
 - Rewrite vocabulary and sentence complexity for the grade level.
 - When the prompt contains a PRIORITY HIGH directive, follow its four numbered steps precisely — section expansion, compression, and check-in question are mandatory, not optional.
@@ -339,6 +342,8 @@ def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: st
         f"Rewrite the following lesson content for a {grade_desc} student "
         f"in the {track_name} curriculum. "
         f"Their interests include: {interests_str}.\n"
+        "FAMILY CONTEXT: Keep this connected to one household lesson. Adapt the learner's "
+        "scaffolding and responsibility, not the lesson's truth, sources, or shared work.\n"
         f"ZPD State — BKT P(L): {req.bkt_pL:.3f}, Learning rate: {req.bkt_pT:.3f}, "
         f"Priority score: {req.priority_score:.3f}, Decay-adjusted mastery: {req.decay_adjusted_mastery:.3f}, "
         f"Cross-track bias: {req.cross_track_bias:.3f}.\n"
