@@ -3,6 +3,8 @@ set -e
 
 _DB="${DIRECT_DATABASE_URL:-${POSTGRES_DSN:-$DATABASE_URL}}"
 if [ -n "$_DB" ]; then
+    echo "[entrypoint] Inspecting Prisma migration state (read-only)..."
+    python scripts/inspect_migration_state.py || echo "[entrypoint] Migration inspection failed (non-fatal)"
     echo "[entrypoint] Running Prisma migrations..."
     # Set HOME to writable directory for Prisma cache
     HOME=/tmp DIRECT_DATABASE_URL="$_DB" DATABASE_URL="$_DB" timeout 120 prisma migrate deploy --schema /app/prisma/schema.prisma || {
