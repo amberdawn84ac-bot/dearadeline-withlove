@@ -48,16 +48,16 @@ class GameSmithAgent:
     """Build safe declarative mini-game blueprints from curriculum missions."""
 
     _TEMPLATES = {
-        "TRUTH_HISTORY": "sort_and_match",
-        "JUSTICE_CHANGEMAKING": "sort_and_match",
-        "GOVERNMENT_ECONOMICS": "budget_balance",
-        "APPLIED_MATHEMATICS": "route_builder",
-        "CREATION_SCIENCE": "route_builder",
-        "HEALTH_NATUROPATHY": "sort_and_match",
-        "HOMESTEADING": "route_builder",
-        "ENGLISH_LITERATURE": "sort_and_match",
-        "CREATIVE_ECONOMY": "budget_balance",
-        "DISCIPLESHIP": "choice_consequence",
+        "TRUTH_HISTORY": "investigation_adventure",
+        "JUSTICE_CHANGEMAKING": "investigation_adventure",
+        "GOVERNMENT_ECONOMICS": "journey_simulation",
+        "APPLIED_MATHEMATICS": "maze_quest",
+        "CREATION_SCIENCE": "systems_builder",
+        "HEALTH_NATUROPATHY": "maze_quest",
+        "HOMESTEADING": "journey_simulation",
+        "ENGLISH_LITERATURE": "investigation_adventure",
+        "CREATIVE_ECONOMY": "market_simulation",
+        "DISCIPLESHIP": "journey_simulation",
     }
 
     def blueprint_for(self, item: Any, canonical_slug_value: str, grade_level: str) -> dict[str, Any]:
@@ -72,7 +72,7 @@ class GameSmithAgent:
             "rules": [
                 "Every correct move must depend on lesson content, not luck.",
                 "Give a useful explanation after each choice.",
-                "Adjust the next round after two misses without lowering the truth standard.",
+                "Respond to mistakes inside the world without lowering the truth standard.",
             ],
             "win_condition": "Use the lesson correctly to solve the interactive challenge.",
             "runtime": "declarative_only",
@@ -105,32 +105,20 @@ class GameSmithAgent:
             str(block.get("content", "")) for block in (canonical or {}).get("blocks", [])
         )[:9000]
         from app.agents.orchestrator import _synthesis_call
-        mechanic = shell["template"]
-        schemas = {
-            "sort_and_match": (
-                'Return {"game":{"mechanic":"sort_and_match","scenario":"...","zones":[{"id":"...","label":"..."}],'
-                '"items":[{"id":"...","label":"...","detail":"...","correct_zone":"..."}],"success_message":"..."}}. '
-                "Use 2-4 zones and exactly 6 items. The player drags each item into a zone."
-            ),
-            "route_builder": (
-                'Return {"game":{"mechanic":"route_builder","scenario":"...","grid_size":5,'
-                '"start":{"x":0,"y":4},"goal":{"x":4,"y":0},"obstacles":[{"x":1,"y":3}],'
-                '"max_moves":10,"success_message":"..."}}. The route and obstacles must model a real constraint from the lesson.'
-            ),
-            "budget_balance": (
-                'Return {"game":{"mechanic":"budget_balance","scenario":"...","budget":100,'
-                '"required_value":10,"options":[{"id":"...","label":"...","cost":20,"value":3,"consequence":"..."}],'
-                '"success_message":"..."}}. Use exactly 6 options; the player must meet required_value without overspending.'
-            ),
-            "choice_consequence": (
-                'Return {"game":{"mechanic":"choice_consequence","scenario":"...",'
-                '"choices":[{"id":"...","label":"...","consequence":"...","wisdom_score":2}],'
-                '"success_message":"..."}}. Use exactly 4 meaningful choices with wisdom_score 0-3.'
-            ),
-        }
+        game_kind = shell["template"]
+        schema = (
+            'Return {"game":{"mechanic":"top_down_2d","game_kind":"GAME_KIND","scenario":"...",'
+            '"world":{"width":12,"height":8,"theme":"..."},"player":{"x":1,"y":6,"sprite":"..."},'
+            '"goal":{"x":10,"y":1,"label":"..."},"obstacles":[{"x":3,"y":4,"sprite":"..."}],'
+            '"objects":[{"id":"...","x":2,"y":5,"sprite":"...","label":"...","effect":"...",'
+            '"value":1}],"required_objects":4,"success_message":"..."}}. '
+            "Use exactly 6 lesson-grounded objects and 8-14 obstacles. Positions must stay inside the world, "
+            "must not overlap the player or goal, and must leave a navigable path. The player moves freely "
+            "through the 2D world, interacts with objects, and reaches the goal after collecting or using enough."
+        ).replace("GAME_KIND", game_kind)
         prompt = (
-            f"Build one interactive {mechanic} mini-game from the verified lesson. {schemas[mechanic]} "
-            "This is not a quiz: do not output questions, answer choices, rounds, or trivia. Every object and "
+            f"Build one playable 2D {game_kind} mini-game from the verified lesson. {schema} "
+            "This is not a quiz: do not output questions, answer choices, rounds, sorting, matching, or trivia. Every object and "
             "consequence must depend on the lesson. Never add facts absent from the lesson. Keep labels concise "
             "and suitable for grade " + grade_level + ".\n\nLESSON:\n" + lesson_text
         )
@@ -142,7 +130,12 @@ class GameSmithAgent:
         try:
             parsed = json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
             game_data = parsed.get("game", {})
-            valid = game_data if game_data.get("mechanic") == mechanic and game_data.get("scenario") else {}
+            valid = game_data if (
+                game_data.get("mechanic") == "top_down_2d"
+                and game_data.get("game_kind") == game_kind
+                and game_data.get("scenario")
+                and len(game_data.get("objects", [])) == 6
+            ) else {}
         except (json.JSONDecodeError, AttributeError, TypeError):
             valid = {}
         game = {**shell, "canonical_ready": True, "interactive": valid}
