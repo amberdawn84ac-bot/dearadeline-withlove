@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -78,6 +79,39 @@ class GameSmithAgent:
             "runtime": "declarative_only",
         }
 
+    def _fallback_2d(self, canonical: dict[str, Any], game_kind: str) -> dict[str, Any]:
+        """Always-playable level assembled only from canonical block titles/content."""
+        blocks = list(canonical.get("blocks", []))
+        source_items = []
+        for index, block in enumerate(blocks[:6]):
+            title = str(block.get("title") or f"Lesson discovery {index + 1}")[:34]
+            content = re.sub(r"\s+", " ", str(block.get("content", ""))).strip()
+            effect = (content.split(".")[0] or f"You recovered {title}")[:120] + "."
+            source_items.append((title, effect))
+        while len(source_items) < 6:
+            source_items.append((f"Lesson discovery {len(source_items) + 1}", "This connects another part of the lesson."))
+        coordinates = [(2, 6), (4, 2), (7, 6), (9, 3), (3, 1), (8, 1)]
+        sprites = ["scroll", "journal", "tool", "map", "lantern", "key"]
+        return {
+            "mechanic": "top_down_2d",
+            "game_kind": game_kind,
+            "scenario": f"Explore {canonical.get('title') or canonical.get('topic')} and recover the ideas that unlock the destination.",
+            "world": {"width": 12, "height": 8, "theme": str(canonical.get("track", "learning")).lower()},
+            "player": {"x": 0, "y": 7, "sprite": "explorer"},
+            "goal": {"x": 11, "y": 0, "label": "Complete the mission"},
+            "obstacles": [
+                {"x": x, "y": y, "sprite": "tree"}
+                for x, y in [(5, 0), (5, 1), (5, 2), (5, 4), (5, 5), (5, 6), (1, 3), (2, 3), (8, 4), (9, 4), (10, 4)]
+            ],
+            "objects": [
+                {"id": f"lesson-object-{index + 1}", "x": coordinates[index][0], "y": coordinates[index][1],
+                 "sprite": sprites[index], "label": title, "effect": effect, "value": 1}
+                for index, (title, effect) in enumerate(source_items)
+            ],
+            "required_objects": 4,
+            "success_message": "You used the lesson to unlock the destination.",
+        }
+
     async def build_playable(self, topic: str, track: str, grade_level: str) -> dict[str, Any]:
         """Create or reuse a playable, declarative game grounded in a canonical."""
         availability = await CurriculumLibrarianAgent().lookup(topic, track)
@@ -122,12 +156,12 @@ class GameSmithAgent:
             "consequence must depend on the lesson. Never add facts absent from the lesson. Keep labels concise "
             "and suitable for grade " + grade_level + ".\n\nLESSON:\n" + lesson_text
         )
-        raw = await _synthesis_call(
-            "You are GameSmith, a curriculum-grounded educational game designer. Output strict JSON only.",
-            prompt,
-            max_tokens=1800,
-        )
         try:
+            raw = await _synthesis_call(
+                "You are GameSmith, a curriculum-grounded educational game designer. Output strict JSON only.",
+                prompt,
+                max_tokens=1800,
+            )
             parsed = json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
             game_data = parsed.get("game", {})
             valid = game_data if (
@@ -136,8 +170,10 @@ class GameSmithAgent:
                 and game_data.get("scenario")
                 and len(game_data.get("objects", [])) == 6
             ) else {}
-        except (json.JSONDecodeError, AttributeError, TypeError):
+        except Exception:
             valid = {}
+        if not valid:
+            valid = self._fallback_2d(canonical or {}, game_kind)
         game = {**shell, "canonical_ready": True, "interactive": valid}
         if valid:
             try:
