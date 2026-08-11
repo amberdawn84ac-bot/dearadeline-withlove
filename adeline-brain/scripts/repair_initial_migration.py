@@ -65,7 +65,10 @@ async def main() -> int:
     try:
         row = await conn.fetchrow(
             '''SELECT finished_at, rolled_back_at, applied_steps_count, logs
-               FROM "_prisma_migrations" WHERE migration_name = $1''',
+               FROM "_prisma_migrations" WHERE migration_name = $1
+               ORDER BY (finished_at IS NOT NULL AND rolled_back_at IS NULL) DESC,
+                        started_at DESC
+               LIMIT 1''',
             TARGET,
         )
         if row is None:
