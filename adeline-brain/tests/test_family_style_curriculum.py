@@ -3,6 +3,7 @@ from app.curriculum.family_style import (
     ensure_family_workshop,
     family_workshop_block,
 )
+from app.agents.adapter import sanitize_learner_text
 
 
 def test_family_workshop_has_shared_work_roles_and_portfolio_evidence():
@@ -30,3 +31,14 @@ def test_canonical_rules_keep_truth_fixed_while_roles_change():
     assert "full adult/high-school depth" in FAMILY_CANONICAL_AUTHORING_RULES
     assert "different responsibility" in FAMILY_CANONICAL_AUTHORING_RULES
     assert "facts, sources, central questions, and worldview fixed" in FAMILY_CANONICAL_AUTHORING_RULES
+
+
+def test_learner_text_removes_internal_notes_and_identity_errors():
+    content = (
+        "Your job, Adeline, is to explain what God says.\n\n"
+        "[GENUI hint: a quiz block after this content would reinforce foundation.]"
+    )
+
+    cleaned = sanitize_learner_text(content)
+
+    assert cleaned == "Your job is to explain what HaShem says."
