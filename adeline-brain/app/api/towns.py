@@ -198,7 +198,7 @@ async def create_town(body: CreateTownRequest, user_id: str = Depends(get_curren
             raise HTTPException(status_code=500, detail="Could not generate a unique join code — please try again.")
 
         town = await _load_town(conn, town_row["id"])
-    except asyncpg.PostgresError as e:
+    except asyncpg.PostgresError:
         logger.exception("Failed to create town")
         raise HTTPException(status_code=500, detail="Could not create town.")
     finally:
