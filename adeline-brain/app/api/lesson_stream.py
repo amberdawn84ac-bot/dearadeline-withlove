@@ -481,6 +481,11 @@ async def _stream_lesson(
             blocks_data = canonical.get("blocks") or []
             if isinstance(blocks_data, str):
                 blocks_data = json.loads(blocks_data)
+
+            # Older canonicals are upgraded in memory so families receive the
+            # one-room-schoolhouse spine immediately, without waiting for a reseed.
+            from app.curriculum.family_style import ensure_family_workshop
+            blocks_data = ensure_family_workshop(blocks_data, request.topic)
             
             yield _sse({"type": "status", "message": "Personalizing lesson for you..."})
             canonical_dummy = {"topic": request.topic, "blocks": blocks_data}
@@ -612,10 +617,15 @@ async def _stream_lesson(
             state["cross_track_acknowledgment"] + "\n\n" + state["blocks"][0]["content"]
         )
 
+    # Keep the durable, full-depth source separate from this learner's view.
+    # Canonicals must never be polluted by a grade-specific adaptation.
+    from app.curriculum.family_style import ensure_family_workshop
+    canonical_blocks = ensure_family_workshop(state["blocks"], request.topic)
+
     # ── Phase 2: Personalize via Adapter ──────────────────────────────────────
     if state["blocks"]:
         yield _sse({"type": "status", "message": "Personalizing lesson for you..."})
-        canonical_dummy = {"topic": request.topic, "blocks": state["blocks"]}
+        canonical_dummy = {"topic": request.topic, "blocks": canonical_blocks}
         state["blocks"] = await adapt_canonical_for_student(canonical_dummy, adaptation_req)
 
     # ── Safety net: if every fallback failed, synthesize a minimal lesson ───
@@ -641,6 +651,7 @@ async def _stream_lesson(
             "evidence": [],
             "is_silenced": False,
         }]
+        canonical_blocks = ensure_family_workshop(state["blocks"], request.topic)
 
     # ── Ensure every block has a block_id for frontend React keys ──────────
     for idx, block in enumerate(state["blocks"]):
@@ -736,7 +747,7 @@ async def _stream_lesson(
             "topic": request.topic,
             "track": request.track.value,
             "title": title,
-            "blocks": state.get("blocks", []),
+            "blocks": canonical_blocks,
             "oas_standards": state.get("oas_standards", []),
             "researcher_activated": state.get("researcher_activated", False),
             "agent_name": state.get("agent_name", ""),
@@ -1185,12 +1196,17 @@ async def _save_canonical_background(
             logger.warning("[LessonStream] Cannot save canonical: missing slug")
             return
 
+        from app.curriculum.family_style import ensure_family_workshop
+
         record = {
             "id": str(uuid.uuid4()),
             "topic": state_for_canonical.get("topic", ""),
             "track": state_for_canonical.get("track", ""),
             "title": state_for_canonical.get("title", ""),
-            "blocks": state_for_canonical.get("blocks", []),
+            "blocks": ensure_family_workshop(
+                state_for_canonical.get("blocks", []),
+                state_for_canonical.get("topic", ""),
+            ),
             "oas_standards": state_for_canonical.get("oas_standards", []),
             "researcher_activated": state_for_canonical.get("researcher_activated", False),
             "agent_name": state_for_canonical.get("agent_name", ""),
