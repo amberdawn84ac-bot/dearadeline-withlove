@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 42443)
+Total output lines: 3727
+
 """
 Multi-Agent Orchestrator
 Routes lesson requests to the appropriate specialist agent based on Track.
@@ -1723,218 +1726,7 @@ async def literature_agent(state: AdelineState) -> AdelineState:
             content = await _synthesize_literature(
                 request=request,
                 book_title=None,
-                book_author=None,
-                topic=request.topic,
-            )
-            blocks.append({
-                "block_type":       BlockType.NARRATIVE.value,
-                "content":          _worldview_wrap(content, request.track),
-                "evidence":         [],
-                "is_silenced":      False,
-                "homestead_content": None,
-            })
-
-    # ── Render to cohesive format ──────────────────────────────────────────────
-    await _render_lesson(state, blocks)
-
-    state["blocks"] = blocks
-    return state
-
-
-async def _synthesize_literature(
-    request: LessonRequest,
-    book_title: str | None,
-    book_author: str | None,
-    topic: str,
-) -> str:
-    """
-    Claude generates literary analysis content.
-    If a specific book is provided, the analysis is grounded in that text.
-    """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
-        if book_title:
-            return f"Literary analysis of '{topic}' in the context of *{book_title}* by {book_author}."
-        return f"Literary analysis: {topic}"
-
-    persona = _TRACK_PERSONA.get(Track.ENGLISH_LITERATURE, "a literary mentor")
-
-    if book_title:
-        user_prompt = (
-            f"The student is currently reading *{book_title}* by {book_author}.\n\n"
-            f"Topic they asked about: {topic}\n\n"
-            f"Write a literary analysis that connects this topic to the book they're reading. "
-            f"Discuss themes, character choices, narrative technique, or author's intent. "
-            f"Make the student think critically about what they're reading."
-        )
-    else:
-        user_prompt = (
-            f"Topic: {topic}\n\n"
-            f"Write a literary analysis or discussion of this topic. "
-            f"Reference specific works, authors, or literary movements where relevant. "
-            f"Make the student think critically about stories, language, and meaning."
-        )
-
-    system_prompt = (
-        f"You are Adeline — {persona}\n\n"
-        "You are authoring durable canonical teaching at full adult/high-school depth "
-        "for a Christian homeschool family. A separate adapter will scaffold it for each learner.\n\n"
-        f"{_ADELINE_VOICE}\n"
-        f"{FAMILY_CANONICAL_AUTHORING_RULES}\n\n"
-        "CONTENT RULES:\n"
-        "• 2-3 paragraphs maximum\n"
-        "• Discuss the text as literature — themes, craft, truth claims, worldview\n"
-        "• Do NOT try to fact-check fiction. Analyze it.\n"
-        "• End with a question that makes the student think about what the author is really saying\n"
-    )
-
-    try:
-        return await _synthesis_call(system_prompt, user_prompt, max_tokens=1500)
-    except Exception as e:
-        logger.error(f"[LiteratureAgent] LLM synthesis failed: {e}")
-        if book_title:
-            return f"Literary analysis of '{topic}' in the context of *{book_title}* by {book_author}."
-        return f"Literary analysis: {topic}"
-
-
-# ── Practical Agent (APPLIED_MATHEMATICS, CREATIVE_ECONOMY) ──────────────────
-
-async def practical_agent(state: AdelineState) -> AdelineState:
-    """
-    Practical skills specialist — math, making, and business.
-
-    Does NOT use the Witness Protocol. These tracks teach applied skills,
-    not historical truth claims. A compound interest formula doesn't need
-    a cosine similarity score.
-
-    Uses Hippocampus as reference material (if available) without gating
-    on similarity threshold. When Hippocampus is empty, Claude generates
-    practical content from its knowledge.
-    """
-    request = state["request"]
-    state["agent_name"] = "PracticalAgent"
-    blocks: list[dict] = []
-
-    logger.info(f"[PracticalAgent] START: topic='{request.topic}' track={request.track.value}")
-
-    # Pull any Hippocampus content as reference (no Witness gate)
-    raw_results = await hippocampus.similarity_search(
-        query_embedding=state["query_embedding"],
-        track=request.track.value,
-        top_k=3,
-    )
-
-    logger.info(f"[PracticalAgent] Hippocampus returned {len(raw_results)} results")
-
-    if raw_results:
-        # Use Hippocampus results as reference material for synthesis
-        content = await _state_synthesize(
-            state,
-            block_type=BlockType.NARRATIVE.value,
-            source_chunks=raw_results,
-            raw_content=raw_results[0]["chunk"],
-        )
-        blocks.append({
-            "block_type":       BlockType.NARRATIVE.value,
-            "content":          _worldview_wrap(content, request.track),
-            "evidence":         [{
-                "source_id":        r["id"],
-                "source_title":     r["source_title"],
-                "source_url":       r.get("source_url", ""),
-                "witness_citation": {
-                    "author":       r.get("citation_author", ""),
-                    "year":         r.get("citation_year"),
-                    "archive_name": r.get("citation_archive_name", ""),
-                },
-                "similarity_score": float(r["similarity_score"]),
-                "verdict":          "VERIFIED",
-                "chunk":            r["chunk"],
-            } for r in raw_results],
-            "is_silenced":      False,
-            "homestead_content": (
-                _homestead_adapt(raw_results[0]["chunk"]) if request.is_homestead else None
-            ),
-        })
-    else:
-        # No Hippocampus content — Claude generates practical content
-        content = await _synthesize_practical(request)
-        blocks.append({
-            "block_type":       BlockType.NARRATIVE.value,
-            "content":          _worldview_wrap(content, request.track),
-            "evidence":         [],
-            "is_silenced":      False,
-            "homestead_content": None,
-        })
-
-    # ── CREATIVE_ECONOMY: always inject a ProjectBuilder GenUI block ──────────
-    if request.track.value == "CREATIVE_ECONOMY" and blocks:
-        logger.info("[PracticalAgent] Injecting ProjectBuilder for CREATIVE_ECONOMY")
-        project_block = await _synthesize_creative_project_block(request, blocks[0].get("content", ""))
-        if project_block:
-            logger.info("[PracticalAgent] ProjectBuilder injection successful")
-            blocks.append(project_block)
-        else:
-            logger.warning("[PracticalAgent] ProjectBuilder injection failed")
-
-    # ── APPLIED_MATHEMATICS: inject a CodePlayground for interactive calculation ──
-    if request.track.value == "APPLIED_MATHEMATICS" and blocks:
-        logger.info("[PracticalAgent] Injecting CodePlayground for APPLIED_MATHEMATICS")
-        code_block = await _synthesize_code_playground_block(request, blocks[0].get("content", ""))
-        if code_block:
-            logger.info("[PracticalAgent] CodePlayground injection successful")
-            blocks.append(code_block)
-        else:
-            logger.warning("[PracticalAgent] CodePlayground injection failed")
-
-    logger.info(f"[PracticalAgent] PRE-RENDER: {len(blocks)} blocks")
-    for i, b in enumerate(blocks):
-        logger.info(f"[PracticalAgent]   Block {i}: type={b.get('block_type')} content_len={len(b.get('content', ''))}")
-
-    # ── Render to cohesive format ──────────────────────────────────────────────
-    await _render_lesson(state, blocks)
-
-    logger.info(f"[PracticalAgent] POST-RENDER: {len(blocks)} blocks")
-    for i, b in enumerate(blocks):
-        logger.info(f"[PracticalAgent]   Block {i}: type={b.get('block_type')} content_len={len(b.get('content', ''))}")
-
-    state["blocks"] = blocks
-    return state
-
-
-async def _synthesize_creative_project_block(request: "LessonRequest", narrative_content: str) -> dict | None:
-    """Generate a ProjectBuilder GENUI_ASSEMBLY block for CREATIVE_ECONOMY lessons."""
-    import json as _json
-    grade_desc = _GRADE_DESC.get(request.grade_level, f"grade {request.grade_level}")
-    system = (
-        "You generate structured ProjectBuilder component data for a creative economy lesson. "
-        "Return ONLY valid JSON — no markdown fences. "
-        "Schema: {\"component_type\": \"ProjectBuilder\", \"props\": {\"title\": str, "
-        "\"description\": str, \"steps\": [{\"id\": str, \"title\": str, \"instruction\": str, \"type\": \"task|reflect|create\"}], "
-        "\"materials\": [str], \"pricingPrompt\": str}, "
-        "\"initial_state\": {\"currentStep\": 0, \"completedSteps\": []}, "
-        "\"callbacks\": [\"onComplete\"], \"re_render_triggers\": [\"onComplete\"]}"
-    )
-    user = (
-        f"Topic: {request.topic}\n"
-        f"Grade: {grade_desc}\n"
-        f"Lesson content:\n{narrative_content[:600]}\n\n"
-        "Generate a ProjectBuilder block that walks the student through actually MAKING or SELLING "
-        "something related to this topic. Steps should be concrete and doable today. "
-        "Include real materials they likely have at home and a pricing prompt at the end."
-    )
-    try:
-        raw = await _synthesis_call(system, user, max_tokens=1200)
-        raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        data = _json.loads(raw)
-        if "props" in data and "steps" in data.get("props", {}):
-            return {
-                "block_type": "GENUI_ASSEMBLY",
-                "content": f"Project: {request.topic}",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-                "genui_assembly_data": data,
-            }
-    except Exception as e:
+                book_a…2443 tokens truncated…xception as e:
         logger.warning(f"[PracticalAgent] ProjectBuilder synthesis failed (non-fatal): {e}")
     return None
 
@@ -3370,12 +3162,11 @@ def _worldview_wrap(content: str, track: Track) -> str:
 
 async def registrar_agent(state: AdelineState) -> AdelineState:
     """
-    CASE credit and xAPI record emitter — runs after every specialist agent.
+    CASE alignment and xAPI draft emitter — runs after every specialist agent.
 
-    For each completed lesson block it emits one xAPI LearningActivity statement.
-    For the lesson as a whole it generates a CASE-compatible credit entry.
-    These are stored in state and returned on the LessonResponse for Phase 6
-    persistence (adeline-brain/app/api/journal.py will write them to DB).
+    Lesson generation can identify likely standards and credit weight, but it cannot prove
+    that a learner completed anything. These records remain proposed until a completion or
+    seal endpoint verifies learner activity.
     """
     request   = state["request"]
     lesson_id = state["lesson_id"]
@@ -3408,6 +3199,7 @@ async def registrar_agent(state: AdelineState) -> AdelineState:
                     "https://adeline.app/xapi/ext/agent":       state.get("agent_name", ""),
                     "https://adeline.app/xapi/ext/is_homestead": request.is_homestead,
                     "https://adeline.app/xapi/ext/block_type":  block.get("block_type", ""),
+                    "https://adeline.app/xapi/ext/completion_verified": False,
                 }
             },
         })
@@ -3449,15 +3241,17 @@ async def registrar_agent(state: AdelineState) -> AdelineState:
         "credit_hours":        credit_hours,
         "credit_type":         _track_to_credit_type(request.track),
         "is_homestead_credit": request.is_homestead,
-        "completed_at":        now_iso,
+        "completed_at":        None,
+        "status":              "PROPOSED",
+        "completion_verified": False,
         "researcher_activated": state["researcher_activated"],
     }]
 
     state["xapi_statements"] = xapi_statements
     state["credits_awarded"]  = credits_awarded
     logger.info(
-        f"[RegistrarAgent] Emitted {len(xapi_statements)} xAPI statement(s) + "
-        f"{credit_hours} credit hours for student={request.student_id}"
+        f"[RegistrarAgent] Drafted {len(xapi_statements)} xAPI statement(s) + "
+        f"{credit_hours} possible credit hours for student={request.student_id}; not sealed"
     )
     return state
 
