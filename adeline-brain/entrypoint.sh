@@ -3,14 +3,21 @@ set -e
 
 _DB="${DIRECT_DATABASE_URL:-${POSTGRES_DSN:-$DATABASE_URL}}"
 if [ -n "$_DB" ]; then
-    echo "[entrypoint] Inspecting Prisma migration state (read-only)..."
-    python scripts/inspect_migration_state.py || echo "[entrypoint] Migration inspection failed (non-fatal)"
+    echo "[entrypoint] Verifying initial Prisma migration state..."
+    if python scripts/repair_initial_migration.py; then
+        echo "[entrypoint] Initial migration is already resolved"
+    else
+        _REPAIR_STATUS=$?
+        if [ "$_REPAIR_STATUS" -eq 42 ]; then
+            echo "[entrypoint] Recording verified initial migration as applied..."
+            HOME=/tmp DIRECT_DATABASE_URL="$_DB" DATABASE_URL="$_DB" prisma migrate resolve --applied 20260327192741_init_8_track_schema --schema /app/prisma/schema.prisma
+        else
+            echo "[entrypoint] Migration repair verification failed; refusing startup"
+            exit "$_REPAIR_STATUS"
+        fi
+    fi
     echo "[entrypoint] Running Prisma migrations..."
-    # Set HOME to writable directory for Prisma cache
-    HOME=/tmp DIRECT_DATABASE_URL="$_DB" DATABASE_URL="$_DB" timeout 120 prisma migrate deploy --schema /app/prisma/schema.prisma || {
-        echo "[entrypoint] migrate deploy failed — attempting baseline..."
-        HOME=/tmp DIRECT_DATABASE_URL="$_DB" DATABASE_URL="$_DB" prisma migrate resolve --applied 20260529_add_focus_and_multimodal --schema /app/prisma/schema.prisma || echo "[entrypoint] Baseline failed (non-fatal)"
-    }
+    HOME=/tmp DIRECT_DATABASE_URL="$_DB" DATABASE_URL="$_DB" timeout 120 prisma migrate deploy --schema /app/prisma/schema.prisma
 else
     echo "[entrypoint] No DATABASE_URL set — skipping Prisma migrate"
 fi
