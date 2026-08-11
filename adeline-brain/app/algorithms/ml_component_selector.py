@@ -13,10 +13,12 @@ When insufficient training data exists, falls back to heuristic scoring.
 """
 
 import logging
-from dataclasses import dataclass, field
-from typing import Optional, Dict, List, Tuple
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Optional, Dict, List, Tuple
 from collections import defaultdict
-import math
+
+if TYPE_CHECKING:
+    from app.algorithms.component_selector import ComponentRecommendation, LearnerContext
 
 logger = logging.getLogger(__name__)
 
@@ -117,13 +119,16 @@ class MLComponentSelector:
         Returns:
             List of ComponentRecommendation sorted by score (descending)
         """
-        from app.algorithms.component_selector import ComponentRecommendation, LearnerContext
+        from app.algorithms.component_selector import ComponentRecommendation
 
         # Filter out excluded categories
         exclude = set(exclude_categories or [])
         candidates = [
             cid for cid in available_components
-            if self._component_features.get(cid)?.category not in exclude
+            if (
+                self._component_features.get(cid) is None
+                or self._component_features[cid].category not in exclude
+            )
         ]
 
         if not candidates:
@@ -434,7 +439,7 @@ class MLComponentSelector:
         max_results: int,
     ) -> List["ComponentRecommendation"]:
         """Fallback to heuristic scoring when insufficient ML data."""
-        from app.algorithms.component_selector import ComponentRecommendation, select_components
+        from app.algorithms.component_selector import select_components
 
         # Use the existing heuristic selector
         results = select_components(
