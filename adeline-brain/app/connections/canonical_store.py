@@ -111,9 +111,23 @@ class CanonicalStore:
             logger.info(f"[CanonicalStore] Redis HIT — {slug}")
             return json.loads(raw)
 
-        record = await self._db_get(slug)
+        try:
+            record = await self._db_get(slug)
+        except Exception as e:
+            logger.warning(f"[CanonicalStore] DB GET failed, checking repository canonicals: {e}")
+            record = None
         if record:
             logger.info(f"[CanonicalStore] DB HIT — {slug}, populating Redis")
+            await self._redis_set(slug, json.dumps(record))
+            return record
+
+        # Repository canonicals keep critical lessons immediately available even when the
+        # remote curriculum store is empty or temporarily unreachable. A DB-approved copy
+        # always wins because it is checked first.
+        from app.curriculum.builtin_canonicals import builtin_canonical
+        record = builtin_canonical(slug)
+        if record:
+            logger.info(f"[CanonicalStore] BUILTIN HIT — {slug}")
             await self._redis_set(slug, json.dumps(record))
         return record
 

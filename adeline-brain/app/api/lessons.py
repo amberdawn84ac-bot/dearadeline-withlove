@@ -94,7 +94,13 @@ async def _persist_learning_records(lesson: LessonResponse) -> None:
         record_learning, _seal_transcript_db,
     )
     try:
-        if lesson.xapi_statements:
+        verified_statements = [
+            statement for statement in lesson.xapi_statements
+            if statement.get("context", {}).get("extensions", {}).get(
+                "https://adeline.app/xapi/ext/completion_verified"
+            ) is True
+        ]
+        if verified_statements:
             stmts = [
                 XAPIStatementIn(
                     id=s.get("id", ""),
@@ -114,12 +120,13 @@ async def _persist_learning_records(lesson: LessonResponse) -> None:
                     )),
                     statement_json=s,
                 )
-                for s in lesson.xapi_statements
+                for s in verified_statements
             ]
             await record_learning(RecordLearningRequest(statements=stmts))
 
-        if lesson.credits_awarded:
-            credit = lesson.credits_awarded[0]
+        verified_credits = [credit for credit in lesson.credits_awarded if credit.get("completion_verified") is True]
+        if verified_credits:
+            credit = verified_credits[0]
             await _seal_transcript_db(TranscriptEntryIn(
                 id=credit.get("id", ""),
                 student_id=credit.get("student_id", ""),

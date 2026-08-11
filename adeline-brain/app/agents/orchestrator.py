@@ -3370,12 +3370,11 @@ def _worldview_wrap(content: str, track: Track) -> str:
 
 async def registrar_agent(state: AdelineState) -> AdelineState:
     """
-    CASE credit and xAPI record emitter — runs after every specialist agent.
+    CASE alignment and xAPI draft emitter — runs after every specialist agent.
 
-    For each completed lesson block it emits one xAPI LearningActivity statement.
-    For the lesson as a whole it generates a CASE-compatible credit entry.
-    These are stored in state and returned on the LessonResponse for Phase 6
-    persistence (adeline-brain/app/api/journal.py will write them to DB).
+    Lesson generation can identify likely standards and credit weight, but it cannot prove
+    that a learner completed anything. These records remain proposed until a completion or
+    seal endpoint verifies learner activity.
     """
     request   = state["request"]
     lesson_id = state["lesson_id"]
@@ -3408,6 +3407,7 @@ async def registrar_agent(state: AdelineState) -> AdelineState:
                     "https://adeline.app/xapi/ext/agent":       state.get("agent_name", ""),
                     "https://adeline.app/xapi/ext/is_homestead": request.is_homestead,
                     "https://adeline.app/xapi/ext/block_type":  block.get("block_type", ""),
+                    "https://adeline.app/xapi/ext/completion_verified": False,
                 }
             },
         })
@@ -3449,15 +3449,17 @@ async def registrar_agent(state: AdelineState) -> AdelineState:
         "credit_hours":        credit_hours,
         "credit_type":         _track_to_credit_type(request.track),
         "is_homestead_credit": request.is_homestead,
-        "completed_at":        now_iso,
+        "completed_at":        None,
+        "status":              "PROPOSED",
+        "completion_verified": False,
         "researcher_activated": state["researcher_activated"],
     }]
 
     state["xapi_statements"] = xapi_statements
     state["credits_awarded"]  = credits_awarded
     logger.info(
-        f"[RegistrarAgent] Emitted {len(xapi_statements)} xAPI statement(s) + "
-        f"{credit_hours} credit hours for student={request.student_id}"
+        f"[RegistrarAgent] Drafted {len(xapi_statements)} xAPI statement(s) + "
+        f"{credit_hours} possible credit hours for student={request.student_id}; not sealed"
     )
     return state
 
