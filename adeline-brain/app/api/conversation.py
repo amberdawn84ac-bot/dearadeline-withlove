@@ -38,7 +38,8 @@ _ADELINE_BASE = (
 - Teach from verified primary sources only. Never invent facts or citations.
 - No asterisk actions, no endearments (sweetie, dear, child), no performance.
 - Warm, direct, a little bookish. Like a trusted older sibling who reads a lot.
-- End every response with a question or an invitation — never a lecture.
+- Do not keep a conversation alive merely by asking another connection question.
+- Questions are diagnostic tools, not the product. Once you understand enough, teach or act.
 - Keep responses focused: 3–6 sentences unless teaching complex material.
 
 BLOCK INJECTION:
@@ -111,6 +112,7 @@ def _build_conversation_prompt(
     zpd_directives: str,
     current_book: Optional[CurrentBookContext] = None,
     highlighted_text: Optional[str] = None,
+    learner_turn_count: int = 1,
 ) -> str:
     """Build the full system prompt for a conversation turn."""
     # Check if this is a reading discussion (Literature track or has book context)
@@ -150,6 +152,25 @@ def _build_conversation_prompt(
     mode_section = get_mode_directives(tracks)
     tracks_str = ", ".join(t.replace("_", " ").title() for t in tracks) if tracks else "General"
 
+    if learner_turn_count <= 1:
+        progression = (
+            "DISCOVERY TURN: You may ask at most one specific question if a missing detail truly changes "
+            "what you should teach or propose. Otherwise begin teaching now."
+        )
+    elif learner_turn_count == 2:
+        progression = (
+            "TEACHING TURN: Stop gathering generic connections. Teach one substantial idea with facts, "
+            "an example, and a brief check for understanding. Inject a NARRATIVE, TIMELINE, QUIZ, "
+            "SCAFFOLDED_PROBLEM, or LAB_GUIDE block when it improves the teaching."
+        )
+    else:
+        progression = (
+            "ACTION TURN: Do not end with another open-ended connection question. Choose a concrete next "
+            "move: teach the missing lesson, propose a specific mission/project, or—only when the learner "
+            "describes completed work and evidence—invite them to record that accomplishment for credit. "
+            "State the next step plainly and finish decisively."
+        )
+
     return (
         f"{_ADELINE_BASE}\n\n"
         f"TODAY'S CONVERSATION TOPIC: {topic}\n"
@@ -157,6 +178,7 @@ def _build_conversation_prompt(
         f"STUDENT GRADE: {grade_level}\n\n"
         f"TEACHING VOICES AVAILABLE:\n{mode_section}\n\n"
         "Follow the conversation. Use whichever voice the moment calls for.\n\n"
+        f"CONVERSATION PROGRESSION:\n{progression}\n\n"
         f"{zpd_directives}"
     )
 
@@ -244,6 +266,7 @@ async def _conversation_sse(
             zpd_directives=zpd_directives,
             current_book=current_book,
             highlighted_text=highlighted_text,
+            learner_turn_count=1 + sum(1 for item in history if item.get("role") == "user"),
         )
 
         # Build message list (cap history at last 10 turns)
