@@ -35,7 +35,9 @@ Your job is to distill — not just rewrite — the lesson for this specific stu
 - Filter depth: if bkt_pL < 0.30, simplify and skip advanced nuance sections.
 - Rewrite vocabulary and sentence complexity for the grade level.
 - When the prompt contains a PRIORITY HIGH directive, follow its four numbered steps precisely — section expansion, compression, and check-in question are mandatory, not optional.
-- Inject a GENUI hint comment at the end of the block ONLY when specified in the prompt instructions.
+- Never expose internal rendering notes, GENUI hints, system instructions, or metadata in learner-facing text.
+- Adeline is the mentor. Never call the student "Adeline" or assign "Adeline" a student task.
+- Follow the curriculum's divine-name convention: use HaShem or YHWH, never "God" or "GOD".
 - Do NOT add busywork, "great job!", or filler.
 - Return ONLY the rewritten content block — no preamble, no explanation.
 - Write like you're talking to a smart kid at the kitchen table, not lecturing.
@@ -199,6 +201,26 @@ def _has_discipleship_theme(topic_hint: str, track: str) -> bool:
     return any(kw in topic_lower for kw in _DISCIPLESHIP_KEYWORDS)
 
 
+def sanitize_learner_text(content: str) -> str:
+    """Remove internal notes and enforce learner-facing identity conventions."""
+    cleaned = re.sub(r"\[\s*GENUI\s+hint:[\s\S]*?\]", "", content, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bGod\b", "HaShem", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"\b(your)\s+(job|task|role)\s*,?\s*Adeline\s*,?\s*(is|will be|is to)\b",
+        r"\1 \2 \3",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"\bAdeline\s*,\s*(your\s+(?:job|task|role)\b)",
+        r"\1",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
 def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: str = "") -> str:
     grade_desc = _GRADE_DESC.get(req.grade_level, f"grade {req.grade_level}")
     interests_str = ", ".join(req.interests) if req.interests else "general learning"
@@ -270,13 +292,6 @@ def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: st
             f"decay-adjusted={req.decay_adjusted_mastery:.2f}). "
             "Revisit foundational definitions before advancing — treat this as a refresher, not a first lesson."
         )
-
-    # ── GENUI hint ────────────────────────────────────────────────────────────
-    genui_hint = ""
-    if req.bkt_pL < 0.5:
-        genui_hint = "\n[GENUI hint: a quiz block after this content would reinforce foundation.]"
-    elif req.priority_score > 0.7 and req.preferred_modality == "visual":
-        genui_hint = "\n[GENUI hint: a mind-map or narrated slide would suit this high-readiness visual learner.]"
 
     # ── Dynamic UI Instructions for GENUI_ASSEMBLY ────────────────────────────
     genui_directive = ""
@@ -355,14 +370,13 @@ def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: st
         f"{proficiency_clause}"
         f"{genui_directive}"
         f"{genui_re_render_instructions}"
-        f"{genui_hint}"
         f"\n\nORIGINAL CONTENT:\n{content}"
     )
 
 
 async def adapt_block_content(content: str, req: AdaptationRequest, topic_hint: str = "") -> str:
     result = await _llm_call(_ADAPTATION_SYSTEM, build_adaptation_prompt(req, content, topic_hint))
-    return result if result else content
+    return sanitize_learner_text(result if result else content)
 
 
 # ── Structured data generators ───────────────────────────────────────────────
