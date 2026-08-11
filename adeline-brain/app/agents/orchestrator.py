@@ -1006,7 +1006,6 @@ async def _generate_from_knowledge(
         ),
     })
 
-    sources_text = "\n".join(f"- {s}" for s in silent_sources[:3]) if silent_sources else ""
     # Missing archive material is Adeline's responsibility, never the learner's.
     # The Researcher has already run before this fallback. Give the child a
     # curiosity doorway only after substantial teaching; never ask them to
@@ -1567,7 +1566,7 @@ async def science_agent(state: AdelineState) -> AdelineState:
     if is_creation_science and blocks:
         mol_block = await _synthesize_molecule_sim_block(request, blocks[0].get("content", ""))
         if mol_block:
-            logger.info(f"[ScienceAgent] Injected MoleculeSimulator block")
+            logger.info("[ScienceAgent] Injected MoleculeSimulator block")
             blocks.append(mol_block)
 
     logger.info(f"[ScienceAgent] PRE-RENDER: {len(blocks)} blocks")
@@ -1863,23 +1862,23 @@ async def practical_agent(state: AdelineState) -> AdelineState:
 
     # ── CREATIVE_ECONOMY: always inject a ProjectBuilder GenUI block ──────────
     if request.track.value == "CREATIVE_ECONOMY" and blocks:
-        logger.info(f"[PracticalAgent] Injecting ProjectBuilder for CREATIVE_ECONOMY")
+        logger.info("[PracticalAgent] Injecting ProjectBuilder for CREATIVE_ECONOMY")
         project_block = await _synthesize_creative_project_block(request, blocks[0].get("content", ""))
         if project_block:
-            logger.info(f"[PracticalAgent] ProjectBuilder injection successful")
+            logger.info("[PracticalAgent] ProjectBuilder injection successful")
             blocks.append(project_block)
         else:
-            logger.warning(f"[PracticalAgent] ProjectBuilder injection failed")
+            logger.warning("[PracticalAgent] ProjectBuilder injection failed")
 
     # ── APPLIED_MATHEMATICS: inject a CodePlayground for interactive calculation ──
     if request.track.value == "APPLIED_MATHEMATICS" and blocks:
-        logger.info(f"[PracticalAgent] Injecting CodePlayground for APPLIED_MATHEMATICS")
+        logger.info("[PracticalAgent] Injecting CodePlayground for APPLIED_MATHEMATICS")
         code_block = await _synthesize_code_playground_block(request, blocks[0].get("content", ""))
         if code_block:
-            logger.info(f"[PracticalAgent] CodePlayground injection successful")
+            logger.info("[PracticalAgent] CodePlayground injection successful")
             blocks.append(code_block)
         else:
-            logger.warning(f"[PracticalAgent] CodePlayground injection failed")
+            logger.warning("[PracticalAgent] CodePlayground injection failed")
 
     logger.info(f"[PracticalAgent] PRE-RENDER: {len(blocks)} blocks")
     for i, b in enumerate(blocks):
@@ -2615,7 +2614,7 @@ async def _render_lesson(
             track=request.track.value,
             student_id=request.student_id,
         )
-        logger.info(f"[Render] CASCADE-1: Calling generate_animated_lesson")
+        logger.info("[Render] CASCADE-1: Calling generate_animated_lesson")
         sketchnote_data = await generate_animated_lesson(_alr)
         logger.info(f"[Render] CASCADE-1: AnimatedSketchnote SUCCESS - frames={len(sketchnote_data.frames)}")
         cohesive_block = {
@@ -2645,7 +2644,7 @@ async def _render_lesson(
                 track=request.track.value,
                 bkt_pL=mastery,
             )
-            logger.info(f"[Render] CASCADE-2: Calling generate_narrated_slide_data")
+            logger.info("[Render] CASCADE-2: Calling generate_narrated_slide_data")
             slide_data = await generate_narrated_slide_data(synthesis_text, _ar)
             if slide_data:
                 logger.info(f"[Render] CASCADE-2: NarratedSlide SUCCESS - slides={len(slide_data.slides)}")
@@ -2659,7 +2658,7 @@ async def _render_lesson(
                 }
                 logger.info(f"[Render] CASCADE-2 NarratedSlide OK for '{request.topic}'")
             else:
-                logger.warning(f"[Render] CASCADE-2: NarratedSlide returned None")
+                logger.warning("[Render] CASCADE-2: NarratedSlide returned None")
         except Exception as _e:
             import traceback as _tb
             logger.warning(
