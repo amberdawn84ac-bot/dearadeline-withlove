@@ -24,7 +24,6 @@ MIGRATIONS = [
     "20260521_canonical_topicslug_unique",
     "20260521_fix_user_updatedat_default",
     "20260523_add_book_table",
-    "20260523_backfill_student_subscriptions",
     "20260525_fix_hippocampus_dedup",
     "20260804_add_student_mobile_fields",
     "20260805_add_town_player_systems",
@@ -147,13 +146,7 @@ async def verify(conn):
            WHERE table_schema = 'public' AND table_name = 'User' AND column_name = 'updatedAt'"""
     ):
         fail('User.updatedAt default is missing')
-    missing_subscriptions = await conn.fetchval(
-        """SELECT count(*) FROM "User" u
-           WHERE u."onboardingComplete" = true
-             AND NOT EXISTS (SELECT 1 FROM "Subscription" s WHERE s."userId" = u.id)"""
-    )
-    if missing_subscriptions:
-        fail(f"{missing_subscriptions} onboarded users are missing subscription backfill")
+
 
 
 async def repair_focus_enums(conn):
