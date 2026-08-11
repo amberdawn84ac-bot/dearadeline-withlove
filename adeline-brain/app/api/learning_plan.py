@@ -159,15 +159,15 @@ class LearningPlanResponse(BaseModel):
 # Which agent handles each track (from CLAUDE.md architecture)
 TRACK_AGENT_MAP = {
     "TRUTH_HISTORY": "HistorianAgent",
-    "JUSTICE_CHANGEMAKING": "HistorianAgent",
+    "JUSTICE_CHANGEMAKING": "JusticeAgent",
     "CREATION_SCIENCE": "ScienceAgent",
     "HOMESTEADING": "ScienceAgent",
     "DISCIPLESHIP": "DiscipleshipAgent",
-    "HEALTH_NATUROPATHY": "DiscipleshipAgent",
-    "GOVERNMENT_ECONOMICS": "DiscipleshipAgent",
-    "ENGLISH_LITERATURE": "DiscipleshipAgent",
-    "APPLIED_MATHEMATICS": "DiscipleshipAgent",
-    "CREATIVE_ECONOMY": "DiscipleshipAgent",
+    "HEALTH_NATUROPATHY": "ScienceAgent",
+    "GOVERNMENT_ECONOMICS": "PracticalAgent",
+    "ENGLISH_LITERATURE": "LiteratureAgent",
+    "APPLIED_MATHEMATICS": "PracticalAgent",
+    "CREATIVE_ECONOMY": "PracticalAgent",
 }
 
 TRACK_EMOJI = {
