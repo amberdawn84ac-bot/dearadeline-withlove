@@ -1,14 +1,9 @@
 """
-Authentication middleware for adeline-brain.
+Authentication helpers for adeline-brain.
 
-Verifies Supabase JWTs using either:
-  1. JWKS (ES256) — fetches public key from Supabase's well-known endpoint
-  2. Shared secret (HS256) — uses SUPABASE_JWT_SECRET env var
-
-The token's 'kid' header determines the path. User access tokens from
-Supabase Auth v2 use ES256 with a kid; legacy tokens use HS256.
-
-Every request must send: Authorization: Bearer <supabase_access_token>
+Supports both Supabase access tokens and Dear Adeline student JWTs. Browser
+clients may authenticate with an Authorization header or the HttpOnly
+``auth_token`` cookie issued by the production UI.
 """
 import logging
 from typing import Optional
@@ -33,11 +28,7 @@ def _get_jwks_client() -> PyJWKClient:
 
 
 def _decode_jwt(token: str) -> dict:
-    """
-    Decode and verify a Supabase-issued JWT.
-    Uses JWKS (ES256) if token has a 'kid' header, otherwise falls back
-    to SUPABASE_JWT_SECRET (HS256).
-    """
+    """Decode and verify a Supabase or Dear Adeline student JWT."""
     try:
         header = jwt.get_unverified_header(token)
     except jwt.DecodeError as e:
@@ -48,40 +39,37 @@ def _decode_jwt(token: str) -> dict:
 
     try:
         if kid:
-            # ES256 path — verify with JWKS public key
             client = _get_jwks_client()
             signing_key = client.get_signing_key_from_jwt(token)
-            payload = jwt.decode(
+            return jwt.decode(
                 token,
                 signing_key.key,
                 algorithms=[alg],
                 audience="authenticated",
             )
-        elif STUDENT_JWT_SECRET:
-            # HS256 path — verify Adelinemobile student sessions
-            payload = jwt.decode(
+        if STUDENT_JWT_SECRET:
+            return jwt.decode(
                 token,
                 STUDENT_JWT_SECRET,
                 algorithms=["HS256"],
                 audience="authenticated",
             )
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail="Server misconfiguration: no student JWT secret.",
-            )
-        return payload
+        raise HTTPException(
+            status_code=500,
+            detail="Server misconfiguration: no student JWT secret.",
+        )
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired.")
     except jwt.InvalidTokenError as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"[Auth] JWT verification error: {e}")
+        logger.error("[Auth] JWT verification error: %s", e)
         raise HTTPException(status_code=401, detail="Token verification failed.")
 
 
 def _extract_bearer_token(authorization: Optional[str]) -> str:
-    """Extract the raw token from an Authorization: Bearer header."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=401,
@@ -93,46 +81,46 @@ def _extract_bearer_token(authorization: Optional[str]) -> str:
     return token
 
 
+def _token_from_sources(
+    authorization: Optional[str],
+    auth_token: Optional[str],
+) -> str:
+    """Prefer Bearer auth, with secure-cookie fallback for browser requests."""
+    if authorization:
+        try:
+            return _extract_bearer_token(authorization)
+        except HTTPException:
+            pass
+    if auth_token:
+        return auth_token
+    raise HTTPException(status_code=401, detail="Authentication required.")
+
+
 def _extract_role(payload: dict) -> str:
-    """Extract the user role from Supabase JWT app_metadata."""
     app_metadata = payload.get("app_metadata", {})
     return app_metadata.get("role", "STUDENT").upper()
 
 
 def _extract_user_id(payload: dict) -> str:
-    """Extract the user ID (Supabase 'sub' claim)."""
     user_id = payload.get("sub", "")
     if not user_id:
         raise HTTPException(status_code=401, detail="Token missing 'sub' claim.")
     return user_id
 
 
-# ── Public dependencies ──────────────────────────────────────────────────────
-
-
 def require_role(*allowed_roles: UserRole):
-    """
-    FastAPI dependency factory.
-    Verifies the Bearer JWT and checks that the user's role is allowed.
-
-    Returns the role string on success.
-
-    Usage:
-        @router.get("/admin-only", dependencies=[Depends(require_role(UserRole.ADMIN))])
-    """
-
+    """FastAPI dependency factory enforcing one of the supplied roles."""
     def _check(
         authorization: Optional[str] = Header(default=None),
+        auth_token: Optional[str] = Cookie(default=None),
     ) -> str:
-        token = _extract_bearer_token(authorization)
+        token = _token_from_sources(authorization, auth_token)
         payload = _decode_jwt(token)
         role_str = _extract_role(payload)
-
         try:
             role = UserRole(role_str)
         except ValueError:
             raise HTTPException(status_code=401, detail=f"Unknown role: {role_str}")
-
         if role not in allowed_roles:
             raise HTTPException(
                 status_code=403,
@@ -142,22 +130,15 @@ def require_role(*allowed_roles: UserRole):
                 ),
             )
         return role.value
-
     return _check
 
 
 def get_current_user_id(
     authorization: Optional[str] = Header(default=None),
+    auth_token: Optional[str] = Cookie(default=None),
 ) -> str:
-    """
-    FastAPI dependency.
-    Decodes the Bearer JWT and returns the authenticated user's UUID.
-
-    Usage:
-        @router.get("/me")
-        async def get_me(user_id: str = Depends(get_current_user_id)):
-    """
-    token = _extract_bearer_token(authorization)
+    """Return the authenticated user id from Bearer header or auth cookie."""
+    token = _token_from_sources(authorization, auth_token)
     payload = _decode_jwt(token)
     return _extract_user_id(payload)
 
@@ -166,50 +147,11 @@ def get_current_user_id_from_auth_or_cookie(
     authorization: Optional[str] = Header(default=None),
     auth_token: Optional[str] = Cookie(default=None),
 ) -> str:
-    """
-    FastAPI dependency with cookie fallback.
-    
-    Tries Authorization header first (for backward compatibility),
-    then falls back to auth_token cookie (for production cookie-based auth).
-    
-    Usage:
-        @router.get("/me")
-        async def get_me(user_id: str = Depends(get_current_user_id_from_auth_or_cookie)):
-    """
-    token = None
-    source = "unknown"
-    
-    # Try Authorization header first
-    if authorization:
-        try:
-            token = _extract_bearer_token(authorization)
-            source = "header"
-        except HTTPException:
-            # Invalid header, will try cookie
-            pass
-    
-    # Fall back to cookie
-    if not token and auth_token:
-        token = auth_token
-        source = "cookie"
-    
-    if not token:
-        raise HTTPException(
-            status_code=401,
-            detail="Missing Authorization header or auth_token cookie"
-        )
-    
-    payload = _decode_jwt(token)
-    user_id = _extract_user_id(payload)
-    
-    # Log auth source for debugging (remove in production if too noisy)
-    logger.debug(f"[Auth] Authenticated via {source}: user {user_id}")
-    
-    return user_id
+    """Backward-compatible alias for cookie-aware authentication."""
+    return get_current_user_id(authorization=authorization, auth_token=auth_token)
 
 
 def get_auth_claims(authorization: Optional[str]) -> tuple[str, str]:
-    """Returns (user_id, email) decoded from the Bearer JWT."""
     token = _extract_bearer_token(authorization)
     payload = _decode_jwt(token)
     user_id = _extract_user_id(payload)
@@ -220,37 +162,26 @@ def get_auth_claims(authorization: Optional[str]) -> tuple[str, str]:
 async def verify_student_access(
     student_id: str,
     authorization: Optional[str] = Header(default=None),
+    auth_token: Optional[str] = Cookie(default=None),
 ) -> str:
-    """
-    Verify the caller can access this student's data.
-    Returns the authenticated user_id.
-
-    Allowed if:
-    - user_id == student_id (student accessing own data)
-    - user role is ADMIN
-    - user role is PARENT and student's parentId matches user_id
-    """
-    token = _extract_bearer_token(authorization)
+    """Verify student, parent, or admin access to a student's data."""
+    token = _token_from_sources(authorization, auth_token)
     payload = _decode_jwt(token)
     user_id = _extract_user_id(payload)
     role_str = _extract_role(payload)
 
-    # Student accessing own data
     if user_id == student_id:
         return user_id
-
-    # Admin can access any student
     if role_str == UserRole.ADMIN.value:
         return user_id
-
-    # Parent can access their children
     if role_str == UserRole.PARENT.value:
         from app.config import get_db_conn
         conn = await get_db_conn()
         try:
             row = await conn.fetchrow(
                 'SELECT id FROM "User" WHERE id = $1 AND "parentId" = $2',
-                student_id, user_id,
+                student_id,
+                user_id,
             )
         finally:
             await conn.close()
@@ -266,10 +197,6 @@ async def verify_student_access(
 def require_internal_key(
     x_internal_key: Optional[str] = Header(default=None, alias="X-Internal-Key"),
 ) -> str:
-    """
-    Verify the request carries a valid internal API key.
-    Used for server-to-server calls (lesson pipeline → learning records).
-    """
     from app.config import INTERNAL_API_KEY
     if not x_internal_key or x_internal_key != INTERNAL_API_KEY:
         raise HTTPException(
