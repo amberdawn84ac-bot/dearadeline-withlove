@@ -1,208 +1,196 @@
-'use client'
+'use client';
 
-import { useState, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
-import Image from 'next/image'
-import { Loader2, Eye, EyeOff } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
-import { setAuthCookie } from '@/lib/auth-cookies'
+import { FormEvent, Suspense, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
-type Mode = 'login' | 'signup'
+const ADELINE_FACE =
+  'https://raw.githubusercontent.com/amberdawn84ac-bot/dearadeline-withlove/main/adeline-world/public/adeline-face.png';
+
+type Mode = 'login' | 'register';
 
 function LoginContent() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const [mode, setMode] = useState<Mode>(
-    searchParams.get('mode') === 'signup' ? 'signup' : 'login'
-  )
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const inviteCode = searchParams.get('invite')
+  const router = useRouter();
+  const [mode, setMode] = useState<Mode>('login');
+  const [username, setUsername] = useState('');
+  const [pin, setPin] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [gradeLevel, setGradeLevel] = useState('6-8');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
+  useEffect(() => {
+    fetch('/api/student-auth', { cache: 'no-store' })
+      .then((response) => {
+        if (response.ok) router.replace('/dashboard');
+      })
+      .catch(() => undefined);
+  }, [router]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
 
     try {
-      if (mode === 'signup') {
-        const { data, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-        })
-        if (signUpError) throw signUpError
-        if (!data.session) {
-          // Email confirmation required
-          setError('Check your email for a confirmation link, then come back and log in.')
-          setLoading(false)
-          return
-        }
-        // Auto-confirmed — new signup always needs onboarding
-        await setAuthCookie(data.session.access_token)
-        // Pass invite code to onboarding if present
-        const onboardingUrl = inviteCode ? `/onboarding?invite=${inviteCode}` : '/onboarding'
-        router.push(onboardingUrl)
-      } else {
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
-        if (signInError) throw signInError
-        if (!data.session) throw new Error('No session returned')
-        const token = data.session.access_token
-        await setAuthCookie(token)
-        // Send returning users directly to dashboard if they already completed onboarding
-        try {
-          const profileRes = await fetch(`/brain/api/onboarding?_=${Date.now()}`, {
-            headers: { 'Authorization': `Bearer ${token}`, 'Cache-Control': 'no-cache' },
-          })
-          if (profileRes.ok) {
-            const profileData = await profileRes.json()
-            if (profileData?.user?.onboardingComplete) {
-              router.push('/dashboard')
-              return
-            }
-          }
-        } catch {
-          // Profile check failed — fall through to onboarding; gate will sort it out
-        }
-        router.push('/onboarding')
+      const body: Record<string, string> = {
+        mode,
+        username: username.trim().toLowerCase(),
+        pin,
+      };
+      if (mode === 'register') {
+        body.display_name = displayName.trim();
+        body.grade_level = gradeLevel;
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Something went wrong'
-      setError(message)
-      setLoading(false)
+
+      const response = await fetch('/api/student-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const detail = Array.isArray(data?.detail)
+          ? data.detail.map((item: { msg?: string }) => item?.msg).filter(Boolean).join(' ')
+          : data?.detail;
+        throw new Error(detail || 'Adeline could not sign you in.');
+      }
+
+      router.push('/dashboard');
+      router.refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Adeline could not sign you in.');
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
-    <div className="min-h-screen bg-[#FFFEF7] flex flex-col items-center justify-center px-6">
-      {/* Logo */}
-      <Link href="/" className="flex items-center gap-3 mb-10">
-        <Image
-          src="/adeline-nav.png"
-          alt="Adeline"
-          width={44}
-          height={44}
-          className="rounded-xl shadow-lg -rotate-3"
-        />
-        <span
-          className="text-2xl font-bold text-[#2F4731]"
-          style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}
-        >
-          Dear Adeline
-        </span>
-      </Link>
+    <main className="min-h-screen grid place-items-center px-4 py-8 bg-[radial-gradient(circle_at_20%_10%,rgba(214,166,75,.18),transparent_34%),radial-gradient(circle_at_85%_85%,rgba(51,99,71,.16),transparent_36%)] bg-[#f7f1e6] text-[#263b2d]">
+      <section className="w-full max-w-[520px] rounded-[30px] border border-[#374f3c2e] bg-[#fffdf7f0] p-7 sm:p-9 shadow-[0_24px_70px_rgba(57,48,34,.13)]">
+        <Link href="/" className="text-[13px] font-black text-[#49654e] no-underline">
+          ← Dear Adeline
+        </Link>
 
-      {/* Card */}
-      <div className="w-full max-w-sm bg-white rounded-2xl border-2 border-[#E7DAC3] p-8 shadow-sm">
-        <h1 className="text-2xl font-bold text-[#2F4731] text-center mb-1">
-          {mode === 'login' ? 'Welcome back' : 'Create your account'}
-        </h1>
-        <p className="text-sm text-[#2F4731]/60 text-center mb-6">
-          {mode === 'login'
-            ? 'Sign in to continue learning'
-            : 'Start your homeschool journey'}
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="my-6 flex items-center gap-4">
+          <img
+            src={ADELINE_FACE}
+            alt="Adeline"
+            className="h-[82px] w-[82px] rounded-full border-4 border-[#d6b15c] bg-[#f4ead5] object-cover object-[center_25%]"
+          />
           <div>
-            <label htmlFor="email" className="block text-xs font-semibold text-[#2F4731] mb-1.5">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              autoComplete="email"
-              className="w-full px-4 py-2.5 rounded-xl border border-[#E7DAC3] text-sm text-[#2F4731] bg-white focus:outline-none focus:border-[#BD6809] transition-colors"
-            />
+            <p className="mb-1 text-[10px] font-black uppercase tracking-[.11em] text-[#9c623e]">
+              Welcome to your learning adventure
+            </p>
+            <h1
+              className="m-0 text-[38px] leading-none font-normal text-[#294832]"
+              style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}
+            >
+              {mode === 'login' ? 'Come on in!' : 'Create your player'}
+            </h1>
           </div>
+        </div>
 
-          <div>
-            <label htmlFor="password" className="block text-xs font-semibold text-[#2F4731] mb-1.5">
-              Password
-            </label>
-            <div className="relative">
-              <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                required
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                className="w-full px-4 py-2.5 rounded-xl border border-[#E7DAC3] text-sm text-[#2F4731] bg-white focus:outline-none focus:border-[#BD6809] transition-colors pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#2F4731]/40 hover:text-[#2F4731]"
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
+        <div className="mb-6 grid grid-cols-2 gap-1 rounded-[15px] bg-[#eae2d2] p-[5px]">
+          <button
+            type="button"
+            onClick={() => { setMode('login'); setError(''); }}
+            className={`min-h-[43px] rounded-[11px] border-0 font-black ${mode === 'login' ? 'bg-[#fffdf7] text-[#294832] shadow-sm' : 'bg-transparent text-[#667064]'}`}
+          >
+            Sign in
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode('register'); setError(''); }}
+            className={`min-h-[43px] rounded-[11px] border-0 font-black ${mode === 'register' ? 'bg-[#fffdf7] text-[#294832] shadow-sm' : 'bg-transparent text-[#667064]'}`}
+          >
+            New player
+          </button>
+        </div>
 
-          {error && (
-            <p className="text-xs text-[#9A3F4A] bg-[#9A3F4A]/10 rounded-lg px-3 py-2">{error}</p>
+        <form onSubmit={submit} className="grid gap-4">
+          {mode === 'register' && (
+            <>
+              <label className="grid gap-2 text-xs font-black text-[#3c5140]">
+                What should Adeline call you?
+                <input
+                  required
+                  autoComplete="name"
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  className="min-h-[49px] rounded-[13px] border border-[#d7cdbb] bg-[#fffefa] px-3 text-[#243429] outline-none focus:border-[#6e8a68] focus:ring-4 focus:ring-[#6e8a6826]"
+                />
+              </label>
+              <label className="grid gap-2 text-xs font-black text-[#3c5140]">
+                Learning level
+                <select
+                  value={gradeLevel}
+                  onChange={(event) => setGradeLevel(event.target.value)}
+                  className="min-h-[49px] rounded-[13px] border border-[#d7cdbb] bg-[#fffefa] px-3 text-[#243429] outline-none"
+                >
+                  <option>K-2</option>
+                  <option>3-5</option>
+                  <option>6-8</option>
+                  <option>9-12</option>
+                </select>
+              </label>
+            </>
           )}
+
+          <label className="grid gap-2 text-xs font-black text-[#3c5140]">
+            Player username
+            <input
+              required
+              autoCapitalize="none"
+              autoComplete="username"
+              minLength={3}
+              maxLength={20}
+              pattern="[a-z0-9_]+"
+              title="Use lowercase letters, numbers, or underscores"
+              value={username}
+              onChange={(event) => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+              className="min-h-[49px] rounded-[13px] border border-[#d7cdbb] bg-[#fffefa] px-3 text-[#243429] outline-none focus:border-[#6e8a68] focus:ring-4 focus:ring-[#6e8a6826]"
+            />
+          </label>
+
+          <label className="grid gap-2 text-xs font-black text-[#3c5140]">
+            4-digit PIN
+            <input
+              required
+              type="password"
+              inputMode="numeric"
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              pattern="[0-9]{4}"
+              maxLength={4}
+              value={pin}
+              onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 4))}
+              className="min-h-[49px] rounded-[13px] border border-[#d7cdbb] bg-[#fffefa] px-3 text-[#243429] outline-none focus:border-[#6e8a68] focus:ring-4 focus:ring-[#6e8a6826]"
+            />
+          </label>
+
+          {error && <p className="m-0 rounded-xl bg-[#fae2dc] px-3 py-2 text-xs font-bold text-[#8a352b]">{error}</p>}
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full py-3 rounded-xl bg-[#2F4731] text-white font-bold text-sm hover:bg-[#243828] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+            disabled={busy}
+            className="mt-1 min-h-[52px] rounded-[15px] border-0 bg-[#66845e] font-black text-white shadow-[0_8px_20px_rgba(72,103,68,.22)] disabled:opacity-60"
           >
-            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {mode === 'login' ? 'Sign In' : 'Create Account'}
+            {busy ? 'Opening your adventure…' : mode === 'login' ? 'Enter Dear Adeline' : 'Start my adventure'}
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm text-[#2F4731]/60">
-          {mode === 'login' ? (
-            <>
-              Don&apos;t have an account?{' '}
-              <Link href="/pricing" className="text-[#BD6809] font-semibold hover:underline">
-                Sign up
-              </Link>
-            </>
-          ) : (
-            <>
-              Already have an account?{' '}
-              <button
-                onClick={() => { setMode('login'); setError('') }}
-                className="text-[#BD6809] font-semibold hover:underline"
-              >
-                Log in
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Pricing link */}
-      <p className="mt-6 text-xs text-[#2F4731]/40">
-        No account yet?{' '}
-        <Link href="/pricing" className="text-[#BD6809] hover:underline font-medium">
-          See plans & pricing
-        </Link>
-      </p>
-    </div>
-  )
+        <p className="mt-6 text-center text-[11px] leading-relaxed text-[#73786f]">
+          One student identity keeps learning, projects, games, portfolio work, and graduation progress together.
+        </p>
+      </section>
+    </main>
+  );
 }
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#FFFEF7]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-[#f7f1e6]" />}>
       <LoginContent />
     </Suspense>
-  )
+  );
 }
