@@ -1,9 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getPlayerSession } from "../lib/player-session";
+import InvestigationGame from "./InvestigationGame";
 
 type Command = "forward" | "left" | "right";
 type Robot = { x: number; y: number; direction: number };
+type WorldObject = { id: string; x: number; y: number; sprite: string; label: string; effect: string };
+
+const worldLevels: Record<string, { title: string; brief: string; player: string; goal: string; objects: WorldObject[] }> = {
+  justice: { title: "The Missing Voices", brief: "Move through the town, recover six firsthand accounts, and bring them to Civic Hall before the official story hardens.", player: "🕵️", goal: "🏛️", objects: ["Letter", "Ledger", "Photo", "Map", "Testimony", "Receipt"].map((label, i) => ({ id: label, x: [2,4,7,9,3,8][i], y: [6,2,6,3,1,1][i], sprite: ["✉️","📒","📷","🗺️","🗣️","🧾"][i], label, effect: `${label} adds a missing piece to the account.` })) },
+  greenhouse: { title: "Save the Seedlings", brief: "Gather what the irrigation system needs, avoid the dry beds, and restore water to the greenhouse.", player: "🧑‍🌾", goal: "🌱", objects: ["Pipe", "Valve", "Rain barrel", "Mulch", "Filter", "Drip line"].map((label, i) => ({ id: label, x: [2,4,7,9,3,8][i], y: [6,2,6,3,1,1][i], sprite: ["➖","🔧","🛢️","🍂","⚙️","💧"][i], label, effect: `${label} improves the working irrigation system.` })) },
+  market: { title: "Market Day Rescue", brief: "Collect the tools for a fair, sustainable market stall and reach Market Square without wasting the budget.", player: "🧺", goal: "🏪", objects: ["Price tags", "Scale", "Change", "Sign", "Inventory", "Receipt book"].map((label, i) => ({ id: label, x: [2,4,7,9,3,8][i], y: [6,2,6,3,1,1][i], sprite: ["🏷️","⚖️","🪙","🪧","📦","📕"][i], label, effect: `${label} makes the market more useful and accountable.` })) },
+  history: { title: "Timewalker", brief: "Recover six pieces of the historical record, then carry the fuller story safely through the history portal.", player: "🧭", goal: "🌀", objects: ["Diary", "Newspaper", "Artifact", "Portrait", "Law", "Oral history"].map((label, i) => ({ id: label, x: [2,4,7,9,3,8][i], y: [6,2,6,3,1,1][i], sprite: ["📔","📰","🏺","🖼️","📜","🎙️"][i], label, effect: `${label} reveals another perspective from the time.` })) },
+};
+
+const defaultLevel = { title: "Town Quest", brief: "Explore the district, collect the six tools that matter, and bring them to the destination.", player: "🧑‍🚀", goal: "✨", objects: ["Tool", "Clue", "Plan", "Material", "Record", "Key"].map((label, i) => ({ id: label, x: [2,4,7,9,3,8][i], y: [6,2,6,3,1,1][i], sprite: ["🔧","🔎","📐","🧱","📓","🗝️"][i], label, effect: `${label} helps complete the mission.` })) };
+const worldObstacles = new Set(["5,0","5,1","5,2","5,4","5,5","5,6","1,3","2,3","8,4","9,4","10,4"]);
+const trackByBuilding: Record<string, string> = { justice: "JUSTICE_CHANGEMAKING", greenhouse: "HOMESTEADING", maker: "APPLIED_MATHEMATICS", library: "ENGLISH_LITERATURE", observatory: "CREATION_SCIENCE", civic: "GOVERNMENT_ECONOMICS", wellness: "HEALTH_NATUROPATHY", market: "CREATIVE_ECONOMY", history: "TRUTH_HISTORY" };
+const gameSprite: Record<string, string> = { scroll: "📜", journal: "📔", tool: "🔧", map: "🗺️", lantern: "🏮", key: "🗝️", explorer: "🧭" };
 
 const buildings = [
   {
@@ -112,6 +127,12 @@ export default function GamePortal() {
   const [selected, setSelected] = useState(buildings[0]);
   const [player, setPlayer] = useState({ x: 42, y: 64 });
   const [labOpen, setLabOpen] = useState(false);
+  const [worldOpen, setWorldOpen] = useState(false);
+  const [investigationOpen, setInvestigationOpen] = useState(false);
+  const [worldPlayer, setWorldPlayer] = useState({ x: 0, y: 7 });
+  const [collected, setCollected] = useState<string[]>([]);
+  const [worldMessage, setWorldMessage] = useState("Use the arrow keys or controls to explore.");
+  const [generatedLevel, setGeneratedLevel] = useState<(typeof defaultLevel) | null>(null);
   const [commands, setCommands] = useState<Command[]>([]);
   const [robot, setRobot] = useState<Robot>({ x: 0, y: 4, direction: 0 });
   const [runState, setRunState] = useState<"ready" | "running" | "success" | "failed">("ready");
@@ -125,7 +146,7 @@ export default function GamePortal() {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (labOpen) return;
+      if (labOpen || worldOpen || investigationOpen) return;
       const moves: Record<string, [number, number]> = {
         ArrowUp: [0, -2.5], ArrowDown: [0, 2.5], ArrowLeft: [-2.5, 0], ArrowRight: [2.5, 0],
       };
@@ -136,7 +157,76 @@ export default function GamePortal() {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [labOpen]);
+  }, [labOpen, worldOpen, investigationOpen]);
+
+  const level = generatedLevel || worldLevels[selected.id] || defaultLevel;
+
+  async function openWorld() {
+    const authored = worldLevels[selected.id] || defaultLevel;
+    setGeneratedLevel(null);
+    setWorldPlayer({ x: 0, y: 7 });
+    setCollected([]);
+    setWorldMessage("Find the six useful objects, then reach the glowing destination.");
+    setWorldOpen(true);
+    const session = getPlayerSession();
+    const track = trackByBuilding[selected.id];
+    if (!session || !track) return;
+    try {
+      const response = await fetch("/api/brain/brain/games/build", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify({ student_id: session.studentId, topic: selected.name, track, grade_level: String(session.player.grade_level || 8) }),
+      });
+      if (!response.ok) return;
+      const payload = await response.json() as { interactive?: Record<string, unknown> };
+      const game = payload.interactive;
+      const objects = Array.isArray(game?.objects) ? game.objects as Record<string, unknown>[] : [];
+      if (game?.mechanic !== "top_down_2d" || objects.length !== 6) return;
+      setGeneratedLevel({
+        title: typeof game.scenario === "string" ? selected.name : authored.title,
+        brief: typeof game.scenario === "string" ? game.scenario : authored.brief,
+        player: "🧭",
+        goal: "✨",
+        objects: objects.map((item, index) => ({
+          id: String(item.id || `object-${index}`), x: Number(item.x), y: Number(item.y),
+          sprite: gameSprite[String(item.sprite)] || authored.objects[index]?.sprite || "✦",
+          label: String(item.label || `Discovery ${index + 1}`), effect: String(item.effect || "This unlocks another part of the lesson."),
+        })),
+      });
+      setWorldMessage("GameSmith loaded this level from the saved lesson.");
+    } catch { /* Authored level remains immediately playable. */ }
+  }
+
+  function moveInWorld(dx: number, dy: number) {
+    setWorldPlayer((current) => {
+      const next = { x: Math.max(0, Math.min(11, current.x + dx)), y: Math.max(0, Math.min(7, current.y + dy)) };
+      if (worldObstacles.has(`${next.x},${next.y}`)) {
+        setWorldMessage("That route is blocked. Find another way through.");
+        return current;
+      }
+      const found = level.objects.find((item) => item.x === next.x && item.y === next.y && !collected.includes(item.id));
+      if (found) {
+        setCollected((items) => [...items, found.id]);
+        setWorldMessage(`${found.sprite} ${found.effect}`);
+      } else if (next.x === 11 && next.y === 0) {
+        setWorldMessage(collected.length >= 4 ? `Mission complete! ${level.goal}` : "The destination is locked. Find at least four important objects first.");
+      }
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    if (!worldOpen) return;
+    function move(event: KeyboardEvent) {
+      const moves: Record<string, [number, number]> = { ArrowUp: [0,-1], ArrowDown: [0,1], ArrowLeft: [-1,0], ArrowRight: [1,0], w: [0,-1], s: [0,1], a: [-1,0], d: [1,0] };
+      const direction = moves[event.key];
+      if (!direction) return;
+      event.preventDefault();
+      moveInWorld(...direction);
+    }
+    window.addEventListener("keydown", move);
+    return () => window.removeEventListener("keydown", move);
+  });
 
   function chooseBuilding(building: (typeof buildings)[number]) {
     setSelected(building);
@@ -189,66 +279,18 @@ export default function GamePortal() {
         </div>
       </header>
 
-      <section className="portal-game">
-        <div className="portal-map" aria-label="AdelineMobile learning town">
-          <img className="portal-map-art" src="/adeline-town-map.png" alt="Hand-drawn learning town with paths and colorful buildings" />
-
-          {buildings.map((building) => (
-            <button
-              className={`building-pin ${building.position} ${building.color} ${selected.id === building.id ? "selected" : ""}`}
-              key={building.id}
-              type="button"
-              onClick={() => chooseBuilding(building)}
-              aria-label={`Visit ${building.name}`}
-            >
-              <b>{building.icon}</b>
-              <span>{building.name}</span>
-            </button>
-          ))}
-
-          <div className="portal-player" style={{ left: `${player.x}%`, top: `${player.y}%` }} aria-label="Your movable avatar">
-            <img src="/player-avatar.png" alt="Your avatar" />
-            <span>YOU</span>
-          </div>
-
-          <div className="move-help"><span>Arrow keys move</span><div><i>↑</i><i>←</i><i>↓</i><i>→</i></div></div>
-
-          <div className="touch-dpad" aria-label="Move avatar">
-            <button type="button" onClick={() => movePlayer(0, -3)} aria-label="Move up">↑</button>
-            <button type="button" onClick={() => movePlayer(-3, 0)} aria-label="Move left">←</button>
-            <button type="button" onClick={() => movePlayer(0, 3)} aria-label="Move down">↓</button>
-            <button type="button" onClick={() => movePlayer(3, 0)} aria-label="Move right">→</button>
-          </div>
-
-          <div className="portal-party" aria-label="Friends online">
-            <p>PARTY · 3 ONLINE</p>
-            <div><span>CR</span><span>DE</span><span>EL</span><button type="button" aria-label="Invite a friend">+</button></div>
-          </div>
-
-          <div className="world-event">
-            <span>LIVE WORLD EVENT</span>
-            <strong>The river is rising</strong>
-            <p>Every district will feel what the town decides next.</p>
-          </div>
-
-          <article className="mission-card">
-            <div className={`mission-icon ${selected.color}`}>{selected.icon}</div>
-            <div className="mission-copy">
-              <p>{selected.area}</p>
-              <h1>{selected.name}</h1>
-              <span>{selected.mission}</span>
-              <strong>{selected.reward}</strong>
-              <small>Adeline quietly maps completed work to your graduation record.</small>
-            </div>
-            {selected.id === "history" ? (
-              <a className="mission-enter-link" href="/history">Enter the story →</a>
-            ) : (
-              <button type="button" disabled={selected.id !== "computer"} onClick={() => setLabOpen(true)}>
-                {selected.id === "computer" ? "Enter the lab →" : "Coming soon"}
-              </button>
-            )}
-          </article>
-        </div>
+      <section className="adventure-journal" aria-label="Dear Adeline games">
+        <header className="journal-intro"><span>YOUR ADVENTURE JOURNAL</span><h1>Choose one story worth entering.</h1><p>A few complete worlds will always beat a town full of empty doors.</p></header>
+        <div className="journal-flourish" aria-hidden="true">❀ ─── ✦ ─── ❀</div>
+        <article className="featured-adventure">
+          <div className="featured-sketch" aria-hidden="true"><span>🚌</span><b>?</b><i>⚖</i><small>1955</small></div>
+          <div className="featured-copy"><span>FEATURED INVESTIGATION · HISTORY & JUSTICE</span><h2>The Teenager History Nearly Forgot</h2><p>Walk through Montgomery, uncover four different kinds of historical records, and decide how courage became lasting change—and why one young person nearly disappeared from the famous version.</p><ul><li>Playable 2D investigation</li><li>About 30–45 minutes</li><li>Saves to your learning record</li></ul><button type="button" onClick={() => setInvestigationOpen(true)}>Open the case →</button></div>
+        </article>
+        <section className="journal-shelf" aria-label="More games"><header><span>MORE TO EXPLORE</span><p>Only playable work earns a place here.</p></header><div>
+          <article className="shelf-card ready"><b>⌘</b><span>COMPUTER SCIENCE</span><h3>Wake the Garden Bot</h3><p>Build, run, and debug a real sequence of commands.</p><button type="button" onClick={() => setLabOpen(true)}>Enter the lab →</button></article>
+          <article className="shelf-card next"><b>🌱</b><span>COMING NEXT</span><h3>The Water Has to Reach</h3><p>A greenhouse building and irrigation game using measurement and systems thinking.</p><small>In development</small></article>
+          <article className="shelf-card next"><b>🧭</b><span>AFTER THAT</span><h3>Journey Through a Broken System</h3><p>A choice-driven journey where resources, policy, and human consequences collide.</p><small>Planned</small></article>
+        </div></section>
       </section>
 
       {labOpen && (
@@ -302,6 +344,27 @@ export default function GamePortal() {
           </div>
         </section>
       )}
+
+      {worldOpen && (
+        <section className="world-game" aria-label={`${level.title} 2D game`}>
+          <header><button type="button" onClick={() => setWorldOpen(false)}>← Town map</button><div><span>2D LEARNING QUEST</span><h1>{level.title}</h1></div><strong>{collected.length}/6 found</strong></header>
+          <div className="world-game-layout">
+            <aside><span>YOUR MISSION</span><h2>{selected.name}</h2><p>{level.brief}</p><div className="world-inventory"><b>Backpack</b>{level.objects.map((item) => <i className={collected.includes(item.id) ? "found" : ""} key={item.id}>{collected.includes(item.id) ? item.sprite : "?"}<small>{collected.includes(item.id) ? item.label : "Unknown"}</small></i>)}</div></aside>
+            <div className="world-stage" style={{ gridTemplateColumns: "repeat(12, 1fr)" }}>
+              {Array.from({ length: 96 }).map((_, index) => {
+                const x = index % 12, y = Math.floor(index / 12), key = `${x},${y}`;
+                const object = level.objects.find((item) => item.x === x && item.y === y && !collected.includes(item.id));
+                const isPlayer = worldPlayer.x === x && worldPlayer.y === y;
+                const isGoal = x === 11 && y === 0;
+                return <div className={`world-tile ${worldObstacles.has(key) ? "blocked" : ""} ${isGoal ? "destination" : ""}`} key={key}>{isGoal && level.goal}{object && <span title={object.label}>{object.sprite}</span>}{isPlayer && <b>{level.player}</b>}</div>;
+              })}
+            </div>
+            <aside className="world-controls"><span>MOVE</span><div><button onClick={() => moveInWorld(0,-1)}>↑</button><button onClick={() => moveInWorld(-1,0)}>←</button><button onClick={() => moveInWorld(0,1)}>↓</button><button onClick={() => moveInWorld(1,0)}>→</button></div><p>{worldMessage}</p><button className="world-reset" onClick={() => void openWorld()}>Restart level</button></aside>
+          </div>
+        </section>
+      )}
+
+      {investigationOpen && <InvestigationGame onClose={() => setInvestigationOpen(false)} />}
 
       <nav className="portal-mobile-nav" aria-label="Game portal menu">
         <a href="/dashboard">⌂<span>Home</span></a>
