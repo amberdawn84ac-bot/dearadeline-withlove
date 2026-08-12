@@ -5,35 +5,7 @@ import { HomeLessonDemo } from '@/components/HomeLessonDemo';
 export default function Home() {
   return (
     <main className="min-h-screen bg-[#dfe4d8] text-[#232820]">
-      <header className="sticky top-0 z-50 border-b border-[#bcc4b7]/60 bg-[#e6eadf]/95 backdrop-blur-xl">
-        <div className="mx-auto flex h-[82px] max-w-[1500px] items-center justify-between px-5 sm:px-8 lg:px-12">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="relative h-14 w-14 overflow-hidden rounded-2xl">
-              <Image src="/adeline-nav.png" alt="Adeline" fill className="object-cover" priority />
-            </div>
-            <div>
-              <div
-                className="text-[24px] leading-none text-[#c27a23]"
-                style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}
-              >
-                Dear Adeline
-              </div>
-              <div className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#586153]">
-                Let Them Keep Their Wonder
-              </div>
-            </div>
-          </Link>
-
-          <nav className="hidden items-center gap-9 text-[14px] font-medium text-[#2f352d] md:flex">
-            <Link href="/" className="hover:text-[#c27a23]">Home</Link>
-            <Link href="#how-it-works" className="hover:text-[#c27a23]">How It Works</Link>
-            <Link href="#about" className="hover:text-[#c27a23]">About</Link>
-            <Link href="/login" className="rounded-full border border-[#8f9989] bg-white/35 px-5 py-2 hover:bg-white/60">Log In</Link>
-          </nav>
-        </div>
-      </header>
-
-      <section className="relative overflow-hidden px-5 pb-20 pt-12 sm:px-8 lg:px-12 lg:pt-16">
+      <section className="relative overflow-hidden px-5 pb-20 pt-8 sm:px-8 lg:px-12 lg:pt-10">
         <div className="pointer-events-none absolute -left-24 top-12 h-[460px] w-[460px] rounded-full bg-white/20 blur-[100px]" />
         <div className="pointer-events-none absolute -bottom-44 right-[-100px] h-[540px] w-[540px] rounded-full bg-[#9aa58f]/25 blur-[110px]" />
 
