@@ -5,13 +5,13 @@ import { useCallback, useState } from 'react';
 import { ExternalLink, Palette } from 'lucide-react';
 import Bookshelf from '@/components/reading-nook/Bookshelf';
 import { AddBookDialog } from '@/components/reading-nook/AddBookDialog';
-import { useAuth } from '@/lib/useAuth';
+import { useStudent } from '@/lib/useStudent';
 import { CURATED_PUBLIC_DOMAIN_BOOKS } from '@/data/learningVault';
 
 export default function ReadingNookPage() {
   const router = useRouter();
-  const { user } = useAuth();
-  const studentId = user?.id ?? '';
+  const { student } = useStudent();
+  const studentId = student?.id ?? '';
   const [refreshKey, setRefreshKey] = useState(0);
 
   const handleBookClick = useCallback((bookId: string) => {

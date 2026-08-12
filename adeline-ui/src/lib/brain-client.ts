@@ -5,9 +5,9 @@
 import { supabase } from '@/lib/supabase';
 
 /**
- * All brain calls go through the Next.js rewrite proxy at /brain/*.
- * The server rewrites to BRAIN_INTERNAL_URL (docker) or localhost:8000 (dev).
- * This means the browser never needs a hardcoded hostname.
+ * All brain calls go through the authenticated Next.js gateway at /brain/*.
+ * The gateway attaches the secure username/PIN cookie server-side, while
+ * retaining Supabase Bearer-token compatibility for parent/admin sessions.
  */
 const BRAIN_URL = "/brain";
 

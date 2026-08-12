@@ -9,12 +9,13 @@ import styles from './sites-dashboard.module.css';
 const NAV_ITEMS = [
   ['☀', 'Today', '/dashboard'],
   ['♡', 'Talk to Adeline', '/dashboard#talk-to-adeline'],
-  ['✦', 'My Missions', '/dashboard/projects'],
-  ['▤', 'Journal', '/dashboard/journey'],
+  ['✦', 'Learning Plan', '/dashboard/journey'],
+  ['⚒', 'Project Workshop', '/dashboard/projects'],
   ['▧', 'Portfolio', '/dashboard/portfolio'],
-  ['◎', 'Skills & Credits', '/dashboard/transcript'],
-  ['⌁', 'Graduation Path', '/dashboard/transcript'],
-  ['◈', 'Game Portal', '/game-portal'],
+  ['◎', 'Transcript & Graduation', '/dashboard/transcript'],
+  ['▤', 'Reading Nook', '/dashboard/reading-nook'],
+  ['◈', 'Resource Vault', '/dashboard/resource-vault'],
+  ['⚙', 'Settings', '/dashboard/settings'],
 ] as const;
 
 export function AppSidebar({ children }: { children: React.ReactNode }) {

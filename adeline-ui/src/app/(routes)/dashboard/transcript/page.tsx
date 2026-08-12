@@ -4,13 +4,13 @@ import { useState } from "react";
 import { OSRHEDashboard } from "@/components/transcript/OSRHEDashboard";
 import { downloadOfficialTranscript, downloadMasteryPortfolio } from "@/lib/brain-client";
 import { Download } from "lucide-react";
-import { useAuth } from "@/lib/useAuth";
+import { useStudent } from "@/lib/useStudent";
 
 type TabType = "osrhe" | "official" | "portfolio";
 
 export default function TranscriptPage() {
-  const { user } = useAuth();
-  const DEMO_STUDENT_ID = user?.id ?? '';
+  const { student } = useStudent();
+  const studentId = student?.id ?? '';
   const [activeTab, setActiveTab] = useState<TabType>("osrhe");
   const [downloadingOfficial, setDownloadingOfficial] = useState(false);
   const [downloadingPortfolio, setDownloadingPortfolio] = useState(false);
@@ -18,11 +18,12 @@ export default function TranscriptPage() {
   const handleDownloadOfficial = async () => {
     try {
       setDownloadingOfficial(true);
-      const blob = await downloadOfficialTranscript(DEMO_STUDENT_ID);
+      if (!studentId) return;
+      const blob = await downloadOfficialTranscript(studentId);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `official-transcript-${DEMO_STUDENT_ID}.pdf`;
+      a.download = `official-transcript-${studentId}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -38,11 +39,12 @@ export default function TranscriptPage() {
   const handleDownloadPortfolio = async () => {
     try {
       setDownloadingPortfolio(true);
-      const blob = await downloadMasteryPortfolio(DEMO_STUDENT_ID);
+      if (!studentId) return;
+      const blob = await downloadMasteryPortfolio(studentId);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `mastery-portfolio-${DEMO_STUDENT_ID}.pdf`;
+      a.download = `mastery-portfolio-${studentId}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -106,7 +108,7 @@ export default function TranscriptPage() {
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           {activeTab === "osrhe" && (
             <div>
-              <OSRHEDashboard studentId={DEMO_STUDENT_ID} />
+              <OSRHEDashboard studentId={studentId} />
             </div>
           )}
 

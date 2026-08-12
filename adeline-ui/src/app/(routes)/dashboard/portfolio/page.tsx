@@ -8,7 +8,7 @@ import {
   listActivities,
 } from "@/lib/brain-client";
 import type { ActivityEntry, Track } from "@/lib/brain-client";
-import { useAuth } from "@/lib/useAuth";
+import { useStudent } from "@/lib/useStudent";
 
 const TRACK_LABELS: Record<string, string> = {
   CREATION_SCIENCE: "Creation Science",
@@ -37,8 +37,8 @@ const TRACK_COLOR: Record<string, string> = {
 };
 
 export default function PortfolioPage() {
-  const { user } = useAuth();
-  const STUDENT_ID = user?.id ?? '';
+  const { student } = useStudent();
+  const studentId = student?.id ?? '';
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
   const [totalCredits, setTotalCredits] = useState(0);
   const [trackCount, setTrackCount] = useState(0);
@@ -51,8 +51,8 @@ export default function PortfolioPage() {
     setError(null);
     try {
       const [actData, stateData] = await Promise.allSettled([
-        listActivities(STUDENT_ID),
-        fetchStudentState(STUDENT_ID),
+        listActivities(studentId),
+        fetchStudentState(studentId),
       ]);
 
       if (actData.status === "fulfilled") {
@@ -71,20 +71,21 @@ export default function PortfolioPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [studentId]);
 
   useEffect(() => {
-    loadPortfolio();
+    if (studentId) loadPortfolio();
   }, [loadPortfolio]);
 
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      const blob = await downloadMasteryPortfolio(STUDENT_ID);
+      if (!studentId) return;
+      const blob = await downloadMasteryPortfolio(studentId);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `adeline-portfolio-${STUDENT_ID}.pdf`;
+      a.download = `adeline-portfolio-${studentId}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

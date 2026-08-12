@@ -11,25 +11,8 @@ const nextConfig = {
    * Dev:    BRAIN_INTERNAL_URL=http://localhost:8000
    * Docker: BRAIN_INTERNAL_URL=http://adeline-brain:8000
    */
-  async rewrites() {
-    // Strictly use environment variable for backend URL
-    // Docker: BRAIN_INTERNAL_URL (internal hostname)
-    // Vercel production: NEXT_PUBLIC_BRAIN_URL (Railway backend URL)
-    // Local dev: localhost:8000
-    const backendUrl = (
-      process.env.BRAIN_INTERNAL_URL ||
-      process.env.BRAIN_URL ||
-      process.env.NEXT_PUBLIC_BRAIN_URL ||
-      "https://dearadeline-withlove-production.up.railway.app"
-    ).replace(/\/$/, "");
-
-    return [
-      {
-        source: "/brain/:path*",
-        destination: `${backendUrl}/brain/:path*`,
-      },
-    ];
-  },
+  // Brain requests are handled by app/brain/[...path]/route.ts so the server
+  // can attach the secure username/PIN session token before proxying.
 };
 
 module.exports = nextConfig;

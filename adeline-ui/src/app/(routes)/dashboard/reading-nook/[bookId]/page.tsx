@@ -12,7 +12,8 @@ import {
 } from '@/lib/bookshelf-client';
 import { EPUBReader } from '@/components/reading-nook/EPUBReader';
 import { ReflectionModal } from '@/components/reading-nook/ReflectionModal';
-import { useAuth } from '@/lib/useAuth';
+import { ReaderProvider } from '@/lib/reader-context';
+import { useStudent } from '@/lib/useStudent';
 
 interface BookData {
   id: string;
@@ -33,8 +34,8 @@ export default function ReadingPage() {
   const router = useRouter();
   const bookId = params.bookId as string;
 
-  const { user } = useAuth();
-  const studentId = user?.id ?? '';
+  const { student } = useStudent();
+  const studentId = student?.id ?? '';
 
   const [book, setBook] = useState<BookData | null>(null);
   const [session, setSession] = useState<ReadingSession | null>(null);
@@ -80,7 +81,7 @@ export default function ReadingPage() {
       }
     };
 
-    loadBook();
+    if (studentId) loadBook();
   }, [bookId, studentId]);
 
   // Create reading session on first load (if no session exists)
@@ -150,7 +151,7 @@ export default function ReadingPage() {
 
   // Render reader
   return (
-    <>
+    <ReaderProvider>
       {book && session ? (
         <>
           <EPUBReader
@@ -180,6 +181,6 @@ export default function ReadingPage() {
           </div>
         </div>
       )}
-    </>
+    </ReaderProvider>
   );
 }

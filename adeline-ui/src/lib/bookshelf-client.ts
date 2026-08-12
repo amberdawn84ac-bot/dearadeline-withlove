@@ -4,7 +4,7 @@
  * Bookshelf API Client
  * Type-safe wrapper for all Bookshelf endpoints
  *
- * Uses the Next.js rewrite proxy at /brain/ so the browser never needs
+ * Uses the authenticated Next.js gateway at /brain/ so the browser never needs
  * a hardcoded hostname. All endpoints are relative to /brain/api/bookshelf/
  */
 
@@ -86,7 +86,7 @@ export class BookshelfAPIError extends Error {
 // ──────────────────────────────────────────────────────────────────────────────
 
 /**
- * All bookshelf API calls go through the Next.js rewrite proxy at /brain/bookshelf/.
+ * All bookshelf API calls go through the authenticated Next.js gateway at /brain/bookshelf/.
  * This avoids hardcoding the backend hostname in the browser.
  */
 const BASE_URL = '/brain/bookshelf';
