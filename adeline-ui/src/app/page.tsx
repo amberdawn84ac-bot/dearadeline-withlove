@@ -13,7 +13,6 @@ import { HomeLessonDemo } from '@/components/HomeLessonDemo';
 export default function Home() {
   return (
     <div className="min-h-screen bg-[#FFFEF7] text-[#2F4731] selection:bg-[#BD6809]/20 relative">
-      {/* Watermark */}
       <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center">
         <Image
           src="/adeline-watermark.png"
@@ -25,7 +24,6 @@ export default function Home() {
         />
       </div>
 
-      {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 bg-white/70 backdrop-blur-xl z-50 border-b border-[#E7DAC3]">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
@@ -57,9 +55,10 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section className="pt-44 pb-32 px-6">
-        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-20 items-center">
+      <section className="pt-44 pb-32 px-6 relative overflow-hidden">
+        <div className="absolute -top-24 right-0 w-96 h-96 rounded-full bg-[#BD6809]/10 blur-[110px] pointer-events-none" />
+        <div className="absolute bottom-0 left-1/3 w-80 h-80 rounded-full bg-[#2F4731]/10 blur-[120px] pointer-events-none" />
+        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-20 items-center relative z-10">
           <div className="space-y-10">
             <div className="space-y-6">
               <p className="text-[#BD6809] text-3xl leading-none" style={{ fontFamily: 'var(--font-kalam), Kalam, "Comic Sans MS", system-ui' }}>
@@ -76,7 +75,7 @@ export default function Home() {
             </div>
 
             <p className="text-xl text-[#2F4731]/80 font-medium max-w-lg leading-relaxed">
-              An AI-powered learning companion that adapts to your student&apos;s interests, tracks skills toward graduation, and transforms curiosity into achievement.
+              Adeline follows what your child is curious about, turns it into meaningful learning, and quietly keeps track of the skills and credits that move them toward graduation.
             </p>
 
             <div className="flex flex-wrap gap-6 pt-4">
@@ -107,36 +106,34 @@ export default function Home() {
                 ))}
               </div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-[#2F4731]">
-                Trusted by homeschool families <br />
-                across Oklahoma
+                Built for real homeschool families <br />
+                and real individual kids
               </p>
             </div>
           </div>
 
-          {/* Chat Preview Card */}
           <div className="relative">
+            <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full bg-[#BD6809]/10 blur-3xl" />
             <div className="relative z-10 bg-white p-2 rounded-[2rem] border-2 border-[#2F4731] shadow-2xl" style={{ transform: 'rotate(1deg)' }}>
               <div className="bg-[#FFFEF7] rounded-[1.8rem] overflow-hidden">
                 <div className="p-6 bg-[#2F4731] text-white flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                      <span role="img" aria-label="AI Mentor">🧠</span>
-                    </div>
+                    <Image src="/adeline-nav.png" alt="Adeline" width={42} height={42} className="rounded-xl border border-white/30" />
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest opacity-60">AI Mentor</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Learning companion</p>
                       <p className="font-bold" style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}>Adeline</p>
                     </div>
                   </div>
                   <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
                 </div>
-                <div className="p-8 space-y-4 min-h-[360px]" style={{ fontFamily: 'var(--font-kalam), Kalam, "Comic Sans MS", system-ui' }}>
+                <div className="p-8 space-y-4 min-h-[430px]" style={{ fontFamily: 'var(--font-kalam), Kalam, "Comic Sans MS", system-ui' }}>
                   <div className="flex justify-start">
                     <div className="bg-white p-4 rounded-2xl rounded-tl-none border border-[#2F4731]/10 text-sm max-w-[85%] shadow-sm">
                       Hi Della! What are you excited to learn about today? 🌿
                     </div>
                   </div>
                   <div className="flex justify-end">
-                    <div className="bg-[#2F4731]/80 p-4 rounded-2xl rounded-tr-none text-white text-sm max-w-[85%] shadow-lg">
+                    <div className="bg-[#2F4731]/85 p-4 rounded-2xl rounded-tr-none text-white text-sm max-w-[85%] shadow-lg">
                       I want to grow my crochet business!
                     </div>
                   </div>
@@ -146,16 +143,19 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="flex justify-end">
-                    <div className="bg-[#2F4731]/80 p-4 rounded-2xl rounded-tr-none text-white text-sm max-w-[85%] shadow-lg">
+                    <div className="bg-[#2F4731]/85 p-4 rounded-2xl rounded-tr-none text-white text-sm max-w-[85%] shadow-lg">
                       No, not yet...
                     </div>
                   </div>
                   <div className="flex justify-start">
-                    <div className="bg-white p-4 rounded-2xl rounded-tl-none border border-[#2F4731]/10 text-sm max-w-[85%] shadow-sm space-y-3">
-                      <p>Perfect! Let&apos;s build one together!</p>
+                    <div className="bg-white p-5 rounded-2xl rounded-tl-none border-2 border-[#BD6809]/70 text-sm max-w-[92%] shadow-lg space-y-3">
+                      <p className="font-bold text-[#BD6809]">Perfect! Let&apos;s build one together.</p>
+                      <p className="text-[#2F4731]/75">
+                        You&apos;ll learn web design, marketing, pricing, writing, and entrepreneurship while you build something your business can actually use.
+                      </p>
                       <div className="flex flex-wrap gap-2">
-                        {['Web Design', 'Marketing', 'Entrepreneurship'].map((tag) => (
-                          <span key={tag} className="px-3 py-1 bg-[#BD6809] text-white text-[10px] font-bold rounded-full uppercase">
+                        {['Web Design', 'Marketing', 'Entrepreneurship', 'Writing'].map((tag) => (
+                          <span key={tag} className="px-3 py-1 bg-[#2F4731]/10 text-[#2F4731] text-[10px] font-bold rounded-full uppercase tracking-wide">
                             {tag}
                           </span>
                         ))}
@@ -163,18 +163,23 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
+                <div className="px-6 py-4 bg-white/70 border-t border-[#E7DAC3] flex items-center justify-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#2F4731]/45">
+                    Skills quietly tracked toward graduation
+                  </p>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Live Demo Section */}
       <section className="py-24 px-6 bg-[#F9F6F0]">
         <div className="max-w-7xl mx-auto flex flex-col items-center gap-10">
           <div className="text-center space-y-3">
             <p className="text-[#BD6809] font-black uppercase tracking-[0.4em] text-xs">
-              Try It Now — No Account Required
+              Try It Now · No Account Required
             </p>
             <h2
               className="text-4xl md:text-5xl font-normal leading-tight"
@@ -183,14 +188,13 @@ export default function Home() {
               Ask Adeline anything.
             </h2>
             <p className="text-sm text-[#2F4731]/60 max-w-md">
-              Choose a track, type a topic, and watch Adeline retrieve a verified primary source and synthesize an age-appropriate lesson — live.
+              Choose a track, type a topic, and watch Adeline build an age-appropriate learning experience from verified sources.
             </p>
           </div>
           <HomeLessonDemo />
         </div>
       </section>
 
-      {/* Features Section */}
       <section className="py-32 px-6 bg-[#2F4731] text-white">
         <div className="max-w-7xl mx-auto flex flex-col items-center text-center space-y-16">
           <div className="space-y-4">
@@ -205,12 +209,12 @@ export default function Home() {
 
           <div className="grid md:grid-cols-3 gap-8 w-full">
             {[
-              { title: 'Student-Led Learning', desc: 'Adeline follows curiosities and builds plans around passions — not worksheets.', Icon: OpenBook, color: 'bg-emerald-500/20' },
-              { title: 'Skills & Credits', desc: 'Every activity maps to credits and competencies automatically. Oklahoma-aligned.', Icon: Compass, color: 'bg-amber-500/20' },
-              { title: 'Graduation Tracker', desc: 'See progress toward state-aligned graduation goals in one glance.', Icon: Scroll, color: 'bg-blue-500/20' },
-              { title: 'Portfolio Builder', desc: 'Projects, artifacts, and reflections all saved for transcripts.', Icon: Pencil, color: 'bg-rose-500/20' },
-              { title: 'Gap Detection', desc: 'Spots missing concepts early and suggests just-right nudges via BKT.', Icon: MagnifyingGlass, color: 'bg-violet-500/20' },
-              { title: 'Fun & Games', desc: 'Playful missions, badges, and creative prompts keep learners engaged.', Icon: Lightbulb, color: 'bg-yellow-500/20' },
+              { title: 'Student-Led Learning', desc: 'Adeline follows curiosities and builds plans around passions, not worksheets.', Icon: OpenBook, color: 'bg-emerald-500/20' },
+              { title: 'Skills & Credits', desc: 'Real activities map quietly to competencies and graduation progress.', Icon: Compass, color: 'bg-amber-500/20' },
+              { title: 'Graduation Tracker', desc: 'See progress toward graduation goals without turning the student experience into a gradebook.', Icon: Scroll, color: 'bg-blue-500/20' },
+              { title: 'Portfolio Builder', desc: 'Projects, photographs, creations, writing, and reflections become a living portfolio.', Icon: Pencil, color: 'bg-rose-500/20' },
+              { title: 'Gap Detection', desc: 'Adeline notices missing concepts and weaves them back into future learning naturally.', Icon: MagnifyingGlass, color: 'bg-violet-500/20' },
+              { title: 'Games & Missions', desc: 'Playful missions, investigations, making, coding, and real-world challenges keep learning active.', Icon: Lightbulb, color: 'bg-yellow-500/20' },
             ].map((feature, i) => (
               <div
                 key={i}
@@ -234,7 +238,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Philosophy Section */}
       <section id="philosophy" className="py-40 px-6">
         <div className="max-w-7xl mx-auto flex flex-col items-center text-center space-y-20">
           <div className="max-w-3xl space-y-6">
@@ -246,16 +249,16 @@ export default function Home() {
               <span className="text-[#BD6809]">nothing like</span> a factory.
             </h2>
             <p className="text-xl text-[#2F4731]/60 font-medium leading-relaxed">
-              We&apos;ve replaced the assembly line with a laboratory. Dear Adeline adapts to each student&apos;s pulse — discovering their strengths and gently revealing their gaps.
+              Dear Adeline replaces one-size-fits-all schooling with curiosity, investigation, creation, conversation, and real accomplishment.
             </p>
           </div>
 
           <div className="grid md:grid-cols-4 gap-4 w-full">
             {[
-              { title: 'Hook', desc: 'Narrative-driven discovery', icon: '✨' },
-              { title: 'Research', desc: 'Deep-dive investigation', icon: '🔍' },
-              { title: 'Build', desc: 'Tangible physical creation', icon: '🛠️' },
-              { title: 'Share', desc: 'Teaching for mastery', icon: '📢' },
+              { title: 'Hook', desc: 'A reason to care', icon: '✨' },
+              { title: 'Investigate', desc: 'Follow real evidence', icon: '🔍' },
+              { title: 'Build', desc: 'Make something real', icon: '🛠️' },
+              { title: 'Share', desc: 'Show what you know', icon: '📢' },
             ].map((step, i) => (
               <div
                 key={i}
@@ -272,7 +275,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Final CTA */}
       <section className="py-20 px-6 mb-32">
         <div className="max-w-6xl mx-auto bg-[#BD6809] rounded-[4rem] p-16 md:p-24 text-white text-center space-y-12 shadow-2xl relative overflow-hidden group">
           <div className="absolute top-0 left-0 w-full h-full bg-[#6B1D2A] opacity-0 group-hover:opacity-10 transition-opacity duration-700" />
@@ -280,11 +282,11 @@ export default function Home() {
             className="text-6xl md:text-7xl lg:text-8xl font-normal leading-none tracking-tighter relative z-10"
             style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}
           >
-            Reclaim <br />
+            Let Them Keep <br />
             Their <span className="italic">Wonder</span>
           </h2>
           <p className="text-xl text-white/80 max-w-xl mx-auto font-medium relative z-10">
-            Join a community of families proving that education is an adventure, and mastery is its own reward.
+            Give them an education built around who they are becoming, not a conveyor belt built for everybody else.
           </p>
           <div className="flex flex-col sm:flex-row gap-6 justify-center relative z-10">
             <Link
@@ -303,7 +305,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="py-24 px-6 border-t border-[#E7DAC3] bg-white/50">
         <div className="max-w-7xl mx-auto grid md:grid-cols-2 justify-between items-center gap-10 opacity-60">
           <div className="flex items-center gap-4">
@@ -313,7 +314,7 @@ export default function Home() {
             </span>
           </div>
           <div className="md:text-right space-y-2">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#6B1D2A]">Oklahoma Homeschooling Reimagined</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#6B1D2A]">Education as Unique as Your Child</p>
             <p className="text-xs font-medium text-[#2F4731]/60">© {new Date().getFullYear()} Dear Adeline Co. All rights reserved.</p>
           </div>
         </div>
