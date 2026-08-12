@@ -24,7 +24,7 @@ export default function Home() {
             src={LANDING_ART}
             alt="Education as unique as your child, with Adeline and a child exploring together"
           />
-          <Link href="/dashboard" className={styles.startButton}>
+          <Link href="/login" className={styles.startButton}>
             Start Your Adventure Today!
           </Link>
         </div>
