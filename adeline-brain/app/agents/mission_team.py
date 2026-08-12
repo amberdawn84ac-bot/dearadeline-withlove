@@ -11,6 +11,9 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from app.agents.resource_intelligence import ResourceIntelligenceAgent
+
+
 @dataclass(frozen=True)
 class CurriculumAvailability:
     slug: str
@@ -190,6 +193,7 @@ class MissionArchitectAgent:
         self.librarian = CurriculumLibrarianAgent()
         self.curator = PortfolioCuratorAgent()
         self.gamesmith = GameSmithAgent()
+        self.resource_intelligence = ResourceIntelligenceAgent()
 
     def select_balanced(self, candidates: list[Any], limit: int) -> list[Any]:
         """Own final mission choice: priority first, with cross-track variety."""
@@ -213,9 +217,12 @@ class MissionArchitectAgent:
         availability = await asyncio.gather(*[
             self.librarian.lookup(item.title, item.track) for item in suggestions
         ])
+        resource_packets = [
+            self.resource_intelligence.select(item.title, item.track) for item in suggestions
+        ]
         return [
-            item.model_copy(update=self._mission_contract(item, found, grade_level, interests))
-            for item, found in zip(suggestions, availability)
+            item.model_copy(update=self._mission_contract(item, found, grade_level, interests, resource_packet))
+            for item, found, resource_packet in zip(suggestions, availability, resource_packets)
         ]
 
     def _mission_contract(
@@ -224,6 +231,7 @@ class MissionArchitectAgent:
         availability: CurriculumAvailability,
         grade_level: str,
         interests: list[str],
+        resource_packet: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         source = item.source
         if source == "zpd":
@@ -257,6 +265,7 @@ class MissionArchitectAgent:
                 f"Chosen for your interest in {interest_note}." if interest_note
                 else f"Chosen from your grade {grade_level} readiness, current mastery, and credit path."
             ),
+            "resource_packet": resource_packet or {"topic": item.title, "track": item.track, "sources": [], "rules": []},
             "game_blueprint": self.gamesmith.blueprint_for(item, availability.slug, grade_level),
         }
 
