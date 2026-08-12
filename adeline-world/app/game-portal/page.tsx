@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { getPlayerSession } from "../lib/player-session";
 import InvestigationGame from "./InvestigationGame";
 
@@ -136,6 +136,29 @@ export default function GamePortal() {
   const [commands, setCommands] = useState<Command[]>([]);
   const [robot, setRobot] = useState<Robot>({ x: 0, y: 4, direction: 0 });
   const [runState, setRunState] = useState<"ready" | "running" | "success" | "failed">("ready");
+  const [makeCodeUrl, setMakeCodeUrl] = useState("");
+  const [projectTitle, setProjectTitle] = useState("");
+  const [projectExplanation, setProjectExplanation] = useState("");
+  const [savedProjects, setSavedProjects] = useState<Array<{ title: string; url: string; explanation: string }>>([]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("adeline-makecode-projects");
+      if (saved) setSavedProjects(JSON.parse(saved));
+    } catch { /* A project can still be submitted during this visit. */ }
+  }, []);
+
+  function saveMakeCodeProject(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const url = makeCodeUrl.trim();
+    if (!/^https:\/\/arcade\.makecode\.com\/(?:S|_)[A-Za-z0-9_-]+/i.test(url)) return;
+    const next = [{ title: projectTitle.trim() || "My Arcade Game", url, explanation: projectExplanation.trim() }, ...savedProjects];
+    setSavedProjects(next);
+    window.localStorage.setItem("adeline-makecode-projects", JSON.stringify(next));
+    setMakeCodeUrl("");
+    setProjectTitle("");
+    setProjectExplanation("");
+  }
 
   function movePlayer(dx: number, dy: number) {
     setPlayer((current) => ({
@@ -273,9 +296,9 @@ export default function GamePortal() {
           <span>Dear Adeline</span>
           <strong>AdelineMobile</strong>
         </div>
-        <div className="portal-currency" aria-label="Player progress">
-          <span>✦ 1,840 XP</span>
-          <span>◈ 12 tokens</span>
+        <div className="portal-currency" aria-label="Learning record">
+          <span>▤ {savedProjects.length} projects</span>
+          <span>◈ Evidence first</span>
         </div>
       </header>
 
@@ -287,7 +310,7 @@ export default function GamePortal() {
           <div className="featured-copy"><span>FEATURED INVESTIGATION · HISTORY & JUSTICE</span><h2>The Teenager History Nearly Forgot</h2><p>Walk through Montgomery, uncover four different kinds of historical records, and decide how courage became lasting change—and why one young person nearly disappeared from the famous version.</p><ul><li>Playable 2D investigation</li><li>About 30–45 minutes</li><li>Saves to your learning record</li></ul><button type="button" onClick={() => setInvestigationOpen(true)}>Open the case →</button></div>
         </article>
         <section className="journal-shelf" aria-label="More games"><header><span>MORE TO EXPLORE</span><p>Only playable work earns a place here.</p></header><div>
-          <article className="shelf-card ready"><b>⌘</b><span>COMPUTER SCIENCE</span><h3>Wake the Garden Bot</h3><p>Build, run, and debug a real sequence of commands.</p><button type="button" onClick={() => setLabOpen(true)}>Enter the lab →</button></article>
+          <article className="shelf-card ready"><b>⌘</b><span>COMPUTER LAB</span><h3>Build Your First Arcade Game</h3><p>Learn the idea here, build a real game in MakeCode, then bring it back as evidence.</p><button type="button" onClick={() => setLabOpen(true)}>Enter the lab →</button></article>
           <article className="shelf-card next"><b>🌱</b><span>COMING NEXT</span><h3>The Water Has to Reach</h3><p>A greenhouse building and irrigation game using measurement and systems thinking.</p><small>In development</small></article>
           <article className="shelf-card next"><b>🧭</b><span>AFTER THAT</span><h3>Journey Through a Broken System</h3><p>A choice-driven journey where resources, policy, and human consequences collide.</p><small>Planned</small></article>
         </div></section>
@@ -297,17 +320,15 @@ export default function GamePortal() {
         <section className="code-lab" aria-label="Codeworks Lab mission">
           <header>
             <button type="button" onClick={() => setLabOpen(false)}>← Town map</button>
-            <div><span>CODEWORKS LAB · MISSION 01</span><h1>Wake the Garden Bot</h1></div>
-            <strong>Debugging I · 180 XP</strong>
+            <div><span>COMPUTER LAB · MISSION 01</span><h1>Build Your First Arcade Game</h1></div>
+            <strong>Evidence required for credit</strong>
           </header>
 
-          <div className="lab-layout">
-            <aside className="lab-brief">
-              <span>YOUR MISSION</span>
-              <h2>The greenhouse sensors are dark.</h2>
-              <p>Program the garden bot to reach the blue power cell. Build a sequence, run it, then debug it until it works.</p>
-              <div className="concept-card"><b>What you’re learning</b><p>An algorithm is a precise sequence of instructions. Computers follow exactly what you write—not what you meant.</p></div>
-            </aside>
+          <div className="lab-zones">
+            <nav className="lab-zone-nav" aria-label="Computer Lab areas"><a href="#lab-adventure">Adventure</a><a href="#lab-arcade">Arcade</a><a href="#lab-maker">Maker Space</a><a href="#lab-cabinet">Portfolio Cabinet</a></nav>
+            <section className="lab-zone" id="lab-adventure"><span>ADVENTURE · LEARN THE FOUNDATION</span><h2>First, wake the Garden Bot.</h2><p>An algorithm is a precise sequence of instructions. Computers follow exactly what you write—not what you meant. Guide the bot to the power cell, then use that same thinking in your own game.</p>
+            <div className="lab-layout compact">
+            <aside className="lab-brief"><span>QUICK PRACTICE</span><h2>The greenhouse sensors are dark.</h2><p>Build a sequence, run it, and debug it until the bot reaches the blue power cell.</p></aside>
 
             <div className="arcade-board">
               <div className="game-grid">
@@ -341,6 +362,13 @@ export default function GamePortal() {
               </div>
               <div className="editor-actions"><button type="button" onClick={resetProgram}>Clear</button><button type="button" onClick={runProgram} disabled={!commands.length || runState === "running"}>▶ Run</button></div>
             </aside>
+            </div></section>
+
+            <section className="lab-zone arcade-zone" id="lab-arcade"><span>ARCADE · CURATED OUTSIDE TOOL</span><h2>Build it in Microsoft MakeCode Arcade.</h2><p>Create a playable game with a player, at least one enemy, a score, health or lives, and a clear win condition. MakeCode opens in a new tab so this mission stays here when you return.</p><a className="external-launch" href="https://arcade.makecode.com/" target="_blank" rel="noreferrer">Launch MakeCode Arcade ↗</a><small>Free browser-based tool. An outside service may have its own privacy terms and account options.</small></section>
+
+            <section className="lab-zone maker-zone" id="lab-maker"><span>MAKER SPACE · BRING BACK WHAT YOU MADE</span><h2>Publish your game and return the share link.</h2><ol><li>In MakeCode, choose <b>Share</b> and publish the project.</li><li>Copy its MakeCode share link.</li><li>Paste it below and explain one design decision or bug you solved.</li></ol><form onSubmit={saveMakeCodeProject}><label>Game title<input value={projectTitle} onChange={(event) => setProjectTitle(event.target.value)} placeholder="Della's Chicken Escape" required /></label><label>MakeCode share link<input type="url" value={makeCodeUrl} onChange={(event) => setMakeCodeUrl(event.target.value)} placeholder="https://arcade.makecode.com/S..." required /></label><label>What did you build, change, or debug?<textarea value={projectExplanation} onChange={(event) => setProjectExplanation(event.target.value)} placeholder="My enemy moved too fast, so I changed…" required /></label><button type="submit">Add project to cabinet</button></form><p className="evidence-rule">Submitting a link does not automatically award credit. The playable project and explanation become reviewable evidence for Adeline’s competency check.</p></section>
+
+            <section className="lab-zone cabinet-zone" id="lab-cabinet"><span>PORTFOLIO CABINET</span><h2>Student-made games live here.</h2>{savedProjects.length === 0 ? <p className="empty-cabinet">Your first published MakeCode game will appear here.</p> : <div className="project-cabinet">{savedProjects.map((project, index) => <article key={`${project.url}-${index}`}><b>PLAYABLE PROJECT</b><h3>{project.title}</h3><p>{project.explanation}</p><a href={project.url} target="_blank" rel="noreferrer">Play game ↗</a></article>)}</div>}</section>
           </div>
         </section>
       )}
