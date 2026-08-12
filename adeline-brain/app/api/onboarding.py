@@ -336,9 +336,10 @@ async def post_onboarding(
                 if code_row["isUsed"]:
                     raise HTTPException(status_code=403, detail="This invite code has already been used.")
 
-            # For grades K-7, account starts unverified; parent must confirm via email
-            needs_coppa = request.gradeLevel in UNDER_13_GRADES
-            coppa_verified = not needs_coppa  # 8-12 verified immediately
+            # Parent contact information is retained, but onboarding does not
+            # require an email-verification gate.
+            needs_coppa = False
+            coppa_verified = True
 
             row = await conn.fetchrow(
                 """

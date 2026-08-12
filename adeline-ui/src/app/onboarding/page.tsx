@@ -135,27 +135,10 @@ export default function OnboardingPage() {
       }
 
       const responseData = await response.json() as {
-        user?: { onboardingComplete?: boolean; requiresCoppaVerification?: boolean; id?: string };
+        user?: { onboardingComplete?: boolean };
       };
       if (!responseData?.user?.onboardingComplete) {
         throw new Error('Onboarding completed but response missing confirmation');
-      }
-
-      // For grades K-7: send COPPA verification email and go to pending page
-      if (responseData.user.requiresCoppaVerification && responseData.user.id) {
-        await fetch('/api/coppa', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            studentId:   responseData.user.id,
-            studentName: data.name,
-            parentName:  data.parentName,
-            parentEmail: data.parentEmail,
-          }),
-        }).catch(() => { /* non-fatal — parent can resend from pending page */ });
-        setStatus('redirecting');
-        window.location.href = '/coppa-pending';
-        return;
       }
 
       console.log('[OnboardingPage] POST successful - now verifying DB propagation...');

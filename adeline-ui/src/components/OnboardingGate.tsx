@@ -23,9 +23,8 @@ import { supabase } from '@/lib/supabase';
  * - If user is on /onboarding and onboarding is already complete, redirect to /dashboard
  */
 
-const PUBLIC_ROUTES = ['/login', '/signup', '/onboarding', '/', '/coppa-pending', '/coppa-verify'];
+const PUBLIC_ROUTES = ['/login', '/signup', '/onboarding', '/'];
 const PROTECTED_ROUTES = ['/dashboard', '/settings'];
-const UNDER_13_GRADES = new Set(['K', '1', '2', '3', '4', '5', '6', '7']);
 
 export function OnboardingGate() {
   const pathname = usePathname();
@@ -88,7 +87,7 @@ export function OnboardingGate() {
         }
 
         const data = await response.json() as {
-          user?: { onboardingComplete?: boolean; gradeLevel?: string; coppaVerified?: boolean };
+          user?: { onboardingComplete?: boolean };
         };
         const user = data.user;
 
@@ -97,16 +96,6 @@ export function OnboardingGate() {
           return;
         }
 
-        // COPPA gate: grades K-7 must have parent email verification
-        if (
-          user.gradeLevel &&
-          UNDER_13_GRADES.has(user.gradeLevel) &&
-          !user.coppaVerified &&
-          pathname !== '/coppa-pending'
-        ) {
-          window.location.href = '/coppa-pending';
-          return;
-        }
       } catch (err) {
         console.error('Error in onboarding gate:', err);
         // Don't block on error — let user retry
