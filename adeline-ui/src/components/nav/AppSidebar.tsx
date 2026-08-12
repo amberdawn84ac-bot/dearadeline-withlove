@@ -17,11 +17,6 @@ const NAV_ITEMS = [
   ['◈', 'Game Portal', '/game-portal'],
 ] as const;
 
-const LIBRARY_ITEMS = [
-  ['▥', 'Reading Nook', '/reading-nook'],
-  ['◇', 'Resource Vault', '/dashboard/resource-vault'],
-] as const;
-
 export function AppSidebar({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -70,12 +65,6 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
         <aside className={styles.sidebar} aria-label="Dashboard menu">
           <nav className={styles.menu}>
             {NAV_ITEMS.map(([icon, label, href]) => (
-              <Link key={`${label}-${href}`} href={href} data-active={isActive(href)}>
-                <b>{icon}</b><span>{label}</span>
-              </Link>
-            ))}
-            <div className={styles.menuDivider} />
-            {LIBRARY_ITEMS.map(([icon, label, href]) => (
               <Link key={`${label}-${href}`} href={href} data-active={isActive(href)}>
                 <b>{icon}</b><span>{label}</span>
               </Link>

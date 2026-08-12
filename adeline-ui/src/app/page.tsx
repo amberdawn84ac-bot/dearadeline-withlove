@@ -1,10 +1,8 @@
 import Link from 'next/link';
 import styles from './sites-home.module.css';
 
-const LANDING_ART =
-  'https://raw.githubusercontent.com/amberdawn84ac-bot/dearadeline-withlove/main/adeline-world/public/landing-illustration.png';
-const ADELINE_FACE =
-  'https://raw.githubusercontent.com/amberdawn84ac-bot/dearadeline-withlove/main/adeline-world/public/adeline-face.png';
+const LANDING_ART = '/landing-illustration.png';
+const ADELINE_FACE = '/adeline-face.png';
 
 const features = [
   ['♡', 'Student-Led Learning', 'Your student tells Adeline what they’re interested in. Curiosity becomes meaningful curriculum.'],
