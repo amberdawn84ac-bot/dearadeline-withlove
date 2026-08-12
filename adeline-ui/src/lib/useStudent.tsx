@@ -1,8 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useAuth } from './useAuth';
-import { supabase } from './supabase';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
 interface StudentProfile {
   id: string;
@@ -17,68 +15,59 @@ interface StudentProfile {
 interface StudentContextValue {
   student: StudentProfile | null;
   loading: boolean;
+  refresh: () => Promise<void>;
 }
 
 const StudentContext = createContext<StudentContextValue>({
   student: null,
   loading: true,
+  refresh: async () => undefined,
 });
 
 export function StudentProvider({ children }: { children: ReactNode }) {
-  const { user, loading: authLoading } = useAuth();
   const [student, setStudent] = useState<StudentProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function fetchProfile() {
-      if (authLoading) return;
-      if (!user) {
+  async function loadStudent() {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/student-auth', {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+      if (!response.ok) {
         setStudent(null);
-        setLoading(false);
         return;
       }
-
-      // Get live session from Supabase
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      if (!token) {
-        setLoading(false);
+      const data = await response.json();
+      if (!data?.user || !data?.student_id) {
+        setStudent(null);
         return;
       }
-
-      // Add cache-busting to prevent stale reads after onboarding completion
-      const cacheBuster = Date.now();
-      fetch(`/brain/api/onboarding?_=${cacheBuster}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-        },
-        credentials: 'include', // Important: sends auth cookies
-      })
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-          if (data?.user) {
-            setStudent({
-              id: user.id,
-              name: data.user.name ?? '',
-              gradeLevel: data.user.gradeLevel ?? '8',
-              interests: data.user.interests ?? [],
-              learningStyle: data.user.learningStyle ?? null,
-              state: data.user.state ?? null,
-              onboardingComplete: data.user.onboardingComplete ?? false,
-            });
-          }
-        })
-        .catch(err => console.error('[StudentProvider] Failed to fetch profile:', err))
-        .finally(() => setLoading(false));
+      setStudent({
+        id: data.student_id,
+        name: data.user.name ?? data.user.display_name ?? 'Student',
+        gradeLevel: data.user.gradeLevel ?? data.user.grade_level ?? '8',
+        interests: data.user.interests ?? [],
+        learningStyle: data.user.learningStyle ?? null,
+        state: data.user.state ?? null,
+        onboardingComplete: data.user.onboardingComplete ?? true,
+      });
+    } catch (error) {
+      console.error('[StudentProvider] Failed to load secure student session:', error);
+      setStudent(null);
+    } finally {
+      setLoading(false);
     }
+  }
 
-    fetchProfile();
-  }, [user, authLoading]);
+  useEffect(() => {
+    void loadStudent();
+  }, []);
 
   return (
-    <StudentContext.Provider value={{ student, loading }}>
+    <StudentContext.Provider value={{ student, loading, refresh: loadStudent }}>
       {children}
     </StudentContext.Provider>
   );
