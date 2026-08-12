@@ -4,8 +4,7 @@ import { FormEvent, Suspense, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-const ADELINE_FACE =
-  'https://raw.githubusercontent.com/amberdawn84ac-bot/dearadeline-withlove/main/adeline-world/public/adeline-face.png';
+const ADELINE_FACE = '/adeline-face.webp';
 
 type Mode = 'login' | 'register';
 

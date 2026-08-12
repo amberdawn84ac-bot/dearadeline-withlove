@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import styles from './sites-home.module.css';
 
-const LANDING_ART = '/landing-illustration.png';
-const ADELINE_FACE = '/adeline-face.png';
+const LANDING_ART = '/landing-illustration.webp';
+const ADELINE_FACE = '/adeline-face.webp';
 
 const features = [
   ['♡', 'Student-Led Learning', 'Your student tells Adeline what they’re interested in. Curiosity becomes meaningful curriculum.'],

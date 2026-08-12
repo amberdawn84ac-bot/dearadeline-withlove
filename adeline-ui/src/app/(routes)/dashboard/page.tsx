@@ -6,8 +6,7 @@ import { getLearningPlan, streamConversation } from '@/lib/brain-client';
 import type { ConversationMessage, LessonSuggestion } from '@/lib/brain-client';
 import styles from '@/components/nav/sites-dashboard.module.css';
 
-const ADELINE_FACE =
-  'https://raw.githubusercontent.com/amberdawn84ac-bot/dearadeline-withlove/main/adeline-world/public/adeline-face.png';
+const ADELINE_FACE = '/adeline-face.webp';
 
 type ChatMessage = { role: 'adeline' | 'learner'; text: string };
 
