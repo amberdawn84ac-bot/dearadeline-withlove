@@ -1,324 +1,159 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import {
-  OpenBook,
-  Compass,
-  Scroll,
-  Pencil,
-  MagnifyingGlass,
-  Lightbulb,
-} from '@/components/illustrations';
 import { HomeLessonDemo } from '@/components/HomeLessonDemo';
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-[#FFFEF7] text-[#2F4731] selection:bg-[#BD6809]/20 relative">
-      <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center">
-        <Image
-          src="/adeline-watermark.png"
-          alt=""
-          width={800}
-          height={800}
-          className="opacity-[0.03] select-none"
-          priority={false}
-        />
-      </div>
-
-      <nav className="fixed top-0 left-0 right-0 bg-white/70 backdrop-blur-xl z-50 border-b border-[#E7DAC3]">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+    <main className="min-h-screen bg-[#dfe4d8] text-[#232820]">
+      <header className="sticky top-0 z-50 border-b border-[#bcc4b7]/60 bg-[#e6eadf]/95 backdrop-blur-xl">
+        <div className="mx-auto flex h-[82px] max-w-[1500px] items-center justify-between px-5 sm:px-8 lg:px-12">
           <Link href="/" className="flex items-center gap-3">
-            <Image
-              src="/adeline-nav.png"
-              alt="Adeline"
-              width={44}
-              height={44}
-              className="rounded-xl shadow-lg -rotate-3"
-            />
-            <span className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}>
-              Dear Adeline
-            </span>
-          </Link>
-          <div className="hidden md:flex items-center gap-6">
-            <Link
-              href="/login"
-              className="px-6 py-2.5 rounded-full border-2 border-[#2F4731] text-[#2F4731] text-xs font-black uppercase tracking-widest hover:bg-[#2F4731] hover:text-white transition-all"
-            >
-              Log In
-            </Link>
-            <Link
-              href="/pricing"
-              className="px-8 py-3.5 rounded-full bg-[#6B1D2A] text-white text-xs font-black uppercase tracking-[0.2em] shadow-xl hover:scale-105 active:scale-95 transition-all"
-            >
-              Try Free
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      <section className="pt-44 pb-32 px-6 relative overflow-hidden">
-        <div className="absolute -top-24 right-0 w-96 h-96 rounded-full bg-[#BD6809]/10 blur-[110px] pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 w-80 h-80 rounded-full bg-[#2F4731]/10 blur-[120px] pointer-events-none" />
-        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-20 items-center relative z-10">
-          <div className="space-y-10">
-            <div className="space-y-6">
-              <p className="text-[#BD6809] text-3xl leading-none" style={{ fontFamily: 'var(--font-kalam), Kalam, "Comic Sans MS", system-ui' }}>
-                Where Learning Comes Alive
-              </p>
-              <h1
-                className="text-7xl md:text-8xl lg:text-9xl font-normal leading-[0.85] tracking-tighter"
+            <div className="relative h-14 w-14 overflow-hidden rounded-2xl">
+              <Image src="/adeline-nav.png" alt="Adeline" fill className="object-cover" priority />
+            </div>
+            <div>
+              <div
+                className="text-[24px] leading-none text-[#c27a23]"
                 style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}
               >
-                Education as <br />
-                <span className="text-[#BD6809] italic">Unique</span> <br />
-                as Your Child
-              </h1>
+                Dear Adeline
+              </div>
+              <div className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#586153]">
+                Let Them Keep Their Wonder
+              </div>
             </div>
+          </Link>
 
-            <p className="text-xl text-[#2F4731]/80 font-medium max-w-lg leading-relaxed">
-              Adeline follows what your child is curious about, turns it into meaningful learning, and quietly keeps track of the skills and credits that move them toward graduation.
+          <nav className="hidden items-center gap-9 text-[14px] font-medium text-[#2f352d] md:flex">
+            <Link href="/" className="hover:text-[#c27a23]">Home</Link>
+            <Link href="#how-it-works" className="hover:text-[#c27a23]">How It Works</Link>
+            <Link href="#about" className="hover:text-[#c27a23]">About</Link>
+            <Link href="/login" className="rounded-full border border-[#8f9989] bg-white/35 px-5 py-2 hover:bg-white/60">Log In</Link>
+          </nav>
+        </div>
+      </header>
+
+      <section className="relative overflow-hidden px-5 pb-20 pt-12 sm:px-8 lg:px-12 lg:pt-16">
+        <div className="pointer-events-none absolute -left-24 top-12 h-[460px] w-[460px] rounded-full bg-white/20 blur-[100px]" />
+        <div className="pointer-events-none absolute -bottom-44 right-[-100px] h-[540px] w-[540px] rounded-full bg-[#9aa58f]/25 blur-[110px]" />
+
+        <div className="relative mx-auto grid max-w-[1500px] items-center gap-12 lg:grid-cols-[0.88fr_1.12fr] xl:gap-20">
+          <div className="relative z-20 pt-4 lg:pt-0">
+            <h1
+              className="max-w-[670px] text-[62px] font-normal leading-[0.9] tracking-[-0.045em] text-[#232820] sm:text-[76px] md:text-[90px] lg:text-[96px] xl:text-[108px]"
+              style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}
+            >
+              Education
+              <br />
+              As Unique As
+              <br />
+              Your Child
+            </h1>
+
+            <p className="mt-8 max-w-[560px] text-[18px] leading-8 text-[#4d574b] sm:text-[19px]">
+              A living education that follows your child&apos;s curiosity, turns real interests into real learning, and quietly keeps them moving toward graduation.
             </p>
 
-            <div className="flex flex-wrap gap-6 pt-4">
+            <div className="mt-9 flex flex-wrap gap-4">
               <Link
-                href="/pricing"
-                className="px-12 py-6 rounded-full bg-[#6B1D2A] text-white font-black uppercase tracking-[0.2em] text-xs shadow-2xl hover:brightness-125 active:scale-95 transition-all flex items-center gap-4"
+                href="/login"
+                className="inline-flex items-center justify-center rounded-full bg-[#c88a18] px-7 py-3.5 text-sm font-bold text-white shadow-[0_14px_30px_rgba(107,72,10,0.2)] transition-transform hover:-translate-y-0.5"
               >
-                Join the Academy
-                <span className="text-lg">→</span>
+                Meet Adeline
               </Link>
               <Link
-                href="#philosophy"
-                className="px-12 py-6 rounded-full border-2 border-[#2F4731] text-[#2F4731] font-black uppercase tracking-[0.2em] text-xs flex items-center gap-2 hover:bg-[#2F4731]/5 transition-all"
+                href="#how-it-works"
+                className="inline-flex items-center justify-center rounded-full border border-[#8f9989] bg-white/20 px-7 py-3.5 text-sm font-semibold text-[#3e463c] hover:bg-white/45"
               >
-                The Method
+                See How It Works
               </Link>
             </div>
+          </div>
 
-            <div className="flex items-center gap-4 pt-6 opacity-60">
-              <div className="flex -space-x-3">
-                {['E', 'M', 'D', 'K'].map((initial, i) => (
+          <div className="relative z-10 lg:pl-3">
+            <div className="overflow-hidden rounded-[30px] border border-[#b5bdae] bg-[#f3f1e8]/88 shadow-[0_24px_70px_rgba(67,77,61,0.18)]">
+              <div className="flex items-center gap-4 border-b border-[#c9cec3] bg-[#e8e8de]/92 px-6 py-4">
+                <Image src="/adeline-nav.png" alt="Adeline" width={52} height={52} className="rounded-full object-cover" />
+                <div>
                   <div
-                    key={i}
-                    className="w-10 h-10 rounded-full bg-[#2F4731]/80 border-2 border-[#FFFEF7] flex items-center justify-center text-[10px] font-bold text-white uppercase"
+                    className="text-[22px] leading-none text-[#252b23]"
+                    style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}
                   >
-                    {initial}
+                    Adeline
                   </div>
-                ))}
+                  <div className="mt-1 text-[12px] text-[#6d7568]">Your learning companion</div>
+                </div>
               </div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#2F4731]">
-                Built for real homeschool families <br />
-                and real individual kids
-              </p>
-            </div>
-          </div>
 
-          <div className="relative">
-            <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full bg-[#BD6809]/10 blur-3xl" />
-            <div className="relative z-10 bg-white p-2 rounded-[2rem] border-2 border-[#2F4731] shadow-2xl" style={{ transform: 'rotate(1deg)' }}>
-              <div className="bg-[#FFFEF7] rounded-[1.8rem] overflow-hidden">
-                <div className="p-6 bg-[#2F4731] text-white flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Image src="/adeline-nav.png" alt="Adeline" width={42} height={42} className="rounded-xl border border-white/30" />
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Learning companion</p>
-                      <p className="font-bold" style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}>Adeline</p>
-                    </div>
-                  </div>
-                  <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
+              <div className="space-y-4 px-6 py-5 sm:px-7 sm:py-6">
+                <div className="max-w-[82%] rounded-[18px] rounded-tl-[5px] border border-[#d2d5cd] bg-white/80 px-4 py-3 text-[15px] leading-6 text-[#3e463d] shadow-sm">
+                  Hi Della! What are you excited to learn about today?
                 </div>
-                <div className="p-8 space-y-4 min-h-[430px]" style={{ fontFamily: 'var(--font-kalam), Kalam, "Comic Sans MS", system-ui' }}>
-                  <div className="flex justify-start">
-                    <div className="bg-white p-4 rounded-2xl rounded-tl-none border border-[#2F4731]/10 text-sm max-w-[85%] shadow-sm">
-                      Hi Della! What are you excited to learn about today? 🌿
-                    </div>
-                  </div>
-                  <div className="flex justify-end">
-                    <div className="bg-[#2F4731]/85 p-4 rounded-2xl rounded-tr-none text-white text-sm max-w-[85%] shadow-lg">
-                      I want to grow my crochet business!
-                    </div>
-                  </div>
-                  <div className="flex justify-start">
-                    <div className="bg-white p-4 rounded-2xl rounded-tl-none border border-[#2F4731]/10 text-sm max-w-[85%] shadow-sm">
-                      That&apos;s amazing! 🧶 Do you have a website to sell your products yet?
-                    </div>
-                  </div>
-                  <div className="flex justify-end">
-                    <div className="bg-[#2F4731]/85 p-4 rounded-2xl rounded-tr-none text-white text-sm max-w-[85%] shadow-lg">
-                      No, not yet...
-                    </div>
-                  </div>
-                  <div className="flex justify-start">
-                    <div className="bg-white p-5 rounded-2xl rounded-tl-none border-2 border-[#BD6809]/70 text-sm max-w-[92%] shadow-lg space-y-3">
-                      <p className="font-bold text-[#BD6809]">Perfect! Let&apos;s build one together.</p>
-                      <p className="text-[#2F4731]/75">
-                        You&apos;ll learn web design, marketing, pricing, writing, and entrepreneurship while you build something your business can actually use.
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {['Web Design', 'Marketing', 'Entrepreneurship', 'Writing'].map((tag) => (
-                          <span key={tag} className="px-3 py-1 bg-[#2F4731]/10 text-[#2F4731] text-[10px] font-bold rounded-full uppercase tracking-wide">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
+
+                <div className="ml-auto max-w-[62%] rounded-[18px] rounded-tr-[5px] bg-[#9ba394] px-4 py-3 text-[15px] leading-6 text-white shadow-sm">
+                  I want to grow my crochet business!
+                </div>
+
+                <div className="max-w-[86%] rounded-[18px] rounded-tl-[5px] border border-[#d2d5cd] bg-white/80 px-4 py-3 text-[15px] leading-6 text-[#3e463d] shadow-sm">
+                  That&apos;s exciting. Do you have a website to show your work yet?
+                </div>
+
+                <div className="ml-auto max-w-[42%] rounded-[18px] rounded-tr-[5px] bg-[#9ba394] px-4 py-3 text-[15px] leading-6 text-white shadow-sm">
+                  No, not yet...
+                </div>
+
+                <div className="max-w-[94%] rounded-[18px] rounded-tl-[5px] border border-[#d2d5cd] bg-white/85 px-4 py-3 text-[15px] leading-6 text-[#3e463d] shadow-sm">
+                  <p>Perfect. Let&apos;s build one together.</p>
+                  <p className="mt-1 text-[#687164]">You&apos;ll learn web design, marketing, pricing, writing, and entrepreneurship while making something your business can actually use.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {['Web Design', 'Marketing', 'Entrepreneurship'].map((tag) => (
+                      <span key={tag} className="rounded-full bg-[#dae0d4] px-3 py-1 text-[11px] font-semibold text-[#566052]">
+                        {tag}
+                      </span>
+                    ))}
                   </div>
                 </div>
-                <div className="px-6 py-4 bg-white/70 border-t border-[#E7DAC3] flex items-center justify-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#2F4731]/45">
-                    Skills quietly tracked toward graduation
-                  </p>
-                </div>
+              </div>
+
+              <div className="border-t border-[#d0d4cb] bg-[#ebece4]/75 px-6 py-3 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7a8275]">
+                Skills quietly tracked toward graduation
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="py-24 px-6 bg-[#F9F6F0]">
-        <div className="max-w-7xl mx-auto flex flex-col items-center gap-10">
-          <div className="text-center space-y-3">
-            <p className="text-[#BD6809] font-black uppercase tracking-[0.4em] text-xs">
-              Try It Now · No Account Required
-            </p>
-            <h2
-              className="text-4xl md:text-5xl font-normal leading-tight"
-              style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}
-            >
-              Ask Adeline anything.
-            </h2>
-            <p className="text-sm text-[#2F4731]/60 max-w-md">
-              Choose a track, type a topic, and watch Adeline build an age-appropriate learning experience from verified sources.
-            </p>
-          </div>
-          <HomeLessonDemo />
-        </div>
-      </section>
-
-      <section className="py-32 px-6 bg-[#2F4731] text-white">
-        <div className="max-w-7xl mx-auto flex flex-col items-center text-center space-y-16">
-          <div className="space-y-4">
-            <p className="text-[#BD6809] font-black uppercase tracking-[0.4em] text-xs">What Adeline Does</p>
-            <h2
-              className="text-6xl md:text-7xl font-normal leading-none"
-              style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}
-            >
-              Built for Real Learning
-            </h2>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8 w-full">
-            {[
-              { title: 'Student-Led Learning', desc: 'Adeline follows curiosities and builds plans around passions, not worksheets.', Icon: OpenBook, color: 'bg-emerald-500/20' },
-              { title: 'Skills & Credits', desc: 'Real activities map quietly to competencies and graduation progress.', Icon: Compass, color: 'bg-amber-500/20' },
-              { title: 'Graduation Tracker', desc: 'See progress toward graduation goals without turning the student experience into a gradebook.', Icon: Scroll, color: 'bg-blue-500/20' },
-              { title: 'Portfolio Builder', desc: 'Projects, photographs, creations, writing, and reflections become a living portfolio.', Icon: Pencil, color: 'bg-rose-500/20' },
-              { title: 'Gap Detection', desc: 'Adeline notices missing concepts and weaves them back into future learning naturally.', Icon: MagnifyingGlass, color: 'bg-violet-500/20' },
-              { title: 'Games & Missions', desc: 'Playful missions, investigations, making, coding, and real-world challenges keep learning active.', Icon: Lightbulb, color: 'bg-yellow-500/20' },
-            ].map((feature, i) => (
-              <div
-                key={i}
-                className="group p-10 bg-white/5 border border-white/10 rounded-[2.5rem] hover:bg-white transition-all duration-500 hover:scale-[1.02] text-left"
-              >
-                <div className={`w-14 h-14 ${feature.color} rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
-                  <feature.Icon size={28} color="white" />
-                </div>
-                <h3
-                  className="text-2xl font-bold mb-3 group-hover:text-[#2F4731]"
-                  style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}
-                >
-                  {feature.title}
-                </h3>
-                <p className="text-white/60 text-sm leading-relaxed group-hover:text-[#2F4731]/70">
-                  {feature.desc}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="philosophy" className="py-40 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col items-center text-center space-y-20">
-          <div className="max-w-3xl space-y-6">
-            <h2
-              className="text-6xl md:text-7xl lg:text-8xl font-normal text-[#2F4731] leading-none italic"
-              style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}
-            >
-              Education should look{' '}
-              <span className="text-[#BD6809]">nothing like</span> a factory.
-            </h2>
-            <p className="text-xl text-[#2F4731]/60 font-medium leading-relaxed">
-              Dear Adeline replaces one-size-fits-all schooling with curiosity, investigation, creation, conversation, and real accomplishment.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-4 gap-4 w-full">
-            {[
-              { title: 'Hook', desc: 'A reason to care', icon: '✨' },
-              { title: 'Investigate', desc: 'Follow real evidence', icon: '🔍' },
-              { title: 'Build', desc: 'Make something real', icon: '🛠️' },
-              { title: 'Share', desc: 'Show what you know', icon: '📢' },
-            ].map((step, i) => (
-              <div
-                key={i}
-                className="p-8 bg-white border-2 border-[#E7DAC3] rounded-[3rem] space-y-4 hover:border-[#BD6809] transition-all group"
-              >
-                <div className="text-4xl mb-6 grayscale group-hover:grayscale-0 transition-all">{step.icon}</div>
-                <h4 className="font-bold text-xl" style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}>
-                  {step.title}
-                </h4>
-                <p className="text-xs font-bold uppercase tracking-widest opacity-40">{step.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="py-20 px-6 mb-32">
-        <div className="max-w-6xl mx-auto bg-[#BD6809] rounded-[4rem] p-16 md:p-24 text-white text-center space-y-12 shadow-2xl relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-full h-full bg-[#6B1D2A] opacity-0 group-hover:opacity-10 transition-opacity duration-700" />
+      <section id="how-it-works" className="bg-[#f7f5ee] px-5 py-24 sm:px-8 lg:px-12">
+        <div className="mx-auto max-w-[1200px] text-center">
+          <p className="text-[11px] font-black uppercase tracking-[0.28em] text-[#c27a23]">How it works</p>
           <h2
-            className="text-6xl md:text-7xl lg:text-8xl font-normal leading-none tracking-tighter relative z-10"
+            className="mt-4 text-5xl text-[#293027] sm:text-6xl"
             style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}
           >
-            Let Them Keep <br />
-            Their <span className="italic">Wonder</span>
+            Start with wonder. Build from there.
           </h2>
-          <p className="text-xl text-white/80 max-w-xl mx-auto font-medium relative z-10">
-            Give them an education built around who they are becoming, not a conveyor belt built for everybody else.
+          <p className="mx-auto mt-5 max-w-2xl text-[17px] leading-7 text-[#687064]">
+            Adeline starts with what a child actually wants to know or make, then connects the science, math, history, writing, research, and real-world skills hiding inside it.
           </p>
-          <div className="flex flex-col sm:flex-row gap-6 justify-center relative z-10">
-            <Link
-              href="/pricing"
-              className="px-16 py-7 rounded-full bg-white text-[#6B1D2A] font-black uppercase tracking-[0.2em] text-sm shadow-xl hover:scale-105 transition-all"
-            >
-              Get Started
-            </Link>
-            <Link
-              href="/login"
-              className="px-16 py-7 rounded-full border-2 border-white text-white font-black uppercase tracking-[0.2em] text-sm hover:bg-white hover:text-[#BD6809] transition-all"
-            >
-              Log In
-            </Link>
+          <div className="mt-12">
+            <HomeLessonDemo />
           </div>
         </div>
       </section>
 
-      <footer className="py-24 px-6 border-t border-[#E7DAC3] bg-white/50">
-        <div className="max-w-7xl mx-auto grid md:grid-cols-2 justify-between items-center gap-10 opacity-60">
-          <div className="flex items-center gap-4">
-            <Image src="/adeline-nav.png" alt="Adeline" width={40} height={40} className="rounded-lg" />
-            <span className="text-xl font-bold text-[#2F4731]" style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}>
-              Dear Adeline
-            </span>
-          </div>
-          <div className="md:text-right space-y-2">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#6B1D2A]">Education as Unique as Your Child</p>
-            <p className="text-xs font-medium text-[#2F4731]/60">© {new Date().getFullYear()} Dear Adeline Co. All rights reserved.</p>
-          </div>
+      <section id="about" className="bg-[#dfe4d8] px-5 py-24 sm:px-8 lg:px-12">
+        <div className="mx-auto max-w-[1000px] text-center">
+          <h2
+            className="text-5xl text-[#293027] sm:text-6xl"
+            style={{ fontFamily: 'var(--font-emilys-candy), "Emilys Candy", cursive' }}
+          >
+            Let them keep their wonder.
+          </h2>
+          <p className="mx-auto mt-5 max-w-3xl text-[18px] leading-8 text-[#596257]">
+            Dear Adeline is designed so the student sees missions, questions, books, projects, games, discoveries, and conversations. The academic machinery stays underneath, where it belongs.
+          </p>
         </div>
-      </footer>
-    </div>
+      </section>
+    </main>
   );
 }
