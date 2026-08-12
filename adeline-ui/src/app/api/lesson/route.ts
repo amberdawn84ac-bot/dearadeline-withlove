@@ -1,34 +1,7 @@
 /**
  * POST /api/lesson
- *
  * Next.js → FastAPI SSE translation bridge.
- *
- * Translates FastAPI SSE events into BOTH:
- *   1. The ai@6 UI Message Stream format (for backward compatibility)
- *   2. The Vercel AI SDK Data Stream Protocol with 2: annotations
- *      for GenUI progressive rendering and bidirectional remediation.
- *
- * UI Message Stream chunks (existing):
- *   {"type":"start"}
- *   {"type":"text-start","id":"t0"}
- *   {"type":"text-delta","id":"t0","delta":"..."}
- *   {"type":"text-end","id":"t0"}
- *   {"type":"data-status","data":{"message":"..."}}
- *   {"type":"data-block","data":{"block":{...}}}
- *   {"type":"data-done","data":{"title":"..."}}
- *   {"type":"data-error","data":{"message":"..."}}
- *   {"type":"tool-input-available","toolCallId":"...","toolName":"...","input":{...},"dynamic":true}
- *   {"type":"tool-output-available","toolCallId":"...","output":{...}}
- *   {"type":"finish","finishReason":"stop"}
- *
- * Data Stream Protocol lines (new — for useGenUIStream):
- *   2:[{"type":"genui_skeleton",...}]   → Component placeholder
- *   2:[{"type":"genui_complete",...}]   → Full component props
- *   2:[{"type":"remediation",...}]      → Remediation component injection
- *   2:[{"type":"status",...}]           → Progress status
- *   c:{"toolCallId":"...","toolName":"student_needs_remediation",...}
  */
-
 import { NextRequest } from "next/server";
 import { logger } from "@/lib/logger";
 
@@ -47,12 +20,10 @@ function chunk(obj: unknown): string {
   return `data: ${JSON.stringify(obj)}\n\n`;
 }
 
-/** Encode a Data Stream Protocol annotation (2: line). */
 function dataAnnotation(payload: Record<string, unknown>): string {
   return `2:${JSON.stringify([payload])}\n`;
 }
 
-/** Encode a Data Stream Protocol tool-call (c: line). */
 function dataToolCall(
   toolCallId: string,
   toolName: string,
@@ -61,7 +32,6 @@ function dataToolCall(
   return `c:${JSON.stringify({ toolCallId, toolName, args })}\n`;
 }
 
-/** Encode a Data Stream Protocol finish (d: line). */
 function dataFinish(reason: string): string {
   return `d:${JSON.stringify({ finishReason: reason })}\n`;
 }
@@ -70,10 +40,12 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const lessonRequest = body.lesson_request ?? body;
 
-  const resolvedAuth = req.headers.get("authorization") ?? "";
+  const headerAuth = req.headers.get("authorization") ?? "";
+  const cookieToken = req.cookies.get("auth_token")?.value ?? "";
+  const resolvedAuth = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : "");
   if (!resolvedAuth) {
     return new Response(
-      chunk({ type: "data-error", data: { message: "Missing Authorization header — please log in again" } }) +
+      chunk({ type: "data-error", data: { message: "Your session has expired. Please log in again." } }) +
       chunk({ type: "finish", finishReason: "error" }),
       {
         status: 200,
@@ -137,8 +109,7 @@ export async function POST(req: NextRequest) {
       let textStarted = false;
       let finished = false;
 
-      const enqueue = (line: string) =>
-        controller.enqueue(encoder.encode(line));
+      const enqueue = (line: string) => controller.enqueue(encoder.encode(line));
 
       const ensureTextStarted = () => {
         if (!textStarted) {
@@ -152,14 +123,11 @@ export async function POST(req: NextRequest) {
         finished = true;
         if (textStarted) enqueue(chunk({ type: "text-end", id: "t0" }));
         enqueue(chunk({ type: "finish", finishReason }));
-        // Also emit Data Stream Protocol finish
         enqueue(dataFinish(finishReason));
         enqueue("data: [DONE]\n\n");
       };
 
-      // Signal stream start
       enqueue(chunk({ type: "start" }));
-
       let firstChunk = true;
 
       try {
@@ -193,28 +161,19 @@ export async function POST(req: NextRequest) {
                 ensureTextStarted();
                 enqueue(chunk({ type: "text-delta", id: "t0", delta: msg }));
                 enqueue(chunk({ type: "data-status", data: { message: msg } }));
-                // Data Stream Protocol: status annotation
                 enqueue(dataAnnotation({ type: "status", message: msg }));
                 break;
               }
-
               case "block": {
                 const blockContent = (event.block as Record<string, unknown>)?.content as string | undefined;
                 if (blockContent) {
                   ensureTextStarted();
                   enqueue(chunk({ type: "text-delta", id: "t0", delta: blockContent + "\n\n" }));
                 }
-                // UI Message Stream format (backward compat)
                 enqueue(chunk({ type: "data-block", data: { block: event.block } }));
-                // Data Stream Protocol 2: annotation — ai@6 useChat reads these, not the data: lines
                 enqueue(dataAnnotation({ type: "data-block", data: { block: event.block } }));
                 break;
               }
-
-              // ── GenUI Progressive Rendering events ─────────────────
-              // These are emitted by the brain's lesson_stream.py and
-              // translated into 2: Data Stream Protocol annotations.
-
               case "genui_skeleton": {
                 enqueue(dataAnnotation({
                   type: "genui_skeleton",
@@ -228,7 +187,6 @@ export async function POST(req: NextRequest) {
                 }));
                 break;
               }
-
               case "genui_complete": {
                 enqueue(dataAnnotation({
                   type: "genui_complete",
@@ -243,7 +201,6 @@ export async function POST(req: NextRequest) {
                 }));
                 break;
               }
-
               case "genui_props": {
                 enqueue(dataAnnotation({
                   type: "genui_props",
@@ -253,13 +210,10 @@ export async function POST(req: NextRequest) {
                 }));
                 break;
               }
-
               case "tool_call": {
                 const toolCallId = (event.props as Record<string, unknown>)?.toolCallId as string
                   ?? crypto.randomUUID();
                 const toolName = String(event.name ?? "unknown");
-
-                // UI Message Stream format (backward compat)
                 enqueue(chunk({
                   type: "tool-input-available",
                   toolCallId,
@@ -272,8 +226,6 @@ export async function POST(req: NextRequest) {
                   toolCallId,
                   output: event.props,
                 }));
-
-                // Data Stream Protocol: tool-call (c: line)
                 enqueue(dataToolCall(
                   toolCallId,
                   toolName,
@@ -281,10 +233,8 @@ export async function POST(req: NextRequest) {
                 ));
                 break;
               }
-
               case "done": {
                 enqueue(chunk({ type: "data-done", data: { title: event.title } }));
-                // Data Stream Protocol: done annotation
                 enqueue(dataAnnotation({
                   type: "data-done",
                   data: {
@@ -297,7 +247,6 @@ export async function POST(req: NextRequest) {
                 closeStream("stop");
                 break;
               }
-
               case "error": {
                 enqueue(chunk({ type: "data-error", data: { message: String(event.message ?? "") } }));
                 closeStream("error");
