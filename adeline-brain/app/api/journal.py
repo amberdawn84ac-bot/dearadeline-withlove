@@ -6,6 +6,7 @@ GET  /journal/progress/{student_id} — Fetch track progress counts
 """
 import asyncio
 import logging
+import uuid
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import Any
@@ -31,6 +32,7 @@ class SealRequest(BaseModel):
     concept_id:   str | None = None   # ZPD concept_id if known
     concept_name: str | None = None   # Human-readable concept title
     quiz_results: list[dict[str, Any]] = Field(default_factory=list)  # [{correct: bool}, ...]
+    credit_draft: dict[str, Any] | None = None
 
 
 class SealResponse(BaseModel):
@@ -99,6 +101,31 @@ async def seal_journal(
     asyncio.create_task(
         _update_card_safe(student_id, body)
     )
+
+    # A generated lesson carries only proposed credit. Sealing is the learner's
+    # completion signal, so this is the one place that turns it into transcript
+    # credit. Never trust the student id embedded in the client payload.
+    if body.credit_draft:
+        try:
+            from app.api.learning_records import _seal_transcript_db, TranscriptEntryIn
+            credit = body.credit_draft
+            await _seal_transcript_db(TranscriptEntryIn(
+                id=credit.get("id") or str(uuid.uuid4()),
+                student_id=student_id,
+                lesson_id=body.lesson_id,
+                course_title=credit.get("course_title") or body.lesson_id,
+                track=body.track.value,
+                oas_standards=credit.get("oas_standards", []),
+                activity_description=credit.get("activity_description", "Completed and sealed lesson"),
+                credit_hours=max(0.0, min(float(credit.get("credit_hours", 0)), 1.0)),
+                credit_type=credit.get("credit_type", "ELECTIVE"),
+                is_homestead_credit=bool(credit.get("is_homestead_credit", False)),
+                agent_name=credit.get("agent_name"),
+                researcher_activated=bool(credit.get("researcher_activated", False)),
+            ))
+        except Exception as exc:
+            logger.exception("[/journal/seal] Transcript credit seal failed")
+            raise HTTPException(status_code=500, detail=f"Journal saved but transcript credit failed: {exc}")
 
     return SealResponse(
         sealed=True,

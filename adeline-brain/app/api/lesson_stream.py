@@ -725,6 +725,11 @@ async def _stream_lesson(
     except Exception as e:
         logger.warning(f"[LessonStream] Graph context failed (non-fatal): {e}")
 
+    # Draft standards/xAPI/credit from the actual generated blocks. These remain
+    # PROPOSED until /journal/seal verifies that the learner completed the lesson.
+    from app.agents.orchestrator import registrar_agent
+    state = await registrar_agent(state)
+
     title = f"{request.topic.title()} — {request.track.value.replace('_', ' ').title()}"
     logger.info(f"[LessonStream] Emitting done event: lesson_id={lesson_id} title='{title}'")
     yield _sse({
@@ -734,12 +739,16 @@ async def _stream_lesson(
         "agent_name": state.get("agent_name", ""),
         "oas_standards": state.get("oas_standards", []),
         "researcher_activated": state.get("researcher_activated", False),
+        "xapi_statements": state.get("xapi_statements", []),
+        "credits_awarded": state.get("credits_awarded", []),
         # Full ALU playlist for the frontend to hydrate ALUCard from a single payload
         "alu_playlist": alu_playlist,
         # Pass state for the background registrar task
         "_state_for_registrar": {
             "xapi_statements": state.get("xapi_statements", []),
             "credits_awarded":  state.get("credits_awarded", []),
+            "blocks": state.get("blocks", []),
+            "oas_standards": state.get("oas_standards", []),
         },
         # Pass state for the background canonical save task
         "_state_for_canonical": {
@@ -1099,8 +1108,8 @@ async def _run_registrar_background(
             "request":               request,
             "lesson_id":             lesson_id,
             "query_embedding":       [],
-            "blocks":                [],
-            "oas_standards":         [],
+            "blocks":                state_snapshot.get("blocks", []),
+            "oas_standards":         state_snapshot.get("oas_standards", []),
             "has_research_missions": False,
             "researcher_activated":  state_snapshot.get("researcher_activated", False),
             "agent_name":            state_snapshot.get("agent_name", ""),
@@ -1116,7 +1125,10 @@ async def _run_registrar_background(
             "recently_used_components": [],
             "profiler_components":   [],
         }
-        final_state = await registrar_agent(dummy_state)
+        # New streams already ran the registrar before the done event so the UI
+        # can carry the draft through completion. Retain fallback for old/cached
+        # payloads that do not contain a draft.
+        final_state = dummy_state if dummy_state["credits_awarded"] else await registrar_agent(dummy_state)
 
         from app.schemas.api_models import LessonResponse
         lesson = LessonResponse(

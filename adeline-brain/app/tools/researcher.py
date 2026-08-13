@@ -262,13 +262,24 @@ async def search_archive_async(query: str, archive_name: str, domains_map: dict 
 
     for attempt in range(3):
         try:
-            from langchain_community.tools import DuckDuckGoSearchResults
-            ddg = DuckDuckGoSearchResults(num_results=DDG_MAX_RESULTS, output_format="list")
-            # Run synchronously in thread pool to avoid blocking the event loop
-            raw = await asyncio.get_event_loop().run_in_executor(
-                None, ddg.run, search_query
-            )
-            results = _parse_ddg_results(str(raw), archive_name)
+            from duckduckgo_search import DDGS
+
+            def _search() -> list[dict]:
+                rows = list(DDGS().text(search_query, max_results=DDG_MAX_RESULTS))
+                return [
+                    {
+                        "title": row.get("title", ""),
+                        "url": row.get("href", ""),
+                        "archive": archive_name,
+                        "snippet": row.get("body", ""),
+                    }
+                    for row in rows
+                    if row.get("href")
+                ]
+
+            # The installed duckduckgo-search package is synchronous; keep it
+            # off the event loop without pulling in the unrelated LangChain stack.
+            results = await asyncio.get_event_loop().run_in_executor(None, _search)
             logger.info(f"[Researcher/DDG] {archive_name}: {len(results)} results for '{query[:60]}'")
             return results
         except Exception as e:

@@ -72,6 +72,7 @@ function SealButton({
           grade: s.grade,
         })),
         evidence_sources: evidenceSources,
+        credit_draft: lesson.credits_awarded?.[0],
       });
       setState("sealed");
       // Brief pause so the toast is visible, then navigate

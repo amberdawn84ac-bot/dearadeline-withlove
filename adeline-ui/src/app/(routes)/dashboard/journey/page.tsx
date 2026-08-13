@@ -109,11 +109,11 @@ export default function JourneyPage() {
             track,
             blocks: collectedBlocks,
             has_research_missions: collectedBlocks.some((b) => b.block_type === "RESEARCH_MISSION"),
-            researcher_activated: false,
+            researcher_activated: event.researcher_activated ?? false,
             oas_standards: (event.oas_standards as LessonResponse["oas_standards"]) ?? [],
-            agent_name: "",
-            xapi_statements: [],
-            credits_awarded: [],
+            agent_name: event.agent_name ?? "Adeline",
+            xapi_statements: event.xapi_statements ?? [],
+            credits_awarded: event.credits_awarded ?? [],
           };
           setActiveLesson(lesson);
           setStreamingBlocks([]);

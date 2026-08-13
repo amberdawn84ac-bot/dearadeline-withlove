@@ -2,8 +2,9 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useStudent } from '@/lib/useStudent';
-import { getLearningPlan, streamConversation } from '@/lib/brain-client';
-import type { ConversationMessage, LessonSuggestion } from '@/lib/brain-client';
+import { getLearningPlan, streamConversation, streamLesson } from '@/lib/brain-client';
+import type { ConversationMessage, LessonBlockResponse, LessonResponse, LessonSuggestion, Track } from '@/lib/brain-client';
+import LessonRenderer from '@/components/lessons/LessonRenderer';
 import styles from '@/components/nav/sites-dashboard.module.css';
 
 const ADELINE_FACE = '/adeline-face.webp';
@@ -25,6 +26,11 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
   const [suggestions, setSuggestions] = useState<LessonSuggestion[]>([]);
   const [planLoading, setPlanLoading] = useState(true);
+  const [activeLesson, setActiveLesson] = useState<LessonResponse | null>(null);
+  const [lessonBlocks, setLessonBlocks] = useState<LessonBlockResponse[]>([]);
+  const [lessonStatus, setLessonStatus] = useState('');
+  const [isGeneratingLesson, setIsGeneratingLesson] = useState(false);
+  const [lastLearnerTopic, setLastLearnerTopic] = useState('');
 
   const studentId = student?.id ?? '';
   const gradeLevel = student?.gradeLevel ?? '8';
@@ -70,6 +76,7 @@ export default function DashboardPage() {
     }));
 
     setMessages((current) => [...current, { role: 'learner', text: value }]);
+    setLastLearnerTopic(value);
     setInput('');
     setError('');
     setStreamingReply('');
@@ -107,6 +114,58 @@ export default function DashboardPage() {
       setError(reason instanceof Error ? reason.message : 'Adeline could not answer yet.');
     } finally {
       setIsThinking(false);
+    }
+  }
+
+  async function generateLesson(topic: string, track: Track = 'TRUTH_HISTORY') {
+    const value = topic.trim();
+    if (!value || !studentId || isGeneratingLesson) return;
+
+    setError('');
+    setActiveLesson(null);
+    setLessonBlocks([]);
+    setLessonStatus('Adeline is gathering the right sources…');
+    setIsGeneratingLesson(true);
+    const collected: LessonBlockResponse[] = [];
+
+    try {
+      for await (const event of streamLesson({
+        student_id: studentId,
+        topic: value,
+        track,
+        grade_level: gradeLevel,
+        is_homestead: track === 'HOMESTEADING',
+      })) {
+        if (event.type === 'status') {
+          setLessonStatus(event.message);
+        } else if (event.type === 'block') {
+          collected.push(event.block);
+          setLessonBlocks([...collected]);
+        } else if (event.type === 'done') {
+          setActiveLesson({
+            lesson_id: event.lesson_id,
+            title: event.title || value,
+            track,
+            blocks: collected,
+            has_research_missions: collected.some((block) => block.block_type === 'RESEARCH_MISSION'),
+            researcher_activated: collected.some((block) => block.block_type === 'PRIMARY_SOURCE'),
+            oas_standards: (event.oas_standards as LessonResponse['oas_standards']) ?? [],
+            agent_name: 'Adeline',
+            xapi_statements: [],
+            credits_awarded: event.credits_awarded ?? [],
+          });
+          setLessonBlocks([]);
+          setLessonStatus('');
+          await loadPlan();
+        } else if (event.type === 'error') {
+          throw new Error(event.message || 'Adeline could not build this lesson yet.');
+        }
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Adeline could not build this lesson yet.');
+    } finally {
+      setIsGeneratingLesson(false);
+      setLessonStatus('');
     }
   }
 
@@ -175,13 +234,45 @@ export default function DashboardPage() {
         </button>
       </form>
 
+      {messages.some((message) => message.role === 'adeline') && !activeLesson && !isGeneratingLesson && (
+        <div className={styles.lessonPrompt}>
+          <div>
+            <strong>Ready to turn this into real learning?</strong>
+            <span>Adeline will build the lesson, choose useful sources, and connect completed work to the learning record.</span>
+          </div>
+          <button type="button" onClick={() => void generateLesson(lastLearnerTopic || heroTitle, heroSuggestion?.track ?? 'TRUTH_HISTORY')}>
+            Build my lesson →
+          </button>
+        </div>
+      )}
+
+      {(isGeneratingLesson || activeLesson) && (
+        <section className={styles.generatedLesson} aria-live="polite">
+          {lessonStatus && <p className={styles.lessonStatus}>{lessonStatus}</p>}
+          {isGeneratingLesson && lessonBlocks.length === 0 && (
+            <div className={styles.loading}>Adeline is building a complete lesson—not another chat answer…</div>
+          )}
+          {lessonBlocks.length > 0 && (
+            <LessonRenderer
+              lesson={{
+                lesson_id: 'streaming', title: lastLearnerTopic, track: heroSuggestion?.track ?? 'TRUTH_HISTORY',
+                blocks: lessonBlocks, has_research_missions: false, researcher_activated: false,
+                agent_name: '', xapi_statements: [], credits_awarded: [], oas_standards: [],
+              }}
+              studentId={studentId}
+            />
+          )}
+          {activeLesson && <LessonRenderer lesson={activeLesson} studentId={studentId} />}
+        </section>
+      )}
+
       <section className={styles.today} aria-label="Today's learning plan">
         <div className={styles.todayHeader}>
           <div>
             <p>Chosen for where you are today</p>
             <h2>Your next adventures</h2>
           </div>
-          <a href="/dashboard/resource-vault">Explore the Resource Vault</a>
+          <span>Adeline chooses sources when they are useful</span>
         </div>
 
         {planLoading ? (
@@ -193,7 +284,11 @@ export default function DashboardPage() {
                 key={suggestion.id}
                 type="button"
                 className={styles.card}
-                onClick={() => void send(`I want to work on: ${suggestion.title}`)}
+                onClick={() => void generateLesson(
+                  suggestion.description ? `${suggestion.title}: ${suggestion.description}` : suggestion.title,
+                  suggestion.track,
+                )}
+                disabled={isGeneratingLesson}
               >
                 <small>{suggestion.track.replace(/_/g, ' ')}</small>
                 <h3>{suggestion.emoji} {suggestion.title}</h3>

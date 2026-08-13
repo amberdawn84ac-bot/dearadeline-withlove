@@ -382,7 +382,7 @@ export async function generateLesson(request: LessonRequest): Promise<LessonJobR
 export type LessonStreamEvent =
   | { type: "status"; message: string }
   | { type: "block"; block: LessonBlockResponse }
-  | { type: "done"; lesson_id: string; title: string; oas_standards?: unknown[] }
+  | { type: "done"; lesson_id: string; title: string; oas_standards?: unknown[]; agent_name?: string; researcher_activated?: boolean; xapi_statements?: XAPIStatement[]; credits_awarded?: CASECredit[] }
   | { type: "error"; message: string }
   // GenUI progressive rendering events (Data Stream Protocol)
   | { type: "genui_skeleton"; componentId: string; componentType: string; hints?: Record<string, unknown>; lessonId?: string; track?: string }
@@ -549,6 +549,7 @@ export interface SealJournalRequest {
   completed_blocks: number;
   oas_standards?: Array<{ standard_id: string; text: string; grade: number }>;
   evidence_sources?: Array<{ title: string; url: string; author: string; year: number | null }>;
+  credit_draft?: CASECredit;
 }
 
 export interface SealJournalResponse {

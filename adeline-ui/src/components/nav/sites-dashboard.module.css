@@ -72,11 +72,18 @@
 .composer textarea:focus { border-color:var(--leaf); }
 .composer button { padding:0 24px; border:0; border-radius:17px; background:var(--coral); color:white; font-weight:900; cursor:pointer; }
 .composer button:disabled { opacity:.55; cursor:wait; }
+.lessonPrompt { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:18px 22px; border:1px solid rgba(41,76,53,.12); border-top:0; background:#fff8e8; }
+.lessonPrompt div { display:grid; gap:3px; }
+.lessonPrompt strong { color:var(--forest); }
+.lessonPrompt span { color:var(--muted); font-size:12px; line-height:1.45; }
+.lessonPrompt button { min-height:44px; padding:0 18px; border:0; border-radius:14px; background:var(--forest); color:white; font-weight:900; cursor:pointer; white-space:nowrap; }
+.generatedLesson { margin-top:24px; padding:28px; border:1px solid #e7ddcc; border-radius:24px; background:rgba(255,255,255,.92); }
+.lessonStatus { margin:0 0 14px; color:var(--coral); font:700 14px var(--font-kalam),cursive; }
 .today { margin-top:30px; }
 .todayHeader { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:14px; }
 .todayHeader p { margin:0; color:var(--coral); font:700 16px var(--font-kalam),cursive; }
 .todayHeader h2 { margin:2px 0 0; color:var(--forest); font:400 34px var(--font-emilys-candy),'Emilys Candy',cursive; }
-.todayHeader a { color:#7b6a4d; font-size:12px; font-weight:800; }
+.todayHeader span { color:#7b6a4d; font-size:12px; font-weight:800; }
 .cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
 .card { padding:20px; border:1px solid #e7ddcc; border-radius:20px; background:rgba(255,255,255,.84); box-shadow:0 7px 18px rgba(55,65,48,.05); text-decoration:none; color:inherit; }
 .card small { color:var(--coral); font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:.1em; }
@@ -102,6 +109,8 @@
   .hero h1 { font-size:40px; }
   .composer { grid-template-columns:1fr; }
   .composer button { min-height:48px; }
+  .lessonPrompt { align-items:stretch; flex-direction:column; }
+  .lessonPrompt button { min-height:46px; }
   .cards { grid-template-columns:1fr; }
   .profileMenu { right:-4px; }
 }
