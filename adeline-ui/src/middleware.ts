@@ -15,6 +15,11 @@ const PUBLIC_PATHS = ['/', '/login', '/signup', '/pricing', '/style-guide'];
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // The source catalog is a parent curation tool, not a student browsing area.
+  if (pathname === '/dashboard/resource-vault') {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
+  }
+
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||

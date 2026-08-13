@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Users, BookOpen, Trophy, Plus, Settings, TrendingUp, GraduationCap } from 'lucide-react';
+import Link from 'next/link';
+import { Loader2, Users, BookOpen, Trophy, Plus, TrendingUp, GraduationCap, ExternalLink, LibraryBig } from 'lucide-react';
 import { getFamilyDashboard, listStudents, addStudent, type FamilyDashboard, type StudentSummary } from '@/lib/parent-client';
 import { getLearningPlan, type LearningPlanResponse, type BookRecommendation, type LessonSuggestion } from '@/lib/brain-client';
 import { AddStudentDialog } from '@/components/parent/AddStudentDialog';
@@ -185,6 +186,29 @@ export default function ParentDashboardPage() {
 
             {/* Progress Grid */}
             <FamilyProgressGrid students={dashboard.students} />
+
+            {/* Parent-only source curation */}
+            <section className="mt-8 rounded-2xl border-2 border-[#E7DAC3] bg-white p-5 sm:p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-[#2F4731]/10 p-2.5">
+                    <LibraryBig className="h-5 w-5 text-[#2F4731]" />
+                  </div>
+                  <div>
+                    <h2 className="font-bold text-[#2F4731]">Adeline&rsquo;s Source Room</h2>
+                    <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[#2F4731]/60">
+                      Review the primary sources, simulations, games, and open curriculum Adeline can draw from. Students receive the relevant source inside their learning plan or lesson instead of browsing the full catalog.
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/dashboard/parent/resources"
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-[#2F4731] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#BD6809]"
+                >
+                  Review sources <ExternalLink className="h-4 w-4" />
+                </Link>
+              </div>
+            </section>
 
             {/* Selected Student Detail */}
             {selectedStudentId && (

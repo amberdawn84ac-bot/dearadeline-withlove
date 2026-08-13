@@ -14,7 +14,6 @@ const NAV_ITEMS = [
   ['▧', 'Portfolio', '/dashboard/portfolio'],
   ['◎', 'Transcript & Graduation', '/dashboard/transcript'],
   ['▤', 'Reading Nook', '/dashboard/reading-nook'],
-  ['◈', 'Resource Vault', '/dashboard/resource-vault'],
   ['⚙', 'Settings', '/dashboard/settings'],
 ] as const;
 
