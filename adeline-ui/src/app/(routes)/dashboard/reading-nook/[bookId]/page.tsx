@@ -7,7 +7,9 @@ import {
   getBook,
   startReading,
   getShelf,
+  moveBook,
   ReadingSession,
+  ShelfData,
   BookshelfAPIError,
 } from '@/lib/bookshelf-client';
 import { EPUBReader } from '@/components/reading-nook/EPUBReader';
@@ -52,20 +54,28 @@ export default function ReadingPage() {
 
         // Fetch book details
         const bookData = await getBook(studentId, bookId);
-        setBook(bookData as BookData);
+        setBook({ ...bookData, source_url: `/api/reading-books/${encodeURIComponent(bookId)}` } as BookData);
 
         // Check if reading session already exists
         try {
-          const shelfData = (await getShelf(studentId, 'all')) as ReadingSession[];
-          const existingSession = Array.isArray(shelfData)
-            ? shelfData.find((s) => s.book_id === bookId)
-            : null;
+          const shelfData = await getShelf(studentId, 'all');
+          const sessions = Array.isArray(shelfData)
+            ? shelfData
+            : [
+                ...(shelfData as ShelfData).reading,
+                ...(shelfData as ShelfData).finished,
+                ...(shelfData as ShelfData).wishlist,
+              ];
+          const existingSession = sessions.find((s) => s.book_id === bookId);
 
           if (existingSession) {
-            setSession(existingSession);
+            setSession(
+              existingSession.status === 'wishlist'
+                ? await moveBook(studentId, existingSession.id, 'reading')
+                : existingSession
+            );
           }
-        } catch (err) {
-          // No existing session — we'll create one below
+        } catch {
           console.debug('No existing session found, will create new one');
         }
       } catch (err) {

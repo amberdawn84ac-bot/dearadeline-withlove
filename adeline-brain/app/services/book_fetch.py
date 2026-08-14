@@ -2,7 +2,8 @@
 Book fetch service with waterfall logic:
 1. Try Standard Ebooks first
 2. Fall through to Gutendex
-3. Save to Supabase Storage
+3. Try unrestricted Internet Archive EPUBs
+4. Save to Supabase Storage
 """
 import httpx
 import logging
@@ -56,6 +57,40 @@ async def fetch_from_gutendex(title: str, timeout: int = 30) -> Optional[bytes]:
             return None
 
 
+async def fetch_from_internet_archive(title: str, timeout: int = 30) -> Optional[bytes]:
+    """Fetch an unrestricted EPUB from Internet Archive when one is available."""
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        try:
+            search = await client.get(
+                "https://archive.org/advancedsearch.php",
+                params={
+                    "q": f'title:"{title}" AND mediatype:texts AND access-restricted-item:false',
+                    "fl[]": "identifier",
+                    "rows": 5,
+                    "output": "json",
+                },
+            )
+            search.raise_for_status()
+            for document in search.json().get("response", {}).get("docs", []):
+                identifier = document.get("identifier")
+                if not identifier:
+                    continue
+                metadata = await client.get(f"https://archive.org/metadata/{identifier}")
+                if metadata.status_code != 200:
+                    continue
+                for file in metadata.json().get("files", []):
+                    name = file.get("name", "")
+                    if name.lower().endswith(".epub") and not file.get("private"):
+                        response = await client.get(
+                            f"https://archive.org/download/{identifier}/{name}"
+                        )
+                        if response.status_code == 200 and response.content.startswith(b"PK"):
+                            return response.content
+        except Exception as exc:
+            logger.warning(f"[BookFetch] Internet Archive lookup failed: {exc}")
+    return None
+
+
 async def save_to_storage(book_id: str, epub_bytes: bytes, source: str = "Unknown") -> str:
     source_safe = re.sub(r'[^\w]', '', source.replace(" ", "_"))
     storage_key = f"books/{book_id}/{source_safe}.epub"
@@ -65,7 +100,7 @@ async def save_to_storage(book_id: str, epub_bytes: bytes, source: str = "Unknow
 
 
 async def fetch_book_with_waterfall(book_id: str, title: str, author: str) -> Optional[tuple[bytes, str]]:
-    """Try Standard Ebooks first, then Gutendex. Returns (epub_bytes, source_name) or None."""
+    """Try trusted public-domain libraries in order and return a usable EPUB."""
     epub_bytes = await fetch_from_standard_ebooks(author, title)
     if epub_bytes:
         logger.info(f"[BookFetch] Found '{title}' on Standard Ebooks ({len(epub_bytes)} bytes)")
@@ -74,5 +109,9 @@ async def fetch_book_with_waterfall(book_id: str, title: str, author: str) -> Op
     if epub_bytes:
         logger.info(f"[BookFetch] Found '{title}' on Gutenberg ({len(epub_bytes)} bytes)")
         return (epub_bytes, "Gutenberg")
+    epub_bytes = await fetch_from_internet_archive(title)
+    if epub_bytes:
+        logger.info(f"[BookFetch] Found '{title}' on Internet Archive ({len(epub_bytes)} bytes)")
+        return (epub_bytes, "Internet Archive")
     logger.warning(f"[BookFetch] '{title}' not found in any library")
     return None

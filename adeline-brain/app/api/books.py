@@ -433,6 +433,65 @@ def _get_lexile_range(grade_level: Optional[str]) -> tuple:
     return (250, 1200)
 
 
+async def _profile_catalog_recommendations(
+    student_id: str,
+    grade_level: Optional[str],
+    interests: list,
+    limit: int,
+) -> List[dict]:
+    """Reliable recommendation fallback that does not depend on an AI provider."""
+    lexile_min, lexile_max = _get_lexile_range(grade_level)
+    midpoint = (lexile_min + lexile_max) // 2
+    interest_text = " ".join(str(item).lower() for item in interests)
+    interest_tracks = []
+    keyword_tracks = {
+        "farm": "HOMESTEADING", "garden": "HOMESTEADING", "animal": "HOMESTEADING",
+        "science": "CREATION_SCIENCE", "nature": "CREATION_SCIENCE",
+        "history": "TRUTH_HISTORY", "government": "GOVERNMENT_ECONOMICS",
+        "justice": "JUSTICE_CHANGEMAKING", "writing": "ENGLISH_LITERATURE",
+        "reading": "ENGLISH_LITERATURE", "art": "CREATIVE_ECONOMY",
+    }
+    for keyword, track in keyword_tracks.items():
+        if keyword in interest_text and track not in interest_tracks:
+            interest_tracks.append(track)
+
+    conn = await _get_conn()
+    try:
+        rows = await conn.fetch(
+            """
+            SELECT b.id, b.title, b.author, b.lexile_level, b.grade_band,
+                   b.track::text AS track, b."coverImageUrl"
+            FROM "Book" b
+            LEFT JOIN "ReadingSession" rs
+              ON rs."bookId" = b.id AND rs."studentId" = $1
+            WHERE rs.id IS NULL AND b.source_url IS NOT NULL
+            ORDER BY ABS(COALESCE(b.lexile_level, $2) - $2), b.title
+            LIMIT $3
+            """,
+            student_id, midpoint, max(limit * 3, 12),
+        )
+        books = [
+            {
+                "id": row["id"], "title": row["title"], "author": row["author"],
+                "lexile_level": row["lexile_level"] or midpoint,
+                "grade_band": row["grade_band"] or (grade_level or "All"),
+                "track": row["track"], "cover_url": row["coverImageUrl"],
+                "relevance_score": 0.9 if row["track"] in interest_tracks else 0.7,
+            }
+            for row in rows
+        ]
+        books.sort(
+            key=lambda book: (
+                book["track"] not in interest_tracks,
+                abs(book["lexile_level"] - midpoint),
+                book["title"],
+            )
+        )
+        return books[:limit]
+    finally:
+        await conn.close()
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────
 
 @router.get(
@@ -482,12 +541,7 @@ async def get_recommendations(
             interests=interests,
         )
 
-        # Step 3: Create embedding via OpenAI (using HyDE document instead of raw query)
-        logger.info("[Books/Recommendations] Creating HyDE embedding")
-        embedding = await _embed(hyde_document)
-        logger.debug(f"[Books/Recommendations] HyDE embedding created (dims: {len(embedding)})")
-
-        # Step 4: Calculate adaptive reading level based on actual reading history
+        # Step 3: Calculate adaptive reading level based on actual reading history
         adaptive_lexile_min, adaptive_lexile_max, confidence = await _calculate_adaptive_reading_level(
             x_user_id, grade_level or ""
         )
@@ -497,24 +551,37 @@ async def get_recommendations(
             f"{adaptive_lexile_min}-{adaptive_lexile_max} (confidence: {confidence:.2f})"
         )
 
-        # Step 5: Search books by embedding with adaptive lexile filtering
-        logger.info(
-            f"[Books/Recommendations] Searching books by HyDE embedding "
-            f"(limit={limit}, adaptive_lexile={adaptive_lexile_min}-{adaptive_lexile_max})"
-        )
-        books = await bookshelf_search.search_books_by_embedding(
-            embedding=embedding,
-            lexile_min=adaptive_lexile_min,
-            lexile_max=adaptive_lexile_max,
-            limit=limit,
-            soft_lexile_fallback=True,
-            tracks_with_lexile_tolerance=["Truth-History", "Discipleship"],
-        )
+        # Step 4: Prefer semantic matches, but always fall back to the curated
+        # catalog so a child never receives an empty shelf because an AI service
+        # is missing, rate-limited, or temporarily unavailable.
+        books = []
+        try:
+            logger.info("[Books/Recommendations] Creating HyDE embedding")
+            embedding = await _embed(hyde_document)
+            books = await bookshelf_search.search_books_by_embedding(
+                embedding=embedding,
+                lexile_min=adaptive_lexile_min,
+                lexile_max=adaptive_lexile_max,
+                limit=limit,
+                soft_lexile_fallback=True,
+                tracks_with_lexile_tolerance=["TRUTH_HISTORY", "DISCIPLESHIP"],
+            )
+        except Exception as exc:
+            logger.warning(f"[Books/Recommendations] Semantic search unavailable: {exc}")
 
-        # Step 5b: External fallback if pgvector results are insufficient
+        if len(books) < min(4, limit):
+            fallback = await _profile_catalog_recommendations(
+                x_user_id, grade_level, interests, limit
+            )
+            existing_ids = {book["id"] for book in books}
+            books.extend(book for book in fallback if book["id"] not in existing_ids)
+            books = books[:limit]
+
+        # Step 4b: External discovery is informational only; shelfable internal
+        # books are preferred because they open in Dear Adeline's reader.
         from app.services.external_books import fetch_external_books, should_fallback_to_external
 
-        if await should_fallback_to_external(books):
+        if not books and await should_fallback_to_external(books):
             logger.warning(
                 f"[Books/Recommendations] Low pgvector matches ({len(books)}), "
                 f"triggering external fallback"

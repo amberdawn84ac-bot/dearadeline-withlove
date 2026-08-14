@@ -5,7 +5,7 @@
  * Type-safe wrapper for all Bookshelf endpoints
  *
  * Uses the authenticated Next.js gateway at /brain/ so the browser never needs
- * a hardcoded hostname. All endpoints are relative to /brain/api/bookshelf/
+ * a hardcoded hostname.
  */
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -89,7 +89,8 @@ export class BookshelfAPIError extends Error {
  * All bookshelf API calls go through the authenticated Next.js gateway at /brain/bookshelf/.
  * This avoids hardcoding the backend hostname in the browser.
  */
-const BASE_URL = '/brain/bookshelf';
+const BOOKS_URL = '/brain/api/books';
+const SESSIONS_URL = '/brain/api/reading-session';
 
 /**
  * Helper to make authenticated fetch requests to bookshelf API
@@ -102,7 +103,7 @@ async function fetchAPI<T>(
   options: RequestInit & { studentId: string }
 ): Promise<T> {
   const { studentId, ...fetchOptions } = options;
-  const url = `${BASE_URL}${endpoint}`;
+  const url = endpoint;
 
   const response = await fetch(url, {
     ...fetchOptions,
@@ -155,7 +156,7 @@ export async function getBooks(
   const queryString = params.toString();
   const endpoint = `/books${queryString ? `?${queryString}` : ''}`;
 
-  return fetchAPI<BookListResponse>(endpoint, {
+  return fetchAPI<BookListResponse>(`${BOOKS_URL}${endpoint}`, {
     method: 'GET',
     studentId,
   });
@@ -165,7 +166,7 @@ export async function getBooks(
  * Get single book by ID
  */
 export async function getBook(studentId: string, bookId: string): Promise<Book> {
-  return fetchAPI<Book>(`/books/${bookId}`, {
+  return fetchAPI<Book>(`${BOOKS_URL}/${bookId}`, {
     method: 'GET',
     studentId,
   });
@@ -215,7 +216,7 @@ export async function getShelf(
   if (status && status !== 'all') params.append('status', status);
 
   const queryString = params.toString();
-  const endpoint = `/reading-session${queryString ? `?${queryString}` : ''}`;
+  const endpoint = `${SESSIONS_URL}${queryString ? `?${queryString}` : ''}`;
 
   return fetchAPI<ShelfData | ReadingSession[]>(endpoint, {
     method: 'GET',
@@ -231,7 +232,7 @@ export async function startReading(
   bookId: string,
   initialStatus: 'reading' | 'wishlist' = 'reading'
 ): Promise<ReadingSession> {
-  return fetchAPI<ReadingSession>(`/reading-session`, {
+  return fetchAPI<ReadingSession>(SESSIONS_URL, {
     method: 'POST',
     studentId,
     body: JSON.stringify({
@@ -253,7 +254,7 @@ export async function updateProgress(
     pages_read?: number;
   }
 ): Promise<ReadingSession> {
-  return fetchAPI<ReadingSession>(`/reading-session/${sessionId}`, {
+  return fetchAPI<ReadingSession>(`${SESSIONS_URL}/${sessionId}`, {
     method: 'PATCH',
     studentId,
     body: JSON.stringify(updates),
@@ -268,7 +269,7 @@ export async function markComplete(
   sessionId: string,
   reflection?: string
 ): Promise<ReadingSession> {
-  return fetchAPI<ReadingSession>(`/reading-session/${sessionId}`, {
+  return fetchAPI<ReadingSession>(`${SESSIONS_URL}/${sessionId}`, {
     method: 'PATCH',
     studentId,
     body: JSON.stringify({
@@ -286,7 +287,7 @@ export async function moveBook(
   sessionId: string,
   newStatus: 'reading' | 'finished' | 'wishlist'
 ): Promise<ReadingSession> {
-  return fetchAPI<ReadingSession>(`/reading-session/${sessionId}`, {
+  return fetchAPI<ReadingSession>(`${SESSIONS_URL}/${sessionId}`, {
     method: 'PATCH',
     studentId,
     body: JSON.stringify({

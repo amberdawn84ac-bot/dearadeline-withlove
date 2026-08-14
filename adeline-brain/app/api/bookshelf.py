@@ -203,7 +203,11 @@ async def get_book(book_id: str):
         await conn.close()
 
 
-@router.post("/add", response_model=AddBookResponse, dependencies=[Depends(require_role(UserRole.ADMIN))])
+@router.post(
+    "/add",
+    response_model=AddBookResponse,
+    dependencies=[Depends(require_role(UserRole.STUDENT, UserRole.PARENT, UserRole.ADMIN))],
+)
 async def add_book(request: AddBookRequest, background_tasks: BackgroundTasks):
     """Add a book by title/author — triggers waterfall download in background."""
     book_id = str(uuid.uuid4())
@@ -212,7 +216,7 @@ async def add_book(request: AddBookRequest, background_tasks: BackgroundTasks):
         await conn.execute(
             """
             INSERT INTO "Book" (id, title, author, track, "updatedAt")
-            VALUES ($1, $2, $3, '', now())
+            VALUES ($1, $2, $3, 'ENGLISH_LITERATURE', now())
             """,
             book_id, request.title, request.author,
         )

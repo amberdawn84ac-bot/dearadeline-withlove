@@ -310,6 +310,13 @@ export default function Bookshelf({
             throw new Error(`Failed to create session: ${createRes.status}`);
           }
         }
+      } else if (shelf!.wishlist.some((candidate) => candidate.id === bookId)) {
+        await fetch(`/brain/api/reading-session/${existingSession.sessionId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+          credentials: "include",
+          body: JSON.stringify({ status: "reading" }),
+        });
       }
 
       // Navigate to reader
@@ -322,12 +329,7 @@ export default function Bookshelf({
   // Handle add to reading list — from Discover section
   const handleAddToReadingList = async (bookId: string) => {
     try {
-      // Check if external book — skip for now (future: sync to wishlist)
       const book = recommendations.find((b) => b.id === bookId);
-      if (book?.isExternal) {
-        alert(`"${book.title}" is available on Open Library. Click the book to view it there.`);
-        return;
-      }
 
       setAddingToList(bookId);
 
@@ -340,7 +342,7 @@ export default function Bookshelf({
         credentials: 'include', // Important: sends auth cookies
         body: JSON.stringify({
           book_id: bookId,
-          status: "reading",
+          status: "wishlist",
         }),
       });
 
@@ -348,12 +350,12 @@ export default function Bookshelf({
         throw new Error(`Failed to add to reading list: ${createRes.status}`);
       }
 
-      // Refetch shelf to show the new book in Currently Reading
+      // Refetch shelf to show the new book in Want to Read
       await fetchShelf();
 
       // Show success notification
       if (book) {
-        alert(`Added "${book.title}" to your reading list!`);
+        alert(`Added "${book.title}" to Want to Read!`);
       }
     } catch (err) {
       console.error("[Bookshelf] Add to reading list failed:", err);

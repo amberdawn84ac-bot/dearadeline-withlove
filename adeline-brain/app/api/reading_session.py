@@ -53,6 +53,7 @@ class BookInShelf(BaseModel):
     title: str
     author: str
     lexile_level: Optional[int] = None
+    grade_band: Optional[str] = None
     track: Optional[str] = None
     cover_url: Optional[str] = None
 
@@ -62,6 +63,7 @@ class SessionDetailResponse(BaseModel):
     id: str
     book_id: str
     book: BookInShelf
+    status: str
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     pages_read: int = 0
@@ -458,7 +460,7 @@ async def get_reading_shelf(
                         rs."startedAt", rs."completedAt", rs."pagesRead", rs."totalPages",
                         rs."currentLocation", rs."studentReflection", rs."minutesRead",
                         b.id as book_id, b.title, b.author, b."gutenbergId",
-                        b."lexileLevel", b.track, b."coverUrl"
+                        b."lexileLevel", b.grade_band, b.track, b."coverUrl"
                     FROM "ReadingSession" rs
                     JOIN "Book" b ON rs."bookId" = b.id
                     WHERE rs."studentId" = $1 AND rs.status = $2
@@ -474,7 +476,7 @@ async def get_reading_shelf(
                         rs."startedAt", rs."completedAt", rs."pagesRead", rs."totalPages",
                         rs."currentLocation", rs."studentReflection", rs."minutesRead",
                         b.id as book_id, b.title, b.author, b."gutenbergId",
-                        b."lexileLevel", b.track, b."coverUrl"
+                        b."lexileLevel", b.grade_band, b.track, b."coverUrl"
                     FROM "ReadingSession" rs
                     JOIN "Book" b ON rs."bookId" = b.id
                     WHERE rs."studentId" = $1
@@ -492,11 +494,13 @@ async def get_reading_shelf(
             session = SessionDetailResponse(
                 id=row["id"],
                 book_id=row["bookId"],
+                status=row["status"],
                 book=BookInShelf(
                     id=row["book_id"],
                     title=row["title"],
                     author=row["author"],
                     lexile_level=row.get("lexileLevel"),
+                    grade_band=row.get("grade_band"),
                     track=row.get("track"),
                     cover_url=row.get("coverUrl"),
                 ),

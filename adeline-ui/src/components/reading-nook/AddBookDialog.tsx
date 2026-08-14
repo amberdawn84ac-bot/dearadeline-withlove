@@ -20,7 +20,16 @@ export function AddBookDialog({ onBookAdded }: Props) {
     setResult(null);
     try {
       const res = await addBook(title.trim(), author.trim());
-      setResult(`"${res.title}" added — ${res.status === "fetching" ? "searching libraries..." : res.status}`);
+      const shelfResponse = await fetch('/brain/api/reading-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ book_id: res.id, status: 'wishlist' }),
+      });
+      if (!shelfResponse.ok && shelfResponse.status !== 409) {
+        throw new Error(`Could not place book on shelf: ${shelfResponse.status}`);
+      }
+      setResult(`"${res.title}" is on Want to Read — ${res.status === "fetching" ? "finding a public-domain edition..." : res.status}`);
       setTitle("");
       setAuthor("");
       onBookAdded?.();
