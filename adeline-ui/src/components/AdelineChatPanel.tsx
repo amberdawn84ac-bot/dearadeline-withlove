@@ -16,6 +16,7 @@ import AnimatedSketchnoteRenderer from "@/components/gen-ui/patterns/AnimatedSke
 import type { LessonRenderMode, AnimatedSketchnoteLesson } from "@/lib/brain-client";
 import { useALUStream } from "@/hooks/useALUStream";
 import { StreamingGenUIRenderer } from "@/components/gen-ui/StreamingGenUIRenderer";
+import LessonRenderer from "@/components/lessons/LessonRenderer";
 import { parseDataStreamLine } from "@/lib/stream-protocol";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -23,7 +24,8 @@ import { parseDataStreamLine } from "@/lib/stream-protocol";
 type RichContent =
   | { type: "projectList"; projects: (ProjectSummary | ProjectDetail)[] }
   | { type: "projectDetail"; project: ProjectDetail }
-  | { type: "activityCredit"; result: ActivityReportResponse };
+  | { type: "activityCredit"; result: ActivityReportResponse }
+  | { type: "lesson"; lesson: LessonResponse };
 
 type MessageSegment =
   | { type: "text"; content: string }
@@ -73,6 +75,21 @@ const WELCOME_MSG: Message = {
 
 const PROJECT_LIST_RE = /\b(show|browse|see|find|list|what|give me).{0,20}(project|craft|make|build|farm)/i;
 const ACTIVITY_RE = /\b(i (spent|did|worked|practiced|baked|built|planted|made|helped|cooked|cleaned|studied|read|drew|painted|sewed|fixed)|today i|this (morning|afternoon|week)|i've been)\b/i;
+const LESSON_REQUEST_RE = /\b(?:build|make|create|generate|start|give me)\s+(?:a\s+)?lesson\b|\bteach me\b|\bi want to learn about\b|\bdeep dive (?:into|on)\b|\bexplain .+ in depth\b/i;
+
+function inferLessonTrack(text: string): Track {
+  const normalized = text.toLowerCase();
+  if (/bible|scripture|yahweh|yeshua|faith|disciple|proverb/.test(normalized)) return "DISCIPLESHIP";
+  if (/history|war|ancient|civilization|primary source/.test(normalized)) return "TRUTH_HISTORY";
+  if (/government|constitution|econom|money|business|market/.test(normalized)) return "GOVERNMENT_ECONOMICS";
+  if (/justice|rights|prison|reform|activis/.test(normalized)) return "JUSTICE_CHANGEMAKING";
+  if (/garden|farm|soil|seed|animal|homestead|cook|food/.test(normalized)) return "HOMESTEADING";
+  if (/health|body|nutrition|herb|medicine/.test(normalized)) return "HEALTH_NATUROPATHY";
+  if (/math|algebra|geometry|fraction|equation|number/.test(normalized)) return "APPLIED_MATHEMATICS";
+  if (/write|poem|novel|book|literature|grammar|language/.test(normalized)) return "ENGLISH_LITERATURE";
+  if (/art|design|music|film|creative|commission/.test(normalized)) return "CREATIVE_ECONOMY";
+  return "CREATION_SCIENCE";
+}
 
 /** Parse "2 hours", "30 minutes", "an hour" → minutes */
 function parseMinutes(text: string): number {
@@ -243,7 +260,6 @@ export function AdelineChatPanel({
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [renderMode, setRenderMode] = useState<LessonRenderMode>("animated_sketchnote_lesson");
-  const [animatedLesson, setAnimatedLesson] = useState<AnimatedSketchnoteLesson | null>(null);
   const [pendingActivity, setPendingActivity] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -343,39 +359,6 @@ export function AdelineChatPanel({
     addMessage({ role: "user", content: text });
     setIsLoading(true);
 
-    // Animated sketchnote lesson — bypass streaming entirely
-    if (renderMode === "animated_sketchnote_lesson" && !activeLessonContext) {
-      setAnimatedLesson(null);
-      addMessage({ role: "adeline", content: "Building your animated lesson — this takes about 20 seconds…" });
-      try {
-        const res = await fetch("/api/adeline/animated-lesson", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ topic: text, duration_seconds: 600, target_ages: "10-18" }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setAnimatedLesson(data as AnimatedSketchnoteLesson);
-          // Replace the "building" message with a success cue
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.content === "Building your animated lesson — this takes about 20 seconds…"
-                ? { ...m, content: `Here's your animated lesson on "${text}":` }
-                : m
-            )
-          );
-        } else {
-          const err = await res.text();
-          addMessage({ role: "adeline", content: `Couldn't generate the animated lesson (${res.status}). Try the Standard mode, or check that GEMINI_API_KEY is set. Detail: ${err.slice(0, 200)}` });
-        }
-      } catch (e) {
-        addMessage({ role: "adeline", content: "Network error reaching the animated-lesson service. Try Standard mode." });
-      } finally {
-        setIsLoading(false);
-      }
-      return;
-    }
-
     try {
       if (activeLessonContext) {
         // Scaffold: student is responding to an active lesson
@@ -391,6 +374,39 @@ export function AdelineChatPanel({
           content: result.adeline_response,
           zpd_zone: result.zpd_zone,
         });
+      } else if (LESSON_REQUEST_RE.test(text)) {
+        const track = inferLessonTrack(text);
+        const blocks: LessonBlockResponse[] = [];
+        let lesson: LessonResponse | null = null;
+        addMessage({ role: "adeline", content: "I’m building this through your full lesson plan process—gathering sources and fitting it to you…" });
+        for await (const event of streamLesson({
+          student_id: studentId,
+          topic: text,
+          track,
+          grade_level: gradeLevel,
+          is_homestead: track === "HOMESTEADING",
+        })) {
+          processALUEvent(event as Record<string, unknown>);
+          if (event.type === "block") blocks.push(event.block);
+          if (event.type === "error") throw new Error(event.message);
+          if (event.type === "done") {
+            lesson = {
+              lesson_id: event.lesson_id,
+              title: event.title || text,
+              track,
+              blocks,
+              has_research_missions: blocks.some((block) => block.block_type === "RESEARCH_MISSION"),
+              researcher_activated: event.researcher_activated ?? false,
+              oas_standards: (event.oas_standards as LessonResponse["oas_standards"]) ?? [],
+              agent_name: event.agent_name ?? "Adeline",
+              xapi_statements: event.xapi_statements ?? [],
+              credits_awarded: event.credits_awarded ?? [],
+            };
+          }
+        }
+        if (!lesson) throw new Error("Lesson stream ended before completion");
+        addMessage({ role: "adeline", content: "Your lesson is ready.", rich: { type: "lesson", lesson } });
+        onLessonGenerated?.(lesson);
       } else if (PROJECT_LIST_RE.test(text)) {
         // Project catalog intent
         addMessage({ role: "adeline", content: "Let me pull up the project catalog for you…" });
@@ -512,7 +528,7 @@ export function AdelineChatPanel({
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, onLessonGenerated, addMessage, conversationHistory, processGenUIEvent, processALUEvent, renderMode, pendingActivity]);
+  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, onLessonGenerated, addMessage, conversationHistory, processGenUIEvent, processALUEvent, pendingActivity]);
 
   // Auto-send initial prompt (e.g. from Daily Bread "Start Deep Dive Study")
   useEffect(() => {
@@ -703,18 +719,16 @@ export function AdelineChatPanel({
                   {msg.rich?.type === "activityCredit" && (
                     <ActivityCreditCard result={msg.rich.result} />
                   )}
+                  {msg.rich?.type === "lesson" && (
+                    <div className="mt-3 rounded-2xl bg-[#FFFEF7] p-2 text-[#2F4731]">
+                      <LessonRenderer lesson={msg.rich.lesson} studentId={studentId} />
+                    </div>
+                  )}
                 </>
               )}
             </div>
           </div>
         ))}
-
-        {/* Animated sketchnote lesson output */}
-        {animatedLesson && (
-          <div className="w-full">
-            <AnimatedSketchnoteRenderer lesson={animatedLesson} />
-          </div>
-        )}
 
         {/* Streaming GenUI components — progressive rendering */}
         {streamingComponentOrder.length > 0 && (
