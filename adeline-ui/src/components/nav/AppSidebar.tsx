@@ -12,7 +12,6 @@ const NAV_ITEMS = [
   ['✦', 'Learning Plan', '/dashboard/journey'],
   ['⚒', 'Project Workshop', '/dashboard/projects'],
   ['▧', 'Portfolio', '/dashboard/portfolio'],
-  ['◎', 'Transcript & Graduation', '/dashboard/transcript'],
   ['▤', 'Reading Nook', '/dashboard/reading-nook'],
   ['⚙', 'Settings', '/dashboard/settings'],
 ] as const;

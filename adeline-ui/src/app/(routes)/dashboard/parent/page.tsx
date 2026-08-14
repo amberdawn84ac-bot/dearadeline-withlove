@@ -227,7 +227,7 @@ export default function ParentDashboardPage() {
                 {!planLoading && studentPlan && (
                   <div className="space-y-6">
                     {/* Credits + Progress */}
-                    <div className="flex items-center gap-6 p-4 bg-white rounded-xl border border-[#E7DAC3]">
+                    <div className="flex flex-wrap items-center gap-6 p-4 bg-white rounded-xl border border-[#E7DAC3]">
                       <div className="flex items-center gap-2">
                         <GraduationCap className="w-5 h-5 text-[#BD6809]" />
                         <div>
@@ -253,6 +253,12 @@ export default function ParentDashboardPage() {
                           </div>
                         </>
                       )}
+                      <Link
+                        href="/dashboard/transcript"
+                        className="ml-auto inline-flex items-center gap-2 rounded-lg bg-[#2F4731] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#BD6809]"
+                      >
+                        Transcript &amp; graduation <ExternalLink className="h-4 w-4" />
+                      </Link>
                     </div>
 
                     {/* Recommended Lessons */}
