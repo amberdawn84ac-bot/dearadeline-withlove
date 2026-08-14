@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   ['⚒', 'Project Workshop', '/dashboard/projects'],
   ['▧', 'Portfolio', '/dashboard/portfolio'],
   ['▤', 'Reading Nook', '/dashboard/reading-nook'],
+  ['☆', 'Opportunities', '/dashboard/opportunities'],
   ['⚙', 'Settings', '/dashboard/settings'],
 ] as const;
 
