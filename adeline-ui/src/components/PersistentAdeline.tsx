@@ -21,15 +21,6 @@ export function PersistentAdeline() {
   return (
     <section className={styles.fixture} data-minimized={minimized} aria-label="Chat with Adeline">
       <div className={styles.topBar}>
-        <div className={styles.identity}>
-          <span className={styles.smallPortrait}>
-            <Image src="/adeline-face.webp" alt="" fill sizes="44px" />
-          </span>
-          <span>
-            <strong>Adeline is here</strong>
-            <small>Ask a question or tell her what you did today.</small>
-          </span>
-        </div>
         <button
           type="button"
           className={styles.toggle}
@@ -52,10 +43,6 @@ export function PersistentAdeline() {
             priority
             sizes="(max-width: 760px) 100vw, 430px"
           />
-          <div className={styles.portraitCaption}>
-            <span>YOUR LEARNING GUIDE</span>
-            <strong>What are we discovering today?</strong>
-          </div>
         </div>
         <div className={styles.chat}>
           <AdelineChatPanel

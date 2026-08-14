@@ -75,7 +75,7 @@ const WELCOME_MSG: Message = {
 
 const PROJECT_LIST_RE = /\b(show|browse|see|find|list|what|give me).{0,20}(project|craft|make|build|farm)/i;
 const ACTIVITY_RE = /\b(i (spent|did|worked|practiced|baked|built|planted|made|helped|cooked|cleaned|studied|read|drew|painted|sewed|fixed)|today i|this (morning|afternoon|week)|i've been)\b/i;
-const LESSON_REQUEST_RE = /\b(?:build|make|create|generate|start|give me)\s+(?:a\s+)?lesson\b|\bteach me\b|\bi want to learn about\b|\bdeep dive (?:into|on)\b|\bexplain .+ in depth\b/i;
+const LESSON_REQUEST_RE = /\b(?:build|make|create|generate|start|give me)\s+(?:an?\s+)?(?:[\w-]+\s+){0,4}lesson\b|\b(?:i(?:'d| would) like|i want|i need)\s+(?:an?\s+)?(?:[\w-]+\s+){0,4}lesson\b|\bteach me\b|\bi want to learn about\b|\bdeep dive (?:into|on)\b|\bexplain .+ in depth\b/i;
 
 function inferLessonTrack(text: string): Track {
   const normalized = text.toLowerCase();
@@ -104,33 +104,6 @@ function parseMinutes(text: string): number {
   if (anHourMatch && !hoursMatch) total += 60;
   if (halfHourMatch && !minutesMatch) total += 30;
   return total > 0 ? Math.round(total) : 60; // default 60 min
-}
-
-// ── ZPD zone badge colors ──────────────────────────────────────────────────────
-
-function ZPDBadge({ zone }: { zone: string }) {
-  const styles: Record<string, { bg: string; text: string; label: string }> = {
-    FRUSTRATED: { bg: "#FEF2F2", text: "#991B1B", label: "Bridge" },
-    IN_ZPD:     { bg: "#F0FDF4", text: "#166534", label: "Socratic" },
-    BORED:      { bg: "#EFF6FF", text: "#1D4ED8", label: "Elevation" },
-  };
-  const s = styles[zone] ?? { bg: "#F9FAFB", text: "#374151", label: zone };
-  return (
-    <span
-      style={{
-        fontSize: 9,
-        fontWeight: 800,
-        background: s.bg,
-        color: s.text,
-        borderRadius: 4,
-        padding: "2px 6px",
-        letterSpacing: "0.08em",
-        textTransform: "uppercase",
-      }}
-    >
-      {s.label}
-    </span>
-  );
 }
 
 // ── Activity credit receipt ────────────────────────────────────────────────────
@@ -659,11 +632,6 @@ export function AdelineChatPanel({
               {/* Streaming conversation message */}
               {msg.segments !== undefined ? (
                 <div className="space-y-0">
-                  {msg.zpd_zone && (
-                    <div className="mb-1.5">
-                      <ZPDBadge zone={msg.zpd_zone} />
-                    </div>
-                  )}
                   {msg.segments.length === 0 && msg.streaming ? (
                     <div className="flex items-center gap-1.5">
                       <Loader2 size={12} className="animate-spin text-[#BD6809]" />
@@ -689,11 +657,6 @@ export function AdelineChatPanel({
                 </div>
               ) : (
                 <>
-                  {msg.zpd_zone && (
-                    <div className="mb-1.5">
-                      <ZPDBadge zone={msg.zpd_zone} />
-                    </div>
-                  )}
                   {msg.content && (
                     <p className="text-sm leading-relaxed whitespace-pre-wrap mb-2">
                       {msg.content}

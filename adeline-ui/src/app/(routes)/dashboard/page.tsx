@@ -78,8 +78,6 @@ export default function TodayPage() {
   return (
     <div className={styles.todayWorkspace}>
       <header className={styles.todayTitle}>
-        <p>Today&apos;s adventure</p>
-        <h1>Everything to touch today</h1>
         <span>A balanced daily itinerary drawn from the larger learning plan. Open each task when you are ready to work.</span>
       </header>
 
