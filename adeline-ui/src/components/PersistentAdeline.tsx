@@ -58,7 +58,12 @@ export function PersistentAdeline() {
           </div>
         </div>
         <div className={styles.chat}>
-          <AdelineChatPanel studentId={student.id} gradeLevel={student.gradeLevel ?? "8"} />
+          <AdelineChatPanel
+            studentId={student.id}
+            gradeLevel={student.gradeLevel ?? "8"}
+            hideHeader
+            hideRenderModeSelector
+          />
         </div>
       </div>
     </section>

@@ -40,7 +40,6 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
     <div className={styles.shell}>
       <header className={styles.header}>
         <Link href="/dashboard" className={styles.brand}>Dear Adeline</Link>
-        <span className={styles.headerLabel}>Today&apos;s Adventure</span>
         <div className={styles.profileWrap}>
           <button
             type="button"

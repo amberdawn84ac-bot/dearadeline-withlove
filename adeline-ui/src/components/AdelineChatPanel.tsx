@@ -48,6 +48,8 @@ interface LessonContext {
 interface AdelineChatPanelProps {
   studentId: string;
   gradeLevel: string;
+  hideHeader?: boolean;
+  hideRenderModeSelector?: boolean;
   activeLessonContext?: LessonContext | null;
   onLessonGenerated?: (lesson: LessonResponse) => void;
   onLessonRequest?: (topic: string) => void;
@@ -224,6 +226,8 @@ function ConversationBlockCard({ block }: { block: Record<string, unknown> }) {
 export function AdelineChatPanel({
   studentId,
   gradeLevel,
+  hideHeader = false,
+  hideRenderModeSelector = false,
   activeLessonContext,
   onLessonGenerated,
   onLessonRequest,
@@ -593,7 +597,7 @@ export function AdelineChatPanel({
 
   return (
     <div className="flex flex-col h-full" style={{ background: "#FFFEF7" }}>
-      {/* Header */}
+      {!hideHeader && (
       <div className="shrink-0 bg-[#2F4731] px-4 py-3 flex items-center gap-3">
         <div className="w-9 h-9 rounded-full bg-[#BD6809] flex items-center justify-center border-2 border-[#BD6809]/40 shrink-0">
           <span className="text-lg">🌿</span>
@@ -613,6 +617,7 @@ export function AdelineChatPanel({
         </div>
         <Sparkles className="w-4 h-4 text-[#BD6809] ml-auto shrink-0" />
       </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
@@ -760,7 +765,7 @@ export function AdelineChatPanel({
         className="shrink-0 px-4 py-3 border-t border-[#E7DAC3]"
         style={{ background: "#FFFDF5" }}
       >
-        <div className="mb-2">
+        <div className={hideRenderModeSelector ? "hidden" : "mb-2"}>
           <RenderModeSelector value={renderMode} onChange={setRenderMode} disabled={isLoading} />
         </div>
         <div className="flex items-end gap-2">
