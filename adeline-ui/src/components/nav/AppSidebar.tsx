@@ -4,11 +4,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useStudent } from '@/lib/useStudent';
+import { PersistentAdeline } from '@/components/PersistentAdeline';
 import styles from './sites-dashboard.module.css';
 
 const NAV_ITEMS = [
   ['☀', 'Today', '/dashboard'],
-  ['♡', 'Talk to Adeline', '/dashboard#talk-to-adeline'],
   ['✦', 'Learning Plan', '/dashboard/journey'],
   ['⚒', 'Project Workshop', '/dashboard/projects'],
   ['▧', 'Portfolio', '/dashboard/portfolio'],
@@ -60,6 +60,8 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
           )}
         </div>
       </header>
+
+      <PersistentAdeline />
 
       <div className={styles.body}>
         <aside className={styles.sidebar} aria-label="Dashboard menu">

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Sparkles, Send, Loader2, FlaskConical, Search, Network, ListOrdered, Brain, Presentation } from "lucide-react";
-import { scaffold, streamLesson, listProjects, getProject, reportActivity, streamConversation } from "@/lib/brain-client";
+import { scaffold, streamLesson, listProjects, getProject, reportActivity, streamConversation, uploadActivityEvidence } from "@/lib/brain-client";
 import { LessonSkeleton } from "@/components/gen-ui/LessonSkeleton";
 import type {
   Track, ScaffoldResponse, LessonResponse, LessonBlockResponse,
@@ -117,6 +117,24 @@ function ZPDBadge({ zone }: { zone: string }) {
 // ── Activity credit receipt ────────────────────────────────────────────────────
 
 function ActivityCreditCard({ result }: { result: ActivityReportResponse }) {
+  const [uploading, setUploading] = useState(false);
+  const [evidenceUrl, setEvidenceUrl] = useState<string | null>(result.evidence_urls?.[0] ?? null);
+  const [uploadError, setUploadError] = useState("");
+
+  async function attachEvidence(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    setUploadError("");
+    try {
+      const uploaded = await uploadActivityEvidence(result.activity_id, file);
+      setEvidenceUrl(uploaded.file_url);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Photo upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   return (
     <div className="space-y-2 pt-1">
       <div
@@ -141,6 +159,17 @@ function ActivityCreditCard({ result }: { result: ActivityReportResponse }) {
               {ct.track.replace(/_/g, " ")} · {ct.credit_type}
             </span>
           ))}
+        </div>
+        <div className="pt-2">
+          {evidenceUrl ? (
+            <p className="text-xs font-bold text-[#166534]">✓ Photo evidence attached to your portfolio</p>
+          ) : (
+            <label className="inline-flex cursor-pointer items-center rounded-lg bg-[#2F4731] px-3 py-2 text-xs font-bold text-white">
+              {uploading ? "Adding photo…" : "Add a project photo"}
+              <input type="file" accept="image/*,video/mp4,video/webm,video/quicktime" className="sr-only" disabled={uploading} onChange={(event) => void attachEvidence(event.target.files?.[0])} />
+            </label>
+          )}
+          {uploadError && <p className="mt-1 text-xs text-red-700">{uploadError}</p>}
         </div>
       </div>
     </div>
@@ -211,6 +240,7 @@ export function AdelineChatPanel({
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [renderMode, setRenderMode] = useState<LessonRenderMode>("animated_sketchnote_lesson");
   const [animatedLesson, setAnimatedLesson] = useState<AnimatedSketchnoteLesson | null>(null);
+  const [pendingActivity, setPendingActivity] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -366,19 +396,32 @@ export function AdelineChatPanel({
           content: "",
           rich: { type: "projectList", projects },
         });
+      } else if (pendingActivity) {
+        const minutes = parseMinutes(text);
+        if (!/(\d+(?:\.\d+)?\s*(?:hour|hr|min)|an hour|half.{0,5}hour)/i.test(text)) {
+          addMessage({ role: "adeline", content: "About how long did you spend on it? Minutes or hours is enough." });
+        } else {
+          addMessage({ role: "adeline", content: "Got it — I’m connecting that real work to your learning record…" });
+          const result = await reportActivity(
+            { student_id: studentId, grade_level: gradeLevel, description: pendingActivity, time_minutes: minutes },
+            "STUDENT",
+          );
+          setPendingActivity(null);
+          addMessage({ role: "adeline", content: `${result.adeline_note} If you have a photo, add it below as portfolio evidence.`, rich: { type: "activityCredit", result } });
+        }
       } else if (ACTIVITY_RE.test(text)) {
         // Life-to-credit: student describing what they did
-        const minutes = parseMinutes(text);
-        addMessage({ role: "adeline", content: "Got it — let me calculate your credits…" });
-        const result = await reportActivity(
-          { student_id: studentId, grade_level: gradeLevel, description: text, time_minutes: minutes },
-          "STUDENT",
-        );
-        addMessage({
-          role: "adeline",
-          content: result.adeline_note,
-          rich: { type: "activityCredit", result },
-        });
+        const hasDuration = /(\d+(?:\.\d+)?\s*(?:hour|hr|min)|an hour|half.{0,5}hour)/i.test(text);
+        if (!hasDuration) {
+          setPendingActivity(text);
+          addMessage({ role: "adeline", content: "That absolutely counts as real learning. About how long did you spend doing it?" });
+        } else {
+          const result = await reportActivity(
+            { student_id: studentId, grade_level: gradeLevel, description: text, time_minutes: parseMinutes(text) },
+            "STUDENT",
+          );
+          addMessage({ role: "adeline", content: `${result.adeline_note} If you have a photo, add it below as portfolio evidence.`, rich: { type: "activityCredit", result } });
+        }
       } else {
         // Default: streaming conversation
         const streamingId = `${Date.now()}-${Math.random()}`;
@@ -465,7 +508,7 @@ export function AdelineChatPanel({
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, onLessonGenerated, addMessage, conversationHistory, processGenUIEvent, processALUEvent, renderMode]);
+  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, onLessonGenerated, addMessage, conversationHistory, processGenUIEvent, processALUEvent, renderMode, pendingActivity]);
 
   // Auto-send initial prompt (e.g. from Daily Bread "Start Deep Dive Study")
   useEffect(() => {

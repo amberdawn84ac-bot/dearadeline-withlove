@@ -18,7 +18,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
@@ -26,6 +26,7 @@ from app.config import create_llm, GOOGLE_API_KEY, ANTHROPIC_API_KEY
 from app.schemas.api_models import Track
 from app.api.middleware import get_current_user_id, verify_student_access
 from app.connections.journal_store import journal_store
+from app.services.storage import upload_mastery_evidence
 from contextlib import asynccontextmanager
 
 logger = logging.getLogger(__name__)
@@ -285,6 +286,7 @@ class ActivityReportResponse(BaseModel):
     credited_tracks:     list[CreditedTrack]
     sealed:              bool
     adeline_note:        str
+    evidence_urls:       list[str] = Field(default_factory=list)
 
 
 class ActivityEntry(BaseModel):
@@ -296,6 +298,7 @@ class ActivityEntry(BaseModel):
     credit_type:         str
     activity_date:       str
     sealed_at:           str
+    evidence_urls:       list[str] = Field(default_factory=list)
 
 
 class ActivityListResponse(BaseModel):
@@ -457,7 +460,50 @@ async def report_activity(
         credited_tracks=credited_tracks,
         sealed=True,
         adeline_note=adeline_note,
+        evidence_urls=[],
     )
+
+
+@router.post("/{activity_id}/evidence")
+async def upload_activity_evidence(
+    activity_id: str,
+    description: str = Form(""),
+    file: UploadFile = File(...),
+    student_id: str = Depends(get_current_user_id),
+):
+    """Attach authenticated photo/video evidence to a credited life activity."""
+    allowed = {"image/jpeg", "image/jpg", "image/png", "image/gif", "video/mp4", "video/webm", "video/quicktime"}
+    content_type = file.content_type or "application/octet-stream"
+    if content_type not in allowed:
+        raise HTTPException(status_code=400, detail="Use a JPG, PNG, GIF, MP4, WebM, or MOV file")
+
+    async with _get_conn() as conn:
+        owns_activity = await conn.fetchval(
+            'SELECT EXISTS(SELECT 1 FROM "TranscriptEntry" WHERE "studentId"=$1 AND "lessonId"=$2)',
+            student_id, activity_id,
+        )
+        if not owns_activity:
+            raise HTTPException(status_code=404, detail="Activity not found")
+
+    file_bytes = await file.read()
+    if len(file_bytes) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (50MB maximum)")
+
+    file_url = await upload_mastery_evidence(
+        student_id=student_id,
+        standard_id=activity_id,
+        file_bytes=file_bytes,
+        content_type=content_type,
+        original_filename=file.filename,
+    )
+
+    evidence_id = str(uuid.uuid4())
+    async with _get_conn() as conn:
+        await conn.execute(
+            'INSERT INTO "ActivityEvidence" (id, "studentId", "activityId", "fileUrl", "contentType", description) VALUES ($1,$2,$3,$4,$5,$6)',
+            evidence_id, student_id, activity_id, file_url, content_type, description or file.filename or "Project evidence",
+        )
+    return {"evidence_id": evidence_id, "activity_id": activity_id, "file_url": file_url}
 
 
 # ── GET /activities/{student_id} ──────────────────────────────────────────────
@@ -478,7 +524,9 @@ async def list_activities(
             SELECT id, "lessonId", "courseTitle", track,
                    "creditHours", "creditType",
                    "activityDescription",
-                   "completedAt", "sealedAt"
+                   "completedAt", "sealedAt",
+                   COALESCE((SELECT array_agg(e."fileUrl" ORDER BY e."createdAt")
+                     FROM "ActivityEvidence" e WHERE e."activityId" = "TranscriptEntry"."lessonId"), ARRAY[]::text[]) AS "evidenceUrls"
             FROM "TranscriptEntry"
             WHERE "studentId" = $1
               AND "lessonId" LIKE 'activity-%'
@@ -499,6 +547,7 @@ async def list_activities(
             credit_type=str(r["creditType"]),
             activity_date=r["completedAt"].isoformat() if r["completedAt"] else "",
             sealed_at=r["sealedAt"].isoformat() if r["sealedAt"] else "",
+            evidence_urls=list(r["evidenceUrls"] or []),
         ))
 
     total_credits = sum(e.credit_hours for e in entries)

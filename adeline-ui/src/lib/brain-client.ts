@@ -934,6 +934,7 @@ export interface ActivityReportResponse {
   credited_tracks: CreditedTrack[];
   sealed: boolean;
   adeline_note: string;
+  evidence_urls: string[];
 }
 
 export interface ActivityEntry {
@@ -945,6 +946,7 @@ export interface ActivityEntry {
   credit_type: string;
   activity_date: string;
   sealed_at: string;
+  evidence_urls: string[];
 }
 
 export interface ActivityListResponse {
@@ -965,6 +967,20 @@ export async function reportActivity(
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`reportActivity failed: ${res.status}`);
+  return res.json();
+}
+
+export async function uploadActivityEvidence(activityId: string, file: File): Promise<{ file_url: string }> {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("description", `Photo evidence for ${activityId}`);
+  const res = await fetch(`${BRAIN_URL}/activities/${encodeURIComponent(activityId)}/evidence`, {
+    method: "POST",
+    headers: await getBrainHeaders(),
+    body,
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Evidence upload failed: ${res.status}`);
   return res.json();
 }
 

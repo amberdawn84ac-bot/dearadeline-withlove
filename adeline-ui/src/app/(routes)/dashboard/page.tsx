@@ -1,310 +1,133 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useStudent } from '@/lib/useStudent';
-import { getLearningPlan, streamConversation, streamLesson } from '@/lib/brain-client';
-import type { ConversationMessage, LessonBlockResponse, LessonResponse, LessonSuggestion, Track } from '@/lib/brain-client';
+import { getLearningPlan, streamLesson } from '@/lib/brain-client';
+import type { BookRecommendation, LessonBlockResponse, LessonResponse, LessonSuggestion, ProjectSuggestion } from '@/lib/brain-client';
 import LessonRenderer from '@/components/lessons/LessonRenderer';
 import styles from '@/components/nav/sites-dashboard.module.css';
 
-const ADELINE_FACE = '/adeline-face.webp';
-
-type ChatMessage = { role: 'adeline' | 'learner'; text: string };
-
-const FALLBACK_STARTERS = [
-  'Strengthen measurement with a greenhouse challenge',
-  'Show me another learning gap',
-  'I’d like to do something different',
-];
-
-export default function DashboardPage() {
+export default function TodayPage() {
   const { student, loading: studentLoading } = useStudent();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
-  const [streamingReply, setStreamingReply] = useState('');
-  const [isThinking, setIsThinking] = useState(false);
-  const [error, setError] = useState('');
-  const [suggestions, setSuggestions] = useState<LessonSuggestion[]>([]);
+  const [tasks, setTasks] = useState<LessonSuggestion[]>([]);
+  const [projects, setProjects] = useState<ProjectSuggestion[]>([]);
+  const [books, setBooks] = useState<BookRecommendation[]>([]);
   const [planLoading, setPlanLoading] = useState(true);
   const [activeLesson, setActiveLesson] = useState<LessonResponse | null>(null);
-  const [lessonBlocks, setLessonBlocks] = useState<LessonBlockResponse[]>([]);
-  const [lessonStatus, setLessonStatus] = useState('');
-  const [isGeneratingLesson, setIsGeneratingLesson] = useState(false);
-  const [lastLearnerTopic, setLastLearnerTopic] = useState('');
+  const [streamingBlocks, setStreamingBlocks] = useState<LessonBlockResponse[]>([]);
+  const [activeTask, setActiveTask] = useState<LessonSuggestion | null>(null);
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
 
   const studentId = student?.id ?? '';
   const gradeLevel = student?.gradeLevel ?? '8';
 
-  const loadPlan = useCallback(async () => {
+  const loadToday = useCallback(async () => {
     if (!studentId) return;
     setPlanLoading(true);
     try {
       const plan = await getLearningPlan(studentId, 6);
-      setSuggestions(plan.suggestions ?? []);
+      setTasks((plan.suggestions ?? []).slice(0, 4));
+      setProjects((plan.projects ?? []).slice(0, 1));
+      setBooks((plan.recommended_books ?? []).slice(0, 1));
     } catch (reason) {
-      console.error('[Dashboard] Could not load learning plan:', reason);
-      setSuggestions([]);
+      setError(reason instanceof Error ? reason.message : 'Adeline could not load today yet.');
     } finally {
       setPlanLoading(false);
     }
   }, [studentId]);
 
-  useEffect(() => {
-    if (studentId) void loadPlan();
-  }, [studentId, loadPlan]);
+  useEffect(() => { void loadToday(); }, [loadToday]);
 
-  const heroSuggestion = suggestions[0];
-  const heroTitle = heroSuggestion
-    ? heroSuggestion.title
-    : 'You’re close on measurement conversions.';
-  const heroDescription = heroSuggestion?.description
-    || 'When we planned the greenhouse, switching feet to inches slowed you down. Want to tackle that through a quick design challenge, or would you like to do something different?';
-
-  const starterPrompts = useMemo(() => {
-    if (!suggestions.length) return FALLBACK_STARTERS;
-    const fromPlan = suggestions.slice(0, 2).map((suggestion) => suggestion.title);
-    return [...fromPlan, 'I’d like to do something different'];
-  }, [suggestions]);
-
-  async function send(text: string) {
-    const value = text.trim();
-    if (!value || !studentId || isThinking) return;
-
-    const history: ConversationMessage[] = messages.map((message) => ({
-      role: message.role === 'learner' ? 'user' : 'adeline',
-      content: message.text,
-    }));
-
-    setMessages((current) => [...current, { role: 'learner', text: value }]);
-    setLastLearnerTopic(value);
-    setInput('');
-    setError('');
-    setStreamingReply('');
-    setIsThinking(true);
-
-    let completeReply = '';
-    try {
-      for await (const event of streamConversation({
-        studentId,
-        message: value,
-        gradeLevel,
-        history,
-      })) {
-        if (event.type === 'text' && event.delta) {
-          completeReply += event.delta;
-          setStreamingReply(completeReply);
-        } else if (event.type === 'block') {
-          const blockText = [event.title, event.content].filter(Boolean).join('\n');
-          if (blockText) {
-            completeReply += `${completeReply ? '\n\n' : ''}${blockText}`;
-            setStreamingReply(completeReply);
-          }
-        } else if (event.type === 'error') {
-          throw new Error(event.message || 'Adeline could not answer yet.');
-        }
-      }
-
-      const finalReply = completeReply.trim();
-      if (finalReply) {
-        setMessages((current) => [...current, { role: 'adeline', text: finalReply }]);
-      }
-      setStreamingReply('');
-    } catch (reason) {
-      setStreamingReply('');
-      setError(reason instanceof Error ? reason.message : 'Adeline could not answer yet.');
-    } finally {
-      setIsThinking(false);
-    }
-  }
-
-  async function generateLesson(topic: string, track: Track = 'TRUTH_HISTORY') {
-    const value = topic.trim();
-    if (!value || !studentId || isGeneratingLesson) return;
-
+  async function openTask(task: LessonSuggestion) {
+    if (!studentId || activeTask) return;
+    const topic = task.description ? `${task.title}: ${task.description}` : task.title;
+    const collected: LessonBlockResponse[] = [];
     setError('');
     setActiveLesson(null);
-    setLessonBlocks([]);
-    setLessonStatus('Adeline is gathering the right sources…');
-    setIsGeneratingLesson(true);
-    const collected: LessonBlockResponse[] = [];
-
+    setStreamingBlocks([]);
+    setActiveTask(task);
+    setStatus('Adeline is gathering the right sources…');
     try {
-      for await (const event of streamLesson({
-        student_id: studentId,
-        topic: value,
-        track,
-        grade_level: gradeLevel,
-        is_homestead: track === 'HOMESTEADING',
-      })) {
-        if (event.type === 'status') {
-          setLessonStatus(event.message);
-        } else if (event.type === 'block') {
-          collected.push(event.block);
-          setLessonBlocks([...collected]);
-        } else if (event.type === 'done') {
+      for await (const event of streamLesson({ student_id: studentId, topic, track: task.track, grade_level: gradeLevel, is_homestead: task.track === 'HOMESTEADING' })) {
+        if (event.type === 'status') setStatus(event.message);
+        if (event.type === 'block') { collected.push(event.block); setStreamingBlocks([...collected]); }
+        if (event.type === 'error') throw new Error(event.message);
+        if (event.type === 'done') {
           setActiveLesson({
-            lesson_id: event.lesson_id,
-            title: event.title || value,
-            track,
-            blocks: collected,
+            lesson_id: event.lesson_id, title: event.title || task.title, track: task.track, blocks: collected,
             has_research_missions: collected.some((block) => block.block_type === 'RESEARCH_MISSION'),
-            researcher_activated: collected.some((block) => block.block_type === 'PRIMARY_SOURCE'),
+            researcher_activated: event.researcher_activated ?? false,
             oas_standards: (event.oas_standards as LessonResponse['oas_standards']) ?? [],
-            agent_name: 'Adeline',
-            xapi_statements: [],
-            credits_awarded: event.credits_awarded ?? [],
+            agent_name: event.agent_name ?? 'Adeline', xapi_statements: event.xapi_statements ?? [], credits_awarded: event.credits_awarded ?? [],
           });
-          setLessonBlocks([]);
-          setLessonStatus('');
-          await loadPlan();
-        } else if (event.type === 'error') {
-          throw new Error(event.message || 'Adeline could not build this lesson yet.');
+          setStreamingBlocks([]);
+          setStatus('');
         }
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Adeline could not build this lesson yet.');
-    } finally {
-      setIsGeneratingLesson(false);
-      setLessonStatus('');
+      setError(reason instanceof Error ? reason.message : 'Adeline could not build this task yet.');
+      setActiveTask(null);
     }
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void send(input);
-  }
-
-  if (studentLoading) {
-    return <div className={styles.loading}>Opening today&apos;s adventure…</div>;
-  }
-
-  if (!student) {
-    return <div className={styles.loading}>Your session has ended. Please sign in again.</div>;
-  }
+  if (studentLoading || planLoading) return <div className={styles.loading}>Adeline is arranging today&apos;s work…</div>;
+  if (!student) return <div className={styles.loading}>Your session has ended. Please sign in again.</div>;
 
   return (
-    <div>
-      <section className={styles.hero} id="talk-to-adeline">
-        <div className={styles.adelineArt}>
-          <img src={ADELINE_FACE} alt="Adeline" />
-        </div>
-        <div className={styles.heroCopy}>
-          <p className={styles.eyebrow}>I noticed something we can strengthen…</p>
-          <h1>{heroTitle}</h1>
-          <span className={styles.heroText}>{heroDescription}</span>
-          <div className={styles.starters}>
-            {starterPrompts.map((starter) => (
-              <button key={starter} type="button" disabled={isThinking} onClick={() => void send(starter)}>
-                {starter}
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {(messages.length > 0 || streamingReply || isThinking) && (
-        <section className={styles.chat} aria-live="polite" aria-busy={isThinking}>
-          {messages.map((message, index) => (
-            <p
-              key={`${message.role}-${index}`}
-              className={message.role === 'learner' ? styles.learnerMessage : styles.adelineMessage}
-            >
-              {message.text}
-            </p>
-          ))}
-          {streamingReply && <p className={styles.adelineMessage}>{streamingReply}</p>}
-          {isThinking && !streamingReply && <p className={styles.adelineMessage}>Adeline is thinking…</p>}
-        </section>
-      )}
+    <div className={styles.todayWorkspace}>
+      <header className={styles.todayTitle}>
+        <p>Today&apos;s adventure</p>
+        <h1>Everything to touch today</h1>
+        <span>A balanced daily itinerary drawn from the larger learning plan. Open each task when you are ready to work.</span>
+      </header>
 
       {error && <p className={styles.error} role="alert">{error}</p>}
 
-      <form className={styles.composer} onSubmit={submit}>
-        <label htmlFor="dashboard-message">Message Adeline</label>
-        <textarea
-          id="dashboard-message"
-          rows={2}
-          value={input}
-          disabled={isThinking}
-          onChange={(event) => setInput(event.target.value)}
-          placeholder="Tell Adeline what you’re thinking…"
-        />
-        <button type="submit" disabled={isThinking || !input.trim()}>
-          {isThinking ? 'Thinking…' : 'Ask →'}
-        </button>
-      </form>
-
-      {messages.some((message) => message.role === 'adeline') && !activeLesson && !isGeneratingLesson && (
-        <div className={styles.lessonPrompt}>
-          <div>
-            <strong>Ready to turn this into real learning?</strong>
-            <span>Adeline will build the lesson, choose useful sources, and connect completed work to the learning record.</span>
-          </div>
-          <button type="button" onClick={() => void generateLesson(lastLearnerTopic || heroTitle, heroSuggestion?.track ?? 'TRUTH_HISTORY')}>
-            Build my lesson →
-          </button>
-        </div>
-      )}
-
-      {(isGeneratingLesson || activeLesson) && (
-        <section className={styles.generatedLesson} aria-live="polite">
-          {lessonStatus && <p className={styles.lessonStatus}>{lessonStatus}</p>}
-          {isGeneratingLesson && lessonBlocks.length === 0 && (
-            <div className={styles.loading}>Adeline is building a complete lesson—not another chat answer…</div>
-          )}
-          {lessonBlocks.length > 0 && (
-            <LessonRenderer
-              lesson={{
-                lesson_id: 'streaming', title: lastLearnerTopic, track: heroSuggestion?.track ?? 'TRUTH_HISTORY',
-                blocks: lessonBlocks, has_research_missions: false, researcher_activated: false,
-                agent_name: '', xapi_statements: [], credits_awarded: [], oas_standards: [],
-              }}
-              studentId={studentId}
-            />
-          )}
-          {activeLesson && <LessonRenderer lesson={activeLesson} studentId={studentId} />}
+      {!activeTask && (
+        <section className={styles.dailyAgenda} aria-label="Today's complete learning agenda">
+          {tasks.map((task, index) => (
+            <article key={task.id} className={styles.agendaCard}>
+              <div className={styles.agendaNumber}>{index + 1}</div>
+              <div className={styles.agendaBody}>
+                <small>{task.track.replace(/_/g, ' ')}</small>
+                <h2>{task.emoji} {task.title}</h2>
+                <p>{task.description}</p>
+                {task.personalization_reason && <em>Why today: {task.personalization_reason}</em>}
+                {task.success_criteria?.length > 0 && (
+                  <ul>{task.success_criteria.slice(0, 3).map((criterion) => <li key={criterion}>{criterion}</li>)}</ul>
+                )}
+              </div>
+              <button type="button" onClick={() => void openTask(task)}>Open task →</button>
+            </article>
+          ))}
+          {projects.map((project) => (
+            <article key={`project-${project.id}`} className={styles.agendaCard}>
+              <div className={styles.agendaNumber}>⚒</div>
+              <div className={styles.agendaBody}><small>Project workshop · {project.track.replace(/_/g, ' ')}</small><h2>{project.emoji} {project.title}</h2><p>{project.tagline}</p><em>Estimated project time: {project.estimated_hours} hours. Touch the next manageable step today.</em></div>
+              <Link href={`/dashboard/projects/${project.id}`}>Open project →</Link>
+            </article>
+          ))}
+          {books.map((book) => (
+            <article key={`book-${book.id}`} className={styles.agendaCard}>
+              <div className={styles.agendaNumber}>▤</div>
+              <div className={styles.agendaBody}><small>Reading · {book.track.replace(/_/g, ' ')}</small><h2>{book.title}</h2><p>By {book.author}{book.grade_band ? ` · ${book.grade_band}` : ''}</p><em>Read or continue a meaningful section today.</em></div>
+              <Link href={`/dashboard/reading-nook/${book.id}`}>Open book →</Link>
+            </article>
+          ))}
+          {!tasks.length && !projects.length && !books.length && <div className={styles.agendaCard}><div className={styles.agendaBody}><h2>Today is open.</h2><p>Ask Adeline what you want to explore, or tell her about something real you completed.</p></div></div>}
         </section>
       )}
 
-      <section className={styles.today} aria-label="Today's learning plan">
-        <div className={styles.todayHeader}>
-          <div>
-            <p>Chosen for where you are today</p>
-            <h2>Your next adventures</h2>
-          </div>
-          <span>Adeline chooses sources when they are useful</span>
-        </div>
-
-        {planLoading ? (
-          <div className={styles.loading}>Adeline is checking your learning path…</div>
-        ) : (
-          <div className={styles.cards}>
-            {suggestions.slice(0, 6).map((suggestion) => (
-              <button
-                key={suggestion.id}
-                type="button"
-                className={styles.card}
-                onClick={() => void generateLesson(
-                  suggestion.description ? `${suggestion.title}: ${suggestion.description}` : suggestion.title,
-                  suggestion.track,
-                )}
-                disabled={isGeneratingLesson}
-              >
-                <small>{suggestion.track.replace(/_/g, ' ')}</small>
-                <h3>{suggestion.emoji} {suggestion.title}</h3>
-                <p>{suggestion.description}</p>
-              </button>
-            ))}
-            {!suggestions.length && (
-              <button type="button" className={styles.card} onClick={() => void send('Help me choose something meaningful to learn today.') }>
-                <small>Start with wonder</small>
-                <h3>Ask Adeline what to explore</h3>
-                <p>Your learning plan grows from your interests, your work, and the skills you still need for graduation.</p>
-              </button>
-            )}
-          </div>
-        )}
-      </section>
+      {activeTask && (
+        <section className={styles.generatedLesson} aria-live="polite">
+          <button type="button" className={styles.backButton} onClick={() => { setActiveTask(null); setActiveLesson(null); setStreamingBlocks([]); }}>← Back to all of today</button>
+          {status && <p className={styles.lessonStatus}>{status}</p>}
+          {streamingBlocks.length > 0 && <LessonRenderer lesson={{ lesson_id: 'streaming', title: activeTask.title, track: activeTask.track, blocks: streamingBlocks, has_research_missions: false, researcher_activated: false, agent_name: '', xapi_statements: [], credits_awarded: [], oas_standards: [] }} studentId={studentId} />}
+          {activeLesson && <LessonRenderer lesson={activeLesson} studentId={studentId} />}
+        </section>
+      )}
     </div>
   );
 }

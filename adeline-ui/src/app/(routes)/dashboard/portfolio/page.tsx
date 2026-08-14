@@ -242,6 +242,13 @@ export default function PortfolioPage() {
                           {new Date(act.sealed_at).toLocaleDateString()}
                         </span>
                       </div>
+                      {act.evidence_urls?.length > 0 && (
+                        <div className="mt-3 flex gap-2 overflow-x-auto">
+                          {act.evidence_urls.map((url) => (
+                            <img key={url} src={url} alt={`Evidence for ${act.course_title}`} className="h-24 w-24 rounded-xl border border-[#E7DAC3] object-cover" />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

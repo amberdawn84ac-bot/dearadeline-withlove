@@ -68,7 +68,7 @@ async def upload_mastery_evidence(
     
     # Build storage key
     safe_standard = standard_id.replace(".", "_")
-    storage_key = f"mastery-evidence/{student_id}/{safe_standard}/{filename}"
+    storage_key = f"{student_id}/{safe_standard}/{filename}"
     
     if _SUPABASE_URL and _SUPABASE_KEY:
         url = await _upload_evidence_supabase(storage_key, file_bytes, content_type)

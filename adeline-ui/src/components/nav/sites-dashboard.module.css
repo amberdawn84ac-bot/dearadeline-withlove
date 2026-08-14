@@ -51,6 +51,19 @@
 .dailyBread strong { display:block; color:var(--coral); font:700 14px var(--font-kalam),cursive; }
 .dailyBread em { display:block; color:var(--forest); font-size:13px; font-style:normal; font-weight:800; line-height:1.45; }
 .content { min-width:0; }
+.todayWorkspace { display:grid; gap:24px; }
+.todayTitle p { margin:0; color:var(--coral); font:700 16px var(--font-kalam),cursive; }
+.todayTitle h1 { margin:0; color:var(--forest); font:400 clamp(36px,5vw,52px)/1 var(--font-emilys-candy),'Emilys Candy',cursive; }
+.todayTitle span { display:block; margin-top:9px; color:var(--muted); font-size:13px; }
+.dailyAgenda { display:grid; gap:14px; }
+.agendaCard { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:20px; padding:24px; border:1px solid #e7ddcc; border-radius:24px; background:rgba(255,255,255,.88); box-shadow:0 8px 20px rgba(55,65,48,.05); }
+.agendaNumber { display:grid; place-items:center; width:42px; height:42px; border-radius:50%; background:#e3ecdd; color:var(--forest); font-weight:900; }
+.agendaBody small { color:var(--coral); font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:.1em; }
+.agendaBody h2 { margin:5px 0; color:var(--forest); font-size:21px; }
+.agendaBody p { margin:0; color:var(--muted); font-size:13px; line-height:1.5; }
+.agendaBody em { display:block; margin-top:8px; color:#7b6a4d; font-size:11px; }
+.agendaBody ul { margin:9px 0 0; padding-left:18px; color:var(--forest); font-size:12px; line-height:1.55; }
+.agendaCard > button,.agendaCard > a,.backButton { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:0 16px; border:0; border-radius:14px; background:var(--forest); color:white; text-decoration:none; font-weight:900; cursor:pointer; white-space:nowrap; }
 .hero { width:100%; min-height:390px; display:grid; grid-template-columns:40% 60%; align-items:center; overflow:hidden; border:1px solid rgba(41,76,53,.12); border-radius:34px 34px 0 0; background:linear-gradient(135deg,#e3ecdd,#f7ead2); }
 .adelineArt { position:relative; height:390px; overflow:hidden; }
 .adelineArt img { position:absolute; width:110%; left:-4%; bottom:-9%; mix-blend-mode:multiply; }
@@ -112,5 +125,7 @@
   .lessonPrompt { align-items:stretch; flex-direction:column; }
   .lessonPrompt button { min-height:46px; }
   .cards { grid-template-columns:1fr; }
+  .agendaCard { grid-template-columns:auto 1fr; align-items:start; }
+  .agendaCard > button,.agendaCard > a { grid-column:1/-1; width:100%; }
   .profileMenu { right:-4px; }
 }

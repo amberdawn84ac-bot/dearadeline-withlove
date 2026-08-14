@@ -287,6 +287,19 @@ model TranscriptEntry {
   createdAt           DateTime     @default(now())
 }
 
+model ActivityEvidence {
+  id          String   @id @default(uuid())
+  studentId   String
+  activityId  String
+  fileUrl     String
+  contentType String
+  description String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([studentId])
+  @@index([activityId])
+}
+
 model SpacedRepetitionCard {
   id             String    @id @default(uuid())
   studentId      String
