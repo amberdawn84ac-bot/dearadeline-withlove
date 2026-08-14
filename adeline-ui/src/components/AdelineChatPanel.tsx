@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Sparkles, Send, Loader2, FlaskConical, Search, Network, ListOrdered, Brain, Presentation } from "lucide-react";
-import { scaffold, streamLesson, listProjects, getProject, reportActivity, streamConversation, uploadActivityEvidence } from "@/lib/brain-client";
+import { scaffold, streamLesson, listProjects, getProject, reportActivity, streamConversation, uploadActivityEvidence, getLearningPlan, lessonRequestFromSuggestion } from "@/lib/brain-client";
 import { LessonSkeleton } from "@/components/gen-ui/LessonSkeleton";
 import type {
   Track, ScaffoldResponse, LessonResponse, LessonBlockResponse,
@@ -89,6 +89,14 @@ function inferLessonTrack(text: string): Track {
   if (/write|poem|novel|book|literature|grammar|language/.test(normalized)) return "ENGLISH_LITERATURE";
   if (/art|design|music|film|creative|commission/.test(normalized)) return "CREATIVE_ECONOMY";
   return "CREATION_SCIENCE";
+}
+
+function suggestionMatchScore(text: string, title: string, description: string): number {
+  const requestWords = new Set(
+    text.toLowerCase().match(/[a-z]{3,}/g)?.filter((word) => !["lesson", "like", "want", "need", "give", "make"].includes(word)) ?? [],
+  );
+  const candidate = `${title} ${description}`.toLowerCase();
+  return [...requestWords].reduce((score, word) => score + (candidate.includes(word) ? 1 : 0), 0);
 }
 
 /** Parse "2 hours", "30 minutes", "an hour" → minutes */
@@ -349,24 +357,32 @@ export function AdelineChatPanel({
         });
       } else if (LESSON_REQUEST_RE.test(text)) {
         const track = inferLessonTrack(text);
+        const plan = await getLearningPlan(studentId, 10);
+        const plannedTask = plan.suggestions
+          .filter((suggestion) => suggestion.track === track)
+          .sort((left, right) =>
+            suggestionMatchScore(text, right.title, right.description) -
+            suggestionMatchScore(text, left.title, left.description)
+          )[0];
+        if (!plannedTask) {
+          addMessage({
+            role: "adeline",
+            content: "I don’t have a matching assignment in your learning plan yet. Tell me a little more about what you want to learn, and I’ll shape the right next step before building it.",
+          });
+          return;
+        }
         const blocks: LessonBlockResponse[] = [];
         let lesson: LessonResponse | null = null;
-        addMessage({ role: "adeline", content: "I’m building this through your full lesson plan process—gathering sources and fitting it to you…" });
-        for await (const event of streamLesson({
-          student_id: studentId,
-          topic: text,
-          track,
-          grade_level: gradeLevel,
-          is_homestead: track === "HOMESTEADING",
-        })) {
+        addMessage({ role: "adeline", content: `I found the best match in your learning plan: “${plannedTask.title}.” I’m building that assignment now…` });
+        for await (const event of streamLesson(lessonRequestFromSuggestion(plannedTask, studentId, gradeLevel))) {
           processALUEvent(event as Record<string, unknown>);
           if (event.type === "block") blocks.push(event.block);
           if (event.type === "error") throw new Error(event.message);
           if (event.type === "done") {
             lesson = {
               lesson_id: event.lesson_id,
-              title: event.title || text,
-              track,
+              title: event.title || plannedTask.title,
+              track: plannedTask.track,
               blocks,
               has_research_missions: blocks.some((block) => block.block_type === "RESEARCH_MISSION"),
               researcher_activated: event.researcher_activated ?? false,

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useStudent } from '@/lib/useStudent';
-import { getLearningPlan, streamLesson } from '@/lib/brain-client';
+import { getLearningPlan, lessonRequestFromSuggestion, streamLesson } from '@/lib/brain-client';
 import type { BookRecommendation, LessonBlockResponse, LessonResponse, LessonSuggestion, ProjectSuggestion } from '@/lib/brain-client';
 import LessonRenderer from '@/components/lessons/LessonRenderer';
 import styles from '@/components/nav/sites-dashboard.module.css';
@@ -42,7 +42,6 @@ export default function TodayPage() {
 
   async function openTask(task: LessonSuggestion) {
     if (!studentId || activeTask) return;
-    const topic = task.description ? `${task.title}: ${task.description}` : task.title;
     const collected: LessonBlockResponse[] = [];
     setError('');
     setActiveLesson(null);
@@ -50,7 +49,7 @@ export default function TodayPage() {
     setActiveTask(task);
     setStatus('Adeline is gathering the right sources…');
     try {
-      for await (const event of streamLesson({ student_id: studentId, topic, track: task.track, grade_level: gradeLevel, is_homestead: task.track === 'HOMESTEADING' })) {
+      for await (const event of streamLesson(lessonRequestFromSuggestion(task, studentId, gradeLevel))) {
         if (event.type === 'status') setStatus(event.message);
         if (event.type === 'block') { collected.push(event.block); setStreamingBlocks([...collected]); }
         if (event.type === 'error') throw new Error(event.message);

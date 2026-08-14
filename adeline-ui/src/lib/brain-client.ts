@@ -57,6 +57,27 @@ export interface LessonRequest {
   force_regenerate?: boolean;
 }
 
+/**
+ * Canonical lesson-generation request for a Learning Plan assignment.
+ * Today and Adeline chat both use this so neither can bypass the child's
+ * planned title, description, track, grade adaptation, or homestead handling.
+ */
+export function lessonRequestFromSuggestion(
+  suggestion: Pick<LessonSuggestion, "title" | "description" | "track">,
+  studentId: string,
+  gradeLevel: string,
+): LessonRequest {
+  return {
+    student_id: studentId,
+    topic: suggestion.description
+      ? `${suggestion.title}: ${suggestion.description}`
+      : suggestion.title,
+    track: suggestion.track,
+    grade_level: gradeLevel,
+    is_homestead: suggestion.track === "HOMESTEADING",
+  };
+}
+
 export interface AnimatedLessonRequest {
   topic: string;
   focus?: string;
