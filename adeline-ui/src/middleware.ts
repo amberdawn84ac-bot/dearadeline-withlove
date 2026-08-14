@@ -15,6 +15,25 @@ const PUBLIC_PATHS = ['/', '/login', '/signup', '/pricing', '/style-guide'];
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Authentication cookies belong to the public Dear Adeline origin. A child
+  // opening a one-off Vercel deployment URL otherwise sees the dashboard shell
+  // without its session and lesson requests fail with a confusing 401. Keep
+  // browser pages on one canonical origin; deployment health/API requests are
+  // left untouched.
+  if (
+    process.env.NODE_ENV === 'production' &&
+    request.nextUrl.hostname.endsWith('.vercel.app') &&
+    !pathname.startsWith('/api') &&
+    !pathname.startsWith('/brain/') &&
+    !pathname.startsWith('/_next')
+  ) {
+    const canonicalUrl = request.nextUrl.clone();
+    canonicalUrl.protocol = 'https:';
+    canonicalUrl.hostname = 'dearadeline.co';
+    canonicalUrl.port = '';
+    return NextResponse.redirect(canonicalUrl, 308);
+  }
+
   // The source catalog is a parent curation tool, not a student browsing area.
   if (pathname === '/dashboard/resource-vault') {
     return NextResponse.redirect(new URL('/dashboard', request.url));
