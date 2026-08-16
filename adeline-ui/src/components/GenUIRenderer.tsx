@@ -99,7 +99,6 @@ import { InsightReport } from "@/components/gen-ui/patterns/InsightReport";
 import { MnemonicCard } from "@/components/gen-ui/patterns/MnemonicCard";
 import { NarratedSlides } from "@/components/gen-ui/patterns/NarratedSlides";
 import { EmbeddedInterrupt } from "@/components/gen-ui/patterns/EmbeddedInterrupt";
-import AnimatedSketchnoteRenderer from "@/components/gen-ui/patterns/AnimatedSketchnoteRenderer";
 import { ExperimentCard } from "@/components/gen-ui/patterns/ExperimentCard";
 import { LabGuide } from "@/components/gen-ui/patterns/LabGuide";
 import { CodePlayground } from "@/components/gen-ui/patterns/CodePlayground";
@@ -292,12 +291,10 @@ type BrainBlockType =
   | "MIND_MAP"
   | "TIMELINE"
   | "MNEMONIC"
-  | "NARRATED_SLIDE"
   | "BOOK_SUGGESTION"
   | "INTERACTIVE_SIM"
   | "HIGHLIGHT_ASK"
   | "GENUI_ASSEMBLY"
-  | "ANIMATED_SKETCHNOTE_LESSON"
   // ALU-tier multimodal blocks
   | "AUDIO_DIALOGUE"
   | "EMBEDDED_INTERRUPT_INLINE"
@@ -416,12 +413,10 @@ const LABEL_STYLES: Record<BrainBlockType, string> = {
   MIND_MAP:         "bg-[#166534] text-white",
   TIMELINE:         "bg-[#1E3A5F] text-white",
   MNEMONIC:         "bg-[#6B21A8] text-white",
-  NARRATED_SLIDE:   "bg-[#1D4ED8] text-white",
   BOOK_SUGGESTION:  "bg-[#78350F] text-white",
   INTERACTIVE_SIM:           "bg-[#065F46] text-white",
   HIGHLIGHT_ASK:             "bg-[#374151] text-white",
   GENUI_ASSEMBLY:            "bg-[#7C3AED] text-white",
-  ANIMATED_SKETCHNOTE_LESSON: "bg-[#3D1419] text-[#FFFEF7]",
   AUDIO_DIALOGUE:              "bg-[#0E7490] text-white",
   EMBEDDED_INTERRUPT_INLINE:   "bg-[#374151] text-white",
   DATA_TRACKING:              "bg-[#0891B2] text-white",
@@ -443,12 +438,10 @@ const LABEL_NAMES: Record<BrainBlockType, string> = {
   MIND_MAP:         "Mind Map",
   TIMELINE:         "Timeline",
   MNEMONIC:         "Mnemonic",
-  NARRATED_SLIDE:   "Lesson Slides",
   BOOK_SUGGESTION:  "Suggested Reading",
   INTERACTIVE_SIM:           "Interactive",
   HIGHLIGHT_ASK:             "Highlight & Ask",
   GENUI_ASSEMBLY:            "Dynamic Component",
-  ANIMATED_SKETCHNOTE_LESSON: "Living Sketchnote",
   AUDIO_DIALOGUE:              "Audio Dialogue",
   EMBEDDED_INTERRUPT_INLINE:   "Quick Check",
   DATA_TRACKING:              "Data Tracking",
@@ -934,14 +927,6 @@ function MnemonicBlock({ block }: { block: LessonBlockResponse }) {
       </p>
     </div>
   );
-}
-
-// ── NARRATED_SLIDE block ──────────────────────────────────────────────────────
-
-function NarratedSlideBlock({ block }: { block: LessonBlockResponse }) {
-  const data = block.narrated_slide_data;
-  if (!data || data.slides.length === 0) return null;
-  return <NarratedSlides data={data} />;
 }
 
 // ── BOOK_SUGGESTION block ──────────────────────────────────────────────────────
@@ -1993,14 +1978,6 @@ function GenUIRenderer({
               break;
             case "MNEMONIC":
               blockContent = <MnemonicBlock block={block} />;
-              break;
-            case "NARRATED_SLIDE":
-              blockContent = <NarratedSlideBlock block={block} />;
-              break;
-            case "ANIMATED_SKETCHNOTE_LESSON":
-              blockContent = block.animated_sketchnote_data
-                ? <AnimatedSketchnoteRenderer lesson={block.animated_sketchnote_data} />
-                : <TextBlock block={block} />;
               break;
             case "BOOK_SUGGESTION":
               blockContent = <BookSuggestionBlock block={block} />;

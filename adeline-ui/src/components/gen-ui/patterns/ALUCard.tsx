@@ -52,7 +52,6 @@ const BLOCK_TAB_CONFIG: Record<string, TabConfig> = {
   TEXT:               { icon: <BookOpen size={13} />,      label: "Read",      modality: "reading" },
   PRIMARY_SOURCE:     { icon: <BookOpen size={13} />,      label: "Source",    modality: "reading" },
   RESEARCH_MISSION:   { icon: <BookOpen size={13} />,      label: "Research",  modality: "reading" },
-  NARRATED_SLIDE:     { icon: <Presentation size={13} />,  label: "Slides",    modality: "visual" },
   AUDIO_DIALOGUE:     { icon: <Headphones size={13} />,    label: "Listen",    modality: "auditory" },
   MIND_MAP:           { icon: <Brain size={13} />,         label: "Map",       modality: "visual" },
   TIMELINE:           { icon: <ListOrdered size={13} />,   label: "Timeline",  modality: "visual" },

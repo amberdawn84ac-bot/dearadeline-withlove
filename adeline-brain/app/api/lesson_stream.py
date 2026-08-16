@@ -1,5 +1,5 @@
 """
-Lesson Streaming API — POST /lesson/stream
+Canonical Lesson Builder API — POST /lesson/build
 
 Streams lesson blocks as Server-Sent Events so the Next.js translation layer
 can feed the Vercel AI SDK Data Stream Protocol to the frontend useChat hook.
@@ -118,8 +118,6 @@ async def _fetch_learner_interactions(student_id: str, limit: int = 30) -> list:
     from app.algorithms.learner_profiler import InteractionRecord
 
     _BLOCK_MODALITY = {
-        "ANIMATED_SKETCHNOTE_LESSON": "visual",
-        "NARRATED_SLIDE":             "auditory",
         "MIND_MAP":                   "visual",
         "TIMELINE":                   "visual",
         "MNEMONIC":                   "visual",
@@ -472,6 +470,17 @@ async def _stream_lesson(
             if isinstance(blocks_data, str):
                 blocks_data = json.loads(blocks_data)
 
+            # Canonicals created by the obsolete generic/compact builder must
+            # never leak back into any learner surface. Archive once, evict the
+            # Redis copy, and rebuild through the family-style pipeline below.
+            from app.curriculum.family_style import is_current_family_canonical
+            if not is_current_family_canonical(blocks_data):
+                await canonical_store.archive(slug, reason="obsolete_family_lesson_format")
+                canonical = None
+                blocks_data = []
+
+        if canonical and not is_pending:
+
             # Older canonicals are upgraded in memory so families receive the
             # one-room-schoolhouse spine immediately, without waiting for a reseed.
             from app.curriculum.family_style import ensure_family_workshop
@@ -491,11 +500,37 @@ async def _stream_lesson(
                 tool_event = _from_block_tool_call(block, lesson_id, request.track.value)
                 if tool_event:
                     yield tool_event
+
+            # Cached and newly authored lessons share the same registrar draft.
+            # A cache hit must not silently lose its proposed credit metadata.
+            from app.agents.orchestrator import registrar_agent
+            cached_state = {
+                "request": request,
+                "lesson_id": lesson_id,
+                "blocks": blocks_data,
+                "oas_standards": canonical.get("oas_standards", []),
+                "researcher_activated": canonical.get("researcher_activated", False),
+                "agent_name": canonical.get("agent_name", "Adeline"),
+                "xapi_statements": [],
+                "credits_awarded": [],
+            }
+            cached_state = await registrar_agent(cached_state)
             yield _sse({
                 "type": "done",
                 "lesson_id": lesson_id,
                 "title": canonical.get("title", request.topic),
+                "agent_name": cached_state.get("agent_name", "Adeline"),
+                "oas_standards": cached_state.get("oas_standards", []),
+                "researcher_activated": cached_state.get("researcher_activated", False),
+                "xapi_statements": cached_state.get("xapi_statements", []),
+                "credits_awarded": cached_state.get("credits_awarded", []),
                 "from_canonical": True,
+                "_state_for_registrar": {
+                    "xapi_statements": cached_state.get("xapi_statements", []),
+                    "credits_awarded": cached_state.get("credits_awarded", []),
+                    "blocks": blocks_data,
+                    "oas_standards": cached_state.get("oas_standards", []),
+                },
             })
             return
         elif canonical and is_pending:
@@ -806,7 +841,6 @@ _GENUI_BLOCK_MAP: dict[str, str] = {
     "MNEMONIC":               "MnemonicCard",
     "EXPERIMENT":             "ExperimentCard",
     "LAB_MISSION":            "LabGuide",
-    "NARRATED_SLIDE":         "NarratedSlides",
     "SCAFFOLDED_PROBLEM":     "ScaffoldedProblem",
     "HARD_THING_CHALLENGE":   "HardThingChallenge",
     "SOCRATIC_DEBATE":        "SocraticDebate",
@@ -939,8 +973,6 @@ def _extract_block_props(block: dict, block_type: str) -> dict:
         props.update(block["mnemonic_data"])
     elif block_type == "EXPERIMENT" and block.get("experiment_data"):
         props.update(block["experiment_data"])
-    elif block_type == "NARRATED_SLIDE" and block.get("narrated_slide_data"):
-        props.update(block["narrated_slide_data"])
 
     return props
 
@@ -962,12 +994,10 @@ _BLOCK_MODALITY_MAP: dict[str, list[str]] = {
     "MIND_MAP":         ["visual"],
     "TIMELINE":         ["visual"],
     "MNEMONIC":         ["visual", "reading"],
-    "NARRATED_SLIDE":   ["auditory", "visual"],
     "AUDIO_DIALOGUE":   ["auditory", "visual"],
     "EXPERIMENT":       ["kinesthetic"],
     "LAB_MISSION":      ["kinesthetic"],
     "GENUI_ASSEMBLY":   ["kinesthetic"],
-    "ANIMATED_SKETCHNOTE_LESSON": ["visual", "auditory"],
     "BOOK_SUGGESTION":  ["reading"],
     "SIMULATION":       ["kinesthetic", "visual"],
     "VIDEO":            ["visual", "auditory"],
@@ -986,12 +1016,10 @@ _BLOCK_DIFFICULTY_MAP: dict[str, str] = {
     "MIND_MAP":         "DEVELOPING",
     "TIMELINE":         "DEVELOPING",
     "MNEMONIC":         "EMERGING",
-    "NARRATED_SLIDE":   "DEVELOPING",
     "AUDIO_DIALOGUE":   "DEVELOPING",
     "EXPERIMENT":       "DEVELOPING",
     "LAB_MISSION":      "EXPANDING",
     "GENUI_ASSEMBLY":   "DEVELOPING",
-    "ANIMATED_SKETCHNOTE_LESSON": "EMERGING",
     "SIMULATION":       "EXPANDING",
     "REAL_WORLD_APP":   "MASTERING",
 }
@@ -1006,12 +1034,10 @@ _BLOCK_COGNITIVE_LOAD: dict[str, float] = {
     "MIND_MAP":         5.5,
     "TIMELINE":         4.5,
     "MNEMONIC":         3.0,
-    "NARRATED_SLIDE":   4.0,
     "AUDIO_DIALOGUE":   3.5,
     "EXPERIMENT":       6.0,
     "LAB_MISSION":      7.0,
     "GENUI_ASSEMBLY":   5.5,
-    "ANIMATED_SKETCHNOTE_LESSON": 3.5,
     "SIMULATION":       6.5,
     "REAL_WORLD_APP":   7.5,
     "CONCEPT_MAP":      5.0,
@@ -1220,7 +1246,7 @@ async def _save_canonical_background(
         logger.warning(f"[LessonStream] Canonical save failed (non-fatal): {e}")
 
 
-@router.post("/stream")
+@router.post("/build")
 @limiter.limit("20/hour")
 async def stream_lesson(
     request: Request,

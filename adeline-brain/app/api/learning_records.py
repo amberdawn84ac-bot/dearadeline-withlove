@@ -147,7 +147,7 @@ async def record_learning(
 ):
     """
     Persist xAPI LearningActivity statements from the RegistrarAgent.
-    Called automatically by /lesson/stream after lesson assembly.
+    Called automatically by /lesson/build after lesson assembly.
     Idempotent — duplicate statement IDs are silently ignored.
     """
     recorded = 0

@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useStudent } from '@/lib/useStudent';
-import { getLearningPlan, lessonRequestFromSuggestion, streamLesson } from '@/lib/brain-client';
-import type { BookRecommendation, LessonBlockResponse, LessonResponse, LessonSuggestion, ProjectSuggestion } from '@/lib/brain-client';
-import LessonRenderer from '@/components/lessons/LessonRenderer';
+import { getLearningPlan } from '@/lib/brain-client';
+import type { BookRecommendation, LessonSuggestion, ProjectSuggestion } from '@/lib/brain-client';
 import styles from '@/components/nav/sites-dashboard.module.css';
 
 export default function TodayPage() {
@@ -14,14 +13,9 @@ export default function TodayPage() {
   const [projects, setProjects] = useState<ProjectSuggestion[]>([]);
   const [books, setBooks] = useState<BookRecommendation[]>([]);
   const [planLoading, setPlanLoading] = useState(true);
-  const [activeLesson, setActiveLesson] = useState<LessonResponse | null>(null);
-  const [streamingBlocks, setStreamingBlocks] = useState<LessonBlockResponse[]>([]);
-  const [activeTask, setActiveTask] = useState<LessonSuggestion | null>(null);
-  const [status, setStatus] = useState('');
   const [error, setError] = useState('');
 
   const studentId = student?.id ?? '';
-  const gradeLevel = student?.gradeLevel ?? '8';
 
   const loadToday = useCallback(async () => {
     if (!studentId) return;
@@ -40,37 +34,6 @@ export default function TodayPage() {
 
   useEffect(() => { void loadToday(); }, [loadToday]);
 
-  async function openTask(task: LessonSuggestion) {
-    if (!studentId || activeTask) return;
-    const collected: LessonBlockResponse[] = [];
-    setError('');
-    setActiveLesson(null);
-    setStreamingBlocks([]);
-    setActiveTask(task);
-    setStatus('Adeline is gathering the right sources…');
-    try {
-      for await (const event of streamLesson(lessonRequestFromSuggestion(task, studentId, gradeLevel))) {
-        if (event.type === 'status') setStatus(event.message);
-        if (event.type === 'block') { collected.push(event.block); setStreamingBlocks([...collected]); }
-        if (event.type === 'error') throw new Error(event.message);
-        if (event.type === 'done') {
-          setActiveLesson({
-            lesson_id: event.lesson_id, title: event.title || task.title, track: task.track, blocks: collected,
-            has_research_missions: collected.some((block) => block.block_type === 'RESEARCH_MISSION'),
-            researcher_activated: event.researcher_activated ?? false,
-            oas_standards: (event.oas_standards as LessonResponse['oas_standards']) ?? [],
-            agent_name: event.agent_name ?? 'Adeline', xapi_statements: event.xapi_statements ?? [], credits_awarded: event.credits_awarded ?? [],
-          });
-          setStreamingBlocks([]);
-          setStatus('');
-        }
-      }
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Adeline could not build this task yet.');
-      setActiveTask(null);
-    }
-  }
-
   if (studentLoading || planLoading) return <div className={styles.loading}>Adeline is arranging today&apos;s work…</div>;
   if (!student) return <div className={styles.loading}>Your session has ended. Please sign in again.</div>;
 
@@ -82,8 +45,7 @@ export default function TodayPage() {
 
       {error && <p className={styles.error} role="alert">{error}</p>}
 
-      {!activeTask && (
-        <section className={styles.dailyAgenda} aria-label="Today's complete learning agenda">
+      <section className={styles.dailyAgenda} aria-label="Today's complete learning agenda">
           {tasks.map((task, index) => (
             <article key={task.id} className={styles.agendaCard}>
               <div className={styles.agendaNumber}>{index + 1}</div>
@@ -96,7 +58,7 @@ export default function TodayPage() {
                   <ul>{task.success_criteria.slice(0, 3).map((criterion) => <li key={criterion}>{criterion}</li>)}</ul>
                 )}
               </div>
-              <button type="button" onClick={() => void openTask(task)}>Open task →</button>
+              <Link href={`/dashboard/lesson/${encodeURIComponent(task.id)}`}>Open task →</Link>
             </article>
           ))}
           {projects.map((project) => (
@@ -114,17 +76,7 @@ export default function TodayPage() {
             </article>
           ))}
           {!tasks.length && !projects.length && !books.length && <div className={styles.agendaCard}><div className={styles.agendaBody}><h2>Today is open.</h2><p>Ask Adeline what you want to explore, or tell her about something real you completed.</p></div></div>}
-        </section>
-      )}
-
-      {activeTask && (
-        <section className={styles.generatedLesson} aria-live="polite">
-          <button type="button" className={styles.backButton} onClick={() => { setActiveTask(null); setActiveLesson(null); setStreamingBlocks([]); }}>← Back to all of today</button>
-          {status && <p className={styles.lessonStatus}>{status}</p>}
-          {streamingBlocks.length > 0 && <LessonRenderer lesson={{ lesson_id: 'streaming', title: activeTask.title, track: activeTask.track, blocks: streamingBlocks, has_research_missions: false, researcher_activated: false, agent_name: '', xapi_statements: [], credits_awarded: [], oas_standards: [] }} studentId={studentId} />}
-          {activeLesson && <LessonRenderer lesson={activeLesson} studentId={studentId} />}
-        </section>
-      )}
+      </section>
     </div>
   );
 }

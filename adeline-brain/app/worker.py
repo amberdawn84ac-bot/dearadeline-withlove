@@ -64,7 +64,7 @@ async def shutdown(ctx: dict) -> None:
 
 class WorkerSettings:
     # ARQ requires actual function objects, not string paths
-    # NOTE: generate_lesson_job removed — lessons now use streaming via /lesson/stream
+    # NOTE: generate_lesson_job removed — lessons use the sole /lesson/build stream
     functions = [warmup_canonical_cache]
     cron_jobs = [
         cron(warmup_canonical_cache, hour=2, minute=0),

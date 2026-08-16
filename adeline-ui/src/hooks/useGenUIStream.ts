@@ -16,7 +16,7 @@
  *   - Delta patching: partial props are merged into existing component state.
  *
  * Usage:
- *   const { components, remediations, isStreaming, streamLesson, triggerRemediation }
+ *   const { components, remediations, isStreaming, triggerRemediation }
  *     = useGenUIStream({ studentId, lessonId });
  */
 

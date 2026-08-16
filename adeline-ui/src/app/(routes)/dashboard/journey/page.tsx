@@ -40,6 +40,7 @@ export default function LearningPlanPage() {
             <div className="flex items-center justify-between gap-3"><small className="font-black uppercase tracking-wider text-[#BD6809]">{index < 4 ? 'Today' : index < 8 ? 'Next' : 'Later'} · {item.track.replace(/_/g, ' ')}</small><span>{item.emoji}</span></div>
             <h3 className="mt-2 font-bold text-[#2F4731]">{item.title}</h3><p className="mt-1 text-sm leading-5 text-[#2F4731]/60">{item.description}</p>
             {item.personalization_reason && <p className="mt-3 border-t border-[#E7DAC3] pt-3 text-xs italic text-[#2F4731]/55">Why Adeline chose it: {item.personalization_reason}</p>}
+            <Link href={`/dashboard/lesson/${encodeURIComponent(item.id)}`} className="mt-4 inline-flex rounded-xl bg-[#2F4731] px-4 py-2 text-sm font-bold text-white">Open assignment →</Link>
           </article>)}
         </div></section>
       </>}

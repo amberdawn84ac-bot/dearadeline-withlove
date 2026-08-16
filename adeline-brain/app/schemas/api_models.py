@@ -85,9 +85,7 @@ class BlockType(str, Enum):
     MIND_MAP         = "MIND_MAP"
     TIMELINE         = "TIMELINE"
     MNEMONIC         = "MNEMONIC"
-    NARRATED_SLIDE   = "NARRATED_SLIDE"
     BOOK_SUGGESTION  = "BOOK_SUGGESTION"
-    ANIMATED_SKETCHNOTE_LESSON = "ANIMATED_SKETCHNOTE_LESSON"
     GENUI_ASSEMBLY   = "GENUI_ASSEMBLY"
     PEER_TUTOR       = "PEER_TUTOR"
     DISCUSSION_FORUM = "DISCUSSION_FORUM"
@@ -137,81 +135,6 @@ class MnemonicData(BaseModel):
                 f"acronym length ({len(self.acronym)})"
             )
         return self
-
-class NarratedSlide(BaseModel):
-    slide_number: int = Field(ge=1)
-    title: str
-    bullets: list[str]
-    narration: str
-
-class NarratedSlideData(BaseModel):
-    total_duration_minutes: float
-    slides: list[NarratedSlide]
-
-
-# ── Animated Sketchnote Lesson Data Models ────────────────────────────────────
-
-class StyledTextModel(BaseModel):
-    text: str
-    style: str  # bold_marker | block_caps | script_hand | sketch_print | tiny_notes | label | caption
-    layout: str  # title_banner | section_header | callout_bubble | flow_step | side_note | diagram_label | closing_quote
-    decoration: list[str] = []
-    emphasis: Optional[str] = None  # low | medium | high
-
-class VisualElementModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    type: str  # handwritten_text | doodle | diagram | arrow | bubble | label | icon | character | background | timeline | split_screen
-    content: str
-    position: dict  # {x: 0-100, y: 0-100}
-    size: Optional[dict] = None  # {width: 0-100, height: 0-100}
-    style: Optional[str] = None
-    color: Optional[str] = None
-
-class AnimationInstructionModel(BaseModel):
-    elementId: str
-    animation: str  # draw_in | write_on | fade_in | pop_in | slide_in | zoom_in | pulse | wiggle | pan | morph | highlight
-    startTime: float
-    duration: float
-    easing: Optional[str] = None  # linear | ease_in | ease_out | ease_in_out
-
-class AnimatedSceneModel(BaseModel):
-    sceneNumber: int
-    sceneTitle: StyledTextModel
-    durationSeconds: float
-    narration: str
-    visualBuild: list[VisualElementModel] = []
-    animationPlan: list[AnimationInstructionModel] = []
-    teachingLayer: dict  # {visualSummary, deepExplanation, whyItMatters, activity?}
-    soundDesign: Optional[dict] = None
-    narrationAudioUrl: Optional[str] = None  # filled after pyttsx3 TTS
-
-class AnimatedSketchnoteLessonData(BaseModel):
-    lessonType: str = "animated_sketchnote_lesson"
-    title: StyledTextModel
-    subtitle: StyledTextModel
-    targetAges: str
-    totalDurationSeconds: float
-    learningGoals: list[str] = []
-    colorPalette: list[str] = []
-    visualStyle: dict  # {format, artDirection, typography, illustrationRules, layoutRules}
-    scenes: list[AnimatedSceneModel] = []
-    fullNarrationScript: str = ""
-    vocabulary: list[dict] = []   # [{word, definition, visualCue}]
-    assessment: list[dict] = []   # [{question, answer, type}]
-    extensionActivities: list[dict] = []  # [{title, instructions, materials?}]
-
-class AnimatedLessonRequest(BaseModel):
-    topic: str
-    focus: str = ""
-    duration_seconds: int = 600
-    target_ages: str = "10-15"
-    track: Optional[Track] = None
-    student_id: Optional[str] = None
-
-class NarrateRequest(BaseModel):
-    text: str
-    voice_rate: int = 160  # words per minute
-
 
 # ── Chaos Levels (Science Experiment difficulty/safety) ──────────────────────
 
@@ -288,7 +211,6 @@ class LessonRequest(BaseModel):
     topic:       str
     is_homestead: bool = False
     grade_level: str
-    render_mode: Optional[str] = None  # "animated_sketchnote_lesson" triggers sketchnote synthesis
     force_regenerate: bool = False  # Bypass canonical cache and regenerate fresh lesson content
 
 class LessonBlockResponse(BaseModel):
@@ -306,7 +228,6 @@ class LessonBlockResponse(BaseModel):
     mind_map_data:        Optional[MindMapData] = None
     timeline_data:        Optional[TimelineData] = None
     mnemonic_data:        Optional[MnemonicData] = None
-    narrated_slide_data:  Optional[NarratedSlideData] = None
     # Interface-generative fields — populated by adapter when transforming block type
     quiz_data:            Optional[dict] = None   # QuizData: {question, options, explanation, difficulty}
     flashcard_data:       Optional[dict] = None   # FlashcardData: {front, back, category}
@@ -317,7 +238,6 @@ class LessonBlockResponse(BaseModel):
     epub_url:             Optional[str] = None
     cover_url:            Optional[str] = None
     lexile_level:         Optional[int] = None
-    animated_sketchnote_data: Optional[AnimatedSketchnoteLessonData] = None
 
 class LessonResponse(BaseModel):
     lesson_id:            str = Field(default_factory=lambda: str(uuid.uuid4()))

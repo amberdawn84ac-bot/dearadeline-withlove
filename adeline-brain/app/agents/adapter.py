@@ -1,20 +1,16 @@
-"""
-Adaptation Layer — transforms a CanonicalLesson for a specific student.
+"""Personalize canonical lesson wording without changing lesson structure.
 
-Two-pass process:
-  1. select_transformation(): decide block_type for this student (pure logic, no LLM)
-  2. adapt/generate: rewrite text OR generate structured data (cheap LLM call)
-
-Cost: ~1-3 LLM calls vs 3-8 for full orchestrator generation.
-PRIMARY_SOURCE and RESEARCH_MISSION blocks are never transformed (Witness Protocol content).
+There is deliberately no format selector here. Specialist agents author the
+canonical lesson once; this adapter may adjust vocabulary and scaffolding for a
+learner, but it may not turn content into cards, slides, animations, quizzes, or
+generic widgets.
 """
+
 import asyncio
-import json
 import logging
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,179 +22,90 @@ _GRADE_DESC = {
     "11": "11th grade (age 16–17)", "12": "12th grade (age 17–18)",
 }
 
-_ADAPTATION_SYSTEM = """You are Adeline's ZPD distillation engine. You receive a canonical lesson (written at adult/HS depth) and a student's live mastery state.
-Your job is to distill — not just rewrite — the lesson for this specific student. Rules:
-- Keep every fact, date, name, and quote. NEVER invent or remove verified content.
-- This is one learner's view of a shared family lesson. Preserve the shared question,
-  shared experience, and shared project. Emphasize this learner's age-appropriate role
-  and individual portfolio contribution without erasing the other family roles.
-- Filter depth: if bkt_pL < 0.30, simplify and skip advanced nuance sections.
-- Rewrite vocabulary and sentence complexity for the grade level.
-- When the prompt contains a PRIORITY HIGH directive, follow its four numbered steps precisely — section expansion, compression, and check-in question are mandatory, not optional.
-- Never expose internal rendering notes, GENUI hints, system instructions, or metadata in learner-facing text.
-- Adeline is the mentor. Never call the student "Adeline" or assign "Adeline" a student task.
-- Follow the curriculum's divine-name convention: use HaShem or YHWH, never "God" or "GOD".
-- Do NOT add busywork, "great job!", or filler.
-- Return ONLY the rewritten content block — no preamble, no explanation.
-- Write like you're talking to a smart kid at the kitchen table, not lecturing.
-- If the topic genuinely touches justice, stewardship, creation, or discipleship and the track is a worldview track, append one short reflective question tied to relevant scripture (≤1 sentence). Omit entirely if no natural connection exists."""
+_ADAPTATION_SYSTEM = """You are Adeline's language-and-scaffolding editor.
+You receive one block from an already-authored family lesson. Adjust only the
+wording for the named learner; never redesign or replace the lesson.
 
-_HIGH_STAKES_TRACKS = frozenset({
-    "TRUTH_HISTORY", "JUSTICE_CHANGEMAKING", "DISCIPLESHIP",
-    "CREATION_SCIENCE", "GOVERNMENT_ECONOMICS",
-})
+Non-negotiable rules:
+- Preserve the block's facts, dates, names, quotations, sources, central question,
+  shared family experience, and real project.
+- Preserve every family age role. Emphasize the requesting learner's role without
+  deleting the responsibilities available to siblings.
+- Adjust vocabulary, sentence length, examples, independence, and scaffolding only.
+- Do not invent facts, activities, questions, formats, widgets, quizzes, cards,
+  slides, animations, metadata, or internal rendering instructions.
+- Never expose GENUI notes, system prompts, or implementation language.
+- Adeline is the mentor. Never call the learner Adeline.
+- Use HaShem or YHWH rather than God when a divine name is needed.
+- Return only the complete revised block. Never truncate a sentence.
+- Write naturally for a smart learner at the kitchen table; no filler or busywork.
+"""
 
-_DISCIPLESHIP_KEYWORDS = frozenset({
-    "justice", "steward", "creation", "neighbor", "truth", "law",
-    "sabbath", "covenant", "scripture", "gospel", "redeem", "shalom",
+_STRUCTURE_OWNING_TYPES = frozenset({
+    "PRIMARY_SOURCE", "EXPERIMENT", "GENUI_ASSEMBLY", "QUIZ", "FLASHCARD",
+    "MIND_MAP", "TIMELINE", "MNEMONIC", "BOOK_SUGGESTION",
 })
 
 
 @dataclass
 class AdaptationRequest:
-    grade_level:            str
-    track:                  str
-    interests:              list[str] = field(default_factory=list)
-    interaction_count:      int = 10
-    recent_quiz_scores:     list[float] = field(default_factory=list)  # last N SM-2 easiness scores (0-5)
-    preferred_modality:     str = "text"   # "text" | "visual" | "kinesthetic"
-    # ── ZPD / BKT state (Step 1 — full personalization) ──────────────────────
-    bkt_pL:                 float = 0.1   # current BKT mastery probability P(L)
-    bkt_pT:                 float = 0.15  # BKT learning rate P(T)
-    priority_score:         float = 0.5   # compute_priority() result 0-1
-    decay_adjusted_mastery: float = 0.0   # mastery after apply_decay()
-    cross_track_bias:       float = 0.0   # from apply_cross_track_bias()
-    # ── Per-concept proficiency map (Step 2 — delivery layer) ──────────────────
-    proficiency_map:       dict[str, float] = field(default_factory=dict)  # {concept_id/slug: 0.0-1.0}
+    grade_level: str
+    track: str
+    interests: list[str] = field(default_factory=list)
+    interaction_count: int = 10
+    recent_quiz_scores: list[float] = field(default_factory=list)
+    preferred_modality: str = "text"
+    bkt_pL: float = 0.1
+    bkt_pT: float = 0.15
+    priority_score: float = 0.5
+    decay_adjusted_mastery: float = 0.0
+    cross_track_bias: float = 0.0
+    proficiency_map: dict[str, float] = field(default_factory=dict)
 
 
-# ── Transformation selection (pure logic, no LLM) ────────────────────────────
-
-def _grade_int(grade_level: str) -> int:
-    if grade_level.upper() == "K":
-        return 0
-    try:
-        return int(grade_level)
-    except ValueError:
-        return 8
-
-
-def select_transformation(block: dict, req: AdaptationRequest) -> str:
-    """
-    Returns transformation decision:
-      "text_only"        — rewrite content text, keep block_type
-      "to_flashcard"     — convert to FLASHCARD + generate flashcard_data
-      "to_quiz"          — convert to QUIZ + generate quiz_data
-      "to_timeline"      — convert to TIMELINE + generate timeline_data
-      "to_narrated_slide" — convert to NARRATED_SLIDE + generate narrated_slide_data
-      "to_genui_assembly" — convert to GENUI_ASSEMBLY + generate genui_assembly_data
-    """
-    block_type = block.get("block_type", "TEXT")
-    content = block.get("content", "")
-    grade = _grade_int(req.grade_level)
-
-    # Witness Protocol content — NEVER transform
-    if block_type in ("PRIMARY_SOURCE", "RESEARCH_MISSION"):
-        return "text_only"
-
-    # Lab/experiment stays as-is
-    if block_type in ("LAB_MISSION", "EXPERIMENT"):
-        return "text_only"
-
-    # Already structured — don't re-transform
-    # Note: NARRATED_SLIDE, ANIMATED_SKETCHNOTE_LESSON removed — use component library instead
-    if block_type in ("MIND_MAP", "TIMELINE", "MNEMONIC",
-                      "QUIZ", "FLASHCARD", "BOOK_SUGGESTION", "GENUI_ASSEMBLY"):
-        return "text_only"
-
-    # Enrichment blocks (vocab, scripture, journal) — render as-is
-    if block.get("_enrichment"):
-        return "text_only"
-
-    # Early interactions: keep simple regardless
-    if req.interaction_count <= 3:
-        if grade <= 5:
-            return "to_flashcard"
-        return "text_only"
-
-    # Low BKT mastery → force quiz to build foundational knowledge
-    if req.bkt_pL < 0.4 and grade >= 5 and block_type in ("NARRATIVE", "TEXT"):
-        return "to_quiz"
-
-    # Young students (K-5): flashcard for NARRATIVE/TEXT
-    if grade <= 5 and block_type in ("NARRATIVE", "TEXT"):
-        return "to_flashcard"
-
-    # Date-heavy content → timeline (3+ year patterns)
-    date_count = len(re.findall(r'\b(1[5-9]\d{2}|20[0-2]\d)\b', content))
-    if date_count >= 3 and block_type in ("NARRATIVE", "TEXT"):
-        return "to_timeline"
-
-    # High priority score + older student → GENUI_ASSEMBLY for interactive stateful components
-    if req.priority_score > 0.7 and grade >= 6 and block_type in ("NARRATIVE", "TEXT"):
-        return "to_genui_assembly"
-
-    # Strong quiz history (avg SM-2 easiness > 3.5) + older student → quiz
-    if (req.recent_quiz_scores and grade >= 7 and
-            sum(req.recent_quiz_scores) / len(req.recent_quiz_scores) > 3.5 and
-            block_type in ("NARRATIVE", "TEXT")):
-        return "to_quiz"
-
-    # Visual/kinesthetic learner, grade 6+ → GENUI_ASSEMBLY with visual component
-    if req.preferred_modality in ("visual", "kinesthetic") and grade >= 6:
-        return "to_genui_assembly"
-
-    return "text_only"
-
-
-# ── LLM call helper ──────────────────────────────────────────────────────────
-
-async def _llm_call(system: str, user: str, max_tokens: int = 600) -> str:
-    import asyncio as _asyncio
+async def _llm_call(system: str, user: str, max_tokens: int = 1400) -> str:
+    """Use the configured synthesis provider, returning an empty string on failure."""
     from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL
+
     if GEMINI_API_KEY:
-        import openai as _oai
-        client = _oai.AsyncOpenAI(api_key=GEMINI_API_KEY, base_url=GEMINI_BASE_URL)
+        import openai
+
+        client = openai.AsyncOpenAI(api_key=GEMINI_API_KEY, base_url=GEMINI_BASE_URL)
         for attempt in range(2):
             try:
                 response = await client.chat.completions.create(
                     model=GEMINI_MODEL,
                     max_tokens=max_tokens,
-                    messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
                 )
                 return response.choices[0].message.content or ""
-            except Exception as gemini_err:
+            except Exception as error:
                 if attempt == 0:
-                    logger.warning(f"[Adapter] Gemini attempt 1 failed ({gemini_err}) — retrying...")
-                    await _asyncio.sleep(1)
-                    continue
-                logger.warning(f"[Adapter] Gemini failed after 2 attempts ({gemini_err}) — falling back to Claude")
-                break
-    # Claude fallback (also primary path when GEMINI_API_KEY not set)
+                    logger.warning("[Adapter] Gemini retry after failure: %s", error)
+                    await asyncio.sleep(1)
+                else:
+                    logger.warning("[Adapter] Gemini failed; trying Claude: %s", error)
+
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        return ""
+
     try:
         import anthropic
+
         client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         response = await client.messages.create(
             model="claude-3-haiku-20240307",
             max_tokens=max_tokens,
-            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+            system=system,
             messages=[{"role": "user", "content": user}],
-            extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
         )
         return response.content[0].text
-    except Exception as e:
-        logger.warning(f"[Adapter] LLM call failed (Claude fallback): {e}")
+    except Exception as error:
+        logger.warning("[Adapter] Language adaptation failed: %s", error)
         return ""
-
-
-# ── Text rewrite ─────────────────────────────────────────────────────────────
-
-def _has_discipleship_theme(topic_hint: str, track: str) -> bool:
-    """True if the topic or track touches justice/stewardship/creation/discipleship themes."""
-    if track in _HIGH_STAKES_TRACKS:
-        return True
-    topic_lower = topic_hint.lower()
-    return any(kw in topic_lower for kw in _DISCIPLESHIP_KEYWORDS)
 
 
 def sanitize_learner_text(content: str) -> str:
@@ -207,470 +114,68 @@ def sanitize_learner_text(content: str) -> str:
     cleaned = re.sub(r"\bGod\b", "HaShem", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(
         r"\b(your)\s+(job|task|role)\s*,?\s*Adeline\s*,?\s*(is|will be|is to)\b",
-        r"\1 \2 \3",
-        cleaned,
-        flags=re.IGNORECASE,
+        r"\1 \2 \3", cleaned, flags=re.IGNORECASE,
     )
     cleaned = re.sub(
         r"\bAdeline\s*,\s*(your\s+(?:job|task|role)\b)",
-        r"\1",
-        cleaned,
-        flags=re.IGNORECASE,
+        r"\1", cleaned, flags=re.IGNORECASE,
     )
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-    return cleaned.strip()
+    return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
 
 def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: str = "") -> str:
     grade_desc = _GRADE_DESC.get(req.grade_level, f"grade {req.grade_level}")
-    interests_str = ", ".join(req.interests) if req.interests else "general learning"
-    track_name = req.track.replace("_", " ").title()
+    interests = ", ".join(req.interests[:4]) if req.interests else "the lesson itself"
 
-    # ── Depth / complexity tier ───────────────────────────────────────────────
-    if req.interaction_count <= 3:
-        complexity = (
-            "This is their first time in this subject — use introductory language, shorter sentences, "
-            "and connect concepts to everyday things."
-        )
-    elif req.bkt_pL < 0.30:
-        complexity = (
-            f"Their BKT mastery probability is low ({req.bkt_pL:.2f}). "
-            "Simplify: skip advanced nuance, use concrete examples, shorter paragraphs. "
-            "Focus only on the core concept — save depth for later."
-        )
+    if req.bkt_pL < 0.30:
+        scaffolding = "Use concrete language and explain difficult terms inline. Keep all facts and family roles."
     elif req.bkt_pL >= 0.65:
-        complexity = (
-            f"Their BKT mastery is solid ({req.bkt_pL:.2f}, decay-adjusted: {req.decay_adjusted_mastery:.2f}). "
-            "You can use subject vocabulary, introduce nuance, and challenge them slightly."
-        )
+        scaffolding = "Keep subject vocabulary and nuance; invite greater independence in this learner's role."
     else:
-        complexity = (
-            f"They have some background here (BKT pL={req.bkt_pL:.2f}). "
-            "Use subject vocabulary but explain it naturally."
-        )
-
-    # ── Priority score instruction ────────────────────────────────────────────
-    if req.priority_score > 0.7:
-        priority_clause = (
-            f"\nPRIORITY HIGH (priority={req.priority_score:.2f}): This concept is the linchpin — "
-            "getting it wrong blocks future learning. Follow these steps exactly:\n"
-            "1. Lead with the core mechanism in the first sentence. No preamble.\n"
-            f"2. Expand the main explanation by 30-40% compared to a standard rewrite (decay-adjusted mastery={req.decay_adjusted_mastery:.2f} confirms headroom to go deeper).\n"
-            "3. Cut or compress any section peripheral to the core mechanism (analogies, historical background, tangents) — keep them only if they directly illuminate the mechanism.\n"
-            "4. End with one concrete 'test your understanding' check-in question (plain prose, NOT a quiz block)."
-        )
-    elif req.priority_score < 0.35:
-        priority_clause = (
-            f"\nPRIORITY: This is lower priority right now (priority={req.priority_score:.2f}). "
-            "Give a brief, clear overview only. Save deeper treatment for when their mastery builds."
-        )
-    else:
-        priority_clause = ""
-
-    # ── Cross-track bias instruction ──────────────────────────────────────────
-    _TRACK_LABELS = {
-        "TRUTH_HISTORY": "History", "CREATION_SCIENCE": "Creation Science",
-        "DISCIPLESHIP": "Discipleship", "JUSTICE_CHANGEMAKING": "Justice & Changemaking",
-        "GOVERNMENT_ECONOMICS": "Government & Economics", "HOMESTEADING": "Homesteading",
-        "HEALTH_NATUROPATHY": "Health & Naturopathy", "ENGLISH_LITERATURE": "Literature",
-        "APPLIED_MATHEMATICS": "Applied Mathematics", "CREATIVE_ECONOMY": "Creative Economy",
-    }
-    cross_track_clause = ""
-    if req.cross_track_bias > 0.1:
-        related = _TRACK_LABELS.get(req.track, req.track)
-        cross_track_clause = (
-            f"\nCROSS-TRACK: This student has strong adjacent-track knowledge "
-            f"(bias={req.cross_track_bias:.2f}). Explicitly connect this concept to what they already "
-            f"know from related subjects like {related} — bridge the familiar to the new."
-        )
-
-    # ── Forgetting / decay instruction ────────────────────────────────────────
-    decay_clause = ""
-    if req.decay_adjusted_mastery < req.bkt_pL * 0.6 and req.bkt_pL > 0.2:
-        decay_clause = (
-            f"\nFORGETTING: Significant decay detected (raw mastery={req.bkt_pL:.2f}, "
-            f"decay-adjusted={req.decay_adjusted_mastery:.2f}). "
-            "Revisit foundational definitions before advancing — treat this as a refresher, not a first lesson."
-        )
-
-    # ── Dynamic UI Instructions for GENUI_ASSEMBLY ────────────────────────────
-    genui_directive = ""
-    if req.decay_adjusted_mastery < 0.6 or req.bkt_pL < 0.55:
-        genui_directive = (
-            "\n**Dynamic UI Instructions:** "
-            "Mastery gap detected. Consider injecting a GENUI_ASSEMBLY block (ScaffoldedProblem or InteractiveQuiz) "
-            "immediately after this content with local state that re-renders on wrong answers."
-        )
-    elif req.priority_score >= 0.8:
-        genui_directive = (
-            "\n**Dynamic UI Instructions:** "
-            "High priority concept. Consider injecting a GENUI_ASSEMBLY block (ProjectBuilder or DragDropTimeline) "
-            "after the main section with interactive state."
-        )
-    elif req.track in ("DISCIPLESHIP", "HEALTH_NATUROPATHY", "GOVERNMENT_ECONOMICS"):
-        genui_directive = (
-            "\n**Dynamic UI Instructions:** "
-            "Discipleship topic. Consider injecting a HardThingChallenge GENUI_ASSEMBLY block "
-            "with student progress state for applying principles."
-        )
-
-    # ── Re-render Triggers for GENUI_ASSEMBLY ───────────────────────────────
-    genui_re_render_instructions = (
-        "\n**Re-render Triggers for GENUI_ASSEMBLY:** "
-        "When injecting GENUI_ASSEMBLY blocks, include reRenderTriggers based on student behavior:\n"
-        "- onStruggle: After 2+ wrong answers in a row OR when pL drops below 0.55\n"
-        "- onMasteryDrop: When decay-adjusted mastery decreases noticeably\n"
-        "- onHintThreshold: After student uses 3+ hints in one component\n"
-        "- onComplete: When student finishes the component successfully\n"
-        "Example: reRenderTriggers: ['onStruggle', 'onComplete']"
-    )
-
-    # ── Discipleship nudge ────────────────────────────────────────────────────
-    discipleship_clause = ""
-    if _has_discipleship_theme(topic_hint or req.track, req.track):
-        discipleship_clause = (
-            "\nIf the content naturally connects to justice, stewardship, creation, or discipleship, "
-            "append one short reflective question tied to relevant scripture (e.g., Proverbs, Matthew, Genesis). "
-            "One sentence maximum. Omit entirely if no genuine connection exists."
-        )
-
-    # ── Proficiency context ────────────────────────────────────────────────────
-    proficiency_clause = ""
-    if req.proficiency_map:
-        high_mastery = [k for k, v in req.proficiency_map.items() if v > 0.8]
-        low_mastery = [k for k, v in req.proficiency_map.items() if v < 0.3]
-        if high_mastery or low_mastery:
-            parts = []
-            if high_mastery:
-                parts.append(f"Concepts scoring > 0.8 (known): {', '.join(high_mastery[:5])} — use as analogies only.")
-            if low_mastery:
-                parts.append(f"Concepts scoring < 0.3 (new): {', '.join(low_mastery[:5])} — provide heavy scaffolding.")
-            proficiency_clause = (
-                f"\nStudent proficiency context:\n"
-                f"- Concepts with score > 0.8: treat as known; use for analogies only.\n"
-                f"- Concepts with score < 0.3: treat as new; provide heavy scaffolding.\n"
-                f"- Mid-range (0.3–0.8): student is in ZPD — Socratic prompting.\n"
-                f"{'; '.join(parts)}"
-            )
+        scaffolding = "Explain specialist vocabulary naturally and keep the learner's responsibility challenging but reachable."
 
     return (
-        f"Rewrite the following lesson content for a {grade_desc} student "
-        f"in the {track_name} curriculum. "
-        f"Their interests include: {interests_str}.\n"
-        "FAMILY CONTEXT: Keep this connected to one household lesson. Adapt the learner's "
-        "scaffolding and responsibility, not the lesson's truth, sources, or shared work.\n"
-        f"ZPD State — BKT P(L): {req.bkt_pL:.3f}, Learning rate: {req.bkt_pT:.3f}, "
-        f"Priority score: {req.priority_score:.3f}, Decay-adjusted mastery: {req.decay_adjusted_mastery:.3f}, "
-        f"Cross-track bias: {req.cross_track_bias:.3f}.\n"
-        f"{complexity}"
-        f"{priority_clause}"
-        f"{cross_track_clause}"
-        f"{decay_clause}"
-        f"{discipleship_clause}"
-        f"{proficiency_clause}"
-        f"{genui_directive}"
-        f"{genui_re_render_instructions}"
-        f"\n\nORIGINAL CONTENT:\n{content}"
+        f"Topic: {topic_hint or 'the current family lesson'}\n"
+        f"Learner: {grade_desc}; track: {req.track.replace('_', ' ').title()}; "
+        f"interests: {interests}; mastery: {req.bkt_pL:.2f}.\n"
+        f"Scaffolding: {scaffolding}\n\n"
+        "Revise the wording only. Preserve the complete lesson block and all shared-family roles.\n\n"
+        f"ORIGINAL BLOCK:\n{content}"
     )
 
 
 async def adapt_block_content(content: str, req: AdaptationRequest, topic_hint: str = "") -> str:
     result = await _llm_call(_ADAPTATION_SYSTEM, build_adaptation_prompt(req, content, topic_hint))
-    return sanitize_learner_text(result if result else content)
+    return sanitize_learner_text(result if result.strip() else content)
 
 
-# ── Structured data generators ───────────────────────────────────────────────
-
-async def generate_flashcard_data(content: str, req: AdaptationRequest) -> Optional[dict]:
-    """Generate {front, back, category} from content."""
-    grade_desc = _GRADE_DESC.get(req.grade_level, f"grade {req.grade_level}")
-    system = (
-        "You extract a single key concept from text and format it as a flashcard. "
-        "Return ONLY valid JSON with keys: front (term or question, ≤12 words), "
-        "back (definition or answer, 1-2 sentences), category (topic label, ≤3 words). "
-        "No markdown, no explanation, just JSON."
-    )
-    user = f"Create a flashcard for a {grade_desc} student from this content:\n\n{content[:800]}"
-    raw = await _llm_call(system, user, max_tokens=200)
-    try:
-        data = json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
-        if "front" in data and "back" in data:
-            return data
-    except (json.JSONDecodeError, AttributeError):
-        pass
-    return None
-
-
-async def generate_quiz_data(content: str, req: AdaptationRequest) -> Optional[dict]:
-    """Generate {question, options:[{text,is_correct}], explanation, difficulty} from content."""
-    grade_desc = _GRADE_DESC.get(req.grade_level, f"grade {req.grade_level}")
-    system = (
-        "You create a multiple-choice quiz question from lesson content. "
-        "Return ONLY valid JSON with keys: question (string), "
-        "options (array of 4 objects with keys text:string and is_correct:bool — exactly one is_correct:true), "
-        "explanation (string, 1-2 sentences explaining the correct answer), "
-        "difficulty (easy|medium|hard). "
-        "No markdown, no explanation, just JSON."
-    )
-    user = f"Create a quiz question for a {grade_desc} student from this content:\n\n{content[:800]}"
-    raw = await _llm_call(system, user, max_tokens=400)
-    try:
-        data = json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
-        if "question" in data and "options" in data:
-            return data
-    except (json.JSONDecodeError, AttributeError):
-        pass
-    return None
-
-
-async def generate_timeline_data(content: str, req: AdaptationRequest) -> Optional[dict]:
-    """Generate {span, events:[{date,label,description}]} from date-heavy content."""
-    grade_desc = _GRADE_DESC.get(req.grade_level, f"grade {req.grade_level}")
-    system = (
-        "You extract chronological events from lesson content and format them as a timeline. "
-        "Return ONLY valid JSON with keys: span (string, e.g. '1865-1877'), "
-        "events (array of objects with keys date:string, label:string ≤6 words, description:string 1-2 sentences). "
-        "Include 3-6 events. No markdown, just JSON."
-    )
-    user = f"Extract a timeline for a {grade_desc} student from this content:\n\n{content[:1000]}"
-    raw = await _llm_call(system, user, max_tokens=500)
-    try:
-        data = json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
-        if "events" in data and len(data["events"]) >= 2:
-            return data
-    except (json.JSONDecodeError, AttributeError):
-        pass
-    return None
-
-
-async def generate_narrated_slide_data(content: str, req: AdaptationRequest) -> Optional[dict]:
-    """Generate {total_duration_minutes, slides:[{slide_number,title,bullets,narration}]}."""
-    grade_desc = _GRADE_DESC.get(req.grade_level, f"grade {req.grade_level}")
-    system = (
-        "You convert lesson content into 2-3 narrated slides. "
-        "Return ONLY valid JSON with keys: total_duration_minutes (number), "
-        "slides (array of objects with keys slide_number:int, title:string, "
-        "bullets:array of 2-4 strings, narration:string 2-3 sentences). "
-        "No markdown, just JSON."
-    )
-    user = f"Convert this to narrated slides for a {grade_desc} student:\n\n{content[:800]}"
-    raw = await _llm_call(system, user, max_tokens=600)
-    try:
-        data = json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
-        if "slides" in data and len(data["slides"]) >= 1:
-            return data
-    except (json.JSONDecodeError, AttributeError):
-        pass
-    return None
-
-
-async def generate_genui_assembly_data(content: str, req: AdaptationRequest) -> Optional[dict]:
-    """
-    Generate GENUI_ASSEMBLY data using the Component Selector library.
-    Returns {component_type, props, initial_state, callbacks, re_render_triggers}.
-    """
-    from app.algorithms.component_selector import select_components, LearnerContext
-
-    # Map mastery to difficulty tier
-    if req.bkt_pL < 0.35:
-        difficulty = "SEEDLING"
-    elif req.bkt_pL < 0.65:
-        difficulty = "GROWING"
-    else:
-        difficulty = "HARVEST"
-
-    # Map track to topic tags
-    _TRACK_TAGS = {
-        "TRUTH_HISTORY": ["history", "reading", "exploration"],
-        "CREATION_SCIENCE": ["science", "exploration", "hands-on"],
-        "APPLIED_MATHEMATICS": ["math", "concrete", "spatial"],
-        "ENGLISH_LITERATURE": ["reading", "text", "reference"],
-        "DISCIPLESHIP": ["application", "scenario", "problem-solving"],
-        "JUSTICE_CHANGEMAKING": ["application", "scenario", "problem-solving"],
-        "GOVERNMENT_ECONOMICS": ["reading", "scenario", "problem-solving"],
-        "HOMESTEADING": ["hands-on", "application", "concrete"],
-        "HEALTH_NATUROPATHY": ["science", "application", "hands-on"],
-        "CREATIVE_ECONOMY": ["hands-on", "application", "problem-solving"],
-    }
-    topic_tags = _TRACK_TAGS.get(req.track, ["reading", "exploration"])
-
-    # Determine modality from track/preference
-    modality = req.preferred_modality or "visual"
-
-    ctx = LearnerContext(
-        mastery_score=req.bkt_pL,
-        difficulty=difficulty,
-        preferred_modalities=[modality, "reading"],
-        recent_struggle_count=0,
-        time_available_minutes=15,
-        needs_assessment=False,
-        topic_tags=topic_tags,
-        recently_used_components=[],
-    )
-
-    # Select best component from library
-    recs = select_components(ctx, max_results=1)
-    if not recs:
-        return None
-
-    component_type = recs[0].component_id
-
-    # Build props based on component type
-    props = _build_component_props_for_adapter(component_type, content, req)
-
-    # Determine re-render triggers
-    _INTERACTIVE_COMPONENTS = {"AdaptiveQuiz", "StealthAssessment", "CorrectiveOverlay", "MultiCompetencyWorkspace"}
-    re_render_triggers = ["onComplete", "onStateChange"] if component_type in _INTERACTIVE_COMPONENTS else ["onComplete"]
-
-    return {
-        "component_type": component_type,
-        "props": props,
-        "initial_state": {},
-        "callbacks": ["onComplete", "onStateChange"],
-        "re_render_triggers": re_render_triggers,
-    }
-
-
-def _build_component_props_for_adapter(component_id: str, content: str, req: AdaptationRequest) -> dict:
-    """Build props for a GenUI component in the adapter context."""
-    track = req.track
-    if component_id == "TextExplanation":
-        return {"title": content[:60], "content": content[:2000], "keyTerms": [], "track": track}
-    elif component_id == "VideoExplanation":
-        return {"title": content[:60], "description": content[:200], "sourceType": "generated", "content": content[:500], "track": track}
-    elif component_id == "AdaptiveQuiz":
-        return {"topic": content[:60], "questions": [], "initialDifficulty": "medium", "track": track}
-    elif component_id == "AutoDiagram":
-        return {"title": f"Concept Map: {content[:40]}", "sourceContent": content[:1000], "diagramType": "concept-map", "track": track}
-    elif component_id == "RealWorldApplication":
-        return {"title": f"Apply It: {content[:40]}", "scenario": "How does this connect to your world?", "content": content[:800], "track": track}
-    elif component_id == "StealthAssessment":
-        return {"topic": content[:60], "content": content[:800], "assessmentType": "comprehension", "track": track}
-    elif component_id == "SimulationEmbed":
-        return {"title": f"Explore: {content[:40]}", "description": content[:200], "sourceType": "generated", "track": track}
-    elif component_id == "VirtualManipulative":
-        return {"title": f"Hands-on: {content[:40]}", "type": "exploration", "track": track}
-    elif component_id == "MultiCompetencyWorkspace":
-        return {"title": f"Deep Work: {content[:40]}", "competencies": [content[:40]], "content": content[:800], "track": track}
-    elif component_id == "CorrectiveOverlay":
-        # CorrectiveOverlay needs live student-answer context; fall back to GlowGrow.
-        short = content[:60].split(".")[0] if content else "this lesson"
-        return {
-            "title": f"Check Your Understanding: {short}",
-            "topic": short,
-            "track": track,
-            "questions": [
-                {
-                    "question": f"What is the key idea in what you just learned about {short}?",
-                    "options": [
-                        {"text": "It reveals a foundational principle", "is_correct": True},
-                        {"text": "It is unrelated to this lesson", "is_correct": False},
-                        {"text": "It has been disproved", "is_correct": False},
-                    ],
-                    "explanation": f"Engaging with {short} builds understanding over time.",
-                    "glow": "Keep going — you're doing great.",
-                    "grow": f"Find one primary source that addresses {short} directly.",
-                },
-            ],
-        }
-    elif component_id == "LearningVelocityCard":
-        return {"topic": content[:60], "track": track}
-    elif component_id == "ProgressMap":
-        return {"topic": content[:60], "track": track}
-    else:
-        return {"topic": content[:60], "content": content[:1000], "track": track}
-
-
-# ── Main adaptation entry point ──────────────────────────────────────────────
-
-async def _transform_block(block: dict, req: AdaptationRequest, topic_hint: str = "") -> dict:
-    """Apply transformation decision to a single block. Returns updated block dict."""
-    decision = select_transformation(block, req)
+async def _adapt_block(block: dict, req: AdaptationRequest, topic_hint: str) -> dict:
     adapted = dict(block)
-    content = block.get("content", "")
+    block_type = str(block.get("block_type") or "NARRATIVE").upper()
+    content = str(block.get("content") or "")
 
-    if decision == "text_only":
+    # Structured and source blocks own exact content/data. Changing their prose
+    # without changing their props creates mismatched, broken lessons.
+    if block_type not in _STRUCTURE_OWNING_TYPES and content.strip():
         adapted["content"] = await adapt_block_content(content, req, topic_hint)
 
-    elif decision == "to_flashcard":
-        data = await generate_flashcard_data(content, req)
-        if data:
-            adapted["block_type"] = "FLASHCARD"
-            adapted["flashcard_data"] = data
-            adapted["content"] = data.get("front", content)
-        else:
-            adapted["content"] = await adapt_block_content(content, req, topic_hint)
-
-    elif decision == "to_quiz":
-        data = await generate_quiz_data(content, req)
-        if data:
-            adapted["block_type"] = "QUIZ"
-            adapted["quiz_data"] = data
-            adapted["content"] = data.get("question", content)
-        else:
-            adapted["content"] = await adapt_block_content(content, req, topic_hint)
-
-    elif decision == "to_timeline":
-        data = await generate_timeline_data(content, req)
-        if data:
-            adapted["block_type"] = "TIMELINE"
-            adapted["timeline_data"] = data
-            adapted["content"] = content  # keep original as context
-        else:
-            adapted["content"] = await adapt_block_content(content, req, topic_hint)
-
-    elif decision == "to_narrated_slide":
-        data = await generate_narrated_slide_data(content, req)
-        if data:
-            adapted["block_type"] = "NARRATED_SLIDE"
-            adapted["narrated_slide_data"] = data
-            adapted["content"] = content
-        else:
-            adapted["content"] = await adapt_block_content(content, req, topic_hint)
-
-    elif decision == "to_genui_assembly":
-        data = await generate_genui_assembly_data(content, req)
-        if data:
-            adapted["block_type"] = "GENUI_ASSEMBLY"
-            adapted["genui_assembly_data"] = data
-            adapted["content"] = content
-        else:
-            adapted["content"] = await adapt_block_content(content, req, topic_hint)
-
+    # Structural invariance is the contract of this adapter.
+    adapted["block_type"] = block_type
     return adapted
 
 
-async def adapt_canonical_for_student(
-    canonical: dict,
-    req: AdaptationRequest,
-) -> list[dict]:
-    """
-    Adapt all blocks in a canonical lesson for the student.
-
-    Per-block: select_transformation() decides the block_type, then
-    the appropriate generator produces structured data (or text rewrite).
-    PRIMARY_SOURCE and RESEARCH_MISSION blocks are never transformed.
-
-    Returns adapted blocks as list[dict] (same shape as LessonBlockResponse).
-    """
-    blocks = canonical.get("blocks", [])
+async def adapt_canonical_for_student(canonical: dict, req: AdaptationRequest) -> list[dict]:
+    """Adapt wording in parallel while preserving block count, order, and types."""
+    blocks = list(canonical.get("blocks") or [])
     if not blocks:
-        return blocks
+        return []
 
-    topic_hint = canonical.get("topic", "")
-
-    adapted_blocks = await asyncio.gather(*[
-        _transform_block(b, req, topic_hint) for b in blocks
-    ])
-
-    transformed = sum(
-        1 for orig, adapted in zip(blocks, adapted_blocks)
-        if orig.get("block_type") != adapted.get("block_type")
-    )
-
+    topic_hint = str(canonical.get("topic") or "")
+    adapted = await asyncio.gather(*(
+        _adapt_block(block, req, topic_hint) for block in blocks
+    ))
     logger.info(
-        f"[Adapter] Adapted {len(adapted_blocks)} blocks for grade={req.grade_level}, "
-        f"track={req.track}, bkt_pL={req.bkt_pL:.3f}, priority={req.priority_score:.3f}, "
-        f"interactions={req.interaction_count}, transformed={transformed} block types"
+        "[Adapter] Adapted wording for %d canonical blocks (grade=%s track=%s); structure unchanged",
+        len(adapted), req.grade_level, req.track,
     )
-    return list(adapted_blocks)
+    return list(adapted)

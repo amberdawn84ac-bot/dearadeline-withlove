@@ -1,22 +1,18 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Sparkles, Send, Loader2, FlaskConical, Search, Network, ListOrdered, Brain, Presentation } from "lucide-react";
-import { scaffold, streamLesson, listProjects, getProject, reportActivity, streamConversation, uploadActivityEvidence, getLearningPlan, lessonRequestFromSuggestion } from "@/lib/brain-client";
-import { LessonSkeleton } from "@/components/gen-ui/LessonSkeleton";
+import { useRouter } from "next/navigation";
+import { Sparkles, Send, Loader2 } from "lucide-react";
+import { scaffold, listProjects, getProject, reportActivity, streamConversation, uploadActivityEvidence, getLearningPlan } from "@/lib/brain-client";
 import type {
-  Track, ScaffoldResponse, LessonResponse, LessonBlockResponse,
+  Track, ScaffoldResponse,
   ProjectSummary, ProjectDetail, ActivityReportResponse,
-  ConversationMessage, LessonRequest,
+  ConversationMessage,
 } from "@/lib/brain-client";
 import { ProjectCatalog } from "@/components/projects/ProjectCard";
 import { ProjectGuide } from "@/components/projects/ProjectGuide";
-import RenderModeSelector from "@/components/RenderModeSelector";
-import AnimatedSketchnoteRenderer from "@/components/gen-ui/patterns/AnimatedSketchnoteRenderer";
-import type { LessonRenderMode, AnimatedSketchnoteLesson } from "@/lib/brain-client";
 import { useALUStream } from "@/hooks/useALUStream";
 import { StreamingGenUIRenderer } from "@/components/gen-ui/StreamingGenUIRenderer";
-import LessonRenderer from "@/components/lessons/LessonRenderer";
 import { parseDataStreamLine } from "@/lib/stream-protocol";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -24,8 +20,7 @@ import { parseDataStreamLine } from "@/lib/stream-protocol";
 type RichContent =
   | { type: "projectList"; projects: (ProjectSummary | ProjectDetail)[] }
   | { type: "projectDetail"; project: ProjectDetail }
-  | { type: "activityCredit"; result: ActivityReportResponse }
-  | { type: "lesson"; lesson: LessonResponse };
+  | { type: "activityCredit"; result: ActivityReportResponse };
 
 type MessageSegment =
   | { type: "text"; content: string }
@@ -40,7 +35,6 @@ interface Message {
   segments?: MessageSegment[];
   streaming?: boolean;
 }
-
 interface LessonContext {
   topic: string;
   track: Track;
@@ -51,11 +45,8 @@ interface AdelineChatPanelProps {
   studentId: string;
   gradeLevel: string;
   hideHeader?: boolean;
-  hideRenderModeSelector?: boolean;
   activeLessonContext?: LessonContext | null;
-  onLessonGenerated?: (lesson: LessonResponse) => void;
   onLessonRequest?: (topic: string) => void;
-  initialPrompt?: string | null;
   /** Text highlighted by the user for "Ask Adeline" feature */
   highlightedContext?: string | null;
   /** Callback to clear the highlighted context after it's been used */
@@ -190,7 +181,6 @@ const BLOCK_CONFIGS: Record<string, { icon: string; bg: string; border: string; 
   MNEMONIC:             { icon: "🧠", bg: "#FAF5FF", border: "#7C3AED",  color: "#7C3AED",  label: "Mnemonic" },
   SOCRATIC_DEBATE:      { icon: "💬", bg: "#FEF2F2", border: "#991B1B",  color: "#991B1B",  label: "Socratic Debate" },
   PROJECT_BUILDER:      { icon: "🔨", bg: "#FFF7ED", border: "#C2410C",  color: "#C2410C",  label: "Project" },
-  NARRATED_SLIDE:       { icon: "🎞️",  bg: "#EFF6FF", border: "#2563EB",  color: "#2563EB",  label: "Slides" },
   SCAFFOLDED_PROBLEM:   { icon: "📐", bg: "#F5F3FF", border: "#7C3AED",  color: "#7C3AED",  label: "Problem" },
   HARD_THING_CHALLENGE: { icon: "🏔️",  bg: "#FEF2F2", border: "#DC2626",  color: "#DC2626",  label: "Challenge" },
   NARRATIVE:            { icon: "📖", bg: "#FDF6E9", border: "#E7DAC3",  color: "#2F4731",  label: "Narrative" },
@@ -225,22 +215,18 @@ export function AdelineChatPanel({
   studentId,
   gradeLevel,
   hideHeader = false,
-  hideRenderModeSelector = false,
   activeLessonContext,
-  onLessonGenerated,
   onLessonRequest,
-  initialPrompt,
   highlightedContext,
   onHighlightedContextUsed,
 }: AdelineChatPanelProps) {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([WELCOME_MSG]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [initialPromptSent, setInitialPromptSent] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
-  const [renderMode, setRenderMode] = useState<LessonRenderMode>("animated_sketchnote_lesson");
   const [pendingActivity, setPendingActivity] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -251,14 +237,7 @@ export function AdelineChatPanel({
     componentOrder: streamingComponentOrder,
     remediations,
     statusMessage: streamStatus,
-    isStreaming: isGenUIStreaming,
     triggerRemediation,
-    processEvent: processGenUIEvent,
-    aluPlaylist,
-    currentALU,
-    scaffolds,
-    advanceALU,
-    processALUEvent,
   } = useALUStream({ studentId, lessonId: activeLessonId ?? undefined });
 
   // Handler for student interaction events from streaming GenUI components.
@@ -371,31 +350,12 @@ export function AdelineChatPanel({
           });
           return;
         }
-        const blocks: LessonBlockResponse[] = [];
-        let lesson: LessonResponse | null = null;
-        addMessage({ role: "adeline", content: `I found the best match in your learning plan: “${plannedTask.title}.” I’m building that assignment now…` });
-        for await (const event of streamLesson(lessonRequestFromSuggestion(plannedTask, studentId, gradeLevel))) {
-          processALUEvent(event as Record<string, unknown>);
-          if (event.type === "block") blocks.push(event.block);
-          if (event.type === "error") throw new Error(event.message);
-          if (event.type === "done") {
-            lesson = {
-              lesson_id: event.lesson_id,
-              title: event.title || plannedTask.title,
-              track: plannedTask.track,
-              blocks,
-              has_research_missions: blocks.some((block) => block.block_type === "RESEARCH_MISSION"),
-              researcher_activated: event.researcher_activated ?? false,
-              oas_standards: (event.oas_standards as LessonResponse["oas_standards"]) ?? [],
-              agent_name: event.agent_name ?? "Adeline",
-              xapi_statements: event.xapi_statements ?? [],
-              credits_awarded: event.credits_awarded ?? [],
-            };
-          }
-        }
-        if (!lesson) throw new Error("Lesson stream ended before completion");
-        addMessage({ role: "adeline", content: "Your lesson is ready.", rich: { type: "lesson", lesson } });
-        onLessonGenerated?.(lesson);
+        addMessage({
+          role: "adeline",
+          content: `I found the right assignment in your learning plan: “${plannedTask.title}.” I’m opening the full family lesson now.`,
+        });
+        onLessonRequest?.(plannedTask.title);
+        router.push(`/dashboard/lesson/${encodeURIComponent(plannedTask.id)}`);
       } else if (PROJECT_LIST_RE.test(text)) {
         // Project catalog intent
         addMessage({ role: "adeline", content: "Let me pull up the project catalog for you…" });
@@ -517,64 +477,7 @@ export function AdelineChatPanel({
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, onLessonGenerated, addMessage, conversationHistory, processGenUIEvent, processALUEvent, pendingActivity]);
-
-  // Auto-send initial prompt (e.g. from Daily Bread "Start Deep Dive Study")
-  useEffect(() => {
-    if (initialPrompt && !initialPromptSent && studentId) {
-      setInitialPromptSent(true);
-      setInput(initialPrompt);
-      // Defer to next tick so input state is set before send
-      setTimeout(() => {
-        setInput('');
-        addMessage({ role: 'user', content: initialPrompt });
-        setIsLoading(true);
-        // Stream the lesson progressively — avoids the 6s+ blank wait from the
-        // old batch generateLesson() + pollLessonResult() approach.
-        (async () => {
-          try {
-            const request: LessonRequest = {
-              student_id: studentId,
-              topic: initialPrompt,
-              track: 'DISCIPLESHIP' as Track,
-              grade_level: gradeLevel,
-              is_homestead: false,
-            };
-            const blocks: LessonBlockResponse[] = [];
-            let title = initialPrompt;
-            for await (const event of streamLesson(request)) {
-              processALUEvent(event as Record<string, unknown>);
-              if (event.type === 'block') {
-                blocks.push(event.block);
-              } else if (event.type === 'done') {
-                if (event.title) title = event.title;
-              } else if (event.type === 'error') {
-                throw new Error(event.message);
-              }
-            }
-            addMessage({ role: 'adeline', content: title || 'Here is your Daily Bread study.' });
-            const lesson: LessonResponse = {
-              lesson_id: `lesson-${Date.now()}`,
-              title,
-              track: 'DISCIPLESHIP' as Track,
-              blocks,
-              has_research_missions: false,
-              researcher_activated: false,
-              oas_standards: [],
-              agent_name: '',
-              xapi_statements: [],
-              credits_awarded: [],
-            };
-            onLessonGenerated?.(lesson);
-          } catch {
-            addMessage({ role: 'adeline', content: 'I ran into a hiccup — give me a moment and try again.' });
-          } finally {
-            setIsLoading(false);
-          }
-        })();
-      }, 100);
-    }
-  }, [initialPrompt, initialPromptSent, studentId, gradeLevel, addMessage, onLessonGenerated]);
+  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, addMessage, conversationHistory, pendingActivity, router]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -698,11 +601,6 @@ export function AdelineChatPanel({
                   {msg.rich?.type === "activityCredit" && (
                     <ActivityCreditCard result={msg.rich.result} />
                   )}
-                  {msg.rich?.type === "lesson" && (
-                    <div className="mt-3 rounded-2xl bg-[#FFFEF7] p-2 text-[#2F4731]">
-                      <LessonRenderer lesson={msg.rich.lesson} studentId={studentId} />
-                    </div>
-                  )}
                 </>
               )}
             </div>
@@ -758,9 +656,6 @@ export function AdelineChatPanel({
         className="shrink-0 px-4 py-3 border-t border-[#E7DAC3]"
         style={{ background: "#FFFDF5" }}
       >
-        <div className={hideRenderModeSelector ? "hidden" : "mb-2"}>
-          <RenderModeSelector value={renderMode} onChange={setRenderMode} disabled={isLoading} />
-        </div>
         <div className="flex items-end gap-2">
           <textarea
             ref={inputRef}
@@ -790,298 +685,6 @@ export function AdelineChatPanel({
         <p className="text-[10px] text-[#2F4731]/40 mt-1.5 text-center">
           Enter to send · Shift+Enter for new line
         </p>
-      </div>
-    </div>
-  );
-}
-
-// ── LessonBlockChatPanel ───────────────────────────────────────────────────────
-// A separate lesson panel: topic + track picker → blocks rendered as chat bubbles.
-
-const TRACK_OPTIONS: { value: Track; label: string }[] = [
-  { value: "TRUTH_HISTORY",        label: "History" },
-  { value: "CREATION_SCIENCE",     label: "Science" },
-  { value: "HOMESTEADING",         label: "Homestead" },
-  { value: "GOVERNMENT_ECONOMICS", label: "Govt" },
-  { value: "JUSTICE_CHANGEMAKING", label: "Justice" },
-  { value: "DISCIPLESHIP",         label: "Discipleship" },
-  { value: "HEALTH_NATUROPATHY",   label: "Health" },
-  { value: "ENGLISH_LITERATURE",   label: "English" },
-];
-
-interface LessonBlockChatPanelProps {
-  studentId: string;
-  initialTrack?: Track;
-}
-
-function BlockBubble({ block }: { block: LessonBlockResponse }) {
-  if (block.is_silenced) return null;
-
-  // Block-type-specific renders always take priority over evidence verdict.
-  // NARRATIVE and RESEARCH_MISSION blocks from DiscipleshipAgent often have an
-  // empty evidence array; checking verdict first (old behaviour) defaulted to
-  // ARCHIVE_SILENT and wrongly showed a "Source not found" gray bubble.
-
-  if (block.block_type === "NARRATIVE") {
-    return (
-      <div
-        className="max-w-[88%] rounded-2xl rounded-bl-sm px-4 py-3 space-y-1.5 animate-fade-slide-in"
-        style={{ background: "#FDF6E9", border: "1.5px solid #E7DAC3" }}
-      >
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm">📖</span>
-          <span className="text-[10px] font-bold text-[#2F4731] uppercase tracking-wide">
-            Narrative
-          </span>
-        </div>
-        <p className="text-sm text-[#2F4731] leading-relaxed">{block.content}</p>
-      </div>
-    );
-  }
-
-  if (block.block_type === "RESEARCH_MISSION") {
-    return (
-      <div
-        className="max-w-[88%] rounded-2xl rounded-bl-sm px-4 py-3 space-y-1.5 animate-fade-slide-in"
-        style={{ background: "#FEFCE8", border: "2px solid #CA8A04" }}
-      >
-        <div className="flex items-center gap-1.5">
-          <Search size={13} className="text-[#CA8A04]" />
-          <span className="text-[10px] font-bold text-[#CA8A04] uppercase tracking-wide">
-            Research Mission
-          </span>
-        </div>
-        <p className="text-sm text-[#2F4731] leading-relaxed">{block.content}</p>
-      </div>
-    );
-  }
-
-  if (block.block_type === "EXPERIMENT" || block.block_type === "LAB_MISSION") {
-    return (
-      <div
-        className="max-w-[88%] rounded-2xl rounded-bl-sm px-4 py-3 space-y-1.5 animate-fade-slide-in"
-        style={{ background: "#FFF7ED", border: "2px solid #BD6809" }}
-      >
-        <div className="flex items-center gap-1.5">
-          <FlaskConical size={13} className="text-[#BD6809]" />
-          <span className="text-[10px] font-bold text-[#BD6809] uppercase tracking-wide">
-            {block.block_type === "EXPERIMENT" ? "Sovereign Lab" : "Experiment"}
-          </span>
-        </div>
-        <p className="text-sm text-[#2F4731] leading-relaxed">{block.content}</p>
-      </div>
-    );
-  }
-
-  if (block.block_type === "MIND_MAP") return (
-    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-green-700 bg-green-50 text-green-800">
-      <Network size={13} /> Mind Map: {block.mind_map_data?.concept}
-    </div>
-  );
-  if (block.block_type === "TIMELINE") return (
-    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-[#1E3A5F] bg-blue-50 text-[#1E3A5F]">
-      <ListOrdered size={13} /> Timeline: {block.timeline_data?.span} · {block.timeline_data?.events.length} events
-    </div>
-  );
-  if (block.block_type === "MNEMONIC") return (
-    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-violet-700 bg-violet-50 text-violet-800">
-      <Brain size={13} /> Remember: {block.mnemonic_data?.acronym}
-    </div>
-  );
-  if (block.block_type === "NARRATED_SLIDE") return (
-    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-blue-700 bg-blue-50 text-blue-800">
-      <Presentation size={13} /> {block.narrated_slide_data?.slides.length} Slides · {block.narrated_slide_data?.total_duration_minutes} min
-    </div>
-  );
-  if (block.block_type === "ANIMATED_SKETCHNOTE_LESSON") return (
-    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-purple-700 bg-purple-50 text-purple-800">
-      <Sparkles size={13} /> Animated Lesson · {block.animated_sketchnote_data?.scenes?.length ?? "?"} scenes
-    </div>
-  );
-
-  // For PRIMARY_SOURCE/TEXT: check evidence verdict to decide display style.
-  const verdict = block.evidence[0]?.verdict;
-  const sourceTitle = block.evidence[0]?.source_title;
-
-  if (verdict === "ARCHIVE_SILENT") {
-    return (
-      <div
-        className="max-w-[88%] rounded-2xl rounded-bl-sm px-4 py-3 space-y-1 animate-fade-slide-in"
-        style={{ background: "#F3F4F6", border: "1px solid #D1D5DB" }}
-      >
-        <p className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wide">
-          Source not found
-        </p>
-        <p className="text-sm text-[#374151] leading-relaxed">{block.content}</p>
-      </div>
-    );
-  }
-
-  // VERIFIED or no evidence (TEXT blocks, PRIMARY_SOURCE with source)
-  return (
-    <div
-      className="max-w-[88%] rounded-2xl rounded-bl-sm px-4 py-3 space-y-2 animate-fade-slide-in"
-      style={{ background: "#fff", border: "1px solid #E7DAC3" }}
-    >
-      {sourceTitle && (
-        <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
-          <span className="text-[10px] font-semibold text-[#166534] truncate">{sourceTitle}</span>
-        </div>
-      )}
-      <p className="text-sm text-[#2F4731] leading-relaxed">{block.content}</p>
-    </div>
-  );
-}
-
-export function LessonBlockChatPanel({ studentId, initialTrack = "TRUTH_HISTORY" }: LessonBlockChatPanelProps) {
-  const [topic, setTopic] = useState("");
-  const [track, setTrack] = useState<Track>(initialTrack);
-  const [renderMode, setRenderMode] = useState<LessonRenderMode>("animated_sketchnote_lesson");
-  const [blocks, setBlocks] = useState<LessonBlockResponse[]>([]);
-  const [animatedLesson, setAnimatedLesson] = useState<AnimatedSketchnoteLesson | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [streamStatus, setStreamStatus] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [blocks.length, loading]);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!topic.trim() || loading) return;
-    setBlocks([]);
-    setAnimatedLesson(null);
-    setStreamStatus(null);
-    setLoading(true);
-
-    if (renderMode === "animated_sketchnote_lesson") {
-      try {
-        const res = await fetch("/api/adeline/animated-lesson", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ topic: topic.trim(), track, duration_seconds: 600, target_ages: "10-18" }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setAnimatedLesson(data as AnimatedSketchnoteLesson);
-        }
-      } catch {
-        // surface nothing — user can retry
-      } finally {
-        setLoading(false);
-        setStreamStatus(null);
-      }
-      return;
-    }
-
-    try {
-      for await (const event of streamLesson({
-        student_id: studentId,
-        track,
-        topic: topic.trim(),
-        is_homestead: false,
-        grade_level: "9",
-      })) {
-        if (event.type === "status") {
-          setStreamStatus(event.message);
-        } else if (event.type === "block") {
-          setBlocks((prev) => [...prev, event.block]);
-        } else if (event.type === "done") {
-          setLoading(false);
-          setStreamStatus(null);
-        } else if (event.type === "error") {
-          setLoading(false);
-          setStreamStatus(null);
-        }
-      }
-    } catch {
-      // surface nothing — user can retry
-    } finally {
-      setLoading(false);
-      setStreamStatus(null);
-    }
-  }
-
-  return (
-    <div className="flex flex-col h-full" style={{ background: "#FFFEF7" }}>
-      {/* Render mode selector */}
-      <div className="shrink-0 px-4 pt-4 pb-1">
-        <RenderModeSelector value={renderMode} onChange={setRenderMode} disabled={loading} />
-      </div>
-
-      {/* Track selector */}
-      <div className="shrink-0 px-4 pt-2 pb-2">
-        <div className="flex gap-1.5 flex-wrap">
-          {TRACK_OPTIONS.map((t) => (
-            <button
-              key={t.value}
-              onClick={() => setTrack(t.value)}
-              className="px-3 py-1 rounded-full text-xs font-semibold transition-all"
-              style={{
-                background: track === t.value ? "#2F4731" : "#F3F0EA",
-                color: track === t.value ? "#FFFEF7" : "#2F4731",
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        {/* Animated sketchnote output */}
-        {animatedLesson && (
-          <AnimatedSketchnoteRenderer lesson={animatedLesson} />
-        )}
-
-        {blocks.map((block) => (
-          <div key={block.block_id} className="flex justify-start">
-            <BlockBubble block={block} />
-          </div>
-        ))}
-
-        {/* Skeleton before first block arrives — gives immediate visual structure */}
-        {loading && blocks.length === 0 && <LessonSkeleton />}
-
-        {/* Progressive status — shows actual SSE status messages once blocks start arriving */}
-        {loading && blocks.length > 0 && (
-          <div className="flex justify-start">
-            <div
-              className="rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-2"
-              style={{ background: "#FDF6E9", border: "1px solid #E7DAC3" }}
-            >
-              <Loader2 size={14} className="animate-spin text-[#BD6809]" />
-              <span className="text-sm text-[#2F4731]/60 italic">
-                {streamStatus ?? "Adeline is thinking…"}
-              </span>
-            </div>
-          </div>
-        )}
-
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Topic input */}
-      <div className="shrink-0 px-4 py-3 border-t border-[#E7DAC3]" style={{ background: "#FFFDF5" }}>
-        <form onSubmit={handleSubmit} className="flex items-end gap-2">
-          <input
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            placeholder="Enter a topic to explore…"
-            className="flex-1 rounded-xl px-3 py-2 text-sm text-[#2F4731] border border-[#E7DAC3] bg-white focus:outline-none focus:border-[#2F4731] transition-colors"
-          />
-          <button
-            type="submit"
-            disabled={!topic.trim() || loading}
-            className="w-9 h-9 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-            style={{ background: "#BD6809", color: "#fff" }}
-          >
-            <Send size={15} />
-          </button>
-        </form>
       </div>
     </div>
   );

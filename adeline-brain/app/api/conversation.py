@@ -51,7 +51,7 @@ experiment, project builder, or socratic debate — output it as a JSON block ta
 </BLOCK>
 
 Valid block_type values: PRIMARY_SOURCE, LAB_MISSION, NARRATIVE, RESEARCH_MISSION,
-QUIZ, MIND_MAP, TIMELINE, MNEMONIC, NARRATED_SLIDE, LAB_GUIDE, EXPERIMENT,
+QUIZ, MIND_MAP, TIMELINE, MNEMONIC, LAB_GUIDE, EXPERIMENT,
 SOCRATIC_DEBATE, PROJECT_BUILDER, SCAFFOLDED_PROBLEM, HARD_THING_CHALLENGE.
 
 You may inject a block mid-sentence. Text before and after the block will render

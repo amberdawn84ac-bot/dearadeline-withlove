@@ -41,19 +41,12 @@ export type Track =
   | "APPLIED_MATHEMATICS"
   | "CREATIVE_ECONOMY";
 
-export type LessonRenderMode =
-  | "standard_lesson"
-  | "visual_deep_dive"
-  | "sketchnote_infographic"
-  | "animated_sketchnote_lesson";
-
 export interface LessonRequest {
   student_id: string;
   track: Track;
   topic: string;
   is_homestead: boolean;
   grade_level: string;
-  render_mode?: LessonRenderMode;
   force_regenerate?: boolean;
 }
 
@@ -69,89 +62,14 @@ export function lessonRequestFromSuggestion(
 ): LessonRequest {
   return {
     student_id: studentId,
-    topic: suggestion.description
-      ? `${suggestion.title}: ${suggestion.description}`
-      : suggestion.title,
+    // The Curriculum Librarian and Learning Plan both key canonicals by title.
+    // Including the card description here creates a different slug, bypasses the
+    // approved family lesson, and generates a duplicate generic lesson instead.
+    topic: suggestion.title,
     track: suggestion.track,
     grade_level: gradeLevel,
     is_homestead: suggestion.track === "HOMESTEADING",
   };
-}
-
-export interface AnimatedLessonRequest {
-  topic: string;
-  focus?: string;
-  duration_seconds?: number;
-  target_ages?: string;
-  track?: Track;
-  student_id?: string;
-}
-
-// ── Animated Sketchnote Lesson types (mirrors adeline-core) ───────────────────
-
-export interface StyledText {
-  text: string;
-  style: "bold_marker" | "block_caps" | "script_hand" | "sketch_print" | "tiny_notes" | "label" | "caption";
-  layout: "title_banner" | "section_header" | "callout_bubble" | "flow_step" | "side_note" | "diagram_label" | "closing_quote";
-  decoration?: string[];
-  emphasis?: "low" | "medium" | "high";
-}
-
-export interface VisualElement {
-  id: string;
-  type: "handwritten_text" | "doodle" | "diagram" | "arrow" | "bubble" | "label" | "icon" | "character" | "background" | "timeline" | "split_screen";
-  content: string;
-  position: { x: number; y: number };
-  size?: { width: number; height: number };
-  style?: string;
-  color?: string;
-}
-
-export interface AnimationInstruction {
-  elementId: string;
-  animation: "draw_in" | "write_on" | "fade_in" | "pop_in" | "slide_in" | "zoom_in" | "pulse" | "wiggle" | "pan" | "morph" | "highlight";
-  startTime: number;
-  duration: number;
-  easing?: "linear" | "ease_in" | "ease_out" | "ease_in_out";
-}
-
-export interface AnimatedScene {
-  sceneNumber: number;
-  sceneTitle: StyledText;
-  durationSeconds: number;
-  narration: string;
-  visualBuild: VisualElement[];
-  animationPlan: AnimationInstruction[];
-  teachingLayer: {
-    visualSummary: StyledText[];
-    deepExplanation: StyledText;
-    whyItMatters: StyledText;
-    activity?: StyledText;
-  };
-  soundDesign?: { musicMood?: string; soundEffects?: string[] };
-  narrationAudioUrl?: string;
-}
-
-export interface AnimatedSketchnoteLesson {
-  lessonType: "animated_sketchnote_lesson";
-  title: StyledText;
-  subtitle: StyledText;
-  targetAges: string;
-  totalDurationSeconds: number;
-  learningGoals: string[];
-  colorPalette: string[];
-  visualStyle: {
-    format: "animated_sketchnote";
-    artDirection: string;
-    typography: string[];
-    illustrationRules: string[];
-    layoutRules: string[];
-  };
-  scenes: AnimatedScene[];
-  fullNarrationScript: string;
-  vocabulary: { word: string; definition: string; visualCue: string }[];
-  assessment: { question: string; answer: string; type: "short_answer" | "discussion" | "draw_and_explain" }[];
-  extensionActivities: { title: string; instructions: string; materials?: string[] }[];
 }
 
 export interface WitnessCitation {
@@ -248,8 +166,6 @@ export interface LessonBlockResponse {
   epub_url?:            string;
   cover_url?:           string;
   lexile_level?:        number;
-  // Animated Sketchnote Lesson — full lesson payload for ANIMATED_SKETCHNOTE_LESSON blocks
-  animated_sketchnote_data?: AnimatedSketchnoteLesson;
   // GENUI_ASSEMBLY — interactive component spec from the orchestrator
   genui_assembly_data?: {
     component_type: string;
@@ -310,94 +226,6 @@ export interface LessonResponse {
 
 // ── Client Functions ───────────────────────────────────────────────────────────
 
-export interface LessonJobResponse {
-  job_id: string;
-  status: "queued" | "done";
-  result?: LessonResponse;
-}
-
-export interface LessonStatusResponse {
-  status: "queued" | "running" | "done" | "failed" | "not_found";
-  result?: LessonResponse;
-  error?: string;
-}
-
-export async function generateLesson(request: LessonRequest): Promise<LessonJobResponse> {
-  const res = await fetch(`${BRAIN_URL}/lesson/stream`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
-    body: JSON.stringify(request),
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    throw new Error(`adeline-brain error: ${res.status} ${res.statusText}`);
-  }
-
-  // Parse SSE stream to build a LessonResponse
-  const reader = res.body?.getReader();
-  const decoder = new TextDecoder();
-  
-  const blocks: LessonBlockResponse[] = [];
-  let title = request.topic;
-  let oas_standards: any[] = [];
-  let agent_name = "";
-  
-  if (reader) {
-    let buffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          try {
-            const data = JSON.parse(line.substring(6));
-            if (data.type === "block") {
-              blocks.push(data.block as LessonBlockResponse);
-            } else if (data.type === "done") {
-              if (data.title) title = data.title;
-              if (data.oas_standards) oas_standards = data.oas_standards;
-              if (data.agent_name) agent_name = data.agent_name;
-            }
-          } catch (e) {
-            // ignore parse errors for partial chunks
-          }
-        }
-      }
-    }
-  }
-
-  const lesson: LessonResponse = {
-    lesson_id: `lesson-${Date.now()}`,
-    title,
-    track: request.track,
-    blocks,
-    has_research_missions: false,
-    researcher_activated: false,
-    oas_standards,
-    agent_name,
-    xapi_statements: [],
-    credits_awarded: [],
-  };
-
-  // Cache it for the subsequent pollLessonResult call
-  if (typeof window !== "undefined") {
-    (window as any).__lessonJobCache = (window as any).__lessonJobCache || new Map();
-    (window as any).__lessonJobCache.set("job-streaming", lesson);
-  }
-
-  return {
-    job_id: "job-streaming",
-    status: "done",
-    result: lesson
-  };
-}
-
 // ── Progressive Lesson Streaming ──────────────────────────────────────────────
 
 export type LessonStreamEvent =
@@ -418,10 +246,10 @@ export type LessonStreamEvent =
  * all at once after the full lesson completes.
  * Model: identical to streamConversation() but for lesson generation.
  */
-export async function* streamLesson(
+export async function* buildLesson(
   request: LessonRequest,
 ): AsyncGenerator<LessonStreamEvent> {
-  const resp = await fetch(`${BRAIN_URL}/lesson/stream`, {
+  const resp = await fetch(`${BRAIN_URL}/lesson/build`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
     body: JSON.stringify(request),
@@ -494,6 +322,10 @@ export async function* streamLesson(
             lesson_id: payload.lesson_id ?? "",
             title: payload.title ?? "",
             oas_standards: payload.oas_standards,
+            agent_name: payload.agent_name,
+            researcher_activated: payload.researcher_activated,
+            xapi_statements: payload.xapi_statements,
+            credits_awarded: payload.credits_awarded,
           };
         } else if (payload.type === "error") {
           yield { type: "error", message: payload.message ?? "Unknown error" };
@@ -503,57 +335,6 @@ export async function* streamLesson(
       }
     }
   }
-}
-
-export async function pollLessonResult(
-  jobId: string,
-  options: {
-    intervalMs?: number;
-    timeoutMs?: number;
-    onProgress?: (status: string) => void;
-  } = {}
-): Promise<LessonResponse> {
-  const { intervalMs = 2000, timeoutMs = 90000, onProgress } = options;
-  const deadline = Date.now() + timeoutMs;
-
-  if (typeof window !== "undefined") {
-    const lesson = (window as any).__lessonJobCache?.get(jobId);
-    if (lesson) {
-      onProgress?.("done");
-      return lesson;
-    }
-  }
-
-  while (Date.now() < deadline) {
-    // Fallback if cache missed (requires backend to actually have /lesson/status which it might not)
-    try {
-      const res = await fetch(`${BRAIN_URL}/lesson/status/${encodeURIComponent(jobId)}`, {
-        headers: await getBrainHeaders(),
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error(`lesson status error: ${res.status}`);
-      const statusRes = await res.json() as LessonStatusResponse;
-      onProgress?.(statusRes.status);
-
-      if (statusRes.status === "done" && statusRes.result) {
-        return statusRes.result;
-      }
-
-      if (statusRes.status === "failed") {
-        throw new Error(statusRes.error ?? "Lesson generation failed");
-      }
-
-      if (statusRes.status === "not_found") {
-        throw new Error("Lesson job not found — it may have expired");
-      }
-    } catch (e) {
-      // ignore
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-
-  throw new Error("Lesson generation timed out after 90 seconds");
 }
 
 export async function listTracks(): Promise<{ tracks: { id: Track; label: string }[] }> {
@@ -1457,20 +1238,6 @@ export async function* streamConversation(params: {
       }
     }
   }
-}
-
-// ── Animated Sketchnote Lessons ───────────────────────────────────────────────
-
-export async function generateAnimatedLesson(
-  req: AnimatedLessonRequest
-): Promise<unknown> {
-  const res = await fetch("/api/adeline/animated-lesson", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) throw new Error(`Animated lesson generation failed: ${res.status}`);
-  return res.json();
 }
 
 // ── Learning Path ─────────────────────────────────────────────────────────────

@@ -1,9 +1,9 @@
 /**
  * lesson-stream.ts
  *
- * Typed data-part definitions for the /api/lesson UI Message Stream.
+ * Typed data-part definitions shared by Adeline streaming interfaces.
  *
- * The server (api/lesson/route.ts) emits newline-delimited JSON chunks whose
+ * Streaming gateways emit newline-delimited JSON chunks whose
  * `type` field starts with "data-". The AI SDK materialises these on the client
  * as DataUIPart objects inside UIMessage.parts. Each variant is narrowed here so
  * callers never need an `as` cast.

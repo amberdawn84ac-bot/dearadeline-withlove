@@ -47,7 +47,7 @@ from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL, GOOGLE_API
 from app.algorithms.pedagogical_directives import generate_pedagogical_directives, get_quick_directives
 from app.agents.pedagogy import ZPDZone
 from app.models.student import MasteryBand
-from app.curriculum.family_style import FAMILY_CANONICAL_AUTHORING_RULES
+from app.curriculum.family_style import FAMILY_CANONICAL_AUTHORING_RULES, finalize_family_lesson
 
 _ANTHROPIC_MODEL = ADELINE_MODEL
 logger = logging.getLogger(__name__)
@@ -1126,7 +1126,7 @@ async def historian_agent(state: AdelineState) -> AdelineState:
         logger.info(f"[HistorianAgent]   Block {i}: type={b.get('block_type')} content_len={len(b.get('content', ''))}")
 
     # ── Render to cohesive format ──────────────────────────────────────────────
-    await _render_lesson(state, blocks)
+    blocks = finalize_family_lesson(blocks, request.topic)
 
     logger.info(f"[HistorianAgent] POST-RENDER: {len(blocks)} blocks")
     for i, b in enumerate(blocks):
@@ -1311,7 +1311,7 @@ EXPERIENCE_INVITATION:
         blocks = await _generate_from_knowledge(state, [])
 
     # ── Render to cohesive format ──────────────────────────────────────────────
-    await _render_lesson(state, blocks)
+    blocks = finalize_family_lesson(blocks, request.topic)
 
     state["blocks"] = blocks
     return state
@@ -1409,9 +1409,7 @@ async def science_agent(state: AdelineState) -> AdelineState:
                 "experiment_data":   best_experiment.model_dump(),
             })
 
-    # ── Step 2: Hippocampus retrieval (always — provides content for the renderer)
-    # Even when an experiment matched, we need teaching content for the animated
-    # sketchnote/narrated slide. The experiment is a supplement alongside it.
+    # ── Step 2: Hippocampus retrieval (grounds one complete teaching block) ──
     raw_results = await hippocampus.similarity_search(
         query_embedding=state["query_embedding"],
         track=request.track.value,
@@ -1429,13 +1427,15 @@ async def science_agent(state: AdelineState) -> AdelineState:
             f"[ScienceAgent] All Hippocampus results below relevance floor "
             f"({_SCIENCE_RELEVANCE_FLOOR}) — falling through to knowledge generation."
         )
-    for result in raw_results:
-        raw = result["chunk"]
-        block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
+    if raw_results:
+        # Synthesize the relevant sources together. Building one block per search
+        # fragment produced the chopped, repetitive cards the learner rejected.
+        raw = "\n\n".join(str(result["chunk"]) for result in raw_results)
+        block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.NARRATIVE
         content = await _state_synthesize(
             state,
             block_type=block_type.value,
-            source_chunks=[result],
+            source_chunks=raw_results,
             raw_content=raw,
         )
         if is_homesteading:
@@ -1457,8 +1457,8 @@ async def science_agent(state: AdelineState) -> AdelineState:
                 },
                 "similarity_score": float(result["similarity_score"]),
                 "verdict":          "VERIFIED",
-                "chunk":            raw,
-            }],
+                "chunk":            result["chunk"],
+            } for result in raw_results],
             "is_silenced":       False,
             "homestead_content": _homestead_adapt(raw) if request.is_homestead else None,
         })
@@ -1474,7 +1474,7 @@ async def science_agent(state: AdelineState) -> AdelineState:
         web_results = await search_witnesses(request.topic, request.track.value)
         if web_results:
             raw = web_results[0].get("chunk", request.topic)
-            block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.PRIMARY_SOURCE
+            block_type = BlockType.LAB_MISSION if is_homesteading else BlockType.NARRATIVE
             content = await _state_synthesize(
                 state,
                 block_type=block_type.value,
@@ -1578,7 +1578,7 @@ async def science_agent(state: AdelineState) -> AdelineState:
         logger.info(f"[ScienceAgent]   Block {i}: type={b.get('block_type')} content_len={len(b.get('content', ''))}")
 
     # ── Render to cohesive format ──────────────────────────────────────────────
-    await _render_lesson(state, blocks)
+    blocks = finalize_family_lesson(blocks, request.topic)
 
     logger.info(f"[ScienceAgent] POST-RENDER: {len(blocks)} blocks")
     for i, b in enumerate(blocks):
@@ -1735,7 +1735,7 @@ async def literature_agent(state: AdelineState) -> AdelineState:
             })
 
     # ── Render to cohesive format ──────────────────────────────────────────────
-    await _render_lesson(state, blocks)
+    blocks = finalize_family_lesson(blocks, request.topic)
 
     state["blocks"] = blocks
     return state
@@ -1890,7 +1890,7 @@ async def practical_agent(state: AdelineState) -> AdelineState:
         logger.info(f"[PracticalAgent]   Block {i}: type={b.get('block_type')} content_len={len(b.get('content', ''))}")
 
     # ── Render to cohesive format ──────────────────────────────────────────────
-    await _render_lesson(state, blocks)
+    blocks = finalize_family_lesson(blocks, request.topic)
 
     logger.info(f"[PracticalAgent] POST-RENDER: {len(blocks)} blocks")
     for i, b in enumerate(blocks):
@@ -2179,887 +2179,6 @@ async def _synthesize_practical(request: LessonRequest) -> str:
 
 # ── Format selector ───────────────────────────────────────────────────────────
 
-async def _decide_formats(
-    topic: str,
-    content: str,
-    track: "Track",
-    grade_level: str,
-    allow_timeline: bool = False,
-) -> list[str]:
-    """
-    One Claude call decides which multimodal formats genuinely add value
-    for this specific lesson. Returns a subset of the available formats.
-
-    Rules Claude uses:
-    - MIND_MAP: good for multi-concept topics; skip for single ideas or stories
-    - TIMELINE: only if chronology is present AND allow_timeline=True
-    - MNEMONIC: only if 3+ distinct terms need to be memorised
-    - NARRATED_SLIDE: good for most lessons; skip if content is very short (<150 chars)
-    """
-    import json as _json
-
-    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
-        defaults = ["MIND_MAP", "NARRATED_SLIDE"]
-        if allow_timeline:
-            defaults.insert(1, "TIMELINE")
-        return defaults
-
-    available = ["MIND_MAP", "MNEMONIC", "NARRATED_SLIDE"]
-    if allow_timeline:
-        available.insert(1, "TIMELINE")
-
-    grade_desc = _GRADE_DESC.get(grade_level, f"grade {grade_level}")
-
-    system_prompt = (
-        "You are a curriculum designer deciding which learning formats add genuine value "
-        "to a specific lesson. Be selective — clutter hurts learning. "
-        "Output ONLY valid JSON: {\"formats\": [\"FORMAT1\", ...]}"
-    )
-    user_prompt = (
-        f"Lesson topic: {topic}\n"
-        f"Track: {track.value.replace('_', ' ')}\n"
-        f"Grade: {grade_desc}\n"
-        f"Content preview: {content[:400]}\n\n"
-        f"Available formats: {available}\n\n"
-        "Which formats genuinely add learning value for THIS specific lesson?\n"
-        "Rules:\n"
-        "- MIND_MAP: include if the topic has multiple related concepts with hierarchy. "
-        "Skip for single-concept topics or narrative stories.\n"
-        "- TIMELINE: include only if chronological sequence is central to the topic.\n"
-        "- MNEMONIC: include only if there are 3+ distinct terms/facts the student must memorise.\n"
-        "- NARRATED_SLIDE: include for most lessons. Skip only if content is a single short paragraph.\n"
-        "Return 0-3 formats maximum. Be honest — fewer is better than irrelevant blocks."
-    )
-
-    try:
-        text = await _synthesis_call(system_prompt, user_prompt, max_tokens=500)
-        text = text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
-        raw = _json.loads(text)
-        chosen = [f for f in raw.get("formats", []) if f in available]
-        # Never return empty — always give at least a narrated slide
-        if not chosen:
-            chosen = ["NARRATED_SLIDE"]
-        logger.info(f"[FormatSelector] Chose {chosen} for '{topic}' ({track.value})")
-        return chosen
-    except Exception as e:
-        logger.warning(f"[FormatSelector] Failed — using defaults: {e}")
-        return ["MIND_MAP", "NARRATED_SLIDE"]
-
-
-async def _inject_modal_supplement(
-    state: "AdelineState",
-    blocks: list[dict],
-    synthesis_text: str,
-) -> None:
-    """
-    Append a modality-matched GENUI_ASSEMBLY supplement if the student's preferred
-    learning style is not already well-served by the rendered blocks.
-
-    Called at the end of _render_lesson after the main cascade resolves.
-    Mutates blocks in place. Non-blocking — any failure is logged and skipped.
-    """
-    from app.algorithms.component_selector import select_modal_supplement
-
-    modality = state.get("preferred_modality", "text")
-    if not modality or modality == "auditory":
-        return  # auditory is served by animated sketchnote / narrated slide cascade
-
-    # Collect components already in this lesson to avoid duplication
-    already_emitted = [
-        b.get("genui_assembly_data", {}).get("component_type", "")
-        for b in blocks
-        if b.get("block_type") == "GENUI_ASSEMBLY"
-    ]
-
-    request = state["request"]
-    mastery_band = state.get("mastery_band", "DEVELOPING")
-
-    # Map mastery band to DifficultyLevel
-    diff_map = {
-        "NOVICE":      "EMERGING",
-        "DEVELOPING":  "DEVELOPING",
-        "PROFICIENT":  "EXPANDING",
-        "ADVANCED":    "MASTERING",
-        "EMERGING":    "EMERGING",
-        "EXPANDING":   "EXPANDING",
-        "MASTERING":   "MASTERING",
-    }
-    difficulty = diff_map.get(mastery_band, "DEVELOPING")
-
-    component_type = select_modal_supplement(
-        preferred_modality=modality,
-        difficulty=difficulty,
-        track=request.track.value,
-        already_emitted=already_emitted,
-    )
-
-    if not component_type:
-        return
-
-    # Build lightweight props for the selected component
-    try:
-        props: dict = {}
-        initial_state: dict = {}
-        callbacks: list[str] = ["onComplete"]
-
-        if component_type == "AutoDiagram":
-            # Build minimal valid nodes/edges so component doesn't crash
-            props = {
-                "title": f"Concept Map: {request.topic}",
-                "description": synthesis_text[:300] if synthesis_text else f"Explore {request.topic}",
-                "diagramType": "concept-map",
-                "track": request.track.value,
-                "nodes": [
-                    {"id": "1", "label": request.topic[:20], "type": "concept", "x": 50, "y": 50},
-                    {"id": "2", "label": "Explore", "type": "process", "x": 150, "y": 100},
-                    {"id": "3", "label": "Learn", "type": "concept", "x": 250, "y": 50},
-                ],
-                "edges": [
-                    {"from": "1", "to": "2", "type": "leads-to"},
-                    {"from": "2", "to": "3", "type": "leads-to"},
-                ],
-            }
-
-        elif component_type == "VirtualManipulative":
-            topic_lower = request.topic.lower()
-            manip_type = (
-                "fractions" if any(w in topic_lower for w in ["fraction", "ratio", "divide", "part"])
-                else "geometry" if any(w in topic_lower for w in ["shape", "angle", "area", "perimeter", "geometry"])
-                else "place_value"
-            )
-            props = {"type": manip_type, "title": f"Explore: {request.topic}"}
-            initial_state = {"currentStep": 0}
-
-        elif component_type == "SimulationEmbed":
-            # Match SimulationEmbed.tsx props exactly
-            props = {
-                "simulationUrl": f"https://phet.colorado.edu/en/simulations/filter?search={request.topic.replace(' ', '+')}",
-                "title": f"Explore: {request.topic}",
-                "description": synthesis_text[:300] if synthesis_text else f"Interactive exploration of {request.topic}",
-                "provider": "phet",
-                "estimatedMinutes": 5,
-                "competencies": [],
-                "track": request.track.value,
-            }
-
-        elif component_type == "TaskScaffold":
-            props = {
-                "title": f"Step-by-step: {request.topic}",
-                "tasks": [
-                    {"id": "t1", "instruction": f"Read through what you learned about {request.topic}."},
-                    {"id": "t2", "instruction": "Write down the three most important facts in your own words."},
-                    {"id": "t3", "instruction": "Apply what you learned: find one real example in your home or community."},
-                ],
-                "currentStep": 0,
-            }
-            initial_state = {"currentStep": 0, "completedTasks": []}
-
-        elif component_type == "ScaffoldedProblem":
-            props = {
-                "title": f"Practice Problem: {request.topic}",
-                "problem": {
-                    "question": f"Based on what you just learned about {request.topic}, solve this step-by-step.",
-                    "context": synthesis_text[:300],
-                    "scaffoldLevel": 3,
-                },
-                "scaffoldLevel": 3,
-            }
-            initial_state = {"currentStep": 0, "hintsUsed": 0}
-
-        elif component_type == "HardThingChallenge":
-            props = {
-                "title": f"Challenge: {request.topic}",
-                "misconceptions": [
-                    f"A common misunderstanding about {request.topic} is oversimplifying it.",
-                ],
-                "counterexamples": [
-                    f"Think of a situation where the standard explanation of {request.topic} breaks down.",
-                ],
-                "testCases": [
-                    f"Explain {request.topic} to someone younger without using any technical terms.",
-                ],
-            }
-
-        elif component_type == "GlowGrow":
-            props = {
-                "strengthArea": f"You engaged with {request.topic}",
-                "growthArea": f"Going deeper on {request.topic}",
-                "feedbackText": (
-                    f"You've covered the core ideas around {request.topic}. "
-                    "What's one question you still have? Bring it back to Adeline."
-                ),
-            }
-
-        elif component_type == "RealWorldApplication":
-            props = {
-                "applicationText": synthesis_text[:400],
-                "examples": [
-                    {"scenario": f"How does {request.topic} show up on a homestead or in your daily life?"},
-                ],
-            }
-
-        elif component_type in ("PeerTutoringCard", "DiscussionForum"):
-            props = {
-                "conceptTitle": request.topic,
-                "conceptTrack": request.track.value,
-                "difficulty": difficulty,
-                "prompt": (
-                    f"Now that you've studied {request.topic}, here's a question to discuss: "
-                    f"{synthesis_text[:200]}..."
-                ),
-            }
-            if component_type == "PeerTutoringCard":
-                props["requestingStudentId"] = request.student_id
-
-        elif component_type == "LabGuide":
-            # LabGuide requires a full Experiment object (frontend dereferences
-            # experiment.chaos_level/materials/steps). Reuse the canonical builder
-            # so generic {title, content} props never reach the render path.
-            props = _build_component_props(
-                component_id="LabGuide",
-                topic=request.topic,
-                content=synthesis_text,
-                track=request.track.value,
-                key_phrase=request.topic,
-            )
-
-        else:
-            # Generic fallback props
-            props = {"title": request.topic, "content": synthesis_text[:400]}
-
-        blocks.append({
-            "block_type": "GENUI_ASSEMBLY",
-            "content": f"{component_type}: {request.topic}",
-            "evidence": [],
-            "is_silenced": False,
-            "homestead_content": None,
-            "genui_assembly_data": {
-                "component_type": component_type,
-                "props": props,
-                "initial_state": initial_state,
-                "callbacks": callbacks,
-            },
-        })
-        logger.info(
-            f"[ModalSupplement] Injected {component_type} for "
-            f"modality={modality} track={request.track.value}"
-        )
-
-    except Exception as e:
-        logger.warning(f"[ModalSupplement] Failed to build props for {component_type} (non-fatal): {e}")
-
-
-async def _render_lesson(
-    state: "AdelineState",
-    blocks: list[dict],
-) -> None:
-    """
-    Render gathered content into a cohesive lesson format. Mutates `blocks` in place.
-
-    Cascade (first successful format wins):
-      1. ANIMATED_SKETCHNOTE_LESSON — full animated whiteboard lesson via Gemini
-      2. NARRATED_SLIDE             — slide deck with narration (cheaper fallback)
-      3. GENUI_ASSEMBLY — adaptive component via component selector (always available)
-
-    Enrichment blocks (_enrichment=True) are SKIPPED — vocab, scripture, and
-    journal cards are embedded inside the cohesive format's teaching layers.
-
-    Interactive supplement blocks (EXPERIMENT, CodePlayground, ProjectBuilder,
-    MoleculeSimulator) are ALWAYS preserved and appended after the cohesive block.
-
-    After the cohesive format is selected, the Component Selector injects ONE
-    modality-matched supplement (e.g. AutoDiagram for visual, TaskScaffold for
-    kinesthetic) via _inject_modal_supplement.
-    """
-    logger.info(f"[Render] _render_lesson START: input_blocks={len(blocks)}")
-
-    if not blocks:
-        logger.warning("[Render] No blocks to render - returning early")
-        return
-
-    request = state["request"]
-
-    # ── Separate interactive supplements and enrichment from content blocks ────
-    _SUPPLEMENT_TYPES = {"EXPERIMENT"}
-    supplements: list[dict] = []
-    content_blocks: list[dict] = []
-    enrichment_blocks: list[dict] = []
-
-    for b in blocks:
-        block_type = b.get("block_type", "")
-        if b.get("_enrichment"):
-            enrichment_blocks.append(b)
-        elif block_type in _SUPPLEMENT_TYPES:
-            supplements.append(b)
-        elif block_type == "GENUI_ASSEMBLY":
-            supplements.append(b)
-        else:
-            content_blocks.append(b)
-
-    logger.info(
-        f"[Render] Block classification: content={len(content_blocks)} "
-        f"supplements={len(supplements)} enrichment={len(enrichment_blocks)}"
-    )
-
-    # ── Gather synthesis text from content blocks ─────────────────────────────
-    # Fixed: Less aggressive placeholder detection - only strip if content is VERY short
-    # and contains placeholder phrases. This prevents stripping legitimate content.
-    _PLACEHOLDER_PHRASES = (
-        "adeline is preparing",
-        "check back shortly",
-        "check back again soon",
-        "please check back",
-        "no content provided",
-        "(no content provided",
-        "[genui hint",
-    )
-
-    def _is_placeholder(text: str) -> bool:
-        t = text.strip().lower()
-        # Only treat as placeholder if it's very short (< 100 chars) AND contains placeholder phrase
-        # This prevents stripping legitimate content that happens to mention these phrases
-        if len(t) < 100 and any(p in t for p in _PLACEHOLDER_PHRASES):
-            return True
-        # Also treat empty or whitespace-only as placeholder
-        return not t
-
-    synthesis_text = "\n\n".join(
-        b.get("content", "") for b in content_blocks
-        if not _is_placeholder(b.get("content", ""))
-    ).strip()
-
-    logger.info(f"[Render] Synthesis text length: {len(synthesis_text)} (before fallback)")
-    logger.info(f"[Render] Synthesis text preview: '{synthesis_text[:200]}...'")
-
-    if not synthesis_text:
-        logger.warning("[Render] Synthesis text empty - falling back to topic")
-        synthesis_text = request.topic
-
-    # ── Clean supplements — strip placeholder text from content & props.description
-    def _clean_supplement(b: dict) -> dict:
-        content = b.get("content", "")
-        if _is_placeholder(content):
-            logger.info(f"[Render] Cleaning placeholder in supplement content: '{content[:50]}...'")
-            b["content"] = request.topic
-        gdata = b.get("genui_assembly_data", {})
-        props = gdata.get("props", {})
-        for key in ("description", "title", "thesis"):
-            if key in props and _is_placeholder(str(props[key])):
-                logger.info(f"[Render] Cleaning placeholder in supplement prop {key}: '{str(props[key])[:50]}...'")
-                props[key] = request.topic
-        gdata["props"] = props
-        b["genui_assembly_data"] = gdata
-        return b
-
-    logger.info(f"[Render] Cleaning {len(supplements)} supplements for placeholders")
-    supplements = [_clean_supplement(b) for b in supplements]
-
-    all_evidence = []
-    for b in content_blocks:
-        all_evidence.extend(b.get("evidence", []))
-
-    # ── Learner context for cascade decisions ─────────────────────────────────
-    mastery = state.get("mastery_score", 0.5)
-    modality = state.get("preferred_modality", "visual")
-    interaction_count = state.get("interaction_count", 0)
-    struggle_count = state.get("recent_struggle_count", 0)
-    recently_used = state.get("recently_used_components", [])
-
-    if mastery < 0.35:
-        difficulty = "EMERGING"
-    elif mastery < 0.65:
-        difficulty = "DEVELOPING"
-    else:
-        difficulty = "MASTERING"
-
-    grade_level = getattr(request, "grade_level", "8") or "8"
-    try:
-        grade_int = int(grade_level) if grade_level.upper() != "K" else 0
-    except (ValueError, AttributeError):
-        grade_int = 8
-
-    # Target ages string for animated sketchnote prompt
-    if grade_int <= 2:
-        target_ages = "5-8"
-    elif grade_int <= 5:
-        target_ages = "8-11"
-    elif grade_int <= 8:
-        target_ages = "11-14"
-    else:
-        target_ages = "14-18"
-
-    # ── Precompute selector context (used in cascade level 3 and modal supplement) ──
-    _TRACK_TAGS = {
-        "TRUTH_HISTORY": ["history", "reading", "exploration"],
-        "CREATION_SCIENCE": ["science", "exploration", "hands-on"],
-        "APPLIED_MATHEMATICS": ["math", "concrete", "spatial"],
-        "ENGLISH_LITERATURE": ["reading", "text", "reference"],
-        "DISCIPLESHIP": ["application", "scenario", "problem-solving"],
-        "JUSTICE_CHANGEMAKING": ["application", "scenario", "problem-solving"],
-        "GOVERNMENT_ECONOMICS": ["reading", "scenario", "problem-solving"],
-        "HOMESTEADING": ["hands-on", "application", "concrete"],
-        "HEALTH_NATUROPATHY": ["science", "application", "hands-on"],
-        "CREATIVE_ECONOMY": ["hands-on", "application", "problem-solving"],
-    }
-    topic_tags = _TRACK_TAGS.get(request.track.value, ["reading", "exploration"])
-    profiler_components: list[str] = state.get("profiler_components", [])
-    recently_used_for_selector = list(set(recently_used + profiler_components[1:]))
-
-    # ── CASCADE LEVEL 1: Animated Sketchnote Lesson ───────────────────────────
-    cohesive_block: dict | None = None
-
-    logger.info(f"[Render] CASCADE-1: Attempting AnimatedSketchnote for '{request.topic}'")
-    try:
-        from app.api.animated_lessons import generate_animated_lesson
-        from app.schemas.api_models import AnimatedLessonRequest as _ALR
-        _alr = _ALR(
-            topic=request.topic,
-            focus=synthesis_text[:2500],
-            duration_seconds=300,
-            target_ages=target_ages,
-            track=request.track.value,
-            student_id=request.student_id,
-        )
-        logger.info("[Render] CASCADE-1: Calling generate_animated_lesson")
-        sketchnote_data = await generate_animated_lesson(_alr)
-        logger.info(f"[Render] CASCADE-1: AnimatedSketchnote SUCCESS - frames={len(sketchnote_data.frames)}")
-        cohesive_block = {
-            "block_type": BlockType.ANIMATED_SKETCHNOTE_LESSON.value,
-            "content": request.topic,
-            "evidence": all_evidence,
-            "is_silenced": False,
-            "homestead_content": None,
-            "animated_sketchnote_data": sketchnote_data.model_dump(),
-        }
-        logger.info(f"[Render] CASCADE-1 AnimatedSketchnote OK for '{request.topic}'")
-    except Exception as _e:
-        import traceback as _tb
-        logger.warning(
-            f"[Render] CASCADE-1 AnimatedSketchnote failed for '{request.topic}': {_e}\n"
-            f"{_tb.format_exc()}"
-        )
-
-    # ── CASCADE LEVEL 2: Narrated Slides ──────────────────────────────────────
-    if cohesive_block is None:
-        logger.info(f"[Render] CASCADE-2: Attempting NarratedSlide for '{request.topic}'")
-        try:
-            from app.agents.adapter import generate_narrated_slide_data
-            from app.agents.adapter import AdaptationRequest as _AR
-            _ar = _AR(
-                grade_level=grade_level,
-                track=request.track.value,
-                bkt_pL=mastery,
-            )
-            logger.info("[Render] CASCADE-2: Calling generate_narrated_slide_data")
-            slide_data = await generate_narrated_slide_data(synthesis_text, _ar)
-            if slide_data:
-                logger.info(f"[Render] CASCADE-2: NarratedSlide SUCCESS - slides={len(slide_data.slides)}")
-                cohesive_block = {
-                    "block_type": BlockType.NARRATED_SLIDE.value,
-                    "content": request.topic,
-                    "evidence": all_evidence,
-                    "is_silenced": False,
-                    "homestead_content": None,
-                    "narrated_slide_data": slide_data,
-                }
-                logger.info(f"[Render] CASCADE-2 NarratedSlide OK for '{request.topic}'")
-            else:
-                logger.warning("[Render] CASCADE-2: NarratedSlide returned None")
-        except Exception as _e:
-            import traceback as _tb
-            logger.warning(
-                f"[Render] CASCADE-2 NarratedSlide failed for '{request.topic}': {_e}\n"
-                f"{_tb.format_exc()}"
-            )
-
-    # ── CASCADE LEVEL 3: Component Selector adaptive fallback ─────────────────
-    if cohesive_block is None:
-        logger.info(f"[Render] CASCADE-3: Attempting Component Selector for '{request.topic}'")
-        try:
-            from app.algorithms.component_selector import select_components, LearnerContext
-            _ctx = LearnerContext(
-                mastery_score=mastery,
-                difficulty=difficulty,
-                preferred_modalities=[modality, "reading"] if modality != "reading" else ["reading", "visual"],
-                recent_struggle_count=struggle_count,
-                time_available_minutes=15,
-                needs_assessment=(interaction_count >= 3 and mastery < 0.6),
-                topic_tags=topic_tags,
-                recently_used_components=recently_used_for_selector,
-            )
-            logger.info(f"[Render] CASCADE-3: Calling select_components with mastery={mastery:.2f} modality={modality}")
-            _recs = select_components(_ctx, max_results=1)
-            _component_id = _recs[0].component_id if _recs else "AdaptiveQuiz"
-            logger.info(f"[Render] CASCADE-3: Selected component={_component_id}")
-        except Exception as _e:
-            logger.warning(f"[Render] CASCADE-3 selector failed ({_e}) — using AdaptiveQuiz")
-            _component_id = "AdaptiveQuiz"
-
-        _component_props = _build_component_props(
-            component_id=_component_id,
-            topic=request.topic,
-            content=synthesis_text[:1500],
-            track=request.track.value,
-            key_phrase=synthesis_text[:80].split(".")[0] if synthesis_text else request.topic,
-        )
-        logger.info(f"[Render] CASCADE-3: Built props for {_component_id}: {list(_component_props.keys())}")
-        cohesive_block = {
-            "block_type": BlockType.GENUI_ASSEMBLY.value,
-            "content": synthesis_text,
-            "evidence": all_evidence,
-            "is_silenced": False,
-            "homestead_content": None,
-            "genui_assembly_data": {
-                "component_type": _component_id,
-                "props": _component_props,
-                "initial_state": {},
-                "callbacks": ["onComplete", "onStateChange"],
-                "re_render_triggers": ["onComplete"],
-            },
-        }
-        logger.info(f"[Render] CASCADE-3 selector fallback: {_component_id} for '{request.topic}'")
-
-    # ── ULTIMATE FALLBACK: If cascade still failed, generate simple NARRATIVE ─────
-    if cohesive_block is None:
-        logger.error(f"[Render] ALL CASCADE LEVELS FAILED for '{request.topic}' - using ultimate fallback NARRATIVE")
-        # Generate a simple narrative about the topic using the synthesis client
-        try:
-            fallback_content = await _state_synthesize(
-                state,
-                block_type=BlockType.NARRATIVE.value,
-                source_chunks=[],
-                raw_content=f"Teach about {request.topic} in an engaging way suitable for grade {grade_level}.",
-            )
-            cohesive_block = {
-                "block_type": BlockType.NARRATIVE.value,
-                "content": fallback_content,
-                "evidence": all_evidence,
-                "is_silenced": False,
-                "homestead_content": None,
-            }
-            logger.info(f"[Render] Ultimate fallback NARRATIVE generated (len={len(fallback_content)})")
-        except Exception as _e:
-            logger.error(f"[Render] Ultimate fallback also failed: {_e}")
-            # Last resort: use the topic as content
-            cohesive_block = {
-                "block_type": BlockType.NARRATIVE.value,
-                "content": f"**{request.topic}**\n\nThis lesson is about {request.topic}. Adeline is preparing additional content for this topic.",
-                "evidence": [],
-                "is_silenced": False,
-                "homestead_content": None,
-            }
-            logger.warning(f"[Render] Using last-resort placeholder for '{request.topic}'")
-
-    # ── Assemble final block list ──────────────────────────────────────────────
-    # Preserve all original agent-produced blocks and append the cohesive format
-    # as a capstone experience. Previously this called blocks.clear() and threw
-    # away all rich content — the single-sketchnote bug.
-    logger.info(f"[Render] Assembling final blocks: content={len(content_blocks)} enrichment={len(enrichment_blocks)} supplements={len(supplements)}")
-    blocks.clear()
-    blocks.extend(content_blocks)
-    blocks.extend(enrichment_blocks)
-    blocks.append(cohesive_block)
-    blocks.extend(supplements)
-    logger.info(f"[Render] Final block count after assembly: {len(blocks)}")
-
-    # ── Modal supplement (component selector — ONE additional component) ───────
-    from app.algorithms.component_selector import select_components, LearnerContext
-    learner_ctx = LearnerContext(
-        mastery_score=mastery,
-        difficulty=difficulty,
-        preferred_modalities=[modality, "reading"] if modality != "reading" else ["reading", "visual"],
-        recent_struggle_count=struggle_count,
-        time_available_minutes=15,
-        needs_assessment=(interaction_count >= 3 and mastery < 0.6),
-        topic_tags=topic_tags,
-        recently_used_components=recently_used_for_selector,
-    )
-    recommendations = select_components(learner_ctx, max_results=1)
-
-    key_phrase = synthesis_text[:80].split(".")[0] if synthesis_text else request.topic
-    for rec in recommendations:
-        component_props = _build_component_props(
-            component_id=rec.component_id,
-            topic=request.topic,
-            content=synthesis_text[:1500],
-            track=request.track.value,
-            key_phrase=key_phrase,
-        )
-        blocks.append({
-            "block_type": BlockType.GENUI_ASSEMBLY.value,
-            "content": f"{rec.component_id}: {request.topic}",
-            "evidence": [],
-            "is_silenced": False,
-            "homestead_content": None,
-            "genui_assembly_data": {
-                "component_type": rec.component_id,
-                "props": component_props,
-                "initial_state": {},
-                "callbacks": ["onComplete", "onStateChange"],
-                "re_render_triggers": ["onComplete"],
-            },
-        })
-
-    logger.info(
-        f"[Render] Final blocks: {[b.get('block_type') for b in blocks]} "
-        f"(mastery={mastery:.2f}, modality={modality}) for '{request.topic}'"
-    )
-
-    await _inject_modal_supplement(state, blocks, synthesis_text[:500])
-
-
-def _build_component_props(
-    component_id: str,
-    topic: str,
-    content: str,
-    track: str,
-    key_phrase: str,
-) -> dict:
-    """
-    Build props for a GenUI component based on its type.
-    Each component has a specific prop schema — this maps content into it.
-    """
-    if component_id == "TextExplanation":
-        return {
-            "title": topic,
-            "content": content[:2000],
-            "keyTerms": [],
-            "track": track,
-        }
-    elif component_id == "VideoExplanation":
-        return {
-            "title": topic,
-            "description": f"Visual explanation of {topic}",
-            "sourceType": "generated",
-            "content": content[:500],
-            "track": track,
-        }
-    elif component_id == "AdaptiveQuiz":
-        return {
-            "topic": topic,
-            "questions": [],
-            "initialDifficulty": "medium",
-            "track": track,
-        }
-    elif component_id == "AutoDiagram":
-        # Build minimal valid nodes/edges so component doesn't crash
-        return {
-            "title": f"Concept Map: {topic}",
-            "description": content[:300] if content else f"Explore {topic}",
-            "diagramType": "concept-map",
-            "track": track,
-            "nodes": [
-                {"id": "1", "label": topic[:20], "type": "concept", "x": 50, "y": 50},
-                {"id": "2", "label": "Explore", "type": "process", "x": 150, "y": 100},
-                {"id": "3", "label": "Learn", "type": "concept", "x": 250, "y": 50},
-            ],
-            "edges": [
-                {"from": "1", "to": "2", "type": "leads-to"},
-                {"from": "2", "to": "3", "type": "leads-to"},
-            ],
-        }
-    elif component_id == "RealWorldApplication":
-        return {
-            "title": f"Apply It: {topic}",
-            "scenario": f"How does {topic} connect to your world?",
-            "content": content[:800],
-            "track": track,
-        }
-    elif component_id == "StealthAssessment":
-        return {
-            "topic": topic,
-            "content": content[:800],
-            "assessmentType": "comprehension",
-            "track": track,
-        }
-    elif component_id == "VirtualManipulative":
-        return {
-            "title": f"Hands-on: {topic}",
-            "type": "exploration",
-            "track": track,
-        }
-    elif component_id == "MultiCompetencyWorkspace":
-        return {
-            "title": f"Deep Work: {topic}",
-            "competencies": [topic],
-            "content": content[:800],
-            "track": track,
-        }
-    elif component_id == "CorrectiveOverlay":
-        # CorrectiveOverlay requires live student-answer context — it cannot be
-        # pre-generated for initial lesson delivery.  Fall back to GlowGrow,
-        # which renders a self-check question that works without prior interaction.
-        short = content[:80].split(".")[0] if content else topic
-        return {
-            "title": f"Check Your Understanding: {topic}",
-            "topic": topic,
-            "track": track,
-            "questions": [
-                {
-                    "question": f"What is the most important idea in what you just learned about {topic}?",
-                    "options": [
-                        {"text": f"It reveals a key principle within {topic}", "is_correct": True},
-                        {"text": f"It is unrelated to {topic}", "is_correct": False},
-                        {"text": "It has been disproved by research", "is_correct": False},
-                    ],
-                    "explanation": f"Understanding {short} is foundational to {topic}.",
-                    "glow": "You're engaging with real content — keep going.",
-                    "grow": f"Find one primary source that addresses {topic} directly.",
-                },
-            ],
-        }
-    elif component_id == "LearningVelocityCard":
-        return {
-            "topic": topic,
-            "track": track,
-        }
-    elif component_id == "ProgressMap":
-        return {
-            "topic": topic,
-            "track": track,
-        }
-    elif component_id == "GlowGrow":
-        return {
-            "title": f"Check Your Understanding: {topic}",
-            "topic": topic,
-            "track": track,
-            "questions": [
-                {
-                    "question": f"What is the most important idea about {key_phrase}?",
-                    "options": [
-                        {"text": f"It reveals a key principle within {topic}", "is_correct": True},
-                        {"text": f"It is unrelated to {topic}", "is_correct": False},
-                        {"text": "It has been disproved by modern research", "is_correct": False},
-                    ],
-                    "explanation": f"Understanding {key_phrase} is foundational to {topic}.",
-                    "glow": "You're engaging with real content — keep going.",
-                    "grow": f"Find one primary source that addresses {key_phrase} directly.",
-                },
-                {
-                    "question": f"How does {topic} connect to a biblical worldview?",
-                    "options": [
-                        {"text": "It reflects God's ordered creation", "is_correct": True},
-                        {"text": "It contradicts Scripture", "is_correct": False},
-                        {"text": "It has no spiritual significance", "is_correct": False},
-                    ],
-                    "explanation": f"All knowledge, including {topic}, finds its foundation in God's truth.",
-                    "glow": "Strong thinking about faith and learning.",
-                    "grow": "Dig into a Scripture passage that speaks to this area.",
-                },
-            ],
-        }
-    elif component_id == "TaskScaffold":
-        return {
-            "title": f"Action Plan: {topic}",
-            "context": content[:300],
-            "tasks": [
-                {"id": "t1", "text": f"Review the core ideas from today's lesson on {key_phrase}", "priority": "now", "estimated_minutes": 5},
-                {"id": "t2", "text": f"Find one primary source or real-world example of {topic}", "priority": "today", "estimated_minutes": 10},
-                {"id": "t3", "text": f"Apply what you learned: how does {topic} show up in your life or community?", "priority": "this_week", "estimated_minutes": 15},
-            ],
-        }
-    elif component_id == "HardThingChallenge":
-        return {
-            "principle": f"The principle of {key_phrase}",
-            "challenge": f"Take one concrete action this week that demonstrates your understanding of {topic}. "
-                         f"Document it with a photo, journal entry, or short video.",
-            "commitmentPrompt": f"What specific thing will you do to live out what you learned about {topic}?",
-            "track": track,
-        }
-    elif component_id == "ScaffoldedProblem":
-        return {
-            "question": f"How does {key_phrase} relate to the broader topic of {topic}?",
-            "steps": [
-                {"instruction": f"Read or re-read the material on {topic}", "hint": "Focus on the central argument or evidence"},
-                {"instruction": "Identify the two most important facts or ideas", "hint": "Look for what the author emphasizes most"},
-                {"instruction": f"Explain how {key_phrase} fits into the bigger picture of {topic}", "hint": "Use your own words — no copy-paste"},
-            ],
-            "difficulty": "medium",
-            "track": track,
-        }
-    elif component_id == "PeerTutoringCard":
-        return {
-            "conceptTitle": topic,
-            "conceptTrack": track,
-            "difficulty": "DEVELOPING",
-        }
-    elif component_id == "DiscussionForum":
-        return {
-            "prompt": f"How does {topic} shape the way you think or act? "
-                      f"Share one specific way {key_phrase} connects to your life, faith, or community.",
-            "conceptTitle": key_phrase or topic,
-            "track": track,
-        }
-    elif component_id == "MoleculeSimulator":
-        return {
-            "title": f"Explore: {topic}",
-            "description": content[:400] or f"Observe and interact with {topic} at a molecular level.",
-            "substance": key_phrase or topic,
-            "track": track,
-        }
-    elif component_id == "LabGuide":
-        return {
-            "experiment": {
-                "id": str(uuid.uuid4())[:8],
-                "title": topic,
-                "tagline": f"Explore {key_phrase} hands-on",
-                "chaos_level": 1,
-                "wow_factor": 3,
-                "scientific_concepts": [key_phrase or topic],
-                "science_credits": [],
-                "grade_band": "K-8",
-                "materials": ["Paper", "Pencil", "Observation journal"],
-                "safety_requirements": [],
-                "steps": [
-                    {"step_number": 1, "instruction": f"Read the lesson on {topic} and note the key ideas.", "tip": "Write down anything that surprises you."},
-                    {"step_number": 2, "instruction": "Observe something in your environment that relates to this concept.", "tip": None},
-                    {"step_number": 3, "instruction": "Sketch or describe what you observed and explain the connection.", "tip": "Include a labeled diagram if helpful."},
-                ],
-                "creation_connection": {
-                    "title": f"God's Design in {topic}",
-                    "scripture": "Psalm 19:1",
-                    "explanation": f"The complexity of {key_phrase} reveals God's creative order.",
-                },
-                "social_media_kit": {
-                    "caption_template": f"Just explored {topic}! Here's what I discovered 🔭 #HomeschoolScience",
-                    "filming_tips": ["Show your materials and workspace", "Narrate each step as you go"],
-                    "hashtags": ["#HomeschoolScience", "#CreationScience", "#SovereignLab"],
-                },
-                "estimated_minutes": 20,
-            }
-        }
-    elif component_id in ("Simulation", "SimulationEmbed"):
-        return {
-            "title": f"Explore: {topic}",
-            "description": f"Interactive exploration of {topic}",
-            "sourceType": "generated",
-            "content": content[:500],
-            "track": track,
-        }
-    elif component_id == "TextDeep":
-        return {
-            "title": topic,
-            "content": content[:3000],
-            "keyTerms": [key_phrase] if key_phrase else [],
-            "track": track,
-        }
-    elif component_id == "ConceptMap":
-        return {
-            "title": f"Concept Map: {topic}",
-            "sourceContent": content[:1000],
-            "diagramType": "concept-map",
-            "track": track,
-        }
-    else:
-        return {
-            "topic": topic,
-            "content": content[:1000],
-            "track": track,
-        }
-
-
-# ── Multimodal synthesis functions ────────────────────────────────────────────
-
 async def _synthesize_mind_map(
     topic: str,
     content: str,
@@ -3328,7 +2447,7 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
             })
 
     # ── Render to cohesive format ──────────────────────────────────────────────
-    await _render_lesson(state, blocks)
+    blocks = finalize_family_lesson(blocks, request.topic)
 
     state["blocks"] = blocks
     return state
@@ -3422,13 +2541,11 @@ async def registrar_agent(state: AdelineState) -> AdelineState:
     mindmap_count    = sum(1 for b in blocks if b.get("block_type") == BlockType.MIND_MAP.value)
     timeline_count   = sum(1 for b in blocks if b.get("block_type") == BlockType.TIMELINE.value)
     mnemonic_count   = sum(1 for b in blocks if b.get("block_type") == BlockType.MNEMONIC.value)
-    slide_count      = sum(1 for b in blocks if b.get("block_type") == BlockType.NARRATED_SLIDE.value)
     credit_hours     = round(min(1.0,
         0.1  * (verified_count + lab_count) +
         0.25 * experiment_count +
         0.05 * (mindmap_count + timeline_count) +
-        0.03 * mnemonic_count +
-        0.08 * slide_count
+        0.03 * mnemonic_count
     ), 2)
 
     credits_awarded: list[dict] = [{
@@ -3444,7 +2561,6 @@ async def registrar_agent(state: AdelineState) -> AdelineState:
             + (f", {lab_count} lab mission(s)" if lab_count else "")
             + (f", {experiment_count} experiment(s)" if experiment_count else "")
             + (f", {mindmap_count + timeline_count} visual map(s)" if mindmap_count + timeline_count else "")
-            + (f", {slide_count} slide deck(s)" if slide_count else "")
         ),
         "credit_hours":        credit_hours,
         "credit_type":         _track_to_credit_type(request.track),
@@ -3476,7 +2592,6 @@ def _block_type_to_xapi_verb(block_type: str) -> str:
         BlockType.MIND_MAP.value:       "composed",
         BlockType.TIMELINE.value:       "experienced",
         BlockType.MNEMONIC.value:       "memorized",
-        BlockType.NARRATED_SLIDE.value: "experienced",
     }.get(block_type, "experienced")
 
 
