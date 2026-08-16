@@ -63,6 +63,7 @@ from app.api.standards import router as standards_router
 from app.api.games import router as games_router
 from app.api.agent_team import router as agent_team_router
 from app.connections.journal_store import journal_store
+from app.connections.canonical_store import canonical_store
 from app.connections.conversation_store import conversation_store
 from app.connections.postgres import init_postgres
 from app.jobs.seed_scheduler import startup_seed_scheduler, shutdown_seed_scheduler
@@ -139,6 +140,16 @@ async def _auto_seed_neo4j():
         logger.warning(f"[AutoSeed] Neo4j auto-seed failed (non-fatal): {e}")
 
 
+async def _purge_legacy_lesson_cache():
+    """One scoped, idempotent cleanup after Postgres and Redis have connected."""
+    await asyncio.sleep(8)
+    try:
+        result = await canonical_store.purge_legacy_canonicals()
+        logger.info(f"[adeline-brain] Legacy canonical cleanup: {result}")
+    except Exception as e:
+        logger.warning(f"[adeline-brain] Legacy canonical cleanup failed (non-fatal): {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("[adeline-brain] Starting up...")
@@ -161,6 +172,7 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(_connect_services())
     await startup_seed_scheduler()
     asyncio.create_task(_auto_seed_neo4j())
+    asyncio.create_task(_purge_legacy_lesson_cache())
     yield
     logger.info("[adeline-brain] Shutting down...")
     await shutdown_seed_scheduler()

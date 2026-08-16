@@ -28,6 +28,24 @@ def canonical_slug(topic: str, track: str) -> str:
 
 
 class CanonicalStore:
+    @staticmethod
+    def _is_current_family_lesson(blocks: object) -> bool:
+        """True only for the single supported canonical lesson contract."""
+        if isinstance(blocks, str):
+            try:
+                blocks = json.loads(blocks)
+            except json.JSONDecodeError:
+                return False
+        return (
+            isinstance(blocks, list)
+            and len(blocks) == 1
+            and isinstance(blocks[0], dict)
+            and blocks[0].get("block_type") == "ANIMATED_SKETCHNOTE_LESSON"
+            and bool(blocks[0].get("animated_sketchnote_data"))
+            and blocks[0].get("family_style") is True
+            and blocks[0].get("canonical_format") == "family_living_sketchnote_v2"
+        )
+
     async def _redis_get(self, slug: str) -> Optional[str]:
         try:
             return await redis_client.get(f"{REDIS_PREFIX}{slug}")
@@ -184,6 +202,57 @@ class CanonicalStore:
         else:
             logger.info(f"[CanonicalStore] Archive no-op (slug not found in DB) — slug={slug}, Redis evicted anyway")
         return archived
+
+    async def purge_legacy_canonicals(self) -> dict[str, int]:
+        """
+        Archive every approved pre-v2 canonical and clear the entire canonical
+        Redis namespace. Student work, transcripts, portfolios, auth sessions,
+        and all non-canonical cache keys are untouched.
+
+        This operation is intentionally idempotent and safe to run at startup.
+        """
+        from app.config import get_db_conn
+
+        conn = await get_db_conn()
+        try:
+            rows = await conn.fetch(
+                'SELECT "topicSlug", "blocksJson" FROM "CanonicalLesson" '
+                'WHERE ("pendingApproval" IS FALSE OR "pendingApproval" IS NULL)'
+            )
+            legacy_slugs = [
+                row["topicSlug"]
+                for row in rows
+                if not self._is_current_family_lesson(row["blocksJson"])
+            ]
+            if legacy_slugs:
+                await conn.execute(
+                    'UPDATE "CanonicalLesson" '
+                    'SET "pendingApproval" = TRUE, '
+                    '"needsReviewReason" = $2, "updatedAt" = NOW() '
+                    'WHERE "topicSlug" = ANY($1::text[])',
+                    legacy_slugs,
+                    "legacy_fragmented_lesson_format",
+                )
+        finally:
+            await conn.close()
+
+        cache_keys = []
+        try:
+            async for key in redis_client.scan_iter(match=f"{REDIS_PREFIX}*"):
+                cache_keys.append(key)
+            for key in cache_keys:
+                await redis_client.delete(key)
+        except Exception as e:
+            logger.warning(f"[CanonicalStore] Canonical namespace cleanup failed (non-fatal): {e}")
+
+        logger.info(
+            f"[CanonicalStore] Legacy cleanup complete — "
+            f"archived={len(legacy_slugs)} cache_keys_deleted={len(cache_keys)}"
+        )
+        return {
+            "archived": len(legacy_slugs),
+            "cache_keys_deleted": len(cache_keys),
+        }
 
     async def approve(self, slug: str, approved_by: str = "") -> bool:
         """Mark a pending canonical as approved: clear flag in DB, then publish to Redis."""

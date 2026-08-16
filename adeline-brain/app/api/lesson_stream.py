@@ -475,13 +475,7 @@ async def _stream_lesson(
             # Canonical format v2 is one cohesive Living Sketchnote. Archive
             # fragmented legacy canonicals instead of continuing to serve old
             # PRIMARY_SOURCE / GENUI_ASSEMBLY / NARRATIVE stacks forever.
-            is_current_canonical = (
-                len(blocks_data) == 1
-                and blocks_data[0].get("block_type") == "ANIMATED_SKETCHNOTE_LESSON"
-                and bool(blocks_data[0].get("animated_sketchnote_data"))
-                and blocks_data[0].get("family_style") is True
-                and blocks_data[0].get("canonical_format") == "family_living_sketchnote_v2"
-            )
+            is_current_canonical = canonical_store._is_current_family_lesson(blocks_data)
             if not is_current_canonical:
                 await canonical_store.archive(slug, reason="legacy_fragmented_lesson_format")
                 raise ValueError("Archived legacy fragmented canonical; regenerating with Living Sketchnote pipeline")

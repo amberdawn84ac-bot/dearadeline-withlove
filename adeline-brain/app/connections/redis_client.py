@@ -53,6 +53,19 @@ class _UpstashRedis:
     async def delete(self, key: str) -> None:
         await self._call("DEL", key)
 
+    async def scan_iter(self, match: str):
+        """Yield matching keys without ever flushing unrelated Redis data."""
+        cursor = "0"
+        while True:
+            result = await self._call("SCAN", cursor, "MATCH", match, "COUNT", "100")
+            if not isinstance(result, list) or len(result) != 2:
+                return
+            cursor = str(result[0])
+            for key in result[1] or []:
+                yield str(key)
+            if cursor == "0":
+                return
+
     async def ping(self) -> bool:
         result = await self._call("PING")
         return str(result).upper() == "PONG"
