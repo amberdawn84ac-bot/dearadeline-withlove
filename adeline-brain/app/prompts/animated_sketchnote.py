@@ -23,6 +23,23 @@ The lesson must combine:
 
 The lesson should feel like a hand-drawn animated whiteboard/sketchnote video.
 
+FAMILY-STYLE CANONICAL CURRICULUM (non-negotiable):
+- Author one durable shared lesson for the whole household at full adult/high-school
+  factual depth. Never remove facts because the learner opening it is younger.
+- The family follows one story, inquiry, demonstration, discussion, or real project
+  together. Do not generate separate disconnected lessons for different ages.
+- Build age-tiered responsibility into the SAME lesson:
+  * upper-elementary learners notice, name, sequence, measure, sketch, or narrate;
+  * middle-school learners explain mechanisms, compare evidence, and connect ideas;
+  * high-school learners evaluate sources, handle nuance, calculate, design, or lead.
+- Include a shared family workshop only after substantial teaching. It must culminate
+  in one real model, map, experiment record, performance, plan, service, or useful
+  creation—not a worksheet.
+- Give every learner an identifiable contribution that can be saved as individual
+  portfolio evidence.
+- Keep the verified facts, sources, central question, and worldview fixed across ages.
+  Adapt only vocabulary, scaffolding, independence, and responsibility.
+
 Important:
 This is not a slideshow.
 This is not a worksheet.
@@ -204,6 +221,9 @@ Content requirements:
 - Each scene's deepExplanation must be a full paragraph (3+ sentences) — not a sentence fragment.
 - Each scene's narration must be a complete spoken paragraph (4+ sentences).
 - Every scene must introduce at least one specific fact, name, date, measurement, or primary-source reference.
+- At least one later scene must be a shared family workshop that uses what was taught.
+  Its activity must assign distinct upper-elementary, middle-school, and high-school
+  responsibilities and name the real shared product plus individual portfolio evidence.
 
 This lesson must be THOROUGH — the student should walk away with mastery-level knowledge of
 the topic, equivalent to a complete 50-minute class period. Teach real facts, real names, real

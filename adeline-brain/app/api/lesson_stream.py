@@ -472,11 +472,20 @@ async def _stream_lesson(
             if isinstance(blocks_data, str):
                 blocks_data = json.loads(blocks_data)
 
-            # Older canonicals are upgraded in memory so families receive the
-            # one-room-schoolhouse spine immediately, without waiting for a reseed.
-            from app.curriculum.family_style import ensure_family_workshop
-            blocks_data = ensure_family_workshop(blocks_data, request.topic)
-            
+            # Canonical format v2 is one cohesive Living Sketchnote. Archive
+            # fragmented legacy canonicals instead of continuing to serve old
+            # PRIMARY_SOURCE / GENUI_ASSEMBLY / NARRATIVE stacks forever.
+            is_current_canonical = (
+                len(blocks_data) == 1
+                and blocks_data[0].get("block_type") == "ANIMATED_SKETCHNOTE_LESSON"
+                and bool(blocks_data[0].get("animated_sketchnote_data"))
+                and blocks_data[0].get("family_style") is True
+                and blocks_data[0].get("canonical_format") == "family_living_sketchnote_v2"
+            )
+            if not is_current_canonical:
+                await canonical_store.archive(slug, reason="legacy_fragmented_lesson_format")
+                raise ValueError("Archived legacy fragmented canonical; regenerating with Living Sketchnote pipeline")
+
             yield _sse({"type": "status", "message": "Personalizing lesson for you..."})
             canonical_dummy = {"topic": request.topic, "blocks": blocks_data}
             blocks_data = await adapt_canonical_for_student(canonical_dummy, adaptation_req)
@@ -1198,17 +1207,12 @@ async def _save_canonical_background(
             logger.warning("[LessonStream] Cannot save canonical: missing slug")
             return
 
-        from app.curriculum.family_style import ensure_family_workshop
-
         record = {
             "id": str(uuid.uuid4()),
             "topic": state_for_canonical.get("topic", ""),
             "track": state_for_canonical.get("track", ""),
             "title": state_for_canonical.get("title", ""),
-            "blocks": ensure_family_workshop(
-                state_for_canonical.get("blocks", []),
-                state_for_canonical.get("topic", ""),
-            ),
+            "blocks": state_for_canonical.get("blocks", []),
             "oas_standards": state_for_canonical.get("oas_standards", []),
             "researcher_activated": state_for_canonical.get("researcher_activated", False),
             "agent_name": state_for_canonical.get("agent_name", ""),

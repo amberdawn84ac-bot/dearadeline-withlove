@@ -41,19 +41,12 @@ export type Track =
   | "APPLIED_MATHEMATICS"
   | "CREATIVE_ECONOMY";
 
-export type LessonRenderMode =
-  | "standard_lesson"
-  | "visual_deep_dive"
-  | "sketchnote_infographic"
-  | "animated_sketchnote_lesson";
-
 export interface LessonRequest {
   student_id: string;
   track: Track;
   topic: string;
   is_homestead: boolean;
   grade_level: string;
-  render_mode?: LessonRenderMode;
   force_regenerate?: boolean;
 }
 
@@ -76,15 +69,6 @@ export function lessonRequestFromSuggestion(
     grade_level: gradeLevel,
     is_homestead: suggestion.track === "HOMESTEADING",
   };
-}
-
-export interface AnimatedLessonRequest {
-  topic: string;
-  focus?: string;
-  duration_seconds?: number;
-  target_ages?: string;
-  track?: Track;
-  student_id?: string;
 }
 
 // ── Animated Sketchnote Lesson types (mirrors adeline-core) ───────────────────
@@ -310,94 +294,6 @@ export interface LessonResponse {
 
 // ── Client Functions ───────────────────────────────────────────────────────────
 
-export interface LessonJobResponse {
-  job_id: string;
-  status: "queued" | "done";
-  result?: LessonResponse;
-}
-
-export interface LessonStatusResponse {
-  status: "queued" | "running" | "done" | "failed" | "not_found";
-  result?: LessonResponse;
-  error?: string;
-}
-
-export async function generateLesson(request: LessonRequest): Promise<LessonJobResponse> {
-  const res = await fetch(`${BRAIN_URL}/lesson/stream`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
-    body: JSON.stringify(request),
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    throw new Error(`adeline-brain error: ${res.status} ${res.statusText}`);
-  }
-
-  // Parse SSE stream to build a LessonResponse
-  const reader = res.body?.getReader();
-  const decoder = new TextDecoder();
-  
-  const blocks: LessonBlockResponse[] = [];
-  let title = request.topic;
-  let oas_standards: any[] = [];
-  let agent_name = "";
-  
-  if (reader) {
-    let buffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          try {
-            const data = JSON.parse(line.substring(6));
-            if (data.type === "block") {
-              blocks.push(data.block as LessonBlockResponse);
-            } else if (data.type === "done") {
-              if (data.title) title = data.title;
-              if (data.oas_standards) oas_standards = data.oas_standards;
-              if (data.agent_name) agent_name = data.agent_name;
-            }
-          } catch (e) {
-            // ignore parse errors for partial chunks
-          }
-        }
-      }
-    }
-  }
-
-  const lesson: LessonResponse = {
-    lesson_id: `lesson-${Date.now()}`,
-    title,
-    track: request.track,
-    blocks,
-    has_research_missions: false,
-    researcher_activated: false,
-    oas_standards,
-    agent_name,
-    xapi_statements: [],
-    credits_awarded: [],
-  };
-
-  // Cache it for the subsequent pollLessonResult call
-  if (typeof window !== "undefined") {
-    (window as any).__lessonJobCache = (window as any).__lessonJobCache || new Map();
-    (window as any).__lessonJobCache.set("job-streaming", lesson);
-  }
-
-  return {
-    job_id: "job-streaming",
-    status: "done",
-    result: lesson
-  };
-}
-
 // ── Progressive Lesson Streaming ──────────────────────────────────────────────
 
 export type LessonStreamEvent =
@@ -494,6 +390,10 @@ export async function* streamLesson(
             lesson_id: payload.lesson_id ?? "",
             title: payload.title ?? "",
             oas_standards: payload.oas_standards,
+            agent_name: payload.agent_name,
+            researcher_activated: payload.researcher_activated,
+            xapi_statements: payload.xapi_statements,
+            credits_awarded: payload.credits_awarded,
           };
         } else if (payload.type === "error") {
           yield { type: "error", message: payload.message ?? "Unknown error" };
@@ -503,57 +403,6 @@ export async function* streamLesson(
       }
     }
   }
-}
-
-export async function pollLessonResult(
-  jobId: string,
-  options: {
-    intervalMs?: number;
-    timeoutMs?: number;
-    onProgress?: (status: string) => void;
-  } = {}
-): Promise<LessonResponse> {
-  const { intervalMs = 2000, timeoutMs = 90000, onProgress } = options;
-  const deadline = Date.now() + timeoutMs;
-
-  if (typeof window !== "undefined") {
-    const lesson = (window as any).__lessonJobCache?.get(jobId);
-    if (lesson) {
-      onProgress?.("done");
-      return lesson;
-    }
-  }
-
-  while (Date.now() < deadline) {
-    // Fallback if cache missed (requires backend to actually have /lesson/status which it might not)
-    try {
-      const res = await fetch(`${BRAIN_URL}/lesson/status/${encodeURIComponent(jobId)}`, {
-        headers: await getBrainHeaders(),
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error(`lesson status error: ${res.status}`);
-      const statusRes = await res.json() as LessonStatusResponse;
-      onProgress?.(statusRes.status);
-
-      if (statusRes.status === "done" && statusRes.result) {
-        return statusRes.result;
-      }
-
-      if (statusRes.status === "failed") {
-        throw new Error(statusRes.error ?? "Lesson generation failed");
-      }
-
-      if (statusRes.status === "not_found") {
-        throw new Error("Lesson job not found — it may have expired");
-      }
-    } catch (e) {
-      // ignore
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-
-  throw new Error("Lesson generation timed out after 90 seconds");
 }
 
 export async function listTracks(): Promise<{ tracks: { id: Track; label: string }[] }> {
@@ -1457,20 +1306,6 @@ export async function* streamConversation(params: {
       }
     }
   }
-}
-
-// ── Animated Sketchnote Lessons ───────────────────────────────────────────────
-
-export async function generateAnimatedLesson(
-  req: AnimatedLessonRequest
-): Promise<unknown> {
-  const res = await fetch("/api/adeline/animated-lesson", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) throw new Error(`Animated lesson generation failed: ${res.status}`);
-  return res.json();
 }
 
 // ── Learning Path ─────────────────────────────────────────────────────────────

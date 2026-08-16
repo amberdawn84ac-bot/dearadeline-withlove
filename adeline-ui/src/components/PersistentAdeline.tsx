@@ -49,7 +49,6 @@ export function PersistentAdeline() {
             studentId={student.id}
             gradeLevel={student.gradeLevel ?? "8"}
             hideHeader
-            hideRenderModeSelector
           />
         </div>
       </div>

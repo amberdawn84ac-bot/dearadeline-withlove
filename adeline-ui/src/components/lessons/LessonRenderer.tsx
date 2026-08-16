@@ -17,6 +17,7 @@ import { BotanicalDivider } from "@/components/icons";
 import { sealJournal } from "@/lib/brain-client";
 import type { LessonResponse, LessonBlockResponse } from "@/lib/brain-client";
 import { downloadCitation } from "@/lib/citation-export";
+import AnimatedSketchnoteRenderer from "@/components/gen-ui/patterns/AnimatedSketchnoteRenderer";
 
 interface LessonRendererProps {
   lesson: LessonResponse;
@@ -276,6 +277,21 @@ export default function LessonRenderer({
       <div className="space-y-5">
         {lesson.blocks.map((block) => {
           if (block.is_silenced) return null;
+
+          // The canonical lesson pipeline produces one cohesive Living
+          // Sketchnote block. Render its structured payload directly instead
+          // of flattening it into the legacy block-card presentation.
+          if (
+            block.block_type === "ANIMATED_SKETCHNOTE_LESSON" &&
+            block.animated_sketchnote_data
+          ) {
+            return (
+              <AnimatedSketchnoteRenderer
+                key={block.block_id}
+                lesson={block.animated_sketchnote_data}
+              />
+            );
+          }
 
           return (
             <BlockWrapper key={block.block_id} block={block} showScores={showScores}>

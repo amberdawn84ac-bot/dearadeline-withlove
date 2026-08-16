@@ -2573,20 +2573,11 @@ async def _render_lesson(
         difficulty = "MASTERING"
 
     grade_level = getattr(request, "grade_level", "8") or "8"
-    try:
-        grade_int = int(grade_level) if grade_level.upper() != "K" else 0
-    except (ValueError, AttributeError):
-        grade_int = 8
 
-    # Target ages string for animated sketchnote prompt
-    if grade_int <= 2:
-        target_ages = "5-8"
-    elif grade_int <= 5:
-        target_ages = "8-11"
-    elif grade_int <= 8:
-        target_ages = "11-14"
-    else:
-        target_ages = "14-18"
+    # Canonicals are family-style source lessons, not single-child copies.
+    # Preserve the full intellectual depth and build tiered responsibilities
+    # into one shared experience; learner adaptation happens at delivery time.
+    target_ages = "9-18 family-style; preserve full high-school depth"
 
     # ── Precompute selector context (used in cascade level 3 and modal supplement) ──
     _TRACK_TAGS = {
@@ -2630,6 +2621,8 @@ async def _render_lesson(
             "is_silenced": False,
             "homestead_content": None,
             "animated_sketchnote_data": sketchnote_data.model_dump(),
+            "family_style": True,
+            "canonical_format": "family_living_sketchnote_v2",
         }
         logger.info(f"[Render] CASCADE-1 AnimatedSketchnote OK for '{request.topic}'")
     except Exception as _e:
@@ -2638,6 +2631,23 @@ async def _render_lesson(
             f"[Render] CASCADE-1 AnimatedSketchnote failed for '{request.topic}': {_e}\n"
             f"{_tb.format_exc()}"
         )
+
+    # There is one lesson product, not a menu of incompatible renderers. If
+    # Living Sketchnote generation fails, surface the failure so the request can
+    # be retried; never silently return the old narrated-slide, GenUI-card, or
+    # plain-narrative lesson experience.
+    if cohesive_block is None:
+        raise RuntimeError(
+            f"Living Sketchnote generation failed for '{request.topic}'"
+        )
+
+    blocks.clear()
+    blocks.append(cohesive_block)
+    logger.info(
+        f"[Render] Final blocks: {[b.get('block_type') for b in blocks]} "
+        f"(single canonical Living Sketchnote) for '{request.topic}'"
+    )
+    return
 
     # ── CASCADE LEVEL 2: Narrated Slides ──────────────────────────────────────
     if cohesive_block is None:
