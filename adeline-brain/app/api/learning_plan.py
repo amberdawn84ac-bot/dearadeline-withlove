@@ -4,7 +4,7 @@ Learning Plan API — Dynamic personalized lesson suggestions.
 Endpoints:
   GET /learning-plan/{student_id}  — Return personalized lesson suggestions based on:
     - Student profile (grade, interests, learning style, pacing)
-    - ZPD candidates from Neo4j knowledge graph (concepts ready to learn)
+    - ZPD candidates from Postgres curriculum relationships (concepts ready to learn)
     - Track progress and mastery levels (balance weak tracks)
     - Recent lessons completed (avoid repetition)
     - Cross-track connections (multi-disciplinary learning)
@@ -32,7 +32,7 @@ from app.schemas.api_models import Track
 from app.api.middleware import verify_student_access
 from app.models.student import load_student_state
 from app.connections.journal_store import journal_store
-from app.connections.neo4j_client import neo4j_client
+from app.connections.curriculum_graph import curriculum_graph
 from app.connections.redis_client import redis_client
 from app.tools.graph_query import tool_get_zpd_candidates, ZPDCandidate
 
@@ -757,7 +757,7 @@ def _calculate_graduation_progress(credits_by_bucket: dict[str, float], grade_le
 
 
 async def _get_grade_level_standards(student_id: str, grade_level: str) -> list[GradeLevelStandard]:
-    """Fetch live OAS standards from Neo4j for this grade, with per-standard mastery status."""
+    """Fetch OAS standards from Postgres for this grade with mastery status."""
     import re
 
     if grade_level == "K" or grade_level.startswith("K"):
@@ -771,23 +771,7 @@ async def _get_grade_level_standards(student_id: str, grade_level: str) -> list[
         return []
 
     try:
-        rows = await neo4j_client.run(
-            """
-            MATCH (s:OASStandard)
-            WHERE s.grade = $grade
-            OPTIONAL MATCH (st:Student {id: $student_id})-[:MASTERED]->(c:Concept)
-                           -[:MAPS_TO_STANDARD]->(s)
-            WITH s, count(c) > 0 AS mastered
-            RETURN s.id            AS id,
-                   s.standard_text AS description,
-                   s.grade         AS grade,
-                   coalesce(s.subject, 'General') AS subject,
-                   mastered
-            ORDER BY s.id
-            LIMIT 10
-            """,
-            {"grade": grade_num, "student_id": student_id},
-        )
+        rows = await curriculum_graph.get_grade_standards(student_id, grade_num, limit=10)
         return [
             GradeLevelStandard(
                 standard_id=r["id"],
@@ -800,7 +784,7 @@ async def _get_grade_level_standards(student_id: str, grade_level: str) -> list[
             for i, r in enumerate(rows)
         ]
     except Exception as e:
-        logger.warning(f"[LearningPlan] Neo4j grade standards query failed: {e}")
+        logger.warning(f"[LearningPlan] grade standards query failed: {e}")
         return []
 
 

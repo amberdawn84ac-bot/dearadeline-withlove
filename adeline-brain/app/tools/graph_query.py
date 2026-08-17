@@ -1,7 +1,7 @@
 """
-GraphRAG Query Tool — structured access to the Neo4j knowledge graph for agents.
+Curriculum Relationship Query Tool — structured Postgres access for agents.
 
-Gives agents structured access to the Neo4j knowledge graph to:
+Gives agents structured access to curriculum relationships to:
   - Get ZPD concept recommendations per student/track (BKT-aware)
   - Walk prerequisite chains (multi-hop reasoning)
   - Find cross-track thematic connections
@@ -11,7 +11,7 @@ Used by: orchestrator agents, learning_plan, and lessons.py when building lesson
 ZPD selection hierarchy:
   1. BKT-aware (get_zpd_candidates_with_bkt) — uses per-concept pL from SpacedRepetitionCard
      + compute_priority(prereq_readiness, mastery_gap, leverage) from zpd_engine.py
-  2. Graph-only fallback (get_zpd_candidates) — binary MASTERED-edge gate from Neo4j
+  2. Relationship fallback (get_zpd_candidates) — Postgres mastery threshold
 """
 from __future__ import annotations
 import logging

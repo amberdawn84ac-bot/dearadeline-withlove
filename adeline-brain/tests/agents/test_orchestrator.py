@@ -7,9 +7,9 @@ Tests cover:
   - _block_type_to_xapi_verb() mapping
   - _track_to_credit_type() mapping
   - _worldview_wrap() framing per track
-  - Full run_orchestrator() with mocked Hippocampus + Neo4j + Researcher
+  - Full run_orchestrator() with mocked Hippocampus + curriculum graph + Researcher
 
-Heavy IO paths (Hippocampus, Neo4j, Researcher) are fully mocked so tests
+Heavy IO paths (Hippocampus, curriculum graph, Researcher) are fully mocked so tests
 run without any external connections.
 """
 import pytest
@@ -273,13 +273,13 @@ class TestRunOrchestrator:
 
         with (
             patch("app.agents.orchestrator.hippocampus") as mock_hippo,
-            patch("app.agents.orchestrator.neo4j_client") as mock_neo4j,
+            patch("app.agents.orchestrator.curriculum_graph") as mock_graph,
             patch("app.agents.orchestrator.evaluate_evidence", return_value=_FAKE_EVALUATED_EVIDENCE),
             patch("app.agents.orchestrator.search_witnesses", new_callable=AsyncMock, return_value=None),
         ):
             mock_hippo.similarity_search = AsyncMock(return_value=[_FAKE_EVIDENCE])
-            mock_neo4j.run = AsyncMock(return_value=[])
-            mock_neo4j.get_cross_track_context = AsyncMock(return_value=[])
+            mock_graph.get_standards_for_track = AsyncMock(return_value=[])
+            mock_graph.get_cross_track_context = AsyncMock(return_value=[])
 
             response = await run_orchestrator(request, [0.1] * 1536)
 
@@ -297,13 +297,13 @@ class TestRunOrchestrator:
 
         with (
             patch("app.agents.orchestrator.hippocampus") as mock_hippo,
-            patch("app.agents.orchestrator.neo4j_client") as mock_neo4j,
+            patch("app.agents.orchestrator.curriculum_graph") as mock_graph,
             patch("app.agents.orchestrator.evaluate_evidence", return_value=_FAKE_EVALUATED_EVIDENCE),
             patch("app.agents.orchestrator.search_witnesses", new_callable=AsyncMock, return_value=None),
         ):
             mock_hippo.similarity_search = AsyncMock(return_value=[_FAKE_EVIDENCE])
-            mock_neo4j.run = AsyncMock(return_value=[])
-            mock_neo4j.get_cross_track_context = AsyncMock(return_value=[])
+            mock_graph.get_standards_for_track = AsyncMock(return_value=[])
+            mock_graph.get_cross_track_context = AsyncMock(return_value=[])
 
             response = await run_orchestrator(request, [0.1] * 1536)
 
@@ -317,13 +317,13 @@ class TestRunOrchestrator:
 
         with (
             patch("app.agents.orchestrator.hippocampus") as mock_hippo,
-            patch("app.agents.orchestrator.neo4j_client") as mock_neo4j,
+            patch("app.agents.orchestrator.curriculum_graph") as mock_graph,
             patch("app.agents.orchestrator.evaluate_evidence", return_value=_FAKE_EVALUATED_EVIDENCE),
             patch("app.agents.orchestrator.search_witnesses", new_callable=AsyncMock, return_value=None),
         ):
             mock_hippo.similarity_search = AsyncMock(return_value=[_FAKE_EVIDENCE])
-            mock_neo4j.run = AsyncMock(return_value=[])
-            mock_neo4j.get_cross_track_context = AsyncMock(return_value=[])
+            mock_graph.get_standards_for_track = AsyncMock(return_value=[])
+            mock_graph.get_cross_track_context = AsyncMock(return_value=[])
 
             response = await run_orchestrator(request, [0.1] * 1536)
 
@@ -336,14 +336,14 @@ class TestRunOrchestrator:
 
         with (
             patch("app.agents.orchestrator.hippocampus") as mock_hippo,
-            patch("app.agents.orchestrator.neo4j_client") as mock_neo4j,
+            patch("app.agents.orchestrator.curriculum_graph") as mock_graph,
             patch("app.agents.orchestrator.build_research_mission_block",
                   return_value={"content": "Go research this.", "title": "Research Mission"}),
             patch("app.agents.orchestrator.search_witnesses", new_callable=AsyncMock, return_value=None),
         ):
             mock_hippo.similarity_search = AsyncMock(return_value=[])
-            mock_neo4j.run = AsyncMock(return_value=[])
-            mock_neo4j.get_cross_track_context = AsyncMock(return_value=[])
+            mock_graph.get_standards_for_track = AsyncMock(return_value=[])
+            mock_graph.get_cross_track_context = AsyncMock(return_value=[])
 
             response = await run_orchestrator(request, [0.1] * 1536)
 

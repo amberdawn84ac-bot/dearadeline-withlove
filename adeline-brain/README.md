@@ -16,8 +16,8 @@ adeline-brain/
 │   ├── protocols/
 │   │   └── witness.py        # 0.85 threshold logic — ARCHIVE_SILENT guard
 │   ├── connections/
-│   │   ├── neo4j_client.py   # GraphRAG knowledge graph (placeholder)
-│   │   └── pgvector_client.py # Hippocampus vector store (placeholder)
+│   │   ├── curriculum_graph.py # Postgres curriculum relationships
+│   │   └── pgvector_client.py  # Hippocampus vector store
 │   └── schemas/
 │       └── api_models.py     # Pydantic models (mirrors adeline-core Zod schemas)
 ├── requirements.txt
@@ -31,10 +31,9 @@ adeline-brain/
 If a vector similarity search returns a score **< 0.85**, the historian agent returns `ARCHIVE_SILENT`.
 The orchestrator then pivots to a `RESEARCH_MISSION` block for the student.
 
-## Connections (Placeholders — configure via `.env`)
+## Connections
 
 | Service | Env Var | Purpose |
 |---------|---------|---------|
-| Neo4j | `NEO4J_URI` | GraphRAG concept relationships |
-| pgvector | `POSTGRES_DSN` | Hippocampus semantic search |
+| Postgres/pgvector | `POSTGRES_DSN` | Curriculum relationships, mastery, and semantic search |
 | adeline-ui | internal Docker network | REST/GraphQL consumer |

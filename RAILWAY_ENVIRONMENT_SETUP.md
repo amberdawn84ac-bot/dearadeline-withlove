@@ -19,9 +19,6 @@ TAVILY_API_KEY=tvly-dev-...          # ⚠️ CRITICAL - Web search for auto-see
 ```bash
 DATABASE_URL=postgresql://...         # PostgreSQL connection string
 POSTGRES_DSN=postgresql://...         # Same as DATABASE_URL (legacy)
-NEO4J_URI=neo4j+s://...              # Neo4j Aura connection
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=...
 ```
 
 ### Optional (Recommended)

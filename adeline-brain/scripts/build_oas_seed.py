@@ -162,7 +162,7 @@ TRACK_LABELS = {
 
 
 def _node_id(standard_id: str, subject: str, grade: int) -> str:
-    """Generate a globally-unique Neo4j node id: SUBJ_G{grade}_{standard_id}."""
+    """Generate a globally-unique standard record id: SUBJ_G{grade}_{standard_id}."""
     subj_code = re.sub(r"[^A-Z0-9]", "", subject.upper().replace(" ", ""))[:6]
     return f"{subj_code}_G{grade}_{standard_id}"
 
@@ -189,7 +189,7 @@ def _make_entry(
         "homestead_adaptation": _track_homestead(track),
         "block_types_suggested": TRACK_BLOCKS[track],
         "difficulty": _difficulty(grade),
-        "neo4j_node": {
+        "standard_node": {
             "label": "OASStandard",
             "properties": {
                 "id":           _node_id(standard_id, subject, grade),
@@ -199,7 +199,7 @@ def _make_entry(
                 "strand":       strand,
             },
         },
-        "neo4j_relationships": [
+        "standard_relationships": [
             {"type": "MAPS_TO_TRACK", "target": track},
         ],
     }
@@ -333,14 +333,14 @@ def rebuild(path: Path) -> None:
             old_track = m["track"]
             changed = False
 
-        # Always ensure neo4j node id is compound-unique
-        props = m["neo4j_node"]["properties"]
+        # Always ensure the standard record id is compound-unique
+        props = m["standard_node"]["properties"]
         current_node_id = props.get("id", sid)
         correct_node_id = _node_id(sid, subj, new_grade)
         if changed or current_node_id == sid:  # plain id needs upgrading
             m = dict(m)
-            m["neo4j_node"] = dict(m["neo4j_node"])
-            m["neo4j_node"]["properties"] = {
+            m["standard_node"] = dict(m["standard_node"])
+            m["standard_node"]["properties"] = {
                 **props,
                 "id": correct_node_id,
                 "standard_id": sid,
@@ -354,7 +354,7 @@ def rebuild(path: Path) -> None:
                 m["block_types_suggested"] = TRACK_BLOCKS[new_track]
                 m["difficulty"] = _difficulty(new_grade)
                 m["grade"] = new_grade
-                m["neo4j_relationships"] = [{"type": "MAPS_TO_TRACK", "target": new_track}]
+                m["standard_relationships"] = [{"type": "MAPS_TO_TRACK", "target": new_track}]
                 rerouted[f"{old_track}→{new_track}"] += 1
                 if new_grade != grade:
                     grade_fixed += 1
@@ -404,7 +404,7 @@ def rebuild(path: Path) -> None:
     deduped: list[dict] = []
     dupes_removed = 0
     for m in new_mappings:
-        nid = m["neo4j_node"]["properties"]["id"]
+        nid = m["standard_node"]["properties"]["id"]
         if nid in seen_node_ids:
             dupes_removed += 1
             continue

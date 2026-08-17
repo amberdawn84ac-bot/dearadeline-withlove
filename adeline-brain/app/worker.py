@@ -32,7 +32,7 @@ if _REDIS_URL.startswith("https://") or _REDIS_URL.startswith("http://"):
 async def startup(ctx: dict) -> None:
     """Initialize connections needed by lesson generation jobs."""
     from app.connections.pgvector_client import hippocampus
-    from app.connections.neo4j_client import neo4j_client
+    from app.connections.curriculum_graph import curriculum_graph
 
     try:
         await hippocampus.connect()
@@ -41,23 +41,18 @@ async def startup(ctx: dict) -> None:
         logger.warning(f"[ARQ Worker] Hippocampus unavailable: {e}")
 
     try:
-        await neo4j_client.connect()
-        logger.info("[ARQ Worker] Neo4j connected")
+        await curriculum_graph.connect()
+        logger.info("[ARQ Worker] Postgres curriculum graph connected")
     except Exception as e:
-        logger.warning(f"[ARQ Worker] Neo4j unavailable (ZPD degraded): {e}")
+        logger.warning(f"[ARQ Worker] curriculum relationships unavailable: {e}")
 
 
 async def shutdown(ctx: dict) -> None:
     """Clean up connections on worker shutdown."""
     from app.connections.pgvector_client import hippocampus
-    from app.connections.neo4j_client import neo4j_client
 
     try:
         await hippocampus.disconnect()
-    except Exception:
-        pass
-    try:
-        await neo4j_client.close()
     except Exception:
         pass
 

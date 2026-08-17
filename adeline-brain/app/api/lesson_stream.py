@@ -743,7 +743,7 @@ async def _stream_lesson(
         })
         logger.info(f"[LessonStream]   Emitted alu_end for {alu_meta['unit_slug']}")
 
-    # ── Phase 2: Neo4j graph context ──────────────────────────────────────────
+    # ── Phase 2: Postgres curriculum relationship context ─────────────────────
     try:
         yield _sse({"type": "status", "message": "Linking OAS standards..."})
         state["oas_standards"] = await _fetch_graph_context(request.track.value)

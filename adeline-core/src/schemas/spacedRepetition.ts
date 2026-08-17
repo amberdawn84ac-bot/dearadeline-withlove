@@ -22,7 +22,7 @@ export const SpacedRepetitionCardSchema = z.object({
   id:          z.string().uuid(),
   studentId:   z.string().uuid(),
 
-  /** Matches KnowledgeNode.id in Neo4j */
+  /** Matches CurriculumConcept.id in Postgres */
   conceptId:   z.string(),
   conceptName: z.string().min(1),
   track:       z.nativeEnum(Track),

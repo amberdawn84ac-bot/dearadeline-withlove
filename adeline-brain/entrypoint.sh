@@ -28,14 +28,15 @@ else
     echo "[entrypoint] No DATABASE_URL set — skipping Prisma migrate"
 fi
 
+# The small curriculum relationship seed is idempotent and must exist in every
+# environment. It replaces the former external graph database seed.
+echo "[entrypoint] Ensuring Postgres curriculum relationships are seeded..."
+python scripts/seed_knowledge_graph.py || { echo "[entrypoint] Curriculum graph seed failed - EXITING"; exit 1; }
+echo "[entrypoint] Ensuring Oklahoma standards are seeded in Postgres..."
+python scripts/seed_oas_standards.py || { echo "[entrypoint] OAS standards seed failed - EXITING"; exit 1; }
+
 # Run seeds if RUN_SEEDS env var is set (case-insensitive)
 if [ "$RUN_SEEDS" = "true" ] || [ "$RUN_SEEDS" = "TRUE" ]; then
-    echo "[entrypoint] Running knowledge graph seed..."
-    python scripts/seed_knowledge_graph.py || { echo "[entrypoint] Knowledge graph seed failed - EXITING"; exit 1; }
-
-    echo "[entrypoint] Running OAS standards seed (critical - loads all 3,043 standards)..."
-    python scripts/seed_oas_standards.py || { echo "[entrypoint] OAS standards seed failed - EXITING"; exit 1; }
-
     echo "[entrypoint] Verifying OAS standards count..."
     python scripts/verify_oas_count.py || { echo "[entrypoint] OAS verification failed - EXITING"; exit 1; }
 

@@ -1,7 +1,7 @@
 """
 Lesson Generation API — /lessons/*
 The primary delivery endpoint. Orchestrates retrieval, Witness Protocol
-verification, and Neo4j graph-linking into a structured LessonResponse.
+verification, and Postgres curriculum linking into a structured LessonResponse.
 """
 import logging
 import os
@@ -177,29 +177,21 @@ async def lesson_health():
 
 @router.get("/health/oas")
 async def oas_health():
-    """Check OAS standards count in Neo4j to verify lesson generation readiness."""
-    from app.connections.neo4j_client import neo4j_client
+    """Check Postgres OAS standards count for lesson-generation readiness."""
+    from app.config import get_db_conn
     
     try:
-        await neo4j_client.connect()
-        result = await neo4j_client.run("MATCH (s:OASStandard) RETURN count(s) as count")
-        count = result.single()["count"] if result else 0
-        await neo4j_client.close()
+        conn = await get_db_conn()
+        count = await conn.fetchval('SELECT COUNT(*) FROM "OASStandard"')
         
         expected = 3043
         minimum = 3000
         
-        # Get distribution by track
-        await neo4j_client.connect()
-        track_result = await neo4j_client.run(
-            """
-            MATCH (s:OASStandard)-[:MAPS_TO_TRACK]->(t:Track)
-            RETURN t.name as track, count(s) as count
-            ORDER BY track
-            """
+        track_result = await conn.fetch(
+            'SELECT track, COUNT(*) AS count FROM "OASStandard" GROUP BY track ORDER BY track'
         )
         track_distribution = {record["track"]: record["count"] for record in track_result}
-        await neo4j_client.close()
+        await conn.close()
         
         return {
             "status": "ok" if count >= minimum else "degraded",

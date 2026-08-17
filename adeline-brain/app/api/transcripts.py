@@ -2,7 +2,7 @@
 Transcripts API — /transcripts/*
 
 GET /transcripts/generate/{student_id}
-    Aggregates Neo4j MASTERED relationships + Postgres journal data
+    Aggregates standards mastery and journal data from Postgres
     and streams back a formal Classical Education PDF transcript.
 
 Clock-hour calculation: each verified block = 30 minutes (0.5 hr).
@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.api.middleware import verify_student_access
-from app.connections.neo4j_client import neo4j_client
+from app.connections.curriculum_graph import curriculum_graph
 from app.connections.journal_store import journal_store
 
 logger = logging.getLogger(__name__)
@@ -299,7 +299,7 @@ async def generate_transcript(
     Generate a formal PDF transcript for a student.
 
     - Reads track progress from Postgres student_journal
-    - Queries Neo4j for MASTERED OASStandard relationships
+    - Reads mastered OAS standards from Postgres
     - Reads stored primary sources from student_journal
     - Returns a streaming PDF download
     """
@@ -311,16 +311,7 @@ async def generate_transcript(
         track_progress, evidence_sources, mastered_raw = await asyncio.gather(
             journal_store.get_track_progress(student_id),
             journal_store.get_all_sources(student_id),
-            neo4j_client.run(
-                """
-                MATCH (st:Student {id: $student_id})-[:MASTERED]->(s:OASStandard)
-                OPTIONAL MATCH (s)-[:MAPS_TO_TRACK]->(t:Track)
-                RETURN s.id AS std_id, s.text AS text, s.grade AS grade,
-                       coalesce(t.name, s.track, '') AS track
-                ORDER BY track, s.grade
-                """,
-                {"student_id": student_id},
-            ),
+            curriculum_graph.get_mastered_standards(student_id),
         )
     except Exception as e:
         logger.exception("[/transcripts/generate] Data fetch failed")

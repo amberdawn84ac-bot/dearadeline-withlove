@@ -16,8 +16,7 @@ async def check_env():
     result = {
         "openai_key_set": bool(os.getenv("OPENAI_API_KEY")),
         "database_url_set": bool(os.getenv("DATABASE_URL") or os.getenv("DIRECT_DATABASE_URL")),
-        "neo4j_uri_set": bool(os.getenv("NEO4J_URI")),
-        "neo4j_password_set": bool(os.getenv("NEO4J_PASSWORD")),
+        "curriculum_graph_backend": "postgres",
     }
 
     try:
@@ -37,8 +36,8 @@ async def check_env():
 class SeedResponse(BaseModel):
     status: str
     curriculum_docs: int
-    neo4j_concepts: int
-    neo4j_tracks: int
+    curriculum_concepts: int
+    curriculum_track_links: int
 
 
 @router.post("/seed", response_model=SeedResponse)
@@ -67,29 +66,17 @@ async def run_seeds():
         
         # Get counts
         from app.config import get_db_conn
-        from app.connections.neo4j_client import neo4j_client
-        
         conn = await get_db_conn()
         doc_count = await conn.fetchval('SELECT COUNT(*) FROM "HippocampusDocument"')
+        concept_count = await conn.fetchval('SELECT COUNT(*) FROM "CurriculumConcept"')
+        track_count = await conn.fetchval('SELECT COUNT(*) FROM "CurriculumTrackLink"')
         await conn.close()
-        
-        concept_count = 0
-        track_count = 0
-        if neo4j_client.driver:
-            async with neo4j_client.driver.session() as session:
-                result = await session.run("MATCH (c:Concept) RETURN count(c) as count")
-                record = await result.single()
-                concept_count = record["count"] if record else 0
-                
-                result = await session.run("MATCH (t:Track) RETURN count(t) as count")
-                record = await result.single()
-                track_count = record["count"] if record else 0
         
         return SeedResponse(
             status="completed",
             curriculum_docs=doc_count,
-            neo4j_concepts=concept_count,
-            neo4j_tracks=track_count,
+            curriculum_concepts=concept_count,
+            curriculum_track_links=track_count,
         )
     except Exception as e:
         logger.error(f"[Admin] Seed failed: {e}")

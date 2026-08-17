@@ -355,6 +355,75 @@ model OASStandard {
   @@index([track])
 }
 
+/// Curriculum relationship data formerly kept in a separate graph database.
+/// Postgres is now the single source of truth for concepts, prerequisites,
+/// cross-track links, standards progression, and learner mastery.
+model CurriculumConcept {
+  id              String   @id
+  title           String
+  description     String
+  track           Track
+  difficulty      String
+  standardCode    String   @default("")
+  gradeBand       String   @default("")
+  tags            String[] @default([])
+  isPrimarySource Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([track])
+  @@index([standardCode])
+  @@index([gradeBand])
+}
+
+model CurriculumConceptPrerequisite {
+  conceptId     String
+  prerequisiteId String
+  weight        Float @default(1.0)
+
+  @@id([conceptId, prerequisiteId])
+  @@index([prerequisiteId])
+}
+
+model CurriculumConceptEvidence {
+  conceptId  String
+  evidenceId String
+  chunk      String @db.Text
+  truthScore Float  @default(0.0)
+
+  @@id([conceptId, evidenceId])
+}
+
+model CurriculumTrackLink {
+  fromTrack Track
+  toTrack   Track
+
+  @@id([fromTrack, toTrack])
+  @@index([toTrack])
+}
+
+model OASStandardRelation {
+  fromStandardId String
+  relationType   String
+  toStandardId   String
+  weight         Float  @default(1.0)
+
+  @@id([fromStandardId, relationType, toStandardId])
+  @@index([toStandardId, relationType])
+}
+
+model StudentConceptMastery {
+  studentId String
+  conceptId String
+  score     Float
+  sealedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([studentId, conceptId])
+  @@index([conceptId])
+  @@index([studentId, score])
+}
+
 model Book {
   id              String   @id @default(uuid())
   title           String

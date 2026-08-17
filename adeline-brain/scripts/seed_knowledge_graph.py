@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 """
-Seed the 10-Track GraphRAG knowledge graph.
+Seed the Postgres-backed 10-Track curriculum relationship graph.
 
 Creates:
-  - 10 Track nodes (one per 10-Track Constitution track)
-  - 80 Concept nodes (8 per track, spanning k-2 through 9-12)
-  - PREREQUISITE_OF edges encoding the learning dependency graph
-  - CROSS_TRACK_LINK edges encoding thematic connections between tracks
+  - 80 concepts (8 per track, spanning k-2 through 9-12)
+  - prerequisite relationships encoding the learning dependency graph
+  - cross-track relationships encoding thematic connections between tracks
     (e.g., HOMESTEADING soil science ↔ CREATION_SCIENCE biology)
 
 Usage:
     cd adeline-brain
     python scripts/seed_knowledge_graph.py
 
-Requires:
-    NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD env vars (or defaults from neo4j_client.py)
+Requires the application's existing Postgres connection.
 """
 import asyncio
 import logging
@@ -29,13 +27,8 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 # Add parent to path so app imports work
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.connections.neo4j_client import neo4j_client
-from app.connections.knowledge_graph import (
-    apply_schema_constraints,
-    seed_tracks,
-    upsert_concept,
-    add_prerequisite,
-)
+from app.connections.curriculum_graph import curriculum_graph
+from app.connections.knowledge_graph import TRACKS_METADATA
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -484,7 +477,7 @@ PREREQUISITES = [
 
 
 # ── Cross-track OAS Standard links (thematic connections between tracks) ──────
-# These are stored on the Track nodes via CROSS_TRACK_LINK relationships,
+# These are stored in CurriculumTrackLink rows,
 # enabling the orchestrator's cross-track context queries.
 
 CROSS_TRACK_LINKS = [
@@ -512,66 +505,20 @@ CROSS_TRACK_LINKS = [
 ]
 
 
-async def seed_cross_track_links() -> None:
-    for from_track, to_track in CROSS_TRACK_LINKS:
-        await neo4j_client.run(
-            """
-            MERGE (a:Track {name: $from_track})
-            MERGE (b:Track {name: $to_track})
-            MERGE (a)-[:CROSS_TRACK_LINK]->(b)
-            """,
-            {"from_track": from_track, "to_track": to_track},
-        )
-    logger.info(f"[Seed] {len(CROSS_TRACK_LINKS)} cross-track links created.")
-
-
 async def main() -> None:
-    logger.info("Connecting to Neo4j…")
-    await neo4j_client.connect()
+    logger.info("Connecting to Postgres curriculum graph…")
+    await curriculum_graph.connect()
 
-    logger.info("Applying schema constraints…")
-    await apply_schema_constraints()
+    logger.info(
+        "Seeding %s concepts, %s prerequisites, and %s cross-track links…",
+        len(CONCEPTS), len(PREREQUISITES), len(CROSS_TRACK_LINKS),
+    )
+    await curriculum_graph.seed_catalog(CONCEPTS, PREREQUISITES, CROSS_TRACK_LINKS)
 
-    logger.info("Seeding Track nodes…")
-    await seed_tracks()
-
-    logger.info(f"Seeding {len(CONCEPTS)} Concept nodes…")
-    for concept_args in CONCEPTS:
-        concept_id, title, description, track, difficulty, standard_code, grade_band, is_primary_source = concept_args
-        await upsert_concept(
-            concept_id=concept_id,
-            title=title,
-            description=description,
-            track=track,
-            difficulty=difficulty,
-            standard_code=standard_code,
-            grade_band=grade_band,
-            is_primary_source=is_primary_source,
-        )
-
-    logger.info(f"Seeding {len(PREREQUISITES)} PREREQUISITE_OF edges…")
-    for from_id, to_id, weight in PREREQUISITES:
-        await add_prerequisite(from_id, to_id, weight)
-
-    logger.info("Seeding cross-track links…")
-    await seed_cross_track_links()
-
-    # Summary
-    counts = await neo4j_client.run("""
-        MATCH (c:Concept)   WITH count(c) AS concepts
-        MATCH (t:Track)     WITH concepts, count(t) AS tracks
-        MATCH (p:Concept)-[:PREREQUISITE_OF]->(:Concept) WITH concepts, tracks, count(p) AS prereqs
-        RETURN concepts, tracks, prereqs
-    """)
-    if counts:
-        c = counts[0]
-        logger.info(
-            f"Graph summary: {c.get('tracks')} Tracks | "
-            f"{c.get('concepts')} Concepts | "
-            f"{c.get('prereqs')} PREREQUISITE_OF edges"
-        )
-
-    await neo4j_client.close()
+    logger.info(
+        "Graph summary: %s Tracks | %s Concepts | %s prerequisite relationships",
+        len(TRACKS_METADATA), len(CONCEPTS), len(PREREQUISITES),
+    )
     logger.info("Done.")
 
 

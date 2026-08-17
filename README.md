@@ -164,7 +164,7 @@ See `adeline-brain/.env.example` for all required keys:
 - `POSTGRES_DSN` — pgvector database (Hippocampus)
 - `OPENAI_API_KEY` — embeddings (`text-embedding-3-small`)
 - `ANTHROPIC_API_KEY` — lesson synthesis (`claude-sonnet-4-6`)
-- `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` — GraphRAG (Neo4j Aura or local bolt)
+- Curriculum relationships, prerequisites, standards, and mastery use the existing Postgres database.
 - `SUPABASE_JWT_SECRET` — JWT verification (required in production)
 - `INTERNAL_API_KEY` — server-to-server auth for internal endpoints
 - `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` — session cache (or `REDIS_URL` for local)

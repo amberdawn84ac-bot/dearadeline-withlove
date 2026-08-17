@@ -14,7 +14,7 @@ from typing import Any
 from app.schemas.api_models import Track
 from app.api.middleware import get_current_user_id, verify_student_access
 from app.connections.journal_store import journal_store
-from app.connections.neo4j_client import neo4j_client
+from app.connections.curriculum_graph import curriculum_graph
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/journal", tags=["journal"])
@@ -91,7 +91,7 @@ async def seal_journal(
     from app.models.student import invalidate_student_state_cache
     await invalidate_student_state_cache(student_id)
 
-    # Fire-and-forget Neo4j Mastery relationships — never block the seal response
+    # Record standards mastery in the same Postgres transaction system.
     if body.oas_standards:
         asyncio.create_task(
             _record_mastery_safe(student_id, body.track.value, body.oas_standards)
@@ -137,10 +137,10 @@ async def seal_journal(
 
 async def _record_mastery_safe(student_id: str, track: str, oas_standards: list[dict]) -> None:
     try:
-        await neo4j_client.record_mastery(student_id, track, oas_standards)
-        logger.info(f"[Neo4j] Mastery recorded for {student_id} — {len(oas_standards)} standards")
+        await curriculum_graph.record_standard_mastery(student_id, track, oas_standards)
+        logger.info(f"[CurriculumGraph] Mastery recorded for {student_id} — {len(oas_standards)} standards")
     except Exception as exc:
-        logger.warning(f"[Neo4j] Mastery write failed (non-fatal): {exc}")
+        logger.warning(f"[CurriculumGraph] Mastery write failed (non-fatal): {exc}")
 
 
 def _quiz_quality(quiz_results: list[dict]) -> int:

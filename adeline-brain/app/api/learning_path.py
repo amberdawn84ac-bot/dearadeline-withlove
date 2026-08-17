@@ -21,7 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.connections.knowledge_graph import get_concept_graph_for_track, TRACKS_METADATA
-from app.connections.neo4j_client import neo4j_client
+from app.connections.curriculum_graph import curriculum_graph
 from app.connections.postgres import get_db_session
 from app.services.standards_mapper import StandardsMapper
 from app.api.middleware import get_current_user_id
@@ -60,14 +60,7 @@ class LearningPathResponse(BaseModel):
 async def _get_student_mastery(student_id: str) -> dict[str, float]:
     """Return {concept_id: score} for all concepts the student has mastered."""
     try:
-        rows = await neo4j_client.run(
-            """
-            MATCH (st:Student {id: $student_id})-[m:MASTERED]->(c:Concept)
-            RETURN c.id AS concept_id, m.score AS score
-            """,
-            {"student_id": student_id},
-        )
-        return {row["concept_id"]: float(row["score"]) for row in rows}
+        return await curriculum_graph.get_student_concept_mastery(student_id)
     except Exception as e:
         logger.warning(f"[LearningPath] Could not fetch mastery for {student_id}: {e}")
         return {}
@@ -109,7 +102,7 @@ async def get_learning_path_nodes(
     Return all concept nodes with computed state (mastered/available/locked)
     for a given student. Optionally filtered to one track.
 
-    Falls back gracefully if Neo4j is unavailable — returns empty nodes list
+    Falls back gracefully if curriculum relationship data is unavailable — returns empty nodes list
     with appropriate warning rather than 500.
     """
     tracks_to_query = [track] if track else list(TRACKS_METADATA.keys())
@@ -133,7 +126,7 @@ async def get_learning_path_nodes(
         try:
             concept_rows = await get_concept_graph_for_track(track_name)
         except Exception as e:
-            logger.warning(f"[LearningPath] Neo4j query failed for track {track_name}: {e}")
+            logger.warning(f"[LearningPath] curriculum query failed for track {track_name}: {e}")
             concept_rows = []
 
         for row in concept_rows:
@@ -199,18 +192,18 @@ class LearningGapsResponse(BaseModel):
 @router.get("/{student_id}/gaps", response_model=LearningGapsResponse)
 async def identify_learning_gaps(
     student_id: str,
-    use_prerequisite_chain: bool = Query(True, description="Use Neo4j prerequisite chains for smarter gaps"),
+    use_prerequisite_chain: bool = Query(True, description="Use prerequisite chains for smarter gaps"),
     db: AsyncSession = Depends(get_db_session),
     current_user_id: str = Depends(get_current_user_id),
 ):
     """
     Identify learning gaps using prerequisite chain logic.
     
-    **Wire 1: Prerequisite Chain (Neo4j FEEDS_INTO)**
+    **Wire 1: Postgres prerequisite progression**
     
     When use_prerequisite_chain=True:
     - Finds the student's most recently mastered standard
-    - Queries Neo4j for FEEDS_INTO relationships
+    - Queries standards progression relationships
     - Returns the next logical standard (not just random unmastered)
     - Example: "Multiplication" → "Division" → "Fractions"
     
@@ -247,9 +240,9 @@ async def identify_learning_gaps(
         gap_standards: list[GapStandard] = []
         
         if use_prerequisite_chain:
-            # **Wire 1: Use Neo4j prerequisite chains**
+            # **Wire 1: Use Postgres prerequisite chains**
             # Find the most recently mastered standard in the lowest subject
-            # Query Neo4j for what it feeds into (the next logical step)
+            # Query standards progression for what it feeds into
             
             # First, find a recently mastered standard to build from
             # In production, this would query the actual most recent
@@ -270,7 +263,7 @@ async def identify_learning_gaps(
             if recent:
                 last_standard_id = recent["standardId"]
                 
-                # Query Neo4j for next logical standards
+                # Query Postgres for next logical standards
                 next_standards = await mapper.get_next_logical_standards(
                     standard_id=last_standard_id,
                     student_id=student_id,

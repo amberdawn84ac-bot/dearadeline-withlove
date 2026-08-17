@@ -1,6 +1,6 @@
 """
 seed_curriculum.py — Activate the Hippocampus
-Loads OAS standards into Neo4j (GraphRAG) and pgvector (Hippocampus).
+Loads OAS standards and source material into Postgres/pgvector.
 Seeds the first Witness document: Narrative of Frederick Douglass (1845).
 
 Run from adeline-brain/:
@@ -25,7 +25,6 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from pgvector.sqlalchemy import Vector
-from neo4j import AsyncGraphDatabase
 import uuid as uuid_lib
 
 logging.basicConfig(
@@ -45,9 +44,6 @@ POSTGRES_DSN = (
     or f"postgresql://adeline:{_pg_password}@localhost:5432/hippocampus"
 ).replace("postgresql://", "postgresql+asyncpg://")
 
-NEO4J_URI      = os.getenv("NEO4J_URI",      "bolt://localhost:7687")
-NEO4J_USER     = os.getenv("NEO4J_USERNAME") or os.getenv("NEO4J_USER", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "placeholder_password")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 EMBED_MODEL    = "text-embedding-3-small"
 EMBED_DIM      = 1536
@@ -271,90 +267,6 @@ async def seed_douglass(session_factory) -> int:
     return stored
 
 
-# ── Neo4j ─────────────────────────────────────────────────────────────────────
-
-async def seed_neo4j(driver, mappings: list[dict]):
-    async with driver.session() as session:
-        # Ensure Track nodes exist for all 10 tracks
-        tracks = {m["track"] for m in mappings}
-        for track in sorted(tracks):
-            await session.run(
-                "MERGE (t:Track {name: $name}) SET t.label = $label",
-                {"name": track, "label": track.replace("_", " ").title()},
-            )
-        log.info(f"[Neo4j] Upserted {len(tracks)} Track nodes")
-
-        # Upsert each OASStandard node
-        # Use neo4j_node.properties.id (compound key) as the MERGE anchor so
-        # standards with the same humanCodingScheme across subjects don't collide.
-        for m in mappings:
-            node_id = m["neo4j_node"]["properties"].get("id", m["standard_id"])
-            props = {
-                **m["neo4j_node"]["properties"],
-                "standard_text":  m["standard_text"],
-                "lesson_hook":    m.get("adeline_lesson_hook", ""),
-                "difficulty":     m.get("difficulty", ""),
-                "homestead_note": m.get("homestead_adaptation", ""),
-            }
-            await session.run(
-                """
-                MERGE (s:OASStandard {id: $id})
-                SET s += $props
-                MERGE (t:Track {name: $track})
-                MERGE (s)-[:MAPS_TO_TRACK]->(t)
-                """,
-                {"id": node_id, "props": props, "track": m["track"]},
-            )
-            log.info(f"  [Neo4j] Merged {node_id} → {m['track']}")
-
-        # Upsert cross-track and progression relationships
-        rel_count = 0
-        for m in mappings:
-            node_id = m["neo4j_node"]["properties"].get("id", m["standard_id"])
-            for rel in m.get("neo4j_relationships", []):
-                target = rel["target"]
-                rel_type = rel["type"]
-                # Skip MAPS_TO_TRACK — already done above
-                if rel_type == "MAPS_TO_TRACK":
-                    continue
-                # Cross-track relationships target a Track node
-                if target in tracks:
-                    await session.run(
-                        f"""
-                        MERGE (s:OASStandard {{id: $sid}})
-                        MERGE (t:Track {{name: $target}})
-                        MERGE (s)-[:{rel_type}]->(t)
-                        """,
-                        {"sid": node_id, "target": target},
-                    )
-                else:
-                    # Progression relationship targets another OASStandard
-                    await session.run(
-                        f"""
-                        MERGE (a:OASStandard {{id: $from_id}})
-                        MERGE (b:OASStandard {{id: $to_id}})
-                        MERGE (a)-[:{rel_type}]->(b)
-                        """,
-                        {"from_id": node_id, "to_id": target},
-                    )
-                rel_count += 1
-        log.info(f"[Neo4j] Created {rel_count} relationships")
-
-        # Seed the Douglass primary source as a HistoricalDocument node
-        await session.run(
-            """
-            MERGE (d:HistoricalDocument {id: 'douglass-narrative-1845'})
-            SET d.title   = 'Narrative of the Life of Frederick Douglass',
-                d.author  = 'Frederick Douglass',
-                d.year    = 1845,
-                d.archive = 'Library of Congress'
-            MERGE (t:Track {name: 'TRUTH_HISTORY'})
-            MERGE (d)-[:PRIMARY_SOURCE_FOR]->(t)
-            """
-        )
-        log.info("[Neo4j] Seeded Douglass HistoricalDocument node")
-
-
 # ── Verification ──────────────────────────────────────────────────────────────
 
 async def verify_truth_engine(session_factory) -> bool:
@@ -434,14 +346,6 @@ async def main():
 
     log.info("── Phase 2: Douglass Primary Source ─────")
     douglass_count = await seed_douglass(session_factory)
-
-    # ── Neo4j ─────────────────────────────────────────────────────────────────
-    log.info("── Phase 3: OAS Standards → Neo4j ───────")
-    driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-    try:
-        await seed_neo4j(driver, mappings)
-    finally:
-        await driver.close()
 
     # ── Final count ───────────────────────────────────────────────────────────
     async with session_factory() as session:

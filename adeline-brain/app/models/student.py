@@ -7,7 +7,7 @@ mastery_score: 0.0 → 1.0 per track, derived from sealed lesson count.
   0.60 – 0.84  PROFICIENT (6–8 lessons)
   0.85 – 1.00  ADVANCED   (9+ lessons)
 
-mastered_standards: OAS standard IDs already earned (from Neo4j MASTERED edges).
+mastered_standards: OAS standard IDs already earned in Postgres.
 These become 'Witness Anchors' in bridge responses.
 """
 from __future__ import annotations
@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from app.connections.journal_store import journal_store
-from app.connections.neo4j_client import neo4j_client
+from app.connections.curriculum_graph import curriculum_graph
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ async def invalidate_student_state_cache(student_id: str) -> None:
 async def load_student_state(student_id: str) -> StudentState:
     """
     Build a live StudentState from journal_store (lesson counts) and
-    Neo4j (mastered OAS standards).
+    Postgres (mastered OAS standards).
     """
     # ── Redis cache check ─────────────────────────────────────────────────────
     from app.connections.redis_client import redis_client
@@ -148,22 +148,11 @@ async def load_student_state(student_id: str) -> StudentState:
         logger.warning(f"[StudentState] journal_store unavailable: {e}")
         progress = {}
 
-    # ── 2. Mastered OAS standards from Neo4j ─────────────────────────────────
+    # ── 2. Mastered OAS standards from Postgres ───────────────────────────────
     try:
-        rows = await neo4j_client.run(
-            """
-            MATCH (st:Student {id: $student_id})-[:MASTERED]->(s:OASStandard)
-            OPTIONAL MATCH (s)-[:MAPS_TO_TRACK]->(t:Track)
-            RETURN s.id        AS standard_id,
-                   s.text      AS text,
-                   s.grade     AS grade,
-                   coalesce(t.name, s.track) AS track
-            ORDER BY track, s.grade
-            """,
-            {"student_id": student_id},
-        )
+        rows = await curriculum_graph.get_mastered_standards(student_id)
     except Exception as e:
-        logger.warning(f"[StudentState] Neo4j unavailable: {e}")
+        logger.warning(f"[StudentState] standards mastery unavailable: {e}")
         rows = []
 
     # Group standards by track

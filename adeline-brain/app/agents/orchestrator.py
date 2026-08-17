@@ -41,7 +41,7 @@ from app.schemas.api_models import (
 )
 from app.protocols.witness import evaluate_evidence
 from app.connections.pgvector_client import hippocampus
-from app.connections.neo4j_client import neo4j_client
+from app.connections.curriculum_graph import curriculum_graph
 from app.tools.researcher import search_witnesses
 from app.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL, GOOGLE_API_KEY, ADELINE_MODEL, LEARNLM_MODEL
 from app.algorithms.pedagogical_directives import generate_pedagogical_directives, get_quick_directives
@@ -601,7 +601,7 @@ class AdelineState(TypedDict):
     profiler_components: list[str]  # Top components from learner_profiler decision tree
 
 
-# ── Neo4j graph-link (multi-hop) ──────────────────────────────────────────────
+# ── Postgres curriculum relationships (multi-hop) ────────────────────────────
 
 async def _fetch_graph_context(track: str) -> list[dict]:
     """
@@ -620,28 +620,19 @@ async def _fetch_graph_context(track: str) -> list[dict]:
 
     # 1. Primary standards for the requested track
     try:
-        primary = await neo4j_client.run(
-            """
-            MATCH (s:OASStandard)-[:MAPS_TO_TRACK]->(t:Track {name: $track})
-            RETURN s.id AS standard_id,
-                   s.standard_text AS text,
-                   s.grade AS grade,
-                   coalesce(s.lesson_hook, '') AS lesson_hook,
-                   $track AS connected_track,
-                   'primary' AS source_type,
-                   '' AS bridge_standard_text
-            ORDER BY s.grade
-            LIMIT 4
-            """,
-            {"track": track},
-        )
-        results.extend(primary)
+        primary = await curriculum_graph.get_standards_for_track(track, limit=4)
+        results.extend({
+            **row,
+            "connected_track": track,
+            "source_type": "primary",
+            "bridge_standard_text": "",
+        } for row in primary)
     except Exception as e:
-        logger.warning(f"[Neo4j] primary standards query failed for track={track}: {e}")
+        logger.warning(f"[CurriculumGraph] primary standards query failed for track={track}: {e}")
 
     # 2. Cross-track connections via CROSS_TRACK_LINK (1 hop)
     try:
-        cross = await neo4j_client.get_cross_track_context(track, limit=4)
+        cross = await curriculum_graph.get_cross_track_context(track, limit=4)
         for row in cross:
             results.append({
                 "standard_id":          row.get("standard_id", ""),
@@ -653,7 +644,7 @@ async def _fetch_graph_context(track: str) -> list[dict]:
                 "bridge_standard_text": row.get("bridge_standard_text", ""),
             })
     except Exception as e:
-        logger.warning(f"[Neo4j] cross-track query failed for track={track}: {e}")
+        logger.warning(f"[CurriculumGraph] cross-track query failed for track={track}: {e}")
 
     return results
 
@@ -2739,7 +2730,7 @@ async def run_orchestrator(
 ) -> LessonResponse:
     """
     Routes the request to the correct specialist agent, graph-links to
-    OAS Standards via Neo4j, runs the RegistrarAgent for xAPI + CASE credits,
+    OAS Standards via Postgres, runs the RegistrarAgent for xAPI + CASE credits,
     and returns a structured LessonResponse.
 
     Agent routing:
@@ -2808,7 +2799,7 @@ async def run_orchestrator(
             state["cross_track_acknowledgment"] + "\n\n" + state["blocks"][0]["content"]
         )
 
-    # ── 3. Graph context (Neo4j) ───────────────────────────────────────────────
+    # ── 3. Postgres curriculum relationship context ───────────────────────────
     state["oas_standards"] = await _fetch_graph_context(request.track.value)
     primary_count = sum(1 for s in state["oas_standards"] if s.get("source_type") == "primary")
     cross_count   = sum(1 for s in state["oas_standards"] if s.get("source_type") == "cross_track")

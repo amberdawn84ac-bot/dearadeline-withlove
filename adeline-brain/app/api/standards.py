@@ -126,7 +126,7 @@ async def submit_standard_evidence(
     1. Validates the evidence (photo/video/quiz score)
     2. Determines proficiency level (developing/approaching/understanding/extending)
     3. Creates/updates StandardMastery record
-    4. Updates Neo4j (Student)-[:MASTERED]->(OASStandard)
+    4. Updates the Postgres standards mastery record
     5. Invalidates graduation report cache
     
     Called by: MasteryCheckWidget.tsx when quiz passed, or evidence upload

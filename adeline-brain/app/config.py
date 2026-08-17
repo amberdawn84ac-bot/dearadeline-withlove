@@ -55,18 +55,6 @@ except Exception as _e:
 # Async variant for SQLAlchemy
 ASYNC_POSTGRES_DSN = POSTGRES_DSN.replace("postgresql://", "postgresql+asyncpg://")
 
-# ── Neo4j ────────────────────────────────────────────────────────────────────
-
-NEO4J_URI = os.getenv("NEO4J_URI", "" if IS_PRODUCTION else "bolt://neo4j:7687")
-NEO4J_USER = os.getenv("NEO4J_USER", os.getenv("NEO4J_USERNAME", "neo4j"))
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "" if IS_PRODUCTION else "adeline_local_dev")
-
-if IS_PRODUCTION and (not NEO4J_URI or not NEO4J_PASSWORD):
-    logger.warning(
-        "[Config] Neo4j credentials not configured — ZPD/graph features will be disabled. "
-        "Set NEO4J_URI and NEO4J_PASSWORD to enable full functionality."
-    )
-
 # ── Redis ────────────────────────────────────────────────────────────────────
 
 UPSTASH_REDIS_REST_URL = os.getenv("UPSTASH_REDIS_REST_URL")

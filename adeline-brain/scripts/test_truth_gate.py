@@ -98,25 +98,19 @@ async def main():
         print(f"  {row['track']:<30}  {row['n']} doc(s)")
     print()
 
-    # Neo4j relationship count
+    # Postgres curriculum relationship count
     try:
-        from neo4j import AsyncGraphDatabase
-        NEO4J_URI      = os.getenv("NEO4J_URI",      "bolt://localhost:7687")
-        NEO4J_USER     = os.getenv("NEO4J_USER",     "neo4j")
-        NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "adeline_local_dev")
-        driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-        async with driver.session() as session:
-            rel_count   = (await (await session.run("MATCH ()-[r]->() RETURN count(r) AS n")).single())["n"]
-            track_nodes = (await (await session.run("MATCH (t:Track) RETURN count(t) AS n")).single())["n"]
-            std_nodes   = (await (await session.run("MATCH (s:OASStandard) RETURN count(s) AS n")).single())["n"]
-        await driver.close()
-        print("-- Neo4j Knowledge Graph ----------------------------------")
-        print(f"  Track nodes      : {track_nodes}")
-        print(f"  OASStandard nodes: {std_nodes}")
-        print(f"  Relationships    : {rel_count}")
+        async with sf() as session:
+            concept_count = (await session.execute(text('SELECT COUNT(*) FROM "CurriculumConcept"'))).scalar()
+            standard_count = (await session.execute(text('SELECT COUNT(*) FROM "OASStandard"'))).scalar()
+            prereq_count = (await session.execute(text('SELECT COUNT(*) FROM "CurriculumConceptPrerequisite"'))).scalar()
+        print("-- Postgres Curriculum Relationships ----------------------")
+        print(f"  Concepts         : {concept_count}")
+        print(f"  OAS standards    : {standard_count}")
+        print(f"  Prerequisites    : {prereq_count}")
         print()
     except Exception as e:
-        print(f"  [Neo4j] Could not connect: {e}")
+        print(f"  [CurriculumGraph] Could not query: {e}")
 
     await engine.dispose()
     print("==========================================================")

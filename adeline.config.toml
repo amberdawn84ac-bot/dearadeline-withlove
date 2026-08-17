@@ -156,12 +156,11 @@ min_ease_factor     = 1.3
 default_ease_factor = 2.5
 initial_interval    = 1      # Days
 
-# ── GraphRAG ─────────────────────────────────────────────────────────────────
+# ── Curriculum Relationships ─────────────────────────────────────────────────
 
 [graphrag]
-driver         = "neo4j"
-node_types     = ["Track", "Concept", "OASStandard", "Evidence", "Student"]
-edge_types     = ["BELONGS_TO", "PREREQUISITE_OF", "MAPS_TO_STANDARD", "SUPPORTED_BY", "MASTERED", "CROSS_TRACK_LINK"]
+driver         = "postgres"
+tables         = ["CurriculumConcept", "CurriculumConceptPrerequisite", "CurriculumTrackLink", "OASStandardRelation", "StudentConceptMastery"]
 max_hop_depth  = 3
 zpd_query_limit = 5
 

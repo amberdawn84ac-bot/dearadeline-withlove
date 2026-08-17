@@ -29,7 +29,6 @@ def parse_bool(value: str | None) -> bool:
 ENV_VARS: Dict[str, Tuple[EnvVarTier, str]] = {
     # Always required (dev + prod)
     "POSTGRES_DSN": (EnvVarTier.ALWAYS_REQUIRED, "PostgreSQL connection for Hippocampus"),
-    "NEO4J_URI": (EnvVarTier.ALWAYS_REQUIRED, "Neo4j connection for knowledge graph"),
     "OPENAI_API_KEY": (EnvVarTier.ALWAYS_REQUIRED, "OpenAI embeddings (text-embedding-3-small)"),
     "ANTHROPIC_API_KEY": (EnvVarTier.ALWAYS_REQUIRED, "Anthropic LLM (claude-sonnet-4-6)"),
     "TAVILY_API_KEY": (EnvVarTier.ALWAYS_REQUIRED, "Tavily web search for deep archive access"),
@@ -130,7 +129,7 @@ async def test_all_apis_healthy():
     Checks:
     1. FastAPI /health endpoint responds
     2. PostgreSQL (Hippocampus) connection is open
-    3. Neo4j (GraphRAG) connection is open
+    3. Postgres curriculum relationship tables are available
     4. Redis/Upstash connection is available (if configured)
     """
     # This test requires the app to be running.

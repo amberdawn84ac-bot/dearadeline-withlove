@@ -1,7 +1,7 @@
 /**
  * adeline-core/src/schemas/knowledgeGraph.ts
  * ─────────────────────────────────────────────────────────────────
- * 10-Track Knowledge Graph node and edge types (stored in Neo4j).
+ * 10-Track curriculum relationship types (stored in Postgres).
  *
  * The graph enables multi-hop ZPD reasoning:
  * "How did the Dawes Act (Track 7) change soil health (Track 3)?"
@@ -14,7 +14,7 @@ import { z } from "zod";
 import { Track, DifficultyLevel } from "../types";
 
 export const KnowledgeNodeSchema = z.object({
-  id:           z.string().uuid(),
+  id:           z.string().min(1),
   title:        z.string().min(1),
   description:  z.string().min(1),
   track:        z.nativeEnum(Track),

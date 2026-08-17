@@ -304,7 +304,7 @@ def _cf_item_to_mapping(item: dict, subject: str) -> Optional[dict]:
         "homestead_adaptation":   _placeholder_homestead(track),
         "block_types_suggested":  TRACK_BLOCKS[track],
         "difficulty":             _difficulty(grade),
-        "neo4j_node": {
+        "standard_node": {
             "label": "OASStandard",
             "properties": {
                 "id":      standard_id,
@@ -313,7 +313,7 @@ def _cf_item_to_mapping(item: dict, subject: str) -> Optional[dict]:
                 "strand":  strand,
             },
         },
-        "neo4j_relationships": [
+        "standard_relationships": [
             {"type": "MAPS_TO_TRACK", "target": track},
         ],
     }

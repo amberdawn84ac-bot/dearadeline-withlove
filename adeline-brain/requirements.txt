@@ -22,7 +22,6 @@ sqlalchemy==2.0.50
 prisma==0.15.0
 
 # GraphRAG
-neo4j==5.20.0
 
 # Auth + sessions + rate-limiting
 redis==5.0.4

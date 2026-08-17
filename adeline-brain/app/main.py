@@ -19,7 +19,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.schemas.api_models import TRUTH_THRESHOLD
-from app.connections.neo4j_client import neo4j_client
+from app.connections.curriculum_graph import curriculum_graph
 from app.connections.pgvector_client import hippocampus
 from app.connections.bookshelf_search import bookshelf_search
 from app.connections.redis_client import ping as redis_ping
@@ -95,56 +95,13 @@ if _SENTRY_DSN:
     logger.info("[adeline-brain] Sentry initialized")
 
 
-async def _auto_seed_neo4j():
-    """Seed OASStandard nodes into Neo4j on startup if the graph is empty."""
-    import json
-    from pathlib import Path
-    await asyncio.sleep(5)  # wait for neo4j_client.connect() to finish
-    try:
-        rows = await neo4j_client.run("MATCH (s:OASStandard) RETURN count(s) AS n", {})
-        count = int(rows[0]["n"]) if rows else 0
-        if count >= 10:
-            logger.info(f"[AutoSeed] Neo4j already has {count} OASStandard nodes — skipping")
-            return
-        logger.info("[AutoSeed] Neo4j has no OASStandard nodes — seeding now...")
-        seed_path = Path(__file__).resolve().parents[2] / "data" / "seeds" / "oas_to_8track.json"
-        with open(seed_path) as f:
-            seed_data = json.load(f)
-        mappings = seed_data["mappings"]
-        tracks = {m["track"] for m in mappings}
-        for track in sorted(tracks):
-            await neo4j_client.run(
-                "MERGE (t:Track {name: $name}) SET t.label = $label",
-                {"name": track, "label": track.replace("_", " ").title()},
-            )
-        for m in mappings:
-            props = {
-                **m["neo4j_node"]["properties"],
-                "standard_text": m["standard_text"],
-                "lesson_hook":   m.get("adeline_lesson_hook", ""),
-                "difficulty":    m.get("difficulty", ""),
-            }
-            await neo4j_client.run(
-                """
-                MERGE (s:OASStandard {id: $id})
-                SET s += $props
-                MERGE (t:Track {name: $track})
-                MERGE (s)-[:MAPS_TO_TRACK]->(t)
-                """,
-                {"id": m["standard_id"], "props": props, "track": m["track"]},
-            )
-        logger.info(f"[AutoSeed] Seeded {len(mappings)} OASStandard nodes into Neo4j")
-    except Exception as e:
-        logger.warning(f"[AutoSeed] Neo4j auto-seed failed (non-fatal): {e}")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("[adeline-brain] Starting up...")
 
     async def _connect_services():
         for name, coro in [
-            ("Neo4j", neo4j_client.connect()),
+            ("CurriculumGraph", curriculum_graph.connect()),
             ("Hippocampus", hippocampus.connect()),
             ("Bookshelf", bookshelf_search.connect()),
             ("JournalStore", journal_store.connect()),
@@ -159,16 +116,11 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(_connect_services())
     await startup_seed_scheduler()
-    asyncio.create_task(_auto_seed_neo4j())
     yield
     logger.info("[adeline-brain] Shutting down...")
     await shutdown_seed_scheduler()
     try:
         await bookshelf_search.disconnect()
-    except Exception:
-        pass
-    try:
-        await neo4j_client.close()
     except Exception:
         pass
 
@@ -303,7 +255,7 @@ async def health():
 
 @app.get("/health/detailed")
 async def health_detailed():
-    """Detailed health check with DB/Neo4j/Redis connectivity. Not used by Railway."""
+    """Detailed health check with Postgres and Redis connectivity."""
     from app.config import get_db_conn
 
     health_status = {
@@ -311,8 +263,8 @@ async def health_detailed():
         "service": "adeline-brain",
         "version": "0.2.0",
         "hippocampus_documents": 0,
-        "neo4j_concepts": 0,
-        "neo4j_tracks": 0,
+        "curriculum_concepts": 0,
+        "curriculum_prerequisites": 0,
         "books": 0,
     }
 
@@ -322,6 +274,12 @@ async def health_detailed():
         health_status["hippocampus_documents"] = result
         oas_count = await conn.fetchval('SELECT COUNT(*) FROM "OASStandard"')
         health_status["oas_standards"] = oas_count
+        health_status["curriculum_concepts"] = await conn.fetchval(
+            'SELECT COUNT(*) FROM "CurriculumConcept"'
+        )
+        health_status["curriculum_prerequisites"] = await conn.fetchval(
+            'SELECT COUNT(*) FROM "CurriculumConceptPrerequisite"'
+        )
         user_count = await conn.fetchval('SELECT COUNT(*) FROM "User"')
         health_status["users"] = user_count
         onboarded_count = await conn.fetchval('SELECT COUNT(*) FROM "User" WHERE "onboardingComplete" = true')
@@ -342,19 +300,6 @@ async def health_detailed():
         await conn.close()
     except Exception as e:
         health_status["books_error"] = str(e)
-
-    try:
-        if neo4j_client.driver:
-            async with neo4j_client.driver.session() as session:
-                concept_result = await session.run("MATCH (c:Concept) RETURN count(c) as count")
-                concept_record = await concept_result.single()
-                health_status["neo4j_concepts"] = concept_record["count"] if concept_record else 0
-
-                track_result = await session.run("MATCH (t:Track) RETURN count(t) as count")
-                track_record = await track_result.single()
-                health_status["neo4j_tracks"] = track_record["count"] if track_record else 0
-    except Exception as e:
-        health_status["neo4j_error"] = str(e)
 
     try:
         redis_ok = await redis_ping()

@@ -349,7 +349,7 @@ export default function LearningPathMap({ studentId, filterTrack }: Props) {
 
         {error && (
           <div className="flex items-center justify-center py-16 text-[#9A3F4A] font-kalam text-sm">
-            {error.includes("Neo4j") || error.includes("unavailable")
+            {error.includes("CurriculumGraph") || error.includes("unavailable")
               ? "Knowledge graph is warming up. Try again in a moment."
               : error}
           </div>

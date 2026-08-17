@@ -21,7 +21,7 @@ import openai
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.connections.neo4j_client import neo4j_client
+from app.connections.curriculum_graph import curriculum_graph
 
 logger = logging.getLogger(__name__)
 
@@ -241,22 +241,15 @@ class StandardsMapper:
         Retrieve all OAS standards mapped to a specific track.
         """
         try:
-            rows = await neo4j_client.run(
-                """
-                MATCH (s:OASStandard)-[:MAPS_TO_TRACK]->(t:Track {name: $track})
-                RETURN s.id AS code, s.standard_text AS description,
-                       s.grade AS grade, s.strand AS strand
-                ORDER BY s.grade, s.strand
-                """,
-                {"track": track},
+            rows = await curriculum_graph.get_standards_for_track(
+                track,
+                grade_min=grade_range[0] if grade_range else None,
+                grade_max=grade_range[1] if grade_range else None,
             )
 
             standards = []
             for row in rows:
                 grade = row.get("grade", 1)
-                if grade_range and not (grade_range[0] <= grade <= grade_range[1]):
-                    continue
-
                 standards.append(OASStandard(
                     code=row["code"],
                     subject=TRACK_TO_SUBJECT.get(track, StandardsSubject.ELA),
@@ -269,7 +262,7 @@ class StandardsMapper:
 
             return standards
         except Exception as e:
-            logger.warning(f"Neo4j query failed: {e}")
+            logger.warning(f"Curriculum standards query failed: {e}")
             return []
 
     async def get_next_logical_standards(
@@ -278,7 +271,7 @@ class StandardsMapper:
         student_id: str,
     ) -> list[OASStandard]:
         """
-        Query Neo4j for FEEDS_INTO relationships to find the next standards
+        Query standards progression relationships to find the next standards
         to master after completing the given standard.
 
         Example: "Multiplication" → "Division" → "Fractions"
@@ -290,30 +283,7 @@ class StandardsMapper:
         """
         try:
             # Find standards that this standard feeds into
-            rows = await neo4j_client.run(
-                """
-                MATCH (current:OASStandard {id: $standard_id})-[:FEEDS_INTO]->(next:OASStandard)
-                MATCH (next)-[:MAPS_TO_TRACK]->(t:Track)
-                OPTIONAL MATCH (next)<-[:PREREQUISITE_FOR]-(prereq:OASStandard)
-                OPTIONAL MATCH (st:Student {id: $student_id})-[:MASTERED]->(prereq)
-                WITH next, t, 
-                     collect(DISTINCT prereq.id) as prereq_ids,
-                     collect(DISTINCT CASE WHEN st.id IS NOT NULL THEN prereq.id END) as mastered_prereqs
-                WHERE NOT EXISTS {
-                    MATCH (:Student {id: $student_id})-[:MASTERED]->(next)
-                }
-                AND ALL(p IN prereq_ids WHERE p IN mastered_prereqs OR p = $standard_id)
-                RETURN next.id as code,
-                       next.standard_text as description,
-                       next.grade as grade,
-                       next.strand as strand,
-                       t.name as track,
-                       size(prereq_ids) as prereq_count
-                ORDER BY next.grade, prereq_count
-                LIMIT 5
-                """,
-                {"standard_id": standard_id, "student_id": student_id},
-            )
+            rows = await curriculum_graph.get_next_standards(standard_id, student_id, limit=5)
 
             standards = []
             for row in rows:
@@ -334,7 +304,7 @@ class StandardsMapper:
             return standards
 
         except Exception as e:
-            logger.warning(f"Neo4j prerequisite query failed: {e}")
+            logger.warning(f"Standards progression query failed: {e}")
             return []
 
     async def get_prerequisites_for_standard(
@@ -348,22 +318,7 @@ class StandardsMapper:
         Returns: (unmastered_prereqs, mastered_prereqs)
         """
         try:
-            rows = await neo4j_client.run(
-                """
-                MATCH (s:OASStandard {id: $standard_id})<-[:PREREQUISITE_FOR]-(prereq:OASStandard)
-                MATCH (prereq)-[:MAPS_TO_TRACK]->(t:Track)
-                OPTIONAL MATCH (:Student {id: $student_id})-[:MASTERED]->(prereq)
-                WITH prereq, t, EXISTS((:Student {id: $student_id})-[:MASTERED]->(prereq)) as is_mastered
-                RETURN prereq.id as code,
-                       prereq.standard_text as description,
-                       prereq.grade as grade,
-                       prereq.strand as strand,
-                       t.name as track,
-                       is_mastered
-                ORDER BY prereq.grade
-                """,
-                {"standard_id": standard_id, "student_id": student_id},
-            )
+            rows = await curriculum_graph.get_standard_prerequisites(standard_id, student_id)
 
             unmastered = []
             mastered = []
@@ -386,7 +341,7 @@ class StandardsMapper:
             return unmastered, mastered
 
         except Exception as e:
-            logger.warning(f"Neo4j prerequisites query failed: {e}")
+            logger.warning(f"Standards prerequisites query failed: {e}")
             return [], []
 
     async def record_mastery_evidence(
@@ -422,13 +377,13 @@ class StandardsMapper:
                 ON CONFLICT ("studentId", "standardId")
                 DO UPDATE SET
                     proficiency = CASE
-                        WHEN :proficiency = 'extending' OR "StandardMastery".proficiency = 'extending'
-                        THEN 'extending'
-                        WHEN :proficiency = 'understanding' OR "StandardMastery".proficiency = 'understanding'
-                        THEN 'understanding'
-                        WHEN :proficiency = 'approaching' OR "StandardMastery".proficiency = 'approaching'
-                        THEN 'approaching'
-                        ELSE 'developing'
+                        WHEN :proficiency = 'EXTENDING' OR "StandardMastery".proficiency = 'EXTENDING'
+                        THEN 'EXTENDING'::"OASProficiencyLevel"
+                        WHEN :proficiency = 'UNDERSTANDING' OR "StandardMastery".proficiency = 'UNDERSTANDING'
+                        THEN 'UNDERSTANDING'::"OASProficiencyLevel"
+                        WHEN :proficiency = 'APPROACHING' OR "StandardMastery".proficiency = 'APPROACHING'
+                        THEN 'APPROACHING'::"OASProficiencyLevel"
+                        ELSE 'DEVELOPING'::"OASProficiencyLevel"
                     END,
                     "evidenceCount" = "StandardMastery"."evidenceCount" + 1,
                     "lastEvidenceAt" = :evidence_at,
@@ -439,30 +394,10 @@ class StandardsMapper:
                 "standard_id": standard_id,
                 "subject": subject.value,
                 "grade": grade,
-                "proficiency": proficiency.value,
+                "proficiency": proficiency.name,
                 "evidence_at": evidence.submitted_at,
             },
         )
-
-        # Update Neo4j mastery relationship
-        try:
-            await neo4j_client.run(
-                """
-                MERGE (st:Student {id: $student_id})
-                MERGE (s:OASStandard {id: $standard_id})
-                MERGE (st)-[m:MASTERED]->(s)
-                SET m.proficiency = $proficiency,
-                    m.evidence_count = coalesce(m.evidence_count, 0) + 1,
-                    m.last_assessed = datetime()
-                """,
-                {
-                    "student_id": student_id,
-                    "standard_id": standard_id,
-                    "proficiency": proficiency.value,
-                },
-            )
-        except Exception as e:
-            logger.warning(f"Neo4j mastery update failed (non-fatal): {e}")
 
         # Invalidate graduation report cache
         await self._invalidate_cache(student_id)
@@ -522,10 +457,10 @@ class StandardsMapper:
                 SELECT 
                     subject,
                     COUNT(*) as total,
-                    COUNT(*) FILTER (WHERE proficiency = 'developing') as developing,
-                    COUNT(*) FILTER (WHERE proficiency = 'approaching') as approaching,
-                    COUNT(*) FILTER (WHERE proficiency = 'understanding') as understanding,
-                    COUNT(*) FILTER (WHERE proficiency = 'extending') as extending
+                    COUNT(*) FILTER (WHERE proficiency = 'DEVELOPING') as developing,
+                    COUNT(*) FILTER (WHERE proficiency = 'APPROACHING') as approaching,
+                    COUNT(*) FILTER (WHERE proficiency = 'UNDERSTANDING') as understanding,
+                    COUNT(*) FILTER (WHERE proficiency = 'EXTENDING') as extending
                 FROM "StandardMastery"
                 {where_clause}
                 GROUP BY subject
@@ -571,7 +506,7 @@ class StandardsMapper:
                     LEFT JOIN "StandardMastery" m
                         ON m."standardId" = s.id AND m."studentId" = :student_id
                     WHERE m.proficiency IS NULL 
-                       OR m.proficiency IN ('developing', 'approaching')
+                       OR m.proficiency IN ('DEVELOPING', 'APPROACHING')
                     LIMIT 10
                 """),
                 {"subject": subj, "student_id": student_id},

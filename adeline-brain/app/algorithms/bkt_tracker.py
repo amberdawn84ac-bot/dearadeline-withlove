@@ -2,12 +2,12 @@
 BKT State Tracker — bridges zpd_engine.py math with SpacedRepetitionCard persistence.
 
 Per-concept BKT pL is stored in SpacedRepetitionCard.masteryLevel.
-When pL crosses the mastery threshold (0.7), a MASTERED edge is written to Neo4j.
+When pL crosses the mastery threshold (0.7), concept mastery is written to Postgres.
 
 This closes the feedback loop that makes ZPD proactive:
   student answers quiz       → update_bkt(correct=True/False)
   → new pL stored in SpacedRepetitionCard.masteryLevel
-  → if pL >= 0.7: MASTERED edge written to Neo4j
+  → if pL >= 0.7: concept mastery written to Postgres
   → next get_zpd_candidates_with_bkt() reflects new mastery
   → higher-order concepts become available in ZPD
 
@@ -106,7 +106,7 @@ async def update_bkt(
     1. Read current pL from SpacedRepetitionCard (defaults to 0.1 if unseen)
     2. Run bkt_update(params, correct) → new_pL
     3. UPSERT SpacedRepetitionCard with new masteryLevel
-    4. If new_pL >= MASTERY_THRESHOLD: write MASTERED edge to Neo4j
+    4. If new_pL >= MASTERY_THRESHOLD: write concept mastery to Postgres
 
     Returns the new pL value.
     """
@@ -153,11 +153,11 @@ async def update_bkt(
             f"correct={correct} pL: {current_pL:.3f} → {new_pL:.3f}"
         )
 
-        # Write Neo4j MASTERED edge when BKT crosses threshold
+        # Write Postgres concept mastery when BKT crosses threshold
         if new_pL >= MASTERY_THRESHOLD and current_pL < MASTERY_THRESHOLD:
             logger.info(
                 f"[BKTTracker] MASTERY THRESHOLD CROSSED for {concept_id} "
-                f"(pL={new_pL:.3f}) — writing MASTERED edge to Neo4j"
+                f"(pL={new_pL:.3f}) — writing concept mastery to Postgres"
             )
             try:
                 await record_concept_mastery(
@@ -167,7 +167,7 @@ async def update_bkt(
                     sealed_at=datetime.now(timezone.utc).isoformat(),
                 )
             except Exception as e:
-                logger.warning(f"[BKTTracker] Neo4j MASTERED edge write failed (non-fatal): {e}")
+                logger.warning(f"[BKTTracker] Postgres mastery write failed (non-fatal): {e}")
 
         return new_pL
 
@@ -183,7 +183,7 @@ def build_mastery_snapshots(
     """
     Build a {concept_id: MasterySnapshot} dict for compute_zpd_from_snapshots().
 
-    concept_rows: list of concept dicts from Neo4j (must have 'id' and 'name').
+    concept_rows: list of concept dicts from Postgres (must have 'id' and 'name').
     mastery_map_with_ts: {concept_id: (pL, last_practiced_at)} from SpacedRepetitionCard.
     """
     snapshots: dict[str, MasterySnapshot] = {}
@@ -255,7 +255,7 @@ async def update_card_after_lesson(
       2 = incorrect but easy to recall, 1 = incorrect, 0 = complete blackout
 
     Updates SpacedRepetitionCard with new mastery level + review schedule (interval, dueAt, easeFactor).
-    Writes MASTERED edge to Neo4j if pL crosses threshold.
+    Writes concept mastery to Postgres if pL crosses threshold.
     Returns the new pL value.
     """
     from app.algorithms.spaced_repetition import sm2
@@ -330,11 +330,11 @@ async def update_card_after_lesson(
             f"dueAt={sm2_result.next_due_at.date()} quality={quality}"
         )
 
-        # Write MASTERED edge to Neo4j when pL crosses threshold
+        # Write Postgres concept mastery when pL crosses threshold
         if new_pL >= MASTERY_THRESHOLD and current_pL < MASTERY_THRESHOLD:
             logger.info(
                 f"[BKTTracker] MASTERY THRESHOLD CROSSED for {concept_id} "
-                f"(pL={new_pL:.3f}) — writing MASTERED edge to Neo4j"
+                f"(pL={new_pL:.3f}) — writing concept mastery to Postgres"
             )
             try:
                 await record_concept_mastery(
@@ -344,7 +344,7 @@ async def update_card_after_lesson(
                     sealed_at=datetime.now(timezone.utc).isoformat(),
                 )
             except Exception as e:
-                logger.warning(f"[BKTTracker] Neo4j MASTERED edge write failed (non-fatal): {e}")
+                logger.warning(f"[BKTTracker] Postgres mastery write failed (non-fatal): {e}")
 
         return new_pL
 

@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
 
-# ── In-memory experiment catalog (seeded below, persisted in Neo4j later) ────
+# ── In-memory experiment catalog (seeded below) ──────────────────────────────
 
 EXPERIMENTS: dict[str, Experiment] = {}
 

@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""
-seed_oas_standards.py — Load ALL 3,043 OAS standards into Neo4j
-
-This script loads the comprehensive OAS standards from oas_to_8track.json
-into Neo4j as OASStandard nodes with proper track mappings.
-
-The current seed_curriculum.py only loads 12 standards - this script
-loads ALL 3,043 standards across all 10 tracks and K-12 grades.
-
-Run from adeline-brain/:
-    python scripts/seed_oas_standards.py
-
-Requires:
-    NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD env vars
-"""
+"""Load all Oklahoma standards into the existing Postgres database."""
 import asyncio
 import json
 import logging
@@ -22,168 +8,98 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from sqlalchemy import text
 
-# Load .env from adeline-brain directory
 load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
-
-# Add parent to path so app imports work
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.connections.neo4j_client import neo4j_client
-from app.connections.knowledge_graph import apply_schema_constraints
+from app.connections.curriculum_graph import curriculum_graph
+from app.connections.postgres import _get_session_factory
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(message)s",
-    datefmt="%H:%M:%S",
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(message)s")
 logger = logging.getLogger(__name__)
 
 OAS_SEED_PATH = Path(__file__).resolve().parents[1] / "data" / "seeds" / "oas_to_8track.json"
-BATCH_SIZE = 50  # Process standards in batches to avoid timeouts
-OVERALL_TIMEOUT = 600  # 10 minutes total timeout for seeding
+OVERALL_TIMEOUT = 600
 
 
-async def seed_oas_standards():
-    """Load all OAS standards from oas_to_8track.json into Neo4j."""
-    
-    # Connect to Neo4j
-    logger.info("Connecting to Neo4j...")
-    await neo4j_client.connect()
-    
-    # Load the comprehensive OAS data
-    logger.info(f"Loading OAS standards from {OAS_SEED_PATH}")
-    with open(OAS_SEED_PATH, "r", encoding="utf-8") as f:
-        oas_data = json.load(f)
-    
-    mappings = oas_data.get("mappings", [])
-    logger.info(f"Found {len(mappings)} OAS standard mappings")
-    
-    # Apply schema constraints first
-    logger.info("Applying Neo4j schema constraints...")
-    await apply_schema_constraints()
-    
-    # DO NOT clear existing OASStandard nodes - use MERGE to add/update without destroying
-    
-    # Seed Track nodes (if not already present)
-    logger.info("Seeding Track nodes...")
-    from app.connections.knowledge_graph import seed_tracks
-    await seed_tracks()
-    
-    # Load all OAS standards in batches to avoid timeouts
-    logger.info(f"Loading OAS standards into Neo4j (batch size={BATCH_SIZE})...")
-    loaded_count = 0
-    failed_count = 0
-    
-    for i in range(0, len(mappings), BATCH_SIZE):
-        batch = mappings[i:i + BATCH_SIZE]
-        logger.info(f"Processing batch {i//BATCH_SIZE + 1}/{(len(mappings) + BATCH_SIZE - 1)//BATCH_SIZE} ({len(batch)} standards)...")
-        
-        for mapping in batch:
-            try:
-                neo4j_node = mapping.get("neo4j_node", {})
-                node_id = neo4j_node.get("properties", {}).get("id")
-                
-                if not node_id:
-                    logger.warning(f"Skipping mapping without node_id: {mapping.get('standard_id')}")
-                    failed_count += 1
-                    continue
-                
-                # Create OASStandard node
-                await neo4j_client.run(
-                    """
-                    MERGE (s:OASStandard {id: $id})
-                    SET s.grade = $grade,
-                        s.subject = $subject,
-                        s.strand = $strand,
-                        s.standard_id = $standard_id,
-                        s.standard_text = $standard_text,
-                        s.track = $track,
-                        s.difficulty = $difficulty
-                    """,
-                    {
-                        "id": node_id,
-                        "grade": mapping.get("grade"),
-                        "subject": mapping.get("subject"),
-                        "strand": mapping.get("strand", ""),
-                        "standard_id": mapping.get("standard_id"),
-                        "standard_text": mapping.get("standard_text"),
-                        "track": mapping.get("track"),
-                        "difficulty": mapping.get("difficulty"),
-                    },
-                )
-                
-                # Create MAPS_TO_TRACK relationship
-                track = mapping.get("track")
-                if track:
-                    await neo4j_client.run(
-                        """
-                        MATCH (s:OASStandard {id: $id})
-                        MATCH (t:Track {name: $track})
-                        MERGE (s)-[:MAPS_TO_TRACK]->(t)
-                        """,
-                        {"id": node_id, "track": track},
-                    )
-                
-                loaded_count += 1
-                
-            except Exception as e:
-                logger.error(f"Failed to load standard {mapping.get('standard_id')}: {e}")
-                failed_count += 1
-        
-        # Progress logging after each batch
-        logger.info(f"Batch complete: {loaded_count}/{len(mappings)} standards loaded...")
-    
-    logger.info(f"✅ Loaded {loaded_count} OAS standards successfully")
-    if failed_count > 0:
-        logger.warning(f"⚠️  Failed to load {failed_count} standards")
-    
-    # Verify the count
-    result = await neo4j_client.run("MATCH (s:OASStandard) RETURN count(s) as count")
-    count = result[0]["count"] if result else 0
-    logger.info(f"📊 Total OASStandard nodes in Neo4j: {count}")
-    
-    # Show distribution by track
-    track_result = await neo4j_client.run(
-        """
-        MATCH (s:OASStandard)-[:MAPS_TO_TRACK]->(t:Track)
-        RETURN t.name as track, count(s) as count
-        ORDER BY track
-        """
-    )
-    logger.info("📈 OAS Standards by track:")
-    for record in track_result:
-        logger.info(f"  {record['track']}: {record['count']}")
-    
-    # Show distribution by grade
-    grade_result = await neo4j_client.run(
-        """
-        MATCH (s:OASStandard)
-        RETURN s.grade as grade, count(s) as count
-        ORDER BY grade
-        """
-    )
-    logger.info("📈 OAS Standards by grade:")
-    for record in grade_result:
-        grade_label = "K" if record['grade'] == 0 else str(record['grade'])
-        logger.info(f"  Grade {grade_label}: {record['count']}")
-    
-    # Close Neo4j connection
-    await neo4j_client.close()
+async def seed_oas_standards() -> None:
+    await curriculum_graph.connect()
+    with OAS_SEED_PATH.open("r", encoding="utf-8") as source:
+        mappings = json.load(source).get("mappings", [])
+
+    standards: list[dict] = []
+    relations: list[dict] = []
+    tracks = {mapping.get("track") for mapping in mappings}
+    for mapping in mappings:
+        # Human-readable OAS codes repeat across subjects and grades. The
+        # compound seed ID is the stable unique key used throughout mastery.
+        standard_id = (
+            mapping.get("standard_node", {}).get("properties", {}).get("id")
+            or mapping.get("neo4j_node", {}).get("properties", {}).get("id")
+            or mapping.get("standard_id")
+        )
+        if not standard_id:
+            continue
+        node_properties = (
+            mapping.get("standard_node", {}).get("properties", {})
+            or mapping.get("neo4j_node", {}).get("properties", {})
+        )
+        standards.append({
+            "code": standard_id,
+            "grade": mapping.get("grade", 0),
+            "subject": mapping.get("subject", "ELA"),
+            "strand": mapping.get("strand") or node_properties.get("strand", ""),
+            "description": mapping.get("standard_text", ""),
+            "grade_band": mapping.get("grade_band", ""),
+            "lesson_hook": mapping.get("adeline_lesson_hook", ""),
+            "homestead": mapping.get("homestead_adaptation", ""),
+            "difficulty": mapping.get("difficulty", "EMERGING"),
+            "track": mapping.get("track", "ENGLISH_LITERATURE"),
+        })
+        for relation in mapping.get("standard_relationships", mapping.get("neo4j_relationships", [])):
+            target = relation.get("target") or relation.get("target_id")
+            relation_type = relation.get("type", "RELATED_TO")
+            if target and target not in tracks:
+                relations.append({
+                    "from_id": standard_id,
+                    "relation_type": relation_type,
+                    "to_id": target,
+                    "weight": float(relation.get("weight", 1.0)),
+                })
+
+    async with _get_session_factory()() as session:
+        await session.execute(text('''
+            INSERT INTO "OASStandard"
+                (id, code, subject, grade, "gradeBand", strand, description, track,
+                 "lessonHook", "homesteadAdaptation", difficulty, "createdAt")
+            VALUES
+                (gen_random_uuid(), :code, :subject, :grade, :grade_band, :strand,
+                 :description, :track, :lesson_hook, :homestead, :difficulty, NOW())
+            ON CONFLICT (code) DO UPDATE SET
+                subject = EXCLUDED.subject, grade = EXCLUDED.grade,
+                "gradeBand" = EXCLUDED."gradeBand", strand = EXCLUDED.strand,
+                description = EXCLUDED.description, track = EXCLUDED.track,
+                "lessonHook" = EXCLUDED."lessonHook",
+                "homesteadAdaptation" = EXCLUDED."homesteadAdaptation",
+                difficulty = EXCLUDED.difficulty
+        '''), standards)
+        if relations:
+            await session.execute(text('''
+                INSERT INTO "OASStandardRelation"
+                    ("fromStandardId", "relationType", "toStandardId", weight)
+                VALUES (:from_id, :relation_type, :to_id, :weight)
+                ON CONFLICT ("fromStandardId", "relationType", "toStandardId")
+                DO UPDATE SET weight = EXCLUDED.weight
+            '''), relations)
+        await session.commit()
+        count = (await session.execute(text('SELECT COUNT(*) FROM "OASStandard"'))).scalar_one()
+    logger.info("Loaded %s standards; Postgres now contains %s", len(standards), count)
 
 
-async def main():
-    try:
-        # Run with overall timeout to prevent hanging deployments
-        await asyncio.wait_for(seed_oas_standards(), timeout=OVERALL_TIMEOUT)
-        logger.info("✅ OAS standards seeding complete!")
-    except asyncio.TimeoutError:
-        logger.error(f"❌ OAS standards seeding timed out after {OVERALL_TIMEOUT} seconds")
-        sys.exit(1)
-    except Exception as e:
-        logger.error(f"❌ OAS standards seeding failed: {e}")
-        raise
+async def main() -> None:
+    await asyncio.wait_for(seed_oas_standards(), timeout=OVERALL_TIMEOUT)
 
 
 if __name__ == "__main__":
