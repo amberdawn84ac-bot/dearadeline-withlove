@@ -9,15 +9,12 @@ from app.curriculum.family_style import (
 from app.agents.adapter import sanitize_learner_text
 
 
-def test_family_workshop_has_shared_work_roles_and_portfolio_evidence():
+def test_family_workshop_helper_is_explicitly_deprecated():
     block = family_workshop_block("Children Who Changed History")
 
     assert block["family_style"] is True
-    assert "Finish with something real" in block["content"]
-    assert "Grades 4–5" in block["content"]
-    assert "Grades 6–8" in block["content"]
-    assert "Grades 9–12" in block["content"]
-    assert "portfolio" in block["content"]
+    assert block["deprecated"] is True
+    assert block["canonical_format_version"] == CANONICAL_FORMAT_VERSION
 
 
 def test_ensure_family_workshop_is_idempotent():
@@ -26,21 +23,26 @@ def test_ensure_family_workshop_is_idempotent():
     twice = ensure_family_workshop(once, "A topic")
 
     assert len(original) == 1
-    assert len(once) == 2
+    assert len(once) == 1
     assert twice == once
 
 
 def test_canonical_rules_keep_truth_fixed_while_roles_change():
     assert "full adult/high-school depth" in FAMILY_CANONICAL_AUTHORING_RULES
     assert "different responsibility" in FAMILY_CANONICAL_AUTHORING_RULES
-    assert "facts, sources, central questions, and worldview fixed" in FAMILY_CANONICAL_AUTHORING_RULES
+    assert "central question, learning goal, verified facts" in FAMILY_CANONICAL_AUTHORING_RULES
 
 
 def test_only_current_family_canonicals_are_reused():
-    current = family_workshop_block("Water")
-    assert current["canonical_format_version"] == CANONICAL_FORMAT_VERSION
+    current = {
+        "block_type": "TEXT",
+        "content": "Water moves through a watershed.",
+        "family_style": True,
+        "canonical_format_version": CANONICAL_FORMAT_VERSION,
+    }
     assert is_current_family_canonical([current])
     assert not is_current_family_canonical([{**current, "canonical_format_version": 1}])
+    assert not is_current_family_canonical([family_workshop_block("Water")])
 
 
 def test_finalizer_preserves_structure_and_removes_obsolete_rebuilders():
@@ -55,14 +57,18 @@ def test_finalizer_preserves_structure_and_removes_obsolete_rebuilders():
             "content": "A real project.",
             "genui_assembly_data": {"component_type": "ProjectBuilder", "props": {"title": "Build"}},
         },
+        {"block_type": "TEXT", "content": "Measure the material."},
+        {"block_type": "REAL_WORLD_APP", "content": "Build the useful object."},
+        {"block_type": "QUIZ", "content": "Check the plan."},
+        {"block_type": "TEXT", "content": "Record the result."},
     ]
 
-    finalized = finalize_family_lesson(blocks, "Woodworking")
+    finalized = finalize_family_lesson(blocks, "Woodworking", track="CREATIVE_ECONOMY")
 
     assert [block["block_type"] for block in finalized] == [
-        "NARRATIVE", "GENUI_ASSEMBLY", "NARRATIVE",
+        "NARRATIVE", "GENUI_ASSEMBLY", "TEXT", "REAL_WORLD_APP", "QUIZ", "TEXT",
     ]
-    assert finalized[-1]["canonical_format_version"] == CANONICAL_FORMAT_VERSION
+    assert all(block["canonical_format_version"] == CANONICAL_FORMAT_VERSION for block in finalized)
 
 
 def test_learner_text_removes_internal_notes_and_identity_errors():

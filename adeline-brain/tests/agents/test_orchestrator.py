@@ -326,6 +326,25 @@ _FAKE_EVALUATED_EVIDENCE = Evidence(
 )
 
 
+async def _validated_seed_lesson(state, blocks):
+    """Keep routing tests deterministic while satisfying the v4 6-block contract."""
+    seed = list(blocks) or [{
+        "block_type": BlockType.NARRATIVE.value,
+        "content": "Knowledge-based lesson.",
+        "evidence": [],
+        "is_silenced": False,
+    }]
+    padded = list(seed)
+    while len(padded) < 6:
+        padded.append({
+            "block_type": BlockType.TEXT.value,
+            "content": f"Canonical learning block {len(padded) + 1}.",
+            "evidence": [],
+            "is_silenced": False,
+        })
+    return padded
+
+
 class TestRunOrchestrator:
     @pytest.mark.asyncio
     async def test_truth_history_returns_lesson_response(self):
@@ -336,6 +355,7 @@ class TestRunOrchestrator:
             patch("app.agents.orchestrator.curriculum_graph") as mock_graph,
             patch("app.agents.orchestrator.evaluate_evidence", return_value=_FAKE_EVALUATED_EVIDENCE),
             patch("app.agents.orchestrator.search_witnesses", new_callable=AsyncMock, return_value=None),
+            patch("app.agents.orchestrator._finalize_specialist_lesson", side_effect=_validated_seed_lesson),
         ):
             mock_hippo.similarity_search = AsyncMock(return_value=[_FAKE_EVIDENCE])
             mock_graph.get_standards_for_track = AsyncMock(return_value=[])
@@ -346,9 +366,9 @@ class TestRunOrchestrator:
         assert response.lesson_id is not None
         assert response.track == Track.TRUTH_HISTORY
         assert response.agent_name == "HistorianAgent"
-        assert len(response.blocks) == 1
+        assert len(response.blocks) == 6
         assert response.blocks[0].block_type == BlockType.PRIMARY_SOURCE
-        assert len(response.xapi_statements) == 1
+        assert len(response.xapi_statements) == 6
         assert len(response.credits_awarded) == 1
 
     @pytest.mark.asyncio
@@ -360,6 +380,7 @@ class TestRunOrchestrator:
             patch("app.agents.orchestrator.curriculum_graph") as mock_graph,
             patch("app.agents.orchestrator.evaluate_evidence", return_value=_FAKE_EVALUATED_EVIDENCE),
             patch("app.agents.orchestrator.search_witnesses", new_callable=AsyncMock, return_value=None),
+            patch("app.agents.orchestrator._finalize_specialist_lesson", side_effect=_validated_seed_lesson),
         ):
             mock_hippo.similarity_search = AsyncMock(return_value=[_FAKE_EVIDENCE])
             mock_graph.get_standards_for_track = AsyncMock(return_value=[])
@@ -380,6 +401,7 @@ class TestRunOrchestrator:
             patch("app.agents.orchestrator.curriculum_graph") as mock_graph,
             patch("app.agents.orchestrator.evaluate_evidence", return_value=_FAKE_EVALUATED_EVIDENCE),
             patch("app.agents.orchestrator.search_witnesses", new_callable=AsyncMock, return_value=None),
+            patch("app.agents.orchestrator._finalize_specialist_lesson", side_effect=_validated_seed_lesson),
         ):
             mock_hippo.similarity_search = AsyncMock(return_value=[_FAKE_EVIDENCE])
             mock_graph.get_standards_for_track = AsyncMock(return_value=[])
@@ -397,9 +419,10 @@ class TestRunOrchestrator:
         with (
             patch("app.agents.orchestrator.hippocampus") as mock_hippo,
             patch("app.agents.orchestrator.curriculum_graph") as mock_graph,
-            patch("app.agents.orchestrator.build_research_mission_block",
-                  return_value={"content": "Go research this.", "title": "Research Mission"}),
             patch("app.agents.orchestrator.search_witnesses", new_callable=AsyncMock, return_value=None),
+            patch("app.agents.orchestrator._generate_from_knowledge", new_callable=AsyncMock,
+                  return_value=[{"block_type": "NARRATIVE", "content": "Knowledge lesson."}]),
+            patch("app.agents.orchestrator._finalize_specialist_lesson", side_effect=_validated_seed_lesson),
         ):
             mock_hippo.similarity_search = AsyncMock(return_value=[])
             mock_graph.get_standards_for_track = AsyncMock(return_value=[])
@@ -407,6 +430,6 @@ class TestRunOrchestrator:
 
             response = await run_orchestrator(request, [0.1] * 1536)
 
-        assert response.has_research_missions is True
-        assert response.blocks[0].block_type == BlockType.RESEARCH_MISSION
+        assert response.has_research_missions is False
+        assert response.blocks[0].block_type == BlockType.NARRATIVE
         assert response.researcher_activated is False
