@@ -121,6 +121,102 @@ TRACK_TO_SUBJECT: dict[str, StandardsSubject] = {
 }
 
 
+# Small deterministic registry used by synchronous callers such as the credit
+# ledger.  The richer StandardsMapper API below remains the source for database
+# and embedding-backed matches; these entries provide a reliable, offline
+# fallback for the subjects currently represented in the curriculum.
+OAS_STANDARDS_REGISTRY: dict[str, OASStandard] = {
+    "OK-ELA-8.R.1": OASStandard(
+        code="OK-ELA-8.R.1", subject=StandardsSubject.ELA, grade=8,
+        grade_band="6-8", strand="Reading",
+        description="Students will identify and analyze main idea and supporting details.",
+        track="ENGLISH_LITERATURE",
+    ),
+    "OK-ELA-HS.R.2": OASStandard(
+        code="OK-ELA-HS.R.2", subject=StandardsSubject.ELA, grade=9,
+        grade_band="9-12", strand="Reading",
+        description="Students will analyze author's purpose and craft.",
+        track="ENGLISH_LITERATURE",
+    ),
+    "OK-SCIENCE-8.LS.1": OASStandard(
+        code="OK-SCIENCE-8.LS.1", subject=StandardsSubject.SCIENCE, grade=8,
+        grade_band="6-8", strand="Life Science",
+        description="Students will understand the relationship between structure and function.",
+        track="CREATION_SCIENCE",
+    ),
+    "OK-MATH-HS.A.1": OASStandard(
+        code="OK-MATH-HS.A.1", subject=StandardsSubject.MATH, grade=9,
+        grade_band="9-12", strand="Algebra",
+        description="Students will solve linear and quadratic equations.",
+        track="APPLIED_MATHEMATICS",
+    ),
+    "OK-SOCIAL-STUDIES-HS.1": OASStandard(
+        code="OK-SOCIAL-STUDIES-HS.1", subject=StandardsSubject.SOCIAL_STUDIES,
+        grade=9, grade_band="9-12", strand="History",
+        description="Students will analyze major events in United States history.",
+        track="TRUTH_HISTORY",
+    ),
+}
+
+
+def get_track_subject(track: str) -> Optional[StandardsSubject]:
+    """Return the OAS subject associated with a curriculum track."""
+    return TRACK_TO_SUBJECT.get(track)
+
+
+def lookup_oas_standard(code: str) -> Optional[OASStandard]:
+    """Look up a standard available to the deterministic mapper."""
+    return OAS_STANDARDS_REGISTRY.get(code)
+
+
+def infer_oas_confidence(content: str, oas_code: str) -> float:
+    """Estimate a transparent keyword-overlap score for an OAS standard."""
+    if not content:
+        return 0.0
+    standard = lookup_oas_standard(oas_code)
+    if standard is None:
+        return 0.0
+
+    content_lower = content.lower()
+    keywords = standard.description.lower().split()
+    matches = sum(1 for keyword in keywords if len(keyword) > 3 and keyword in content_lower)
+    return min(1.0, matches / max(1, len(keywords)))
+
+
+def map_lesson_to_oas(
+    track: str,
+    content: str,
+    grade_band: str = "9-12",
+) -> list[OASStandard]:
+    """Synchronously map lesson text for ledger and transcript enrichment."""
+    subject = get_track_subject(track)
+    if subject is None:
+        return []
+
+    matches = []
+    for code, standard in OAS_STANDARDS_REGISTRY.items():
+        if standard.subject != subject or standard.grade_band != grade_band:
+            continue
+        confidence = infer_oas_confidence(content, code)
+        if confidence > 0.3:
+            matches.append(OASStandard(
+                code=standard.code,
+                subject=standard.subject,
+                grade=standard.grade,
+                grade_band=standard.grade_band,
+                strand=standard.strand,
+                description=standard.description,
+                track=track,
+                confidence=confidence,
+            ))
+    return sorted(matches, key=lambda standard: standard.confidence, reverse=True)
+
+
+def validate_oas_code(code: str) -> bool:
+    """Return whether a code exists in the deterministic registry."""
+    return code in OAS_STANDARDS_REGISTRY
+
+
 def _score_to_proficiency(score: float, evidence_type: str) -> OASProficiencyLevel:
     """Convert numerical score to OAS proficiency level."""
     if evidence_type == "quiz":
