@@ -30,7 +30,7 @@ ENV_VARS: Dict[str, Tuple[EnvVarTier, str]] = {
     # Always required (dev + prod)
     "POSTGRES_DSN": (EnvVarTier.ALWAYS_REQUIRED, "PostgreSQL connection for Hippocampus"),
     "OPENAI_API_KEY": (EnvVarTier.ALWAYS_REQUIRED, "OpenAI embeddings (text-embedding-3-small)"),
-    "ANTHROPIC_API_KEY": (EnvVarTier.ALWAYS_REQUIRED, "Anthropic LLM (claude-sonnet-4-6)"),
+    "GEMINI_API_KEY": (EnvVarTier.ALWAYS_REQUIRED, "Gemini lesson generation"),
     "TAVILY_API_KEY": (EnvVarTier.ALWAYS_REQUIRED, "Tavily web search for deep archive access"),
 
     # Production required

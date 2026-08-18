@@ -14,7 +14,7 @@ Usage:
 Requires:
     - DATABASE_URL env var set
     - GEMINI_API_KEY or GOOGLE_API_KEY set (for generation)
-    - ANTHROPIC_API_KEY optional (fallback for controversial topics)
+    - GEMINI_API_KEY required for lesson authoring
 
 Topics are generated with pendingApproval=TRUE by default so you can review before publishing.
 After review, approve them via:

@@ -18,7 +18,7 @@ from fastapi import APIRouter
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
-from app.config import create_llm, GOOGLE_API_KEY, ANTHROPIC_API_KEY
+from app.config import create_llm, GOOGLE_API_KEY, GEMINI_MODEL
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["daily-bread"])
@@ -226,7 +226,7 @@ Return ONLY this JSON (no other text):
   ]
 }}"""
 
-    if not ANTHROPIC_API_KEY and not GOOGLE_API_KEY and not os.getenv("GEMINI_API_KEY"):
+    if not GOOGLE_API_KEY and not os.getenv("GEMINI_API_KEY"):
         # Fallback sections when no API key
         return [
             DeepDiveSection(
@@ -247,7 +247,7 @@ Return ONLY this JSON (no other text):
             ),
         ]
 
-    llm = create_llm(max_tokens=1200)
+    llm = create_llm(model=GEMINI_MODEL, max_tokens=1200)
     lc_messages = [
         SystemMessage(content=_DEEP_DIVE_SYSTEM),
         HumanMessage(content=user_prompt),

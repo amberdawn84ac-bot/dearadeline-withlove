@@ -791,11 +791,14 @@ async def _synthesize_corrective_overlay(
         "relatedConcepts": [],
     }
     try:
-        import os
         import json as _json
-        import anthropic
+        import openai
+        from app.config import GEMINI_API_KEY, GOOGLE_API_KEY, GEMINI_MODEL, GEMINI_BASE_URL
 
-        client = anthropic.AsyncAnthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        api_key = GEMINI_API_KEY or GOOGLE_API_KEY
+        if not api_key:
+            return fallback
+        client = openai.AsyncOpenAI(api_key=api_key, base_url=GEMINI_BASE_URL)
         prompt = (
             f"A student answered a {track} question incorrectly.\n"
             f"Question: {question}\n"
@@ -808,12 +811,12 @@ async def _synthesize_corrective_overlay(
             "- relatedConcepts (array of strings): 2–3 related concepts the student should review\n"
             "Keep it concise and educational. No markdown — pure JSON only."
         )
-        message = await client.messages.create(
-            model="claude-haiku-4-5-20251001",
+        message = await client.chat.completions.create(
+            model=GEMINI_MODEL,
             max_tokens=256,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = message.content[0].text.strip()
+        raw = (message.choices[0].message.content or "").strip()
         parsed = _json.loads(raw)
         return {
             "studentAnswer": wrong_answer,

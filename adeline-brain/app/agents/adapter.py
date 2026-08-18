@@ -8,7 +8,6 @@ generic widgets.
 
 import asyncio
 import logging
-import os
 import re
 from dataclasses import dataclass, field
 
@@ -87,25 +86,8 @@ async def _llm_call(system: str, user: str, max_tokens: int = 1400) -> str:
                     logger.warning("[Adapter] Gemini retry after failure: %s", error)
                     await asyncio.sleep(1)
                 else:
-                    logger.warning("[Adapter] Gemini failed; trying Claude: %s", error)
-
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        return ""
-
-    try:
-        import anthropic
-
-        client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        response = await client.messages.create(
-            model="claude-3-haiku-20240307",
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
-        return response.content[0].text
-    except Exception as error:
-        logger.warning("[Adapter] Language adaptation failed: %s", error)
-        return ""
+                    logger.warning("[Adapter] Gemini adaptation failed: %s", error)
+    return ""
 
 
 def sanitize_learner_text(content: str) -> str:

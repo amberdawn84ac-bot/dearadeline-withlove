@@ -464,7 +464,15 @@ async def _stream_lesson(
         canonical = None if request.force_regenerate else await canonical_store.get(slug)
         # Redis payload uses snake_case key; DB payload also uses snake_case via _db_get
         is_pending = canonical.get("pending_approval") or canonical.get("pendingApproval") if canonical else False
-        if canonical and not is_pending:
+        review_reason = (
+            canonical.get("needs_review_reason") or canonical.get("needsReviewReason")
+            if canonical else None
+        )
+        # Validate approved canonicals and legacy pending rows with no actual
+        # review reason. The latter were bulk-seeded by the retired pipeline and
+        # otherwise trap learners on "Coming Soon" forever.
+        should_validate_format = bool(canonical) and (not is_pending or not review_reason)
+        if should_validate_format:
             # canonical_store returns "blocks" (not "blocksJson")
             blocks_data = canonical.get("blocks") or []
             if isinstance(blocks_data, str):
@@ -478,6 +486,7 @@ async def _stream_lesson(
                 await canonical_store.archive(slug, reason="obsolete_family_lesson_format")
                 canonical = None
                 blocks_data = []
+                is_pending = False
 
         if canonical and not is_pending:
 
@@ -537,7 +546,7 @@ async def _stream_lesson(
             # Canonical exists but is pending admin approval (controversial topic, etc.)
             # Show a graceful "under review" message instead of attempting live generation
             # which may fail due to safety filters or produce poor content.
-            review_reason = canonical.get("needs_review_reason") or canonical.get("needsReviewReason") or "Awaiting review"
+            review_reason = review_reason or "Awaiting review"
             logger.info(f"[LessonStream] Pending canonical found — slug={slug}, reason={review_reason}")
             yield _sse({"type": "status", "message": "This lesson is being prepared by our teaching team..."})
             

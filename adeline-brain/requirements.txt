@@ -5,13 +5,11 @@ pydantic==2.13.4
 pydantic-settings==2.14.1
 
 openai>=1.68.2,<2.0.0
-anthropic==0.105.2
 
 # LangChain — LLM orchestration (used by daily_bread.py and config.py)
 # Minimum floors set to fix: CVE-2025-65106, CVE-2025-68664, CVE-2026-26013,
 # CVE-2026-40087, CVE-2026-44843 (langchain-core), PYSEC-2026-76 (langchain-openai)
 langchain-core>=0.3.85
-langchain-anthropic>=0.3.0
 langchain-google-genai>=2.0.0
 langchain-openai>=0.3.0,<1.0.0
 

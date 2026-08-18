@@ -28,12 +28,9 @@ with a PRIMARY_SOURCE block from the auto-found archive.
 
 import contextvars
 import logging
-import os
 import uuid
 from datetime import datetime, timezone
 from typing import TypedDict, Literal, Optional
-
-import anthropic
 
 from app.schemas.api_models import (
     LessonRequest, LessonResponse, LessonBlockResponse,
@@ -48,8 +45,8 @@ from app.algorithms.pedagogical_directives import generate_pedagogical_directive
 from app.agents.pedagogy import ZPDZone
 from app.models.student import MasteryBand
 from app.curriculum.family_style import FAMILY_CANONICAL_AUTHORING_RULES, finalize_family_lesson
+from app.curriculum.canonical_author import CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT
 
-_ANTHROPIC_MODEL = ADELINE_MODEL
 logger = logging.getLogger(__name__)
 
 # ── Controversial Topic Detection ────────────────────────────────────────────
@@ -157,35 +154,14 @@ def apply_cognitive_load_budget(load) -> None:
 
 
 def _synthesis_client():
-    """
-    Returns an async OpenAI-compatible client for multimodal synthesis.
-    Priority order:
-      1. ADELINE_MODEL starts with "gemini" + GOOGLE_API_KEY set
-         → ChatGoogleGenerativeAI via OpenAI-compat endpoint
-      2. GEMINI_API_KEY set (legacy cheap synthesis key)
-         → Gemini Flash via OpenAI-compat endpoint
-      3. Fallback → Claude via ANTHROPIC_API_KEY
-    Returns (client, model_name, is_gemini).
-    """
-    if _ANTHROPIC_MODEL.lower().startswith("gemini") and GOOGLE_API_KEY:
-        import openai as _oai
-        return (
-            _oai.AsyncOpenAI(api_key=GOOGLE_API_KEY, base_url=GEMINI_BASE_URL),
-            _ANTHROPIC_MODEL,
-            True,
-        )
-    if GEMINI_API_KEY:
-        import openai as _oai
-        return (
-            _oai.AsyncOpenAI(api_key=GEMINI_API_KEY, base_url=GEMINI_BASE_URL),
-            GEMINI_MODEL,
-            True,
-        )
-    return (
-        anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY")),
-        _ANTHROPIC_MODEL,
-        False,
-    )
+    """Return the Gemini OpenAI-compatible client and configured model."""
+    import openai as _oai
+
+    api_key = GEMINI_API_KEY or GOOGLE_API_KEY
+    if not api_key:
+        raise SynthesisSafetyError("GEMINI_API_KEY or GOOGLE_API_KEY is required")
+    model = ADELINE_MODEL if ADELINE_MODEL.lower().startswith("gemini") else GEMINI_MODEL
+    return _oai.AsyncOpenAI(api_key=api_key, base_url=GEMINI_BASE_URL), model
 
 
 async def _pedagogical_call(system: str, user: str, max_tokens: int = 4000) -> str:
@@ -215,7 +191,7 @@ async def _pedagogical_call(system: str, user: str, max_tokens: int = 4000) -> s
                 finish_reason = getattr(choice, "finish_reason", None)
                 content = choice.message.content or ""
                 # Treat safety-filter / non-stop finish reasons as a failure so we fall through
-                # to the next model (or Claude). Returning a truncated fragment would render a
+                # to the next Gemini model. Returning a truncated fragment would render a
                 # broken lesson to the student.
                 if finish_reason and finish_reason != "stop":
                     logger.warning(
@@ -226,98 +202,47 @@ async def _pedagogical_call(system: str, user: str, max_tokens: int = 4000) -> s
                 return content
             except Exception as e:
                 logger.warning(f"[Pedagogical] {model} failed ({e}) — trying fallback")
-    # Final fallback: Claude
+    # Final fallback: retry through the standard Gemini synthesis path.
     return await _synthesis_call(system, user, max_tokens)
 
 
 async def _synthesis_call(system: str, user: str, max_tokens: int = 6000) -> str:
     """
-    Single synthesis API call — uses Gemini Flash if available, else Claude.
-    On Gemini failure, automatically retries once then falls back to Claude.
+    Single Gemini synthesis call with one retry.
     Returns the text content of the response.
     """
     ceil = _synthesis_token_ceil.get()
     if ceil is not None:
         max_tokens = min(max_tokens, ceil)
     import asyncio as _asyncio
-    client, model, is_gemini = _synthesis_client()
-
-    if is_gemini:
-        for attempt in range(2):
-            try:
-                response = await client.chat.completions.create(
-                    model=model,
-                    max_tokens=max_tokens,
-                    messages=[
-                        {"role": "system", "content": system},
-                        {"role": "user",   "content": user},
-                    ],
-                )
-                choice = response.choices[0]
-                finish_reason = getattr(choice, "finish_reason", None)
-                content = choice.message.content or ""
-                # If Gemini's safety filter blocked the response (partial or empty content with
-                # a non-"stop" finish_reason), fall through to Claude instead of returning the
-                # truncated fragment. This is common for Creation Science / Origins topics.
-                if finish_reason and finish_reason != "stop":
-                    logger.warning(
-                        f"[Synthesis] Gemini returned finish_reason={finish_reason!r} "
-                        f"(content len={len(content)}) — treating as failure and falling back to Claude"
-                    )
-                    break
-                return content
-            except Exception as gemini_err:
-                if attempt == 0:
-                    logger.warning(
-                        f"[Synthesis] Gemini attempt {attempt + 1} failed ({gemini_err}) — retrying..."
-                    )
-                    await _asyncio.sleep(1)
-                    continue
-                logger.warning(
-                    f"[Synthesis] Gemini failed after 2 attempts ({gemini_err}) — "
-                    "falling back to Claude"
-                )
-                break
-        # Gemini exhausted — fall back to Claude
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-        if not anthropic_key:
-            # No Claude fallback available — this is a safety-filter scenario on a controversial topic.
-            # Raise SynthesisSafetyError so the agent can save a "pending review" canonical
-            # instead of returning a broken/partial lesson to the student.
-            raise SynthesisSafetyError(
-                f"Gemini safety filter triggered (finish_reason={finish_reason}) "
-                "and ANTHROPIC_API_KEY not set — cannot generate lesson"
-            )
-        fallback_client = anthropic.AsyncAnthropic(api_key=anthropic_key)
+    client, model = _synthesis_client()
+    last_error: Exception | None = None
+    for attempt in range(2):
         try:
-            response = await fallback_client.messages.create(
-                model=_ANTHROPIC_MODEL,
+            response = await client.chat.completions.create(
+                model=model,
                 max_tokens=max_tokens,
-                system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
-                messages=[{"role": "user", "content": user}],
-                extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
             )
-        except (anthropic.RateLimitError, anthropic.APIConnectionError) as claude_err:
-            raise SynthesisSafetyError(
-                f"Claude fallback unavailable ({type(claude_err).__name__}): {claude_err}"
-            ) from claude_err
-        return response.content[0].text
-    else:
-        # Use Anthropic prompt caching on the system prompt (static prefix cached 5 min)
-        response = await client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            system=[
-                {
-                    "type": "text",
-                    "text": system,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": user}],
-            extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
-        )
-        return response.content[0].text
+            choice = response.choices[0]
+            finish_reason = getattr(choice, "finish_reason", None)
+            content = choice.message.content or ""
+            if finish_reason and finish_reason != "stop":
+                raise SynthesisSafetyError(
+                    f"Gemini stopped with finish_reason={finish_reason!r}"
+                )
+            if not content.strip():
+                raise SynthesisSafetyError("Gemini returned empty content")
+            return content
+        except Exception as gemini_err:
+            last_error = gemini_err
+            if attempt == 0:
+                logger.warning("[Synthesis] Gemini failed (%s) — retrying", gemini_err)
+                await _asyncio.sleep(1)
+    raise SynthesisSafetyError(f"Gemini unavailable after 2 attempts: {last_error}")
 
 # Track routing constants
 # TRUTH_HISTORY is the ONLY track that requires the Witness Protocol —
@@ -332,7 +257,7 @@ _DISCIPLESHIP_TRACKS = {
 _LITERATURE_TRACKS = {Track.ENGLISH_LITERATURE}
 
 
-# ── Claude synthesis ─────────────────────────────────────────────────────────
+# ── Gemini synthesis ─────────────────────────────────────────────────────────
 
 # Grade band → readable description and age mapping
 _GRADE_DESC = {
@@ -479,7 +404,7 @@ async def _synthesize_content(
         mastery_score: Student's current mastery score (0.0-1.0)
         mastery_band: Student's current mastery band
     """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
+    if not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return raw_content
 
     persona    = _TRACK_PERSONA.get(request.track, "a knowledgeable mentor")
@@ -926,6 +851,124 @@ def _structured_lesson_to_blocks(lesson: dict, request: LessonRequest) -> list[d
     return blocks
 
 
+def _extract_json_object(raw: str) -> dict | None:
+    """Parse a model JSON object, tolerating an accidental Markdown fence."""
+    import json as _json
+
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    try:
+        value = _json.loads(text)
+    except (_json.JSONDecodeError, TypeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+async def _author_family_canonical(
+    state: AdelineState,
+    seed_blocks: list[dict],
+) -> list[dict]:
+    """Compose specialist material into the validated canonical lesson."""
+    import json as _json
+
+    request = state["request"]
+    seed = []
+    for block in seed_blocks[:10]:
+        seed.append({
+            "block_type": block.get("block_type"),
+            "title": block.get("title"),
+            "content": str(block.get("content") or "")[:6000],
+            "evidence": block.get("evidence") or [],
+        })
+
+    user_prompt = (
+        f"Topic: {request.topic}\n"
+        f"Track: {request.track.value}\n\n"
+        "Compose the canonical lesson from the specialist material below. "
+        "Preserve verified evidence and semantic block types. Do not invent "
+        "quotations, citations, measurements, or source identities. If the "
+        "material is incomplete, add teaching, discussion, application, "
+        "reflection, and portfolio work without fabricating evidence.\n\n"
+        f"SPECIALIST MATERIAL:\n{_json.dumps(seed, ensure_ascii=False)}"
+    )
+
+    try:
+        raw = await _synthesis_call(
+            CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT,
+            user_prompt,
+            max_tokens=8000,
+        )
+        authored = _extract_json_object(raw)
+        authored_blocks = authored.get("blocks") if authored else None
+        if isinstance(authored_blocks, list):
+            normalized: list[dict] = []
+            for block in authored_blocks:
+                if not isinstance(block, dict):
+                    continue
+                candidate = dict(block)
+                candidate["block_type"] = str(
+                    candidate.get("block_type") or ""
+                ).upper()
+                candidate.setdefault("evidence", [])
+                candidate.setdefault("is_silenced", False)
+                normalized.append(candidate)
+            finalized = finalize_family_lesson(
+                normalized, request.topic, track=request.track.value
+            )
+            if finalized:
+                logger.info(
+                    "[CanonicalAuthor] Authored %d validated blocks for %r (%s)",
+                    len(finalized), request.topic, request.track.value,
+                )
+                return finalized
+        logger.warning(
+            "[CanonicalAuthor] Model output failed the v4 contract for %r (%s)",
+            request.topic, request.track.value,
+        )
+    except Exception as e:
+        logger.warning(
+            "[CanonicalAuthor] Authoring failed for %r (%s): %s",
+            request.topic, request.track.value, e,
+        )
+
+    structured = await _gemini_structured_lesson(
+        request.topic, request.track, request.grade_level
+    )
+    if structured:
+        fallback_blocks = _structured_lesson_to_blocks(structured, request)
+        finalized = finalize_family_lesson(
+            fallback_blocks, request.topic, track=request.track.value
+        )
+        if finalized:
+            return finalized
+
+    logger.error(
+        "[CanonicalAuthor] No valid canonical lesson could be produced for %r (%s)",
+        request.topic, request.track.value,
+    )
+    return []
+
+
+async def _finalize_specialist_lesson(
+    state: AdelineState,
+    blocks: list[dict],
+) -> list[dict]:
+    """Validate a complete specialist lesson or expand it through the author."""
+    request = state["request"]
+    finalized = finalize_family_lesson(
+        blocks, request.topic, track=request.track.value
+    )
+    if finalized:
+        return finalized
+    return await _author_family_canonical(state, blocks)
+
+
 async def _generate_from_knowledge(
     state: AdelineState,
     silent_sources: list[str],
@@ -1117,7 +1160,7 @@ async def historian_agent(state: AdelineState) -> AdelineState:
         logger.info(f"[HistorianAgent]   Block {i}: type={b.get('block_type')} content_len={len(b.get('content', ''))}")
 
     # ── Render to cohesive format ──────────────────────────────────────────────
-    blocks = finalize_family_lesson(blocks, request.topic)
+    blocks = await _finalize_specialist_lesson(state, blocks)
 
     logger.info(f"[HistorianAgent] POST-RENDER: {len(blocks)} blocks")
     for i, b in enumerate(blocks):
@@ -1242,7 +1285,7 @@ EXPERIENCE_INVITATION:
 {_ADELINE_VOICE}
 """
 
-    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
+    if not GOOGLE_API_KEY and not GEMINI_API_KEY:
         blocks.append({
             "block_type":  BlockType.NARRATIVE.value,
             "content":     f"Justice investigation: {request.topic}",
@@ -1302,7 +1345,7 @@ EXPERIENCE_INVITATION:
         blocks = await _generate_from_knowledge(state, [])
 
     # ── Render to cohesive format ──────────────────────────────────────────────
-    blocks = finalize_family_lesson(blocks, request.topic)
+    blocks = await _finalize_specialist_lesson(state, blocks)
 
     state["blocks"] = blocks
     return state
@@ -1569,7 +1612,7 @@ async def science_agent(state: AdelineState) -> AdelineState:
         logger.info(f"[ScienceAgent]   Block {i}: type={b.get('block_type')} content_len={len(b.get('content', ''))}")
 
     # ── Render to cohesive format ──────────────────────────────────────────────
-    blocks = finalize_family_lesson(blocks, request.topic)
+    blocks = await _finalize_specialist_lesson(state, blocks)
 
     logger.info(f"[ScienceAgent] POST-RENDER: {len(blocks)} blocks")
     for i, b in enumerate(blocks):
@@ -1726,7 +1769,7 @@ async def literature_agent(state: AdelineState) -> AdelineState:
             })
 
     # ── Render to cohesive format ──────────────────────────────────────────────
-    blocks = finalize_family_lesson(blocks, request.topic)
+    blocks = await _finalize_specialist_lesson(state, blocks)
 
     state["blocks"] = blocks
     return state
@@ -1742,7 +1785,7 @@ async def _synthesize_literature(
     Claude generates literary analysis content.
     If a specific book is provided, the analysis is grounded in that text.
     """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
+    if not GOOGLE_API_KEY and not GEMINI_API_KEY:
         if book_title:
             return f"Literary analysis of '{topic}' in the context of *{book_title}* by {book_author}."
         return f"Literary analysis: {topic}"
@@ -1881,7 +1924,7 @@ async def practical_agent(state: AdelineState) -> AdelineState:
         logger.info(f"[PracticalAgent]   Block {i}: type={b.get('block_type')} content_len={len(b.get('content', ''))}")
 
     # ── Render to cohesive format ──────────────────────────────────────────────
-    blocks = finalize_family_lesson(blocks, request.topic)
+    blocks = await _finalize_specialist_lesson(state, blocks)
 
     logger.info(f"[PracticalAgent] POST-RENDER: {len(blocks)} blocks")
     for i, b in enumerate(blocks):
@@ -2134,7 +2177,7 @@ def _synthesize_concept_map_block(topic: str, mind_map_data: dict) -> dict | Non
 
 async def _synthesize_practical(request: LessonRequest) -> str:
     """LLM generates practical/applied content for math and creative economy."""
-    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
+    if not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return f"Practical lesson: {request.topic}"
 
     persona = _TRACK_PERSONA.get(request.track, "a practical mentor")
@@ -2179,7 +2222,7 @@ async def _synthesize_mind_map(
     Extract a concept hierarchy from lesson content.
     Returns None on any failure — never surfaces errors to the student.
     """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
+    if not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return None
     from app.schemas.api_models import MindMapData
     import json
@@ -2218,7 +2261,7 @@ async def _synthesize_timeline(
     For homesteading: generates a seasonal calendar.
     Returns None on any failure.
     """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
+    if not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return None
     from app.schemas.api_models import TimelineData
     import json
@@ -2264,7 +2307,7 @@ async def _synthesize_mnemonic(
     Generate a mnemonic device when ≥3 concepts are present in the content.
     Returns None if fewer than 3 concepts detected or on any failure.
     """
-    if not os.getenv("ANTHROPIC_API_KEY") and not GOOGLE_API_KEY and not GEMINI_API_KEY:
+    if not GOOGLE_API_KEY and not GEMINI_API_KEY:
         return None
     from app.schemas.api_models import MnemonicData
     import json
@@ -2438,7 +2481,7 @@ async def discipleship_agent(state: AdelineState) -> AdelineState:
             })
 
     # ── Render to cohesive format ──────────────────────────────────────────────
-    blocks = finalize_family_lesson(blocks, request.topic)
+    blocks = await _finalize_specialist_lesson(state, blocks)
 
     state["blocks"] = blocks
     return state

@@ -13,6 +13,7 @@ Heavy IO paths (Hippocampus, curriculum graph, Researcher) are fully mocked so t
 run without any external connections.
 """
 import pytest
+import json
 from unittest.mock import AsyncMock, patch
 
 from app.schemas.api_models import (
@@ -26,6 +27,7 @@ from app.agents.orchestrator import (
     _worldview_wrap,
     registrar_agent,
     run_orchestrator,
+    _finalize_specialist_lesson,
 )
 
 
@@ -90,6 +92,64 @@ class TestRoute:
     def test_english_routes_to_literature(self):
         state = _make_state(Track.ENGLISH_LITERATURE)
         assert _route(state) == "literature"
+
+
+class TestCanonicalAuthor:
+    @pytest.mark.asyncio
+    async def test_short_specialist_result_is_expanded_not_discarded(self):
+        state = _make_state(Track.TRUTH_HISTORY)
+        seed = [{
+            "block_type": "PRIMARY_SOURCE",
+            "title": "Verified document",
+            "content": "A verified source excerpt.",
+            "evidence": [{"verdict": "VERIFIED"}],
+            "is_silenced": False,
+        }]
+        authored = {
+            "canonical_format_version": 4,
+            "title": "Soil and Yield",
+            "track": "TRUTH_HISTORY",
+            "blocks": [
+                {"block_type": "PRIMARY_SOURCE", "content": "Inspect the verified document."},
+                {"block_type": "TEXT", "content": "Establish the historical context."},
+                {"block_type": "TIMELINE", "content": "Sequence the documented events."},
+                {"block_type": "REAL_WORLD_APP", "content": "Compare the claim with a local record."},
+                {"block_type": "QUIZ", "content": "Check the evidence and reasoning."},
+                {"block_type": "TEXT", "content": "Preserve a source-based portfolio reflection."},
+            ],
+        }
+
+        with patch(
+            "app.agents.orchestrator._synthesis_call",
+            new_callable=AsyncMock,
+            return_value=json.dumps(authored),
+        ):
+            result = await _finalize_specialist_lesson(state, seed)
+
+        assert len(result) == 6
+        assert result[0]["block_type"] == "PRIMARY_SOURCE"
+        assert all(block["canonical_format_version"] == 4 for block in result)
+
+    @pytest.mark.asyncio
+    async def test_complete_valid_canonical_skips_second_model_call(self):
+        state = _make_state(Track.TRUTH_HISTORY)
+        blocks = [
+            {"block_type": "PRIMARY_SOURCE", "content": "Verified source"},
+            {"block_type": "TEXT", "content": "Context"},
+            {"block_type": "TIMELINE", "content": "Sequence"},
+            {"block_type": "REAL_WORLD_APP", "content": "Application"},
+            {"block_type": "QUIZ", "content": "Assessment"},
+            {"block_type": "TEXT", "content": "Reflection"},
+        ]
+
+        with patch(
+            "app.agents.orchestrator._synthesis_call",
+            new_callable=AsyncMock,
+        ) as synthesis:
+            result = await _finalize_specialist_lesson(state, blocks)
+
+        assert len(result) == 6
+        synthesis.assert_not_awaited()
 
 
 # ── _block_type_to_xapi_verb() ────────────────────────────────────────────────
