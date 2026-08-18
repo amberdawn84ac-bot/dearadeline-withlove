@@ -1,9 +1,15 @@
-"""The one canonical lesson format shared by every learner-facing surface."""
+"""Canonical family-style lesson rules and structural validation.
+
+Family style is the lesson itself, not an extra narrative block appended after
+specialist generation. The same canonical experience is later adapted by grade
+and mastery and rendered for digital or printable surfaces.
+"""
 
 from copy import deepcopy
 import re
+from typing import Any
 
-CANONICAL_FORMAT_VERSION = 3
+CANONICAL_FORMAT_VERSION = 4
 
 _OBSOLETE_FORMATS = {
     "ANIMATED_SKETCHNOTE_LESSON",
@@ -15,67 +21,85 @@ _PLACEHOLDER_PHRASES = (
     "check back soon",
     "no content provided",
     "[genui hint",
+    "lesson is being prepared",
+    "come back later",
 )
+_MAX_CANONICAL_BLOCKS = 10
+_MIN_CANONICAL_BLOCKS = 6
+_SUBSTANTIVE_BLOCK_TYPES = frozenset({
+    "PRIMARY_SOURCE",
+    "LAB_MISSION",
+    "EXPERIMENT",
+    "RESEARCH_MISSION",
+    "REAL_WORLD_APP",
+    "SIMULATION",
+    "TIMELINE",
+    "MIND_MAP",
+    "CONCEPT_MAP",
+    "GENUI_ASSEMBLY",
+    "DISCUSSION_FORUM",
+    "QUIZ",
+})
+_TRACKS_EXPECTING_SUBSTANTIVE_BLOCKS = frozenset({
+    "TRUTH_HISTORY",
+    "JUSTICE_CHANGEMAKING",
+    "CREATION_SCIENCE",
+    "HOMESTEADING",
+    "ENGLISH_LITERATURE",
+    "APPLIED_MATHEMATICS",
+    "CREATIVE_ECONOMY",
+})
 
 FAMILY_CANONICAL_AUTHORING_RULES = """
-FAMILY-STYLE CANONICAL RULES (non-negotiable):
-- Author the durable lesson at full adult/high-school depth. Do not lower or remove
-  verified facts because the requesting learner is younger.
-- Build one shared intellectual experience for the household: one story, inquiry,
-  demonstration, discussion, or real project that learners can do together.
-- Give learners different responsibility, not different disconnected lessons:
-  upper-elementary learners notice, name, sequence, measure, draw, or narrate;
-  middle-school learners explain mechanisms, compare evidence, and make connections;
-  high-school learners evaluate sources, handle nuance, calculate, design, or lead synthesis.
-- The shared work must culminate in something real: a model, map, experiment, record,
-  performance, plan, service, or useful creation. No worksheets or decorative busywork.
-- Each learner must be able to preserve an individual contribution as portfolio evidence.
-- Keep facts, sources, central questions, and worldview fixed across ages. Adapt only
-  vocabulary, scaffolding, independence, and depth of responsibility.
+CANONICAL LESSON AUTHOR — FAMILY-STYLE, NON-NEGOTIABLE:
+- Author ONE rich shared family learning experience at full adult/high-school depth.
+- This canonical lesson is the durable source of truth; a separate adapter changes grade,
+  mastery, scaffolding, vocabulary, independence, and depth of responsibility only.
+- Do not write a generic lesson, article, or explanatory narrative and do not append a generic
+  family-workshop paragraph. Family style is the structure of the actual learning experience.
+- Prefer concrete evidence and meaningful tasks over explanatory prose.
+- Keep the central question, learning goal, verified facts, evidence, worldview lens, shared work,
+  and real-world outcome fixed across ages.
+- Give elementary, middle, and high-school learners different responsibility in the SAME shared work:
+  notice/label/build; explain/compare/apply; evaluate/design/calculate/lead.
+- Every substantive lesson should produce something real when the subject supports it: an experiment,
+  model, map, record, source dossier, performance, plan, service, written argument, useful creation,
+  or other authentic deliverable.
+- Include a concrete individual contribution that can be preserved as portfolio evidence.
+- Use NARRATIVE only when narrative itself is the best instructional medium. Never use it as a fallback,
+  placeholder, family-instructions block, filler, or status message.
+- Use semantic visuals only when they improve understanding. The renderer decides page layout and UI.
+- Keep the canonical lesson to 6–10 substantive blocks. Never pad the lesson to reach the count.
+- When the track supports evidence, experimentation, investigation, or real-world application, include at
+  least one appropriate substantive block such as PRIMARY_SOURCE, LAB_MISSION, EXPERIMENT, REAL_WORLD_APP,
+  or another evidence/action block. Do not force an inappropriate activity.
+- The adaptation contract must stay short: 3–5 rules describing only what grade/mastery may change.
+- Never invent quotations, source identities, dates, measurements, research findings, or evidence.
+- Never print frontend behavior, CSS, page coordinates, rendering instructions, or internal metadata in prose.
 """.strip()
 
 
 def family_workshop_block(topic: str) -> dict:
-    """Return the stable one-room-schoolhouse spine stored with every canonical."""
+    """Deprecated compatibility helper; family style is no longer a synthetic block.
+
+    Kept so old imports do not break. New canonical generation must NOT append
+    this block to lessons.
+    """
     safe_topic = topic.strip() or "this topic"
     return {
         "block_type": "NARRATIVE",
-        "content": (
-            f"## Do this together: {safe_topic}\n\n"
-            "Begin with one shared question: **What is happening, how do we know, and what can we "
-            "make or do with what we learn?** Read the lesson, inspect its sources, and try its "
-            "demonstration or example together.\n\n"
-            "**Grades 4–5:** notice and name details; sequence, measure, sketch, label, narrate, or "
-            "build one concrete part.\n\n"
-            "**Grades 6–8:** explain the mechanism or cause and effect; compare evidence, record "
-            "results, and connect the idea to real life.\n\n"
-            "**Grades 9–12:** evaluate claims and sources; handle nuance, design the method, calculate "
-            "where useful, or lead the final synthesis.\n\n"
-            "**Finish with something real.** Make the form fit the topic: a model, map, experiment "
-            "record, performance, plan, service, or useful creation. Each learner preserves one "
-            "clearly identified contribution—a photo, page, recording, explanation, or reflection—"
-            "for the portfolio."
-        ),
+        "content": f"## Family learning: {safe_topic}",
         "evidence": [],
         "is_silenced": False,
-        "homestead_content": None,
-        "_enrichment": True,
         "family_style": True,
         "canonical_format_version": CANONICAL_FORMAT_VERSION,
-        "family_roles": {
-            "upper_elementary": "notice, name, sequence, measure, sketch, narrate, or build",
-            "middle_school": "explain, compare evidence, record results, and connect ideas",
-            "high_school": "evaluate sources, handle nuance, design, calculate, and lead synthesis",
-        },
-        "portfolio_evidence": "Each learner preserves an identifiable contribution to the shared work.",
+        "deprecated": True,
     }
 
 
 def ensure_family_workshop(blocks: list[dict], topic: str) -> list[dict]:
-    """Add exactly one family workshop without mutating the caller's list."""
-    if any(block.get("family_style") for block in blocks):
-        return list(blocks)
-    return [*blocks, family_workshop_block(topic)]
+    """Compatibility no-op: family style is authored by the canonical lesson itself."""
+    return list(blocks)
 
 
 def _usable_content(block: dict) -> bool:
@@ -98,30 +122,71 @@ def _valid_interactive(block: dict) -> bool:
     )
 
 
-def finalize_family_lesson(blocks: list[dict], topic: str) -> list[dict]:
-    """Normalize specialist output once without rebuilding it into another format.
+def _family_role_metadata(block: dict) -> dict:
+    roles = block.get("family_roles")
+    if isinstance(roles, dict):
+        return roles
+    return {
+        "elementary": "notice, identify, sequence, measure, sketch, label, narrate, or build",
+        "middle": "explain, compare evidence, connect cause and effect, record results, or apply",
+        "high_school": "evaluate sources, handle nuance, calculate where useful, design, or lead synthesis",
+    }
 
-    Specialists own the lesson's facts, sources, and real work. This function is
-    the only structural finalizer: it removes obsolete formats/placeholders,
-    rejects malformed widgets, deduplicates content, and adds one family workshop.
-    It never calls an LLM and never converts one block type into another.
+
+def validate_canonical_lesson(
+    blocks: list[dict],
+    *,
+    track: str | None = None,
+) -> list[str]:
+    """Return structural canonical-lesson violations without inventing content."""
+    errors: list[str] = []
+    count = len(blocks)
+    if count < _MIN_CANONICAL_BLOCKS:
+        errors.append(f"canonical lesson requires at least {_MIN_CANONICAL_BLOCKS} substantive blocks; got {count}")
+    if count > _MAX_CANONICAL_BLOCKS:
+        errors.append(f"canonical lesson may contain at most {_MAX_CANONICAL_BLOCKS} blocks; got {count}")
+
+    if track in _TRACKS_EXPECTING_SUBSTANTIVE_BLOCKS:
+        if not any(str(block.get("block_type", "")).upper() in _SUBSTANTIVE_BLOCK_TYPES for block in blocks):
+            errors.append(f"track {track} requires at least one evidence/action-oriented block")
+
+    for index, block in enumerate(blocks):
+        if str(block.get("block_type") or "").upper() == "NARRATIVE":
+            content = str(block.get("content") or "").lower()
+            if any(phrase in content for phrase in ("family workshop:", "do this together:", "coming soon", "check back")):
+                errors.append(f"block {index} is a generic family/status narrative and is not allowed")
+
+    return errors
+
+
+def finalize_family_lesson(blocks: list[dict], topic: str, *, track: str | None = None) -> list[dict]:
+    """Normalize specialist output without rebuilding it into another format.
+
+    Specialists own the actual lesson. This finalizer only removes obsolete or
+    unusable blocks, deduplicates identical content, preserves block types, marks
+    the result as the current family canonical format, and enforces the 6–10
+    canonical block ceiling. It never calls an LLM and never appends a synthetic
+    narrative block.
     """
     finalized: list[dict] = []
     seen: set[tuple[str, str]] = set()
 
     for original in blocks:
         block = deepcopy(original)
-        block_type = str(block.get("block_type") or "NARRATIVE").strip().upper()
+        block_type = str(block.get("block_type") or "").strip().upper()
+        if not block_type:
+            continue
         if block_type in _OBSOLETE_FORMATS or block.get("is_silenced"):
             continue
         if not _usable_content(block) or not _valid_interactive(block):
             continue
 
-        # TEXT is a transport-era alias. Learners see one coherent narrative type.
-        if block_type == "TEXT":
-            block_type = "NARRATIVE"
+        # Preserve the semantic block type. Do not silently relabel TEXT as NARRATIVE.
         block["block_type"] = block_type
         block["content"] = re.sub(r"\n{3,}", "\n\n", str(block["content"]).strip())
+        block["family_style"] = True
+        block["canonical_format_version"] = CANONICAL_FORMAT_VERSION
+        block["family_roles"] = _family_role_metadata(block)
 
         fingerprint = (block_type, re.sub(r"\s+", " ", block["content"]).lower())
         if fingerprint in seen:
@@ -129,15 +194,34 @@ def finalize_family_lesson(blocks: list[dict], topic: str) -> list[dict]:
         seen.add(fingerprint)
         finalized.append(block)
 
-    # Never disguise a failed specialist response as a lesson by returning only
-    # the generic workshop. The caller can surface a real generation failure.
-    return ensure_family_workshop(finalized, topic) if finalized else []
+    # Enforce the ceiling without inventing or rewriting content.
+    finalized = finalized[:_MAX_CANONICAL_BLOCKS]
+
+    errors = validate_canonical_lesson(finalized, track=track)
+    if errors:
+        # A short/structurally invalid lesson must fail closed rather than being
+        # disguised as a generic narrative lesson.
+        return []
+
+    return finalized
 
 
 def is_current_family_canonical(blocks: list[dict]) -> bool:
     """Only reuse lessons authored and saved by the current family format."""
-    return any(
+    return bool(blocks) and all(
         block.get("family_style")
         and block.get("canonical_format_version") == CANONICAL_FORMAT_VERSION
+        and not block.get("deprecated")
         for block in blocks
     )
+
+
+def canonical_metadata(topic: str, track: str, adaptation_contract: list[str]) -> dict[str, Any]:
+    """Create the small renderer/adaptor metadata envelope for a canonical lesson."""
+    contract = [str(rule).strip() for rule in adaptation_contract if str(rule).strip()][:5]
+    return {
+        "canonical_format_version": CANONICAL_FORMAT_VERSION,
+        "topic": topic,
+        "track": track,
+        "adaptation_contract": contract,
+    }
