@@ -216,13 +216,73 @@ Respond with JSON only:
 }"""
 
 
+_LOCAL_ACTIVITY_HINTS: dict[str, tuple[str, ...]] = {
+    "baking": ("bake", "baked", "bread", "dough", "yeast", "sourdough"),
+    "cooking": ("cook", "cooked", "meal", "recipe", "kitchen"),
+    "gardening": ("garden", "planted", "seed", "soil", "harvest"),
+    "building": ("build", "built", "construct", "repair", "fixed"),
+    "woodworking": ("woodwork", "lumber", "saw", "carpentry"),
+    "sewing": ("sew", "sewed", "stitched", "fabric"),
+    "coding": ("code", "coded", "program", "software", "app"),
+    "reading": ("read", "book", "chapter"),
+    "writing": ("write", "wrote", "essay", "story", "poem"),
+    "volunteering": ("volunteer", "helped", "community service"),
+    "animal_care": ("fed the", "cared for", "animal", "livestock", "chicken"),
+    "drawing": ("draw", "drew", "paint", "sketch"),
+    "music": ("music", "guitar", "piano", "sang", "practiced"),
+    "research": ("research", "investigated", "looked up", "compared sources"),
+    "entrepreneurship": ("sold", "business", "customer", "profit", "budget"),
+}
+
+
+def _map_activity_locally(description: str, *, allow_generic: bool = False) -> Optional[dict]:
+    """Map common life activities without making learning recognition depend on an LLM."""
+    normalized = description.lower()
+    categories = [
+        category
+        for category, hints in _LOCAL_ACTIVITY_HINTS.items()
+        if any(hint in normalized for hint in hints)
+    ][:3]
+    if not categories and not allow_generic:
+        return None
+
+    if "baking" in categories:
+        return {
+            "categories": categories,
+            "course_title": "Applied Chemistry: Bread Fermentation",
+            "activity_description": (
+                "Measured ingredients, observed fermentation and dough development, "
+                "and used heat to transform dough into bread."
+            ),
+            "primary_track": "CREATION_SCIENCE",
+        }
+
+    primary = categories[0] if categories else None
+    mapping = LIFE_TO_CREDIT.get(primary or "", {})
+    tracks = mapping.get("tracks") or [Track.DISCIPLESHIP]
+    subject = (mapping.get("subjects") or ["Independent Study"])[0]
+    return {
+        "categories": categories,
+        "course_title": subject,
+        "activity_description": (
+            "Documented a real-world activity and reflected on the observations, "
+            "decisions, skills, and possible next questions it produced."
+        ),
+        "primary_track": tracks[0].value,
+    }
+
+
 async def _map_activity_with_gemini(description: str, grade_level: str) -> dict:
     """
     Use the active LLM to map a free-text activity description to academic credit categories.
     Falls back to a generic mapping if no LLM key is available.
     """
+    local_match = _map_activity_locally(description)
+    if local_match:
+        return local_match
+
     if not GOOGLE_API_KEY and not os.getenv("GEMINI_API_KEY"):
-        raise RuntimeError("No LLM API key set — cannot map activity")
+        return _map_activity_locally(description, allow_generic=True) or {}
 
     llm = create_llm(model=GEMINI_MODEL, max_tokens=512)
     lc_messages = [
@@ -244,11 +304,10 @@ async def _map_activity_with_gemini(description: str, grade_level: str) -> dict:
                 text = text[4:]
         return json.loads(text)
     except json.JSONDecodeError as e:
-        logger.warning(f"[activities] LLM returned non-JSON: {e}")
-        raise HTTPException(status_code=500, detail="Credit mapping failed — invalid response from AI")
+        logger.warning(f"[activities] Gemini returned non-JSON; using local mapping: {e}")
     except Exception as e:
-        logger.warning(f"[activities] LLM API error: {e}")
-        raise HTTPException(status_code=503, detail=f"AI unavailable: {e}")
+        logger.warning(f"[activities] Gemini unavailable; using local mapping: {e}")
+    return _map_activity_locally(description, allow_generic=True) or {}
 
 
 # ── Request / Response models ─────────────────────────────────────────────────
@@ -355,6 +414,7 @@ async def report_activity(
     primary_track = mapped.get("primary_track", "DISCIPLESHIP")
 
     # Validate primary_track against enum
+    sealed = True
     try:
         Track(primary_track)
     except ValueError:
@@ -383,7 +443,7 @@ async def report_activity(
                 elif mapping["credit_type"] == "HOMESTEAD" and dominant_credit_type != "CORE":
                     dominant_credit_type = "HOMESTEAD"
 
-    # If Claude returned no recognized categories, fall back to primary_track
+    # If the mapper returned no recognized categories, fall back to primary_track.
     if not credited_tracks:
         credited_tracks.append(CreditedTrack(
             track=primary_track,
@@ -455,9 +515,9 @@ async def report_activity(
                 activity_date,
                 now_iso,
             )
-    except Exception as e:
-        logger.exception("[activities] TranscriptEntry write failed")
-        raise HTTPException(status_code=500, detail=f"Failed to seal activity: {e}")
+    except Exception:
+        sealed = False
+        logger.exception("[activities] TranscriptEntry write failed; returning learning reflection")
 
     logger.info(
         f"[/activities/report] Sealed '{course_title}' — "
@@ -473,7 +533,7 @@ async def report_activity(
         activity_description=activity_desc,
         credit_hours=credit_hours,
         credited_tracks=credited_tracks,
-        sealed=True,
+        sealed=sealed,
         adeline_note=adeline_note,
         evidence_urls=[],
     )

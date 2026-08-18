@@ -5,6 +5,7 @@ from app.api.activities import (
     CreditedTrack,
     _build_learning_note,
     _calc_credit_hours,
+    _map_activity_locally,
 )
 
 
@@ -42,3 +43,21 @@ def test_learning_note_centers_bread_science_and_reflection():
     assert "Ratios & Measurement" in note
     assert "What did you notice" in note
     assert "minutes" not in note
+
+
+def test_bread_maps_without_an_llm_or_duration():
+    mapped = _map_activity_locally("I baked bread and watched the dough rise.")
+
+    assert mapped is not None
+    assert mapped["categories"][0] == "baking"
+    assert mapped["course_title"] == "Applied Chemistry: Bread Fermentation"
+    assert mapped["primary_track"] == "CREATION_SCIENCE"
+    assert "fermentation" in mapped["activity_description"].lower()
+
+
+def test_unknown_activity_has_safe_reflection_fallback():
+    mapped = _map_activity_locally("I completed something meaningful.", allow_generic=True)
+
+    assert mapped is not None
+    assert mapped["course_title"] == "Independent Study"
+    assert mapped["primary_track"] == "DISCIPLESHIP"

@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { Sparkles, Send, Loader2 } from "lucide-react";
-import { scaffold, listProjects, getProject, reportActivity, streamConversation, uploadActivityEvidence, getLearningPlan } from "@/lib/brain-client";
+import { scaffold, listProjects, getProject, reportActivity, streamConversation, uploadActivityEvidence } from "@/lib/brain-client";
 import type {
   Track, ScaffoldResponse,
   ProjectSummary, ProjectDetail, ActivityReportResponse,
@@ -46,7 +45,6 @@ interface AdelineChatPanelProps {
   gradeLevel: string;
   hideHeader?: boolean;
   activeLessonContext?: LessonContext | null;
-  onLessonRequest?: (topic: string) => void;
   /** Text highlighted by the user for "Ask Adeline" feature */
   highlightedContext?: string | null;
   /** Callback to clear the highlighted context after it's been used */
@@ -66,30 +64,6 @@ const WELCOME_MSG: Message = {
 
 const PROJECT_LIST_RE = /\b(show|browse|see|find|list|what|give me).{0,20}(project|craft|make|build|farm)/i;
 const ACTIVITY_RE = /\b(i (spent|did|worked|practiced|baked|built|planted|made|helped|cooked|cleaned|studied|read|drew|painted|sewed|fixed)|today i|this (morning|afternoon|week)|i've been)\b/i;
-const LESSON_REQUEST_RE = /\b(?:build|make|create|generate|start|give me)\s+(?:an?\s+)?(?:[\w-]+\s+){0,4}lesson\b|\b(?:i(?:'d| would) like|i want|i need)\s+(?:an?\s+)?(?:[\w-]+\s+){0,4}lesson\b|\bteach me\b|\bi want to learn about\b|\bdeep dive (?:into|on)\b|\bexplain .+ in depth\b/i;
-
-function inferLessonTrack(text: string): Track {
-  const normalized = text.toLowerCase();
-  if (/bible|scripture|yahweh|yeshua|faith|disciple|proverb/.test(normalized)) return "DISCIPLESHIP";
-  if (/history|war|ancient|civilization|primary source/.test(normalized)) return "TRUTH_HISTORY";
-  if (/government|constitution|econom|money|business|market/.test(normalized)) return "GOVERNMENT_ECONOMICS";
-  if (/justice|rights|prison|reform|activis/.test(normalized)) return "JUSTICE_CHANGEMAKING";
-  if (/garden|farm|soil|seed|animal|homestead|cook|food/.test(normalized)) return "HOMESTEADING";
-  if (/health|body|nutrition|herb|medicine/.test(normalized)) return "HEALTH_NATUROPATHY";
-  if (/math|algebra|geometry|fraction|equation|number/.test(normalized)) return "APPLIED_MATHEMATICS";
-  if (/write|poem|novel|book|literature|grammar|language/.test(normalized)) return "ENGLISH_LITERATURE";
-  if (/art|design|music|film|creative|commission/.test(normalized)) return "CREATIVE_ECONOMY";
-  return "CREATION_SCIENCE";
-}
-
-function suggestionMatchScore(text: string, title: string, description: string): number {
-  const requestWords = new Set(
-    text.toLowerCase().match(/[a-z]{3,}/g)?.filter((word) => !["lesson", "like", "want", "need", "give", "make"].includes(word)) ?? [],
-  );
-  const candidate = `${title} ${description}`.toLowerCase();
-  return [...requestWords].reduce((score, word) => score + (candidate.includes(word) ? 1 : 0), 0);
-}
-
 /** Extract an optional duration when the student happens to mention one. */
 function parseMinutes(text: string): number | undefined {
   const hoursMatch = text.match(/(\d+(?:\.\d+)?)\s*hour/i);
@@ -133,13 +107,15 @@ function ActivityCreditCard({ result }: { result: ActivityReportResponse }) {
         style={{ background: "#F0FDF4", border: "1.5px solid #2F4731" }}
       >
         <p className="text-xs font-bold text-[#2F4731] uppercase tracking-wider">
-          Learning recorded
+          {result.sealed ? "Learning recorded" : "Learning explored"}
         </p>
         <p className="text-sm font-bold text-[#2F4731]">{result.course_title}</p>
         <p className="text-xs text-[#2F4731]/70">{result.activity_description}</p>
         <div className="flex flex-wrap gap-2 pt-1 border-t border-[#2F4731]/20">
           <span className="text-xs font-bold text-[#BD6809]">
-            {result.credit_hours > 0
+            {!result.sealed
+              ? "Record save pending"
+              : result.credit_hours > 0
               ? `${result.credit_hours} credit hr${result.credit_hours !== 1 ? "s" : ""}`
               : "Learning evidence saved"}
           </span>
@@ -154,7 +130,9 @@ function ActivityCreditCard({ result }: { result: ActivityReportResponse }) {
           ))}
         </div>
         <div className="pt-2">
-          {evidenceUrl ? (
+          {!result.sealed ? (
+            <p className="text-xs font-bold text-[#92400E]">The reflection is safe here; the permanent record can be retried later.</p>
+          ) : evidenceUrl ? (
             <p className="text-xs font-bold text-[#166534]">✓ Photo evidence attached to your portfolio</p>
           ) : (
             <label className="inline-flex cursor-pointer items-center rounded-lg bg-[#2F4731] px-3 py-2 text-xs font-bold text-white">
@@ -218,11 +196,9 @@ export function AdelineChatPanel({
   gradeLevel,
   hideHeader = false,
   activeLessonContext,
-  onLessonRequest,
   highlightedContext,
   onHighlightedContextUsed,
 }: AdelineChatPanelProps) {
-  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([WELCOME_MSG]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -335,28 +311,6 @@ export function AdelineChatPanel({
           content: result.adeline_response,
           zpd_zone: result.zpd_zone,
         });
-      } else if (LESSON_REQUEST_RE.test(text)) {
-        const track = inferLessonTrack(text);
-        const plan = await getLearningPlan(studentId, 10);
-        const plannedTask = plan.suggestions
-          .filter((suggestion) => suggestion.track === track)
-          .sort((left, right) =>
-            suggestionMatchScore(text, right.title, right.description) -
-            suggestionMatchScore(text, left.title, left.description)
-          )[0];
-        if (!plannedTask) {
-          addMessage({
-            role: "adeline",
-            content: "I don’t have a matching assignment in your learning plan yet. Tell me a little more about what you want to learn, and I’ll shape the right next step before building it.",
-          });
-          return;
-        }
-        addMessage({
-          role: "adeline",
-          content: `I found the right assignment in your learning plan: “${plannedTask.title}.” I’m opening the full family lesson now.`,
-        });
-        onLessonRequest?.(plannedTask.title);
-        router.push(`/dashboard/lesson/${encodeURIComponent(plannedTask.id)}`);
       } else if (PROJECT_LIST_RE.test(text)) {
         // Project catalog intent
         addMessage({ role: "adeline", content: "Let me pull up the project catalog for you…" });
@@ -370,16 +324,23 @@ export function AdelineChatPanel({
         // Life-to-learning: recognize educational value immediately. Duration is
         // optional metadata, never a gate before discussing what was learned.
         const minutes = parseMinutes(text);
-        const result = await reportActivity(
-          {
-            student_id: studentId,
-            grade_level: gradeLevel,
-            description: text,
-            ...(minutes ? { time_minutes: minutes } : {}),
-          },
-          "STUDENT",
-        );
-        addMessage({ role: "adeline", content: `${result.adeline_note} If you have a photo, add it below as portfolio evidence.`, rich: { type: "activityCredit", result } });
+        try {
+          const result = await reportActivity(
+            {
+              student_id: studentId,
+              grade_level: gradeLevel,
+              description: text,
+              ...(minutes ? { time_minutes: minutes } : {}),
+            },
+            "STUDENT",
+          );
+          addMessage({ role: "adeline", content: `${result.adeline_note} If you have a photo, add it below as portfolio evidence.`, rich: { type: "activityCredit", result } });
+        } catch {
+          addMessage({
+            role: "adeline",
+            content: "That is real learning. Think about what you noticed, what decisions you made, what changed from start to finish, and what you would try next. I could not save the permanent learning record just now, but we can keep exploring it here.",
+          });
+        }
       } else {
         // Default: streaming conversation
         const streamingId = `${Date.now()}-${Math.random()}`;
@@ -446,7 +407,7 @@ export function AdelineChatPanel({
           setMessages((prev) =>
             prev.map((m) =>
               m.id === streamingId
-                ? { ...m, content: "I ran into a hiccup — give me a moment and try again.", streaming: false }
+                ? { ...m, content: "I could not reach the conversation service just now. Your message is still here—please try once more.", streaming: false }
                 : m
             )
           );
@@ -461,12 +422,12 @@ export function AdelineChatPanel({
     } catch (err) {
       addMessage({
         role: "adeline",
-        content: "I ran into a hiccup — give me a moment and try again.",
+        content: "I could not reach the service just now. Your message is still here—please try once more.",
       });
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, addMessage, conversationHistory, router]);
+  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, addMessage, conversationHistory]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
