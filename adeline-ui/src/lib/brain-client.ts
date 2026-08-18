@@ -739,6 +739,19 @@ export interface ActivityReportResponse {
   evidence_urls: string[];
 }
 
+export interface BreadLessonCompletionRequest {
+  grade_level: string;
+  answers: Record<string, string>;
+  observations: string;
+  next_test: string;
+}
+
+export interface BreadLessonCompletionResponse extends ActivityReportResponse {
+  score_percent: number;
+  concepts_demonstrated: string[];
+  oas_standards: string[];
+}
+
 export interface ActivityEntry {
   activity_id: string;
   course_title: string;
@@ -769,6 +782,23 @@ export async function reportActivity(
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`reportActivity failed: ${res.status}`);
+  return res.json();
+}
+
+export async function completeBreadLesson(
+  payload: BreadLessonCompletionRequest,
+): Promise<BreadLessonCompletionResponse> {
+  const res = await fetch(`${BRAIN_URL}/activities/kitchen-chemistry-bread/complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    const message = detail?.detail?.message ?? `Bread lesson review failed: ${res.status}`;
+    throw new Error(message);
+  }
   return res.json();
 }
 

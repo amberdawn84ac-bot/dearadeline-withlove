@@ -46,6 +46,16 @@ export default function TodayPage() {
       {error && <p className={styles.error} role="alert">{error}</p>}
 
       <section className={styles.dailyAgenda} aria-label="Today's complete learning agenda">
+          <article className={styles.agendaCard}>
+            <div className={styles.agendaNumber}>🍞</div>
+            <div className={styles.agendaBody}>
+              <small>Featured family lab · Creation Science + Applied Mathematics</small>
+              <h2>Kitchen Chemistry: Bread</h2>
+              <p>Investigate living yeast, fermentation, gas bubbles, gluten structure, ingredient ratios, temperature, and oven transformations in one shared family lesson.</p>
+              <em>Includes a printable workbook, layered roles for different ages, and a registrar-verified portfolio finish.</em>
+            </div>
+            <Link href="/dashboard/lesson/kitchen-chemistry-bread">Open family lab →</Link>
+          </article>
           {tasks.map((task, index) => (
             <article key={task.id} className={styles.agendaCard}>
               <div className={styles.agendaNumber}>{index + 1}</div>

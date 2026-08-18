@@ -15,7 +15,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
@@ -326,7 +326,7 @@ class ActivityReportRequest(BaseModel):
         le=1440,
         description="Optional time spent, used only for clock-hour accounting.",
     )
-    activity_date: Optional[str] = Field(
+    activity_date: Optional[date] = Field(
         default=None,
         description="ISO date string (YYYY-MM-DD). Defaults to today.",
     )
@@ -347,6 +347,19 @@ class ActivityReportResponse(BaseModel):
     sealed:              bool
     adeline_note:        str
     evidence_urls:       list[str] = Field(default_factory=list)
+
+
+class BreadLessonCompletionRequest(BaseModel):
+    grade_level: str
+    answers: dict[str, str]
+    observations: str = Field(min_length=15, max_length=1200)
+    next_test: str = Field(min_length=10, max_length=800)
+
+
+class BreadLessonCompletionResponse(ActivityReportResponse):
+    score_percent: float
+    concepts_demonstrated: list[str]
+    oas_standards: list[str]
 
 
 class ActivityEntry(BaseModel):
@@ -384,6 +397,103 @@ def _build_learning_note(
         f"{subjects_display}. What did you notice, figure out, or change while doing it, "
         "and what would you try next time?"
     )
+
+
+_BREAD_REVIEW_ANSWER_KEY = {
+    "yeast": "living_fungus",
+    "gas": "carbon_dioxide",
+    "gluten": "traps_gas",
+    "temperature": "warm_speeds_yeast",
+    "oven": "sets_structure_and_browns",
+    "ratio": "proportional_scaling",
+}
+
+
+def _score_bread_review(answers: dict[str, str]) -> tuple[int, int]:
+    """Return correct and total counts for the fixed, server-verified review."""
+    correct = sum(
+        answers.get(question_id) == expected
+        for question_id, expected in _BREAD_REVIEW_ANSWER_KEY.items()
+    )
+    return correct, len(_BREAD_REVIEW_ANSWER_KEY)
+
+
+def _bread_standards_for_grade(grade_level: str) -> list[str]:
+    """Select a small, age-appropriate OAS alignment for one shared family lab."""
+    digits = "".join(character for character in grade_level if character.isdigit())
+    grade = int(digits) if digits else 8
+    if grade <= 3:
+        return ["SCIENC_G3_CCC.3.3-5.3"]
+    if grade <= 5:
+        return ["SCIENC_G5_5.PS1.2", "MATHEM_G4_4.GM.2.7"]
+    if grade <= 8:
+        return ["SCIENC_G7_7.PS1.2", "SCIENC_G6_6.PS1.4", "MATHEM_G6_6.N.3.3"]
+    return ["SCIENC_G9_B.LS2.3", "SCIENC_G9_CCC.5.9-12.3"]
+
+
+async def _seal_activity_transcript(
+    *,
+    transcript_entry_id: str,
+    student_id: str,
+    activity_id: str,
+    course_title: str,
+    primary_track: str,
+    oas_standards: list[str],
+    activity_description: str,
+    credit_hours: float,
+    credit_type: str,
+    is_homestead_credit: bool,
+    completed_at: date,
+    sealed_at: datetime,
+    percent_score: Optional[float] = None,
+) -> bool:
+    """Write a portfolio/transcript record with asyncpg-native date values."""
+    try:
+        async with _get_conn() as conn:
+            await conn.execute(
+                """
+                INSERT INTO "TranscriptEntry" (
+                    id, "studentId", "lessonId", "courseTitle", track,
+                    "oasStandards", "activityDescription",
+                    "creditHours", "creditType",
+                    "gradeLetter", "percentScore",
+                    "isHomesteadCredit", "agentName", "researcherActivated",
+                    "completedAt", "sealedAt", "xapiStatementId"
+                ) VALUES (
+                    $1, $2, $3, $4, $5::"Track",
+                    $6, $7,
+                    $8, $9::"CreditType",
+                    NULL, $10,
+                    $11, 'RegistrarAgent'::"AgentName", false,
+                    $12::date, $13::timestamptz, NULL
+                )
+                ON CONFLICT ("studentId", "lessonId") DO UPDATE SET
+                    "courseTitle"         = EXCLUDED."courseTitle",
+                    "oasStandards"        = EXCLUDED."oasStandards",
+                    "creditHours"         = EXCLUDED."creditHours",
+                    "creditType"          = EXCLUDED."creditType",
+                    "percentScore"        = EXCLUDED."percentScore",
+                    "activityDescription" = EXCLUDED."activityDescription",
+                    "sealedAt"            = EXCLUDED."sealedAt"
+                """,
+                transcript_entry_id,
+                student_id,
+                activity_id,
+                course_title,
+                primary_track,
+                oas_standards,
+                activity_description,
+                credit_hours,
+                credit_type,
+                percent_score,
+                is_homestead_credit,
+                completed_at,
+                sealed_at,
+            )
+        return True
+    except Exception:
+        logger.exception("[activities] TranscriptEntry write failed; returning learning reflection")
+        return False
 
 
 # ── POST /activities/report ───────────────────────────────────────────────────
@@ -458,8 +568,8 @@ async def report_activity(
 
     # ── 4. Generate activity ID and date ──────────────────────────────────────
     activity_id   = f"activity-{uuid.uuid4()}"
-    activity_date = body.activity_date or datetime.now(timezone.utc).date().isoformat()
-    now_iso       = datetime.now(timezone.utc).isoformat()
+    activity_date = body.activity_date or datetime.now(timezone.utc).date()
+    sealed_at     = datetime.now(timezone.utc)
 
     # ── 5. Seal to student_journal (makes it show on dashboard) ───────────────
     try:
@@ -476,48 +586,20 @@ async def report_activity(
     # ── 6. Seal TranscriptEntry for each credited track ────────────────────────
     transcript_entry_id = str(uuid.uuid4())
 
-    try:
-        async with _get_conn() as conn:
-            await conn.execute(
-                """
-                INSERT INTO "TranscriptEntry" (
-                    id, "studentId", "lessonId", "courseTitle", track,
-                    "oasStandards", "activityDescription",
-                    "creditHours", "creditType",
-                    "gradeLetter", "percentScore",
-                    "isHomesteadCredit", "agentName", "researcherActivated",
-                    "completedAt", "sealedAt", "xapiStatementId"
-                ) VALUES (
-                    $1, $2, $3, $4, $5::"Track",
-                    $6, $7,
-                    $8, $9::"CreditType",
-                    NULL, NULL,
-                    $10, 'RegistrarAgent'::"AgentName", false,
-                    $11::date, $12::timestamptz, NULL
-                )
-                ON CONFLICT ("studentId", "lessonId") DO UPDATE SET
-                    "courseTitle"         = EXCLUDED."courseTitle",
-                    "creditHours"         = EXCLUDED."creditHours",
-                    "creditType"          = EXCLUDED."creditType",
-                    "activityDescription" = EXCLUDED."activityDescription",
-                    "sealedAt"            = EXCLUDED."sealedAt"
-                """,
-                transcript_entry_id,
-                student_id,
-                activity_id,
-                course_title,
-                primary_track,
-                [],                      # oasStandards — none for life activities
-                activity_desc,
-                credit_hours,
-                dominant_credit_type,
-                dominant_credit_type == "HOMESTEAD",
-                activity_date,
-                now_iso,
-            )
-    except Exception:
-        sealed = False
-        logger.exception("[activities] TranscriptEntry write failed; returning learning reflection")
+    sealed = await _seal_activity_transcript(
+        transcript_entry_id=transcript_entry_id,
+        student_id=student_id,
+        activity_id=activity_id,
+        course_title=course_title,
+        primary_track=primary_track,
+        oas_standards=[],
+        activity_description=activity_desc,
+        credit_hours=credit_hours,
+        credit_type=dominant_credit_type,
+        is_homestead_credit=dominant_credit_type == "HOMESTEAD",
+        completed_at=activity_date,
+        sealed_at=sealed_at,
+    )
 
     logger.info(
         f"[/activities/report] Sealed '{course_title}' — "
@@ -536,6 +618,106 @@ async def report_activity(
         sealed=sealed,
         adeline_note=adeline_note,
         evidence_urls=[],
+    )
+
+
+@router.post(
+    "/kitchen-chemistry-bread/complete",
+    response_model=BreadLessonCompletionResponse,
+)
+async def complete_kitchen_chemistry_bread(
+    body: BreadLessonCompletionRequest,
+    student_id: str = Depends(get_current_user_id),
+):
+    """Verify the bread review, then create its registrar and portfolio record."""
+    correct, total = _score_bread_review(body.answers)
+    score_percent = round((correct / total) * 100, 1)
+    if correct < 5:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Review the bread concepts and try again before sealing the portfolio entry.",
+                "correct": correct,
+                "total": total,
+            },
+        )
+
+    completed_at = datetime.now(timezone.utc).date()
+    sealed_at = datetime.now(timezone.utc)
+    activity_id = f"activity-kitchen-chemistry-bread-{completed_at.isoformat()}"
+    oas_standards = _bread_standards_for_grade(body.grade_level)
+    concepts = [
+        "Yeast is a living fungus that carries out fermentation.",
+        "Fermentation releases carbon dioxide that inflates the dough.",
+        "Gluten forms a stretchy network that traps gas.",
+        "Temperature changes yeast activity and proofing rate.",
+        "Ingredient ratios can be scaled proportionally.",
+        "Oven heat sets structure and browns the crust.",
+    ]
+    activity_description = (
+        "Completed a family kitchen-chemistry investigation of bread fermentation, "
+        "ingredient ratios, carbon-dioxide production, gluten structure, temperature, "
+        f"and oven transformations. Observation: {body.observations.strip()} "
+        f"Next investigation: {body.next_test.strip()}"
+    )
+    credited_tracks = [
+        CreditedTrack(
+            track="CREATION_SCIENCE",
+            subjects=[
+                "Chemistry: Fermentation & Gas Production",
+                "Physical Science: Matter, Heat & Structural Change",
+            ],
+            credit_type="CORE",
+        ),
+        CreditedTrack(
+            track="APPLIED_MATHEMATICS",
+            subjects=["Math: Ratios, Measurement & Proportional Scaling"],
+            credit_type="CORE",
+        ),
+    ]
+
+    try:
+        await journal_store.seal(
+            student_id=student_id,
+            lesson_id=activity_id,
+            track="CREATION_SCIENCE",
+            completed_blocks=1,
+            sources=[],
+        )
+    except Exception as error:
+        logger.warning(f"[bread-lesson] Journal seal failed (non-fatal): {error}")
+
+    sealed = await _seal_activity_transcript(
+        transcript_entry_id=str(uuid.uuid4()),
+        student_id=student_id,
+        activity_id=activity_id,
+        course_title="Kitchen Chemistry: Bread",
+        primary_track="CREATION_SCIENCE",
+        oas_standards=oas_standards,
+        activity_description=activity_description,
+        credit_hours=0.05,
+        credit_type="CORE",
+        is_homestead_credit=False,
+        completed_at=completed_at,
+        sealed_at=sealed_at,
+        percent_score=score_percent,
+    )
+
+    return BreadLessonCompletionResponse(
+        activity_id=activity_id,
+        course_title="Kitchen Chemistry: Bread",
+        activity_description=activity_description,
+        credit_hours=0.05,
+        credited_tracks=credited_tracks,
+        sealed=sealed,
+        adeline_note=(
+            "You explained the chemistry instead of merely finishing a recipe. "
+            "Your fermentation, structure, heat, and ratio evidence is ready for the portfolio."
+        ),
+        evidence_urls=[],
+        score_percent=score_percent,
+        concepts_demonstrated=concepts,
+        oas_standards=oas_standards,
     )
 
 
