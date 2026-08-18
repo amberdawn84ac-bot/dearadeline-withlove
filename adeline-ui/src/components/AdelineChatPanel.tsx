@@ -90,8 +90,8 @@ function suggestionMatchScore(text: string, title: string, description: string):
   return [...requestWords].reduce((score, word) => score + (candidate.includes(word) ? 1 : 0), 0);
 }
 
-/** Parse "2 hours", "30 minutes", "an hour" → minutes */
-function parseMinutes(text: string): number {
+/** Extract an optional duration when the student happens to mention one. */
+function parseMinutes(text: string): number | undefined {
   const hoursMatch = text.match(/(\d+(?:\.\d+)?)\s*hour/i);
   const minutesMatch = text.match(/(\d+)\s*min/i);
   const anHourMatch = /\ban hour\b/i.test(text);
@@ -102,7 +102,7 @@ function parseMinutes(text: string): number {
   if (minutesMatch) total += parseInt(minutesMatch[1]);
   if (anHourMatch && !hoursMatch) total += 60;
   if (halfHourMatch && !minutesMatch) total += 30;
-  return total > 0 ? Math.round(total) : 60; // default 60 min
+  return total > 0 ? Math.round(total) : undefined;
 }
 
 // ── Activity credit receipt ────────────────────────────────────────────────────
@@ -133,13 +133,15 @@ function ActivityCreditCard({ result }: { result: ActivityReportResponse }) {
         style={{ background: "#F0FDF4", border: "1.5px solid #2F4731" }}
       >
         <p className="text-xs font-bold text-[#2F4731] uppercase tracking-wider">
-          Credits recorded
+          Learning recorded
         </p>
         <p className="text-sm font-bold text-[#2F4731]">{result.course_title}</p>
         <p className="text-xs text-[#2F4731]/70">{result.activity_description}</p>
         <div className="flex flex-wrap gap-2 pt-1 border-t border-[#2F4731]/20">
           <span className="text-xs font-bold text-[#BD6809]">
-            {result.credit_hours} credit hr{result.credit_hours !== 1 ? "s" : ""}
+            {result.credit_hours > 0
+              ? `${result.credit_hours} credit hr${result.credit_hours !== 1 ? "s" : ""}`
+              : "Learning evidence saved"}
           </span>
           {result.credited_tracks.map((ct) => (
             <span
@@ -227,7 +229,6 @@ export function AdelineChatPanel({
   const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
-  const [pendingActivity, setPendingActivity] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -365,32 +366,20 @@ export function AdelineChatPanel({
           content: "",
           rich: { type: "projectList", projects },
         });
-      } else if (pendingActivity) {
-        const minutes = parseMinutes(text);
-        if (!/(\d+(?:\.\d+)?\s*(?:hour|hr|min)|an hour|half.{0,5}hour)/i.test(text)) {
-          addMessage({ role: "adeline", content: "About how long did you spend on it? Minutes or hours is enough." });
-        } else {
-          addMessage({ role: "adeline", content: "Got it — I’m connecting that real work to your learning record…" });
-          const result = await reportActivity(
-            { student_id: studentId, grade_level: gradeLevel, description: pendingActivity, time_minutes: minutes },
-            "STUDENT",
-          );
-          setPendingActivity(null);
-          addMessage({ role: "adeline", content: `${result.adeline_note} If you have a photo, add it below as portfolio evidence.`, rich: { type: "activityCredit", result } });
-        }
       } else if (ACTIVITY_RE.test(text)) {
-        // Life-to-credit: student describing what they did
-        const hasDuration = /(\d+(?:\.\d+)?\s*(?:hour|hr|min)|an hour|half.{0,5}hour)/i.test(text);
-        if (!hasDuration) {
-          setPendingActivity(text);
-          addMessage({ role: "adeline", content: "That absolutely counts as real learning. About how long did you spend doing it?" });
-        } else {
-          const result = await reportActivity(
-            { student_id: studentId, grade_level: gradeLevel, description: text, time_minutes: parseMinutes(text) },
-            "STUDENT",
-          );
-          addMessage({ role: "adeline", content: `${result.adeline_note} If you have a photo, add it below as portfolio evidence.`, rich: { type: "activityCredit", result } });
-        }
+        // Life-to-learning: recognize educational value immediately. Duration is
+        // optional metadata, never a gate before discussing what was learned.
+        const minutes = parseMinutes(text);
+        const result = await reportActivity(
+          {
+            student_id: studentId,
+            grade_level: gradeLevel,
+            description: text,
+            ...(minutes ? { time_minutes: minutes } : {}),
+          },
+          "STUDENT",
+        );
+        addMessage({ role: "adeline", content: `${result.adeline_note} If you have a photo, add it below as portfolio evidence.`, rich: { type: "activityCredit", result } });
       } else {
         // Default: streaming conversation
         const streamingId = `${Date.now()}-${Math.random()}`;
@@ -477,7 +466,7 @@ export function AdelineChatPanel({
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, addMessage, conversationHistory, pendingActivity, router]);
+  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, onLessonRequest, addMessage, conversationHistory, router]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {

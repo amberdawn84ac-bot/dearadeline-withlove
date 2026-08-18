@@ -718,7 +718,7 @@ export interface ActivityReportRequest {
   student_id: string;
   grade_level: string;
   description: string;
-  time_minutes: number;
+  time_minutes?: number;
   activity_date?: string;
 }
 

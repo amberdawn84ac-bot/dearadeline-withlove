@@ -183,7 +183,7 @@ def _calc_credit_hours(time_minutes: int) -> float:
     return round(min(raw, 1.0), 3)
 
 
-# ── Claude mapping prompt ──────────────────────────────────────────────────────
+# ── Gemini mapping prompt ──────────────────────────────────────────────────────
 
 _SYSTEM_PROMPT = """You are Adeline's Registrar — a warm, precise academic credentialing engine for a
 Christian homeschool family. Your job is to look at what a student did and map it to academic credit
@@ -216,7 +216,7 @@ Respond with JSON only:
 }"""
 
 
-async def _map_activity_with_claude(description: str, grade_level: str) -> dict:
+async def _map_activity_with_gemini(description: str, grade_level: str) -> dict:
     """
     Use the active LLM to map a free-text activity description to academic credit categories.
     Falls back to a generic mapping if no LLM key is available.
@@ -261,10 +261,11 @@ class ActivityReportRequest(BaseModel):
         max_length=2000,
         description="What did you do? Be specific — include what you made, learned, or accomplished.",
     )
-    time_minutes: int = Field(
+    time_minutes: Optional[int] = Field(
+        default=None,
         ge=5,
         le=1440,
-        description="How many minutes did you spend on this activity?",
+        description="Optional time spent, used only for clock-hour accounting.",
     )
     activity_date: Optional[str] = Field(
         default=None,
@@ -308,6 +309,24 @@ class ActivityListResponse(BaseModel):
     total_credits: float
 
 
+def _build_learning_note(
+    activity_description: str,
+    credited_tracks: list[CreditedTrack],
+) -> str:
+    """Lead with demonstrated learning instead of clock time."""
+    learning_subjects = list(dict.fromkeys(
+        subject
+        for credited_track in credited_tracks
+        for subject in credited_track.subjects
+    ))
+    subjects_display = "; ".join(learning_subjects[:4]) or "Independent Study"
+    return (
+        f"That is real learning. {activity_description.rstrip('.')}—and it connects to "
+        f"{subjects_display}. What did you notice, figure out, or change while doing it, "
+        "and what would you try next time?"
+    )
+
+
 # ── POST /activities/report ───────────────────────────────────────────────────
 
 @router.post("/report", response_model=ActivityReportResponse)
@@ -324,11 +343,11 @@ async def report_activity(
     """
     logger.info(
         f"[/activities/report] student={student_id} "
-        f"grade={body.grade_level} time={body.time_minutes}min"
+        f"grade={body.grade_level} time={body.time_minutes or 'unspecified'}min"
     )
 
-    # ── 1. Map activity to academic credit via Claude ──────────────────────────
-    mapped = await _map_activity_with_claude(body.description, body.grade_level)
+    # ── 1. Map the activity's learning value via Gemini ────────────────────────
+    mapped = await _map_activity_with_gemini(body.description, body.grade_level)
 
     categories    = mapped.get("categories", [])
     course_title  = mapped.get("course_title", "Independent Study")
@@ -373,8 +392,9 @@ async def report_activity(
         ))
         dominant_credit_type = "ELECTIVE"
 
-    # ── 3. Calculate credit hours ──────────────────────────────────────────────
-    credit_hours = _calc_credit_hours(body.time_minutes)
+    # ── 3. Calculate optional clock-hour credit ────────────────────────────────
+    # Learning evidence is still recorded when the student did not provide time.
+    credit_hours = _calc_credit_hours(body.time_minutes or 0)
 
     # ── 4. Generate activity ID and date ──────────────────────────────────────
     activity_id   = f"activity-{uuid.uuid4()}"
@@ -387,7 +407,7 @@ async def report_activity(
             student_id=student_id,
             lesson_id=activity_id,
             track=primary_track,
-            completed_blocks=max(1, body.time_minutes // 30),
+            completed_blocks=max(1, (body.time_minutes or 0) // 30),
             sources=[],
         )
     except Exception as e:
@@ -445,12 +465,7 @@ async def report_activity(
     )
 
     # ── 7. Build Adeline's response note ──────────────────────────────────────
-    time_display   = f"{body.time_minutes} minutes" if body.time_minutes < 60 else f"{body.time_minutes // 60} hour{'s' if body.time_minutes >= 120 else ''}"
-    tracks_display = ", ".join(t.track.replace("_", " ").title() for t in credited_tracks[:2])
-    adeline_note   = (
-        f"{time_display} of real work. That goes on your transcript as {course_title}. "
-        f"Credit filed under {tracks_display}."
-    )
+    adeline_note = _build_learning_note(activity_desc, credited_tracks)
 
     return ActivityReportResponse(
         activity_id=activity_id,
