@@ -6,7 +6,6 @@ import { useStudent } from '@/lib/useStudent';
 import { getLearningPlan } from '@/lib/brain-client';
 import type { BookRecommendation, LessonSuggestion, ProjectSuggestion } from '@/lib/brain-client';
 import styles from '@/components/nav/sites-dashboard.module.css';
-import { DailyBreadWidget } from '@/components/daily-bread/DailyBreadWidget';
 
 export default function TodayPage() {
   const { student, loading: studentLoading } = useStudent();
@@ -45,10 +44,6 @@ export default function TodayPage() {
       </header>
 
       {error && <p className={styles.error} role="alert">{error}</p>}
-
-      <section aria-label="Daily Bible lesson" className="mx-auto w-full max-w-3xl">
-        <DailyBreadWidget gradeLevel={student.gradeLevel} />
-      </section>
 
       <section className={styles.dailyAgenda} aria-label="Today's complete learning agenda">
           <article className={styles.agendaCard}>

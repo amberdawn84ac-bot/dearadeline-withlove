@@ -80,6 +80,9 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
             <p>Wisdom begins when you are willing to notice what you do not yet know.</p>
             <strong>Today&apos;s practice</strong>
             <em>Ask one honest question and follow it.</em>
+            <Link href="/dashboard/daily-bread" className="mt-4 inline-flex rounded-lg bg-[#2F4731] px-3 py-2 text-xs font-bold text-white">
+              Start Deep Dive Study →
+            </Link>
           </article>
         </aside>
 
