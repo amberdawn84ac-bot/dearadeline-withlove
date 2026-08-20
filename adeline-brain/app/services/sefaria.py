@@ -7,6 +7,7 @@ Provides lazy caching to Hippocampus for similarity search capability.
 API Documentation: https://github.com/Sefaria/Sefaria-Project/wiki/API-Documentation
 """
 import httpx
+import html
 import logging
 import re
 from typing import Optional, Dict, List
@@ -237,8 +238,15 @@ def extract_text(data) -> str:
                 parts.extend(str(v) for v in item if v)
             elif item:
                 parts.append(str(item))
-        return " ".join(parts)
-    return str(data) if data else ""
+        raw = " ".join(parts)
+    else:
+        raw = str(data) if data else ""
+    # Sefaria text frequently includes presentation markup such as poetry
+    # indents, <small>, and <br>. The app renders plain text, so normalize it at
+    # the adapter boundary instead of leaking tags into every lesson consumer.
+    raw = re.sub(r"<br\s*/?>", "\n", raw, flags=re.IGNORECASE)
+    raw = re.sub(r"<[^>]+>", "", raw)
+    return "\n".join(part.strip() for part in html.unescape(raw).splitlines() if part.strip())
 
 
 def detect_biblical_reference(topic: str) -> Optional[str]:

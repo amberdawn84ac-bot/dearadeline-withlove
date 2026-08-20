@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStudent } from '@/lib/useStudent';
 import { PersistentAdeline } from '@/components/PersistentAdeline';
 import styles from './sites-dashboard.module.css';
@@ -22,6 +22,16 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { student } = useStudent();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [dailyBread, setDailyBread] = useState<{ verse: string; reference: string; bigIdea: string; practice: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch('/brain/daily-bread')
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => { if (!cancelled && data?.verse) setDailyBread(data); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   const initial = (student?.name?.trim()?.[0] || 'A').toUpperCase();
 
@@ -74,12 +84,12 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
           <article className={styles.dailyBread}>
             <div className={styles.breadHeading}><span>DAILY BREAD</span><b>❦</b></div>
-            <blockquote>“The beginning of wisdom is this: Get wisdom.”</blockquote>
-            <cite>Proverbs 4:7</cite>
+            <blockquote>“{dailyBread?.verse || 'Open today’s passage and receive the text in context.'}”</blockquote>
+            <cite>{dailyBread?.reference || 'Today’s Scripture'}</cite>
             <hr />
-            <p>Wisdom begins when you are willing to notice what you do not yet know.</p>
+            <p>{dailyBread?.bigIdea || 'A new family Bible lesson is ready each day.'}</p>
             <strong>Today&apos;s practice</strong>
-            <em>Ask one honest question and follow it.</em>
+            <em>{dailyBread?.practice || 'Read, understand, and live the passage today.'}</em>
             <Link href="/dashboard/daily-bread" className="mt-4 inline-flex rounded-lg bg-[#2F4731] px-3 py-2 text-xs font-bold text-white">
               Start Deep Dive Study →
             </Link>

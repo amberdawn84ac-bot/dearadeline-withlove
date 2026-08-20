@@ -55,6 +55,34 @@ _FALLBACKS = [
 
 _FALLBACK_INDEX = 0  # rotates by day-of-year
 
+
+def _complete_lesson(data: dict) -> dict:
+    """Guarantee a useful family lesson even when generation is unavailable."""
+    reference = data.get("reference", "today's passage")
+    data.setdefault("lessonTitle", f"Living {reference}")
+    data.setdefault("bigIdea", "Receive the text in its real context, then put its truth into practice today.")
+    data.setdefault("readTogether", [reference, f"Read the verses immediately before and after {reference} to see the larger thought."])
+    data.setdefault("familyDiscussion", [
+        "What words, images, or repeated ideas do you notice in the passage?",
+        "What would the first hearers have understood from this passage that a modern reader might miss?",
+        "What is one specific action a younger child, an older student, and an adult could each take because of this truth?",
+    ])
+    data.setdefault("practice", "Choose one concrete action that matches the passage, do it today, and be ready to explain the connection.")
+    data.setdefault("prayer", "YHWH, help us hear your words truthfully and live them faithfully. Amen.")
+    data.setdefault("creditConnections", ["DISCIPLESHIP", "ENGLISH_LITERATURE"])
+    data.setdefault("portfolioEvidence", ["Record a spoken, written, drawn, or photographed response that explains the passage and documents how it was practiced."])
+    if not data.get("readTogether"):
+        data["readTogether"] = [reference, f"Read the verses immediately before and after {reference} to see the larger thought."]
+    if not data.get("familyDiscussion"):
+        data["familyDiscussion"] = [
+            "What words, images, or repeated ideas do you notice in the passage?",
+            "What did this mean to its first hearers?",
+            "What will we do differently today because of it?",
+        ]
+    if not data.get("portfolioEvidence"):
+        data["portfolioEvidence"] = ["Record an authentic response that explains the passage and documents how it was practiced."]
+    return data
+
 # ── Response model ─────────────────────────────────────────────────────────────
 
 class DailyBreadResponse(BaseModel):
@@ -113,7 +141,7 @@ Return ONLY this JSON object with no other text:
 @router.get("/daily-bread", response_model=DailyBreadResponse)
 async def daily_bread():
     today = date.today().isoformat()  # YYYY-MM-DD
-    cache_key = f"daily-bread:v2:{today}"
+    cache_key = f"daily-bread:v3:{today}"
 
     # ── Try Redis cache ────────────────────────────────────────────────────────
     try:
@@ -147,7 +175,7 @@ async def daily_bread():
                 data["isFoxTranslation"] = bool(source.get("is_fox"))
         except Exception as source_error:
             logger.warning(f"[DailyBread] Sefaria source fetch failed (non-fatal): {source_error}")
-        result = DailyBreadResponse(**data)
+        result = DailyBreadResponse(**_complete_lesson(data))
 
         # ── Cache for 24 hours ─────────────────────────────────────────────────
         try:
@@ -161,8 +189,8 @@ async def daily_bread():
     except Exception as e:
         logger.error(f"[DailyBread] Generation failed: {e}")
         # Rotate fallbacks by day of year
-        fallback = _FALLBACKS[date.today().timetuple().tm_yday % len(_FALLBACKS)]
-        return DailyBreadResponse(**fallback)
+        fallback = dict(_FALLBACKS[date.today().timetuple().tm_yday % len(_FALLBACKS)])
+        return DailyBreadResponse(**_complete_lesson(fallback))
 
 
 # ── Deep Dive ─────────────────────────────────────────────────────────────────
@@ -253,9 +281,7 @@ Return ONLY this JSON (no other text):
   ]
 }}"""
 
-    if not GOOGLE_API_KEY:
-        # Fallback sections when no API key
-        return [
+    fallback_sections = [
             DeepDiveSection(
                 heading="What It Actually Says",
                 content=f"{fox_text or reference} — read it slowly, word by word.",
@@ -273,6 +299,8 @@ Return ONLY this JSON (no other text):
                 content="How does this verse change how you act or think today?",
             ),
         ]
+    if not GOOGLE_API_KEY:
+        return fallback_sections
 
     llm = create_llm(model=GEMINI_MODEL, max_tokens=1200)
     lc_messages = [
@@ -286,12 +314,7 @@ Return ONLY this JSON (no other text):
         return [DeepDiveSection(**s) for s in raw["sections"]]
     except Exception as e:
         logger.error(f"[DeepDive] LLM synthesis failed: {e}")
-        return [
-            DeepDiveSection(
-                heading="Scripture Study",
-                content=fox_text or f"Read {reference} slowly and consider what it asks of you.",
-            )
-        ]
+        return fallback_sections
 
 
 @router.post("/daily-bread/deep-dive", response_model=DeepDiveResponse)
