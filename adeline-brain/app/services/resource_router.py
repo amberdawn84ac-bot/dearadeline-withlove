@@ -151,6 +151,66 @@ async def _smithsonian(query: ResourceQuery, client: httpx.AsyncClient) -> list[
     return output
 
 
+async def _inaturalist(query: ResourceQuery, client: httpx.AsyncClient) -> list[RoutedResource]:
+    """Return nearby-capable, real biodiversity observations without OAuth."""
+    if query.track not in {"CREATION_SCIENCE", "HOMESTEADING"}:
+        return []
+    response = await client.get(
+        "https://api.inaturalist.org/v1/observations",
+        params={"q": query.topic, "quality_grade": "research", "photos": "true", "per_page": 6, "order_by": "votes"},
+    )
+    response.raise_for_status()
+    output = []
+    for row in response.json().get("results", []):
+        taxon = row.get("taxon") or {}
+        photos = row.get("photos") or []
+        observation_id = row.get("id")
+        title = taxon.get("preferred_common_name") or taxon.get("name")
+        if not observation_id or not title:
+            continue
+        output.append(RoutedResource(
+            id=f"inaturalist:{observation_id}", title=f"Observe: {title}", provider="iNaturalist",
+            resource_type="DATASET", source_url=f"https://www.inaturalist.org/observations/{observation_id}",
+            description=f"Research-grade community observation of {taxon.get('name', title)}. Inspect location, date, photographs, identification history, and uncertainty.",
+            thumbnail_url=(photos[0].get("url") if photos else None),
+            license="ITEM_LEVEL_LICENSE", commercial_use="CHECK_PHOTO_AND_DATA_LICENSE",
+            skills_practiced=["species identification", "field observation", "data quality"], estimated_minutes=20,
+            discovery_prompt="Which visible features support this identification, and what could still be mistaken?",
+            mastery_prompt="Explain the identification using observable traits rather than relying only on the label.",
+            portfolio_output="Save a field-journal comparison or contribute a family observation under the provider's privacy rules.",
+        ))
+    return output
+
+
+def _youtube_resources(query: ResourceQuery) -> list[RoutedResource]:
+    """Approved-channel searches. YouTube remains link/embed-only content."""
+    encoded = quote_plus(query.topic)
+    channels: list[tuple[str, str, str, str]] = []
+    if query.track in {"CREATION_SCIENCE", "HOMESTEADING", "APPLIED_MATHEMATICS"}:
+        channels.extend([
+            ("science-buddies", "Science Buddies", "Science.Buddies", "hands-on experiment"),
+            ("royal-institution", "The Royal Institution", "TheRoyalInstitution", "science demonstration"),
+            ("hhmi-biointeractive", "HHMI BioInteractive", "biointeractive", "biology investigation"),
+        ])
+    if query.track in {"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING", "GOVERNMENT_ECONOMICS", "ENGLISH_LITERATURE"}:
+        channels.extend([
+            ("voices-past", "Voices of the Past", "VoicesofthePast", "first-person historical account"),
+            ("national-archives", "U.S. National Archives", "USNationalArchives", "archival film or record"),
+            ("world-history", "World History Encyclopedia", "WorldHistoryEncyclopedia", "historical overview"),
+            ("smithsonian-archives", "Smithsonian Institution Archives", "siarchives", "museum or archival account"),
+        ])
+    return [RoutedResource(
+        id=f"youtube:{slug}", title=f"Find a {purpose} about {query.topic}", provider=name,
+        resource_type="VIDEO", source_url=f"https://www.youtube.com/@{handle}/search?query={encoded}",
+        description=f"Search only the approved {name} channel. Use the video as evidence, demonstration, or perspective—not as the lesson itself.",
+        license="YOUTUBE_LINK_OR_OFFICIAL_EMBED", commercial_use="LINK_OR_OFFICIAL_EMBED_ONLY",
+        skills_practiced=["media analysis", "evidence checking"], estimated_minutes=12,
+        discovery_prompt="Before watching, write what evidence would distinguish a demonstration or original account from an unsupported claim.",
+        mastery_prompt="Name one observation or quotation from the video, then verify it against the experiment result or original record.",
+        portfolio_output="Save a claim-evidence-verification note with the video and original-source links.",
+    ) for slug, name, handle, purpose in channels]
+
+
 async def _curated(query: ResourceQuery, _client: httpx.AsyncClient) -> list[RoutedResource]:
     words = _terms(f"{query.topic} {query.objective}")
     output: list[RoutedResource] = []
@@ -231,6 +291,71 @@ async def _curated(query: ResourceQuery, _client: httpx.AsyncClient) -> list[Rou
             skills_practiced=["close reading", "annotation", "textual evidence"],
             portfolio_output="Save an annotated passage and an original claim supported by the text.",
         ))
+    if query.track in {"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING", "GOVERNMENT_ECONOMICS"}:
+        output.extend([
+            RoutedResource(
+                id="docsteach:primary", title=f"Analyze National Archives documents about {query.topic}",
+                provider="National Archives DocsTeach", resource_type="PRIMARY_SOURCE",
+                source_url="https://docsteach.org/primary-sources/",
+                description="Explore letters, photographs, speeches, posters, maps, films, and document-analysis activities.",
+                license="MIXED_ITEM_LEVEL; ACTIVITIES_CC0", commercial_use="CHECK_PRIMARY_SOURCE_ITEM",
+                skills_practiced=["document analysis", "sequencing", "corroboration"], estimated_minutes=25,
+                discovery_prompt="What can the document establish directly, and what remains interpretation?",
+                portfolio_output="Save a document-analysis sheet citing the National Archives identifier.",
+            ),
+            RoutedResource(
+                id="dpla:search", title=f"Search American libraries and museums for {query.topic}",
+                provider="Digital Public Library of America", resource_type="PRIMARY_SOURCE",
+                source_url=f"https://dp.la/search?q={quote_plus(query.topic)}",
+                description="Search aggregated photographs, documents, books, maps, and objects from American cultural institutions.",
+                license="ITEM_LEVEL_RIGHTS", commercial_use="CHECK_ITEM",
+                skills_practiced=["archive discovery", "provenance", "source comparison"], estimated_minutes=20,
+                portfolio_output="Save a source dossier containing the owning institution and item-level rights statement.",
+            ),
+        ])
+    if query.track in {"CREATION_SCIENCE", "APPLIED_MATHEMATICS"}:
+        output.extend([
+            RoutedResource(
+                id="concord:models", title=f"Manipulate a Concord model related to {query.topic}",
+                provider="Concord Consortium", resource_type="SIMULATION",
+                source_url="https://learn.concord.org/", description="Explore scientifically grounded STEM models, simulations, datasets, and systems-building tools.",
+                license="RESOURCE_LEVEL_TERMS", commercial_use="LINK; CHECK_ACTIVITY_LICENSE",
+                skills_practiced=["systems modeling", "variable control", "prediction"], estimated_minutes=25,
+                discovery_prompt="Which variables can you change, and what does the model assume or leave out?",
+                portfolio_output="Save a model prediction, test result, and critique of one limitation.",
+            ),
+            RoutedResource(
+                id="science-buddies:projects", title=f"Find a testable family experiment about {query.topic}",
+                provider="Science Buddies", resource_type="EXPERIMENT",
+                source_url=f"https://www.sciencebuddies.org/science-fair-projects/project-ideas/list?q={quote_plus(query.topic)}",
+                description="Search step-by-step K–12 experiments with materials, procedures, safety guidance, and project scaffolding.",
+                license="LINK_ONLY_UNLESS_MARKED", commercial_use="LINK_ONLY", skills_practiced=["experimental design", "measurement", "data analysis"], estimated_minutes=45,
+                discovery_prompt="Identify the independent variable, dependent variable, controls, and safety needs before beginning.",
+                portfolio_output="Save the family's procedure changes, raw observations, graph, and conclusion—not a copied worksheet.",
+            ),
+        ])
+    if query.track == "CREATION_SCIENCE":
+        output.extend([
+            RoutedResource(
+                id="hhmi:biointeractive", title=f"Investigate real biological data about {query.topic}",
+                provider="HHMI BioInteractive", resource_type="SIMULATION",
+                source_url=f"https://www.biointeractive.org/search?keywords={quote_plus(query.topic)}",
+                description="Find virtual labs, interactives, films, case studies, and authentic biological datasets for secondary learners.",
+                license="RESOURCE_LEVEL_CREATIVE_COMMONS_OR_LINK", commercial_use="CHECK_RESOURCE",
+                skills_practiced=["data analysis", "biological modeling", "scientific argument"], estimated_minutes=30,
+                portfolio_output="Save a data-backed claim and identify the limits of the dataset or model.",
+            ),
+            RoutedResource(
+                id="bhl:search", title=f"Read historical biodiversity sources about {query.topic}",
+                provider="Biodiversity Heritage Library", resource_type="READING",
+                source_url=f"https://www.biodiversitylibrary.org/search?searchTerm={quote_plus(query.topic)}",
+                description="Search digitized biological literature, field books, taxonomy, and scientific illustrations.",
+                license="ITEM_LEVEL_RIGHTS", commercial_use="CHECK_ITEM",
+                skills_practiced=["history of science", "taxonomy", "source comparison"], estimated_minutes=20,
+                portfolio_output="Compare a historical description or illustration with a current observation or classification.",
+            ),
+        ])
+    output.extend(_youtube_resources(query))
     return output
 
 
@@ -244,11 +369,11 @@ class ResourceRouter:
 
     async def search(self, query: ResourceQuery) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=httpx.Timeout(6, connect=3), follow_redirects=True, headers={"User-Agent": "DearAdelineResourceRouter/1.0"}) as client:
-            calls = [fn(query, client) for fn in (_loc, _smithsonian, _nasa, _curated)]
+            calls = [fn(query, client) for fn in (_loc, _smithsonian, _nasa, _inaturalist, _curated)]
             settled = await asyncio.gather(*calls, return_exceptions=True)
         resources: list[RoutedResource] = []
         failures = []
-        for name, result in zip(("loc", "smithsonian", "nasa", "curated"), settled):
+        for name, result in zip(("loc", "smithsonian", "nasa", "inaturalist", "curated"), settled):
             if isinstance(result, Exception):
                 failures.append(name)
                 continue

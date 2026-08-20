@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.resource_router import ResourceQuery, ResourceRouter, _curated, resource_block_for_lesson
+from app.services.resource_router import ResourceQuery, ResourceRouter, _curated, _youtube_resources, resource_block_for_lesson
 
 
 class DummyClient:
@@ -57,3 +57,30 @@ async def test_lesson_resource_block_is_live_not_canonical_content(monkeypatch):
     assert block["block_type"] == "RESOURCE_COLLECTION"
     assert block["canonical_format_version"] == 5
     assert block["metadata"]["resources"][0]["id"] == "makecode:arcade"
+
+
+def test_science_youtube_is_restricted_to_approved_channels():
+    videos = _youtube_resources(ResourceQuery(topic="chemical reactions", track="CREATION_SCIENCE"))
+    providers = {video.provider for video in videos}
+    assert providers == {"Science Buddies", "The Royal Institution", "HHMI BioInteractive"}
+    assert all(video.license == "YOUTUBE_LINK_OR_OFFICIAL_EMBED" for video in videos)
+
+
+def test_history_youtube_requires_evidence_checking():
+    videos = _youtube_resources(ResourceQuery(topic="Great Depression", track="TRUTH_HISTORY"))
+    assert {video.provider for video in videos} >= {"Voices of the Past", "U.S. National Archives"}
+    assert all("verify" in video.mastery_prompt.lower() for video in videos)
+
+
+@pytest.mark.asyncio
+async def test_curated_science_sources_include_models_experiments_and_real_data():
+    results = await _curated(ResourceQuery(topic="diffusion", track="CREATION_SCIENCE"), DummyClient())
+    ids = {item.id for item in results}
+    assert {"concord:models", "science-buddies:projects", "hhmi:biointeractive", "bhl:search"} <= ids
+
+
+@pytest.mark.asyncio
+async def test_curated_history_sources_include_docsteach_and_dpla():
+    results = await _curated(ResourceQuery(topic="Great Depression", track="TRUTH_HISTORY"), DummyClient())
+    ids = {item.id for item in results}
+    assert {"docsteach:primary", "dpla:search"} <= ids
