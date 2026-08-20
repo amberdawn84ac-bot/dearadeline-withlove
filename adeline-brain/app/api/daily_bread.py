@@ -9,14 +9,12 @@ No auth required — public widget endpoints.
 """
 import json
 import logging
-import os
 from datetime import date
 from typing import Optional
 
-import openai
 from fastapi import APIRouter
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.config import create_llm, GOOGLE_API_KEY, GEMINI_MODEL
 
@@ -66,6 +64,18 @@ class DailyBreadResponse(BaseModel):
     originalMeaning: str
     translationNote: str | None
     context: str
+    lessonTitle: str = "Daily Bread"
+    bigIdea: str = "Receive the text, understand it in context, and live it today."
+    readTogether: list[str] = Field(default_factory=list)
+    familyDiscussion: list[str] = Field(default_factory=list)
+    practice: str = "Choose one concrete way to live this passage today."
+    prayer: str = "YHWH, give us ears to hear and courage to obey. Amen."
+    creditConnections: list[str] = Field(default_factory=lambda: ["DISCIPLESHIP", "ENGLISH_LITERATURE"])
+    portfolioEvidence: list[str] = Field(default_factory=lambda: ["A spoken, written, drawn, or photographed response showing what the learner understood and practiced"])
+    originalText: Optional[str] = None
+    sourceVersion: Optional[str] = None
+    sourceUrl: Optional[str] = None
+    isFoxTranslation: bool = False
 
 
 # ── System prompt ──────────────────────────────────────────────────────────────
@@ -86,7 +96,15 @@ Return ONLY this JSON object with no other text:
   "original": "The key Hebrew or Greek word with transliteration in parentheses",
   "originalMeaning": "What that word literally means — its full depth in the original language",
   "translationNote": "One sentence about what the Everett Fox rendering recovers that common English translations lose. Use null if standard translations are faithful.",
-  "context": "One sentence of historical or cultural context that makes this verse richer — include original place/person names"
+  "context": "One sentence of historical or cultural context that makes this verse richer — include original place/person names",
+  "lessonTitle": "A short, inviting family Bible lesson title",
+  "bigIdea": "The central truth of the passage in one clear sentence",
+  "readTogether": ["The main reference", "One nearby passage that clarifies its context"],
+  "familyDiscussion": ["An observation question", "A context or meaning question", "A concrete application question with layered answers for different ages"],
+  "practice": "One specific action the family can take today — no busywork",
+  "prayer": "A brief prayer rooted in the actual passage",
+  "creditConnections": ["DISCIPLESHIP", "Add ENGLISH_LITERATURE, TRUTH_HISTORY, or another track only when the lesson genuinely demonstrates it"],
+  "portfolioEvidence": ["One or two authentic evidence options: spoken explanation, written reflection, drawing, photo of practice, or source comparison"]
 }}"""
 
 
@@ -95,7 +113,7 @@ Return ONLY this JSON object with no other text:
 @router.get("/daily-bread", response_model=DailyBreadResponse)
 async def daily_bread():
     today = date.today().isoformat()  # YYYY-MM-DD
-    cache_key = f"daily-bread:{today}"
+    cache_key = f"daily-bread:v2:{today}"
 
     # ── Try Redis cache ────────────────────────────────────────────────────────
     try:
@@ -106,20 +124,29 @@ async def daily_bread():
     except Exception as e:
         logger.warning(f"[DailyBread] Redis unavailable: {e}")
 
-    # ── Generate with OpenAI ───────────────────────────────────────────────────
+    # ── Generate with Gemini ───────────────────────────────────────────────────
     try:
-        client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        completion = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": _SYSTEM},
-                {"role": "user",   "content": _USER_TEMPLATE.format(today=today)},
-            ],
-            temperature=0.7,
-            max_tokens=400,
-        )
-        raw = completion.choices[0].message.content.strip()
+        llm = create_llm(model=GEMINI_MODEL, temperature=0.7, max_tokens=1200)
+        completion = await llm.ainvoke([
+            SystemMessage(content=_SYSTEM),
+            HumanMessage(content=_USER_TEMPLATE.format(today=today)),
+        ])
+        raw = str(completion.content).strip()
         data = json.loads(raw)
+        # Sefaria is the source of record for Hebrew-Bible text. Gemini builds
+        # the lesson but does not get to invent or silently paraphrase the text.
+        try:
+            from app.services.sefaria import fetch_biblical_text
+            source = await fetch_biblical_text(data["reference"])
+            if source and source.get("english"):
+                data["verse"] = source["english"]
+                data["reference"] = source.get("ref") or data["reference"]
+                data["originalText"] = source.get("hebrew") or None
+                data["sourceVersion"] = source.get("version_title") or "Sefaria"
+                data["sourceUrl"] = source.get("url")
+                data["isFoxTranslation"] = bool(source.get("is_fox"))
+        except Exception as source_error:
+            logger.warning(f"[DailyBread] Sefaria source fetch failed (non-fatal): {source_error}")
         result = DailyBreadResponse(**data)
 
         # ── Cache for 24 hours ─────────────────────────────────────────────────
@@ -226,7 +253,7 @@ Return ONLY this JSON (no other text):
   ]
 }}"""
 
-    if not GOOGLE_API_KEY and not os.getenv("GEMINI_API_KEY"):
+    if not GOOGLE_API_KEY:
         # Fallback sections when no API key
         return [
             DeepDiveSection(

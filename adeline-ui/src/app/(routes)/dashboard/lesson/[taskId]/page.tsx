@@ -23,7 +23,17 @@ export default function CanonicalLessonPage() {
     void (async () => {
       try {
         const plan = await getLearningPlan(student.id, 12);
-        const selected = plan.suggestions.find((item) => item.id === decodeURIComponent(params.taskId));
+        const requestedId = decodeURIComponent(params.taskId);
+        let selected = plan.suggestions.find((item) => item.id === requestedId);
+        if (!selected) {
+          const roadmapDay = plan.roadmap.months.flatMap((month) => month.weeks).flatMap((week) => week.days).find((day) => day.lesson_id === requestedId);
+          if (roadmapDay) selected = {
+            id: roadmapDay.lesson_id, title: roadmapDay.title, track: roadmapDay.track,
+            description: roadmapDay.description, emoji: roadmapDay.emoji,
+            priority: 0.5, source: 'explore', canonical_ready: false,
+            mission_kind: 'learning_mission', success_criteria: [],
+          };
+        }
         if (!selected) throw new Error('That assignment is no longer in the current learning plan.');
         if (cancelled) return;
         setTask(selected);

@@ -1125,6 +1125,35 @@ export interface LearningPlanResponse {
   weakest_track?: string;
   total_credits_earned: number;
   credits_this_week: number;
+  graduation_progress: {
+    total_required: number;
+    total_earned: number;
+    percentage_complete: number;
+    credits_remaining: number;
+    on_track: boolean;
+    is_high_school: boolean;
+  };
+  credit_gaps: Array<{ bucket: string; required: number; earned: number; remaining: number; priority: number }>;
+  grade_standards: Array<{ standard_id: string; subject: string; grade: number; description: string; mastered: boolean; priority: number }>;
+  roadmap: {
+    school_days_per_week: number;
+    total_weeks: number;
+    starts_on: string;
+    ends_on: string;
+    months: Array<{
+      month: number;
+      label: string;
+      starts_on: string;
+      ends_on: string;
+      focus: string;
+      weeks: Array<{
+        week: number;
+        starts_on: string;
+        theme: string;
+        days: Array<{ date: string; day: string; lesson_id: string; title: string; track: Track; description: string; emoji: string }>;
+      }>;
+    }>;
+  };
   generated_at: string;
 }
 

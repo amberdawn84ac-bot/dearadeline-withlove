@@ -10,6 +10,18 @@ interface DailyBread {
   originalMeaning: string;
   translationNote: string;
   context: string;
+  lessonTitle: string;
+  bigIdea: string;
+  readTogether: string[];
+  familyDiscussion: string[];
+  practice: string;
+  prayer: string;
+  creditConnections: string[];
+  portfolioEvidence: string[];
+  originalText?: string;
+  sourceVersion?: string;
+  sourceUrl?: string;
+  isFoxTranslation?: boolean;
 }
 
 interface DailyBreadWidgetProps {
@@ -103,7 +115,7 @@ export function DailyBreadWidget({ onStudy, gradeLevel = '8' }: DailyBreadWidget
           </div>
           <div className="flex-1">
             <h3 className="font-bold text-[#2F4731] text-sm">Daily Bread</h3>
-            <p className="text-[#2F4731]/50 text-xs">Daily scripture study</p>
+            <p className="text-[#2F4731]/50 text-xs">A new family Bible lesson every day</p>
           </div>
         </div>
 
@@ -112,6 +124,12 @@ export function DailyBreadWidget({ onStudy, gradeLevel = '8' }: DailyBreadWidget
 
         {/* Reference */}
         <p className="text-[#BD6809] font-semibold text-xs mb-4">{data.reference}</p>
+        {data.sourceUrl && <a href={data.sourceUrl} target="_blank" rel="noreferrer" className="mb-4 inline-flex text-[11px] font-semibold text-[#2F4731]/60 underline">Source text: {data.isFoxTranslation ? 'Everett Fox via Sefaria' : (data.sourceVersion || 'Sefaria')} ↗</a>}
+
+        <div className="mb-4">
+          <h4 className="font-bold text-[#2F4731]">{data.lessonTitle || 'Today’s Bible lesson'}</h4>
+          <p className="mt-1 text-xs leading-relaxed text-[#2F4731]/70">{data.bigIdea}</p>
+        </div>
 
         {/* Original language section */}
         {data.original && (
@@ -132,14 +150,20 @@ export function DailyBreadWidget({ onStudy, gradeLevel = '8' }: DailyBreadWidget
           </div>
         )}
 
+        {data.readTogether?.length > 0 && <div className="mb-4"><p className="text-xs font-bold uppercase tracking-wide text-[#BD6809]">Read together</p><ul className="mt-1 list-disc pl-4 text-xs leading-5 text-[#2F4731]/75">{data.readTogether.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+        {data.familyDiscussion?.length > 0 && <div className="mb-4"><p className="text-xs font-bold uppercase tracking-wide text-[#BD6809]">Talk about it</p><ol className="mt-1 list-decimal pl-4 text-xs leading-5 text-[#2F4731]/75">{data.familyDiscussion.map((item) => <li key={item}>{item}</li>)}</ol></div>}
+        {data.practice && <div className="mb-4 rounded-lg bg-[#EEF4E9] p-3"><p className="text-xs font-bold text-[#2F4731]">Live it today</p><p className="mt-1 text-xs leading-5 text-[#2F4731]/75">{data.practice}</p></div>}
+        {data.prayer && <p className="mb-4 text-xs italic leading-5 text-[#2F4731]/70">{data.prayer}</p>}
+        {data.creditConnections?.length > 0 && <div className="mb-4 border-t border-[#E7DAC3] pt-3"><p className="text-[11px] font-bold uppercase text-[#2F4731]/50">Evidence can support</p><p className="mt-1 text-xs text-[#2F4731]/70">{data.creditConnections.map((track) => track.replace(/_/g, ' ')).join(' · ')}</p>{data.portfolioEvidence?.[0] && <p className="mt-2 text-[11px] italic text-[#2F4731]/55">Portfolio evidence: {data.portfolioEvidence[0]}</p>}</div>}
+
         {/* CTA Button */}
-        <button
+        {onStudy && <button
           onClick={handleStudy}
           className="w-full px-4 py-2 bg-[#2F4731] text-white rounded-lg text-sm font-semibold hover:bg-[#1F3321] transition-colors flex items-center justify-center gap-2 group"
         >
           Start Deep Dive Study
           <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-        </button>
+        </button>}
       </div>
     );
   }

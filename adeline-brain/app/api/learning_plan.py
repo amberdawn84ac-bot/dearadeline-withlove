@@ -23,7 +23,7 @@ This is the heart of Adeline's adaptive curriculum — connecting:
 import json
 import logging
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -138,6 +138,40 @@ class GraduationProgress(BaseModel):
     on_track: bool  # Based on grade level and expected progress
     is_high_school: bool  # True for 9-12, False for K-8
 
+
+class RoadmapDay(BaseModel):
+    date: str
+    day: str
+    lesson_id: str
+    title: str
+    track: str
+    description: str
+    emoji: str
+
+
+class RoadmapWeek(BaseModel):
+    week: int
+    starts_on: str
+    theme: str
+    days: list[RoadmapDay]
+
+
+class RoadmapMonth(BaseModel):
+    month: int
+    label: str
+    starts_on: str
+    ends_on: str
+    focus: str
+    weeks: list[RoadmapWeek]
+
+
+class AcademicRoadmap(BaseModel):
+    school_days_per_week: int = 4
+    total_weeks: int = 36
+    starts_on: str
+    ends_on: str
+    months: list[RoadmapMonth]
+
 class LearningPlanResponse(BaseModel):
     student_id: str
     suggestions: list[LessonSuggestion]
@@ -151,6 +185,7 @@ class LearningPlanResponse(BaseModel):
     graduation_progress: GraduationProgress
     credit_gaps: list[CreditGap]  # What's still needed for graduation (9-12 only)
     grade_standards: list[GradeLevelStandard]  # K-8 grade-level standards progress
+    roadmap: AcademicRoadmap
     generated_at: str
 
 
@@ -512,6 +547,69 @@ def _get_grade_appropriate_starters(track: str, grade_level: str) -> list[tuple[
     return STARTER_TOPICS_BY_GRADE.get(band, {}).get(track, [])
 
 
+def _build_academic_roadmap(
+    grade_level: str,
+    suggestions: list[LessonSuggestion],
+    active_tracks: list[str],
+) -> AcademicRoadmap:
+    """Build a stable rolling 36-week, four-day academic roadmap.
+
+    This is deliberately planning metadata, not 144 pre-generated lessons. Opening a
+    day sends its topic through the one canonical family-lesson builder.
+    """
+    today = date.today()
+    start = today - timedelta(days=today.weekday())
+    tracks = active_tracks or list(STARTER_TOPICS_BY_GRADE[_get_grade_band(grade_level)])
+    seeds: list[tuple[str, str, str, str, str]] = []
+    for item in suggestions:
+        seeds.append((item.id, item.title, item.track, item.description, item.emoji))
+    for track in tracks:
+        for index, (title, description) in enumerate(_get_grade_appropriate_starters(track, grade_level)):
+            seeds.append((f"roadmap-{track.lower()}-{index}", title, track, description, TRACK_EMOJI.get(track, "✦")))
+    if not seeds:
+        seeds = [("roadmap-discovery", "Family Discovery Lab", "CREATION_SCIENCE", "Observe, test, document, and explain one real phenomenon.", "🔬")]
+
+    weeks: list[RoadmapWeek] = []
+    day_names = ["Monday", "Tuesday", "Wednesday", "Thursday"]
+    for week_index in range(36):
+        week_start = start + timedelta(weeks=week_index)
+        days: list[RoadmapDay] = []
+        for day_index, day_name in enumerate(day_names):
+            seed_index = (week_index * 4 + day_index) % len(seeds)
+            lesson_id, title, track, description, emoji = seeds[seed_index]
+            lesson_date = week_start + timedelta(days=day_index)
+            days.append(RoadmapDay(
+                date=lesson_date.isoformat(), day=day_name,
+                lesson_id=lesson_id, title=title, track=track,
+                description=description, emoji=emoji,
+            ))
+        weeks.append(RoadmapWeek(
+            week=week_index + 1,
+            starts_on=week_start.isoformat(),
+            theme=days[0].title,
+            days=days,
+        ))
+
+    months: list[RoadmapMonth] = []
+    for month_index in range(9):
+        month_weeks = weeks[month_index * 4:(month_index + 1) * 4]
+        month_start = date.fromisoformat(month_weeks[0].starts_on)
+        month_end = date.fromisoformat(month_weeks[-1].starts_on) + timedelta(days=3)
+        months.append(RoadmapMonth(
+            month=month_index + 1,
+            label=f"Month {month_index + 1}",
+            starts_on=month_start.isoformat(),
+            ends_on=month_end.isoformat(),
+            focus=month_weeks[0].theme,
+            weeks=month_weeks,
+        ))
+    return AcademicRoadmap(
+        starts_on=start.isoformat(),
+        ends_on=(start + timedelta(weeks=35, days=3)).isoformat(),
+        months=months,
+    )
+
+
 def _zpd_to_suggestion(candidate: ZPDCandidate, priority_boost: float = 0.0) -> LessonSuggestion:
     """
     Convert a ZPD candidate to a lesson suggestion.
@@ -814,7 +912,7 @@ async def _get_available_projects(track: str = None, limit: int = 3) -> list[Pro
 # ── Redis sliding-window helpers ──────────────────────────────────────────────
 
 def _plan_cache_key(student_id: str) -> str:
-    return f"learning_plan:{student_id}"
+    return f"learning_plan:v2:{student_id}"
 
 
 async def pop_completed_lesson(student_id: str, lesson_title: str) -> None:
@@ -1234,6 +1332,7 @@ async def get_learning_plan(
         graduation_progress=graduation_progress,
         credit_gaps=credit_gaps if graduation_progress.is_high_school else [],  # Empty for K-8
         grade_standards=grade_standards,  # Only populated for K-8
+        roadmap=_build_academic_roadmap(grade_level, final_suggestions, active_tracks),
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
 
