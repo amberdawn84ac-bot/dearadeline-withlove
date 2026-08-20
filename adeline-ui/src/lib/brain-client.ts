@@ -1150,9 +1150,11 @@ export interface LearningPlanResponse {
         week: number;
         starts_on: string;
         theme: string;
-        days: Array<{ date: string; day: string; lesson_id: string; title: string; track: Track; description: string; emoji: string }>;
+        days: Array<{ date: string; day: string; lesson_id: string; title: string; track: Track; description: string; emoji: string; planning_status: 'ready' | 'forecast' }>;
       }>;
     }>;
+    adaptive: boolean;
+    revision_policy: string;
   };
   generated_at: string;
 }

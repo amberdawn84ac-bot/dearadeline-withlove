@@ -147,6 +147,7 @@ class RoadmapDay(BaseModel):
     track: str
     description: str
     emoji: str
+    planning_status: str  # "ready" near-term; "forecast" farther out
 
 
 class RoadmapWeek(BaseModel):
@@ -171,6 +172,8 @@ class AcademicRoadmap(BaseModel):
     starts_on: str
     ends_on: str
     months: list[RoadmapMonth]
+    adaptive: bool = True
+    revision_policy: str = "Recalculate after completed evidence, mastery changes, pace changes, new interests, or changed credit gaps."
 
 class LearningPlanResponse(BaseModel):
     student_id: str
@@ -582,6 +585,7 @@ def _build_academic_roadmap(
                 date=lesson_date.isoformat(), day=day_name,
                 lesson_id=lesson_id, title=title, track=track,
                 description=description, emoji=emoji,
+                planning_status="ready" if week_index < 4 else "forecast",
             ))
         weeks.append(RoadmapWeek(
             week=week_index + 1,
@@ -922,21 +926,11 @@ async def pop_completed_lesson(student_id: str, lesson_title: str) -> None:
     """
     cache_key = _plan_cache_key(student_id)
     try:
-        raw = await redis_client.get(cache_key)
-        if not raw:
-            return
-        plan = json.loads(raw)
-        original_count = len(plan.get("suggestions", []))
-        plan["suggestions"] = [
-            s for s in plan.get("suggestions", [])
-            if s.get("title") != lesson_title
-        ]
-        if len(plan["suggestions"]) < original_count:
-            await redis_client.set(cache_key, json.dumps(plan), ex=3600)
-            logger.info(
-                f"[LearningPlan] Popped '{lesson_title}' from queue for student={student_id}. "
-                f"Queue: {original_count} → {len(plan['suggestions'])}"
-            )
+        # A completion changes mastery, pacing, evidence, and possibly credit gaps.
+        # The whole forecast must be rebuilt; mutating only today's queue leaves a
+        # stale month/year plan behind.
+        await redis_client.delete(cache_key)
+        logger.info(f"[LearningPlan] Invalidated adaptive roadmap after '{lesson_title}' for student={student_id}")
     except Exception as e:
         logger.warning(f"[LearningPlan] Failed to pop completed lesson (non-fatal): {e}")
 
@@ -948,6 +942,11 @@ async def _replenish_learning_plan_queue(student_id: str) -> None:
     """
     cache_key = _plan_cache_key(student_id)
     try:
+        # Full regeneration on the next read is intentional. A partial append cannot
+        # correctly re-evaluate interests, mastery, pace, standards, and credits.
+        await redis_client.delete(cache_key)
+        logger.info(f"[LearningPlan/Replenish] Marked adaptive roadmap for regeneration: student={student_id}")
+        return
         # 1. Load current queue
         raw = await redis_client.get(cache_key)
         plan = json.loads(raw) if raw else {}
@@ -1336,10 +1335,10 @@ async def get_learning_plan(
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
 
-    # ── Cache the response (1 hour TTL — replenishment extends as lessons complete) ──
+    # ── Short cache: completions invalidate immediately; other profile changes settle within 5 minutes. ──
     try:
-        await redis_client.set(cache_key, response.model_dump_json(), ex=3600)
-        logger.info(f"[LearningPlan] Cached response for student={student_id} (1 hr TTL)")
+        await redis_client.set(cache_key, response.model_dump_json(), ex=300)
+        logger.info(f"[LearningPlan] Cached response for student={student_id} (5 min TTL)")
     except Exception as e:
         logger.warning(f"[LearningPlan] Redis cache write failed (non-fatal): {e}")
 
