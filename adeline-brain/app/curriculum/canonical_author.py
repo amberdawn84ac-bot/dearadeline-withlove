@@ -25,7 +25,7 @@ Prefer concrete evidence and meaningful tasks over explanatory prose.
 OUTPUT CONTRACT:
 Return ONLY valid JSON for exactly one CanonicalLesson object:
 {{
-  "canonical_format_version": 4,
+  "canonical_format_version": 5,
   "title": "",
   "track": "",
   "big_question": "",

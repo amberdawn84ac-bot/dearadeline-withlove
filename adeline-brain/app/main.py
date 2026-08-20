@@ -61,6 +61,7 @@ from app.api.lesson_stream import router as lesson_stream_router
 from app.api.standards import router as standards_router
 from app.api.games import router as games_router
 from app.api.agent_team import router as agent_team_router
+from app.api.resources import router as resources_router
 from app.connections.journal_store import journal_store
 from app.connections.conversation_store import conversation_store
 from app.connections.postgres import init_postgres
@@ -210,6 +211,7 @@ app.include_router(genui_router)
 app.include_router(standards_router)
 app.include_router(games_router)
 app.include_router(agent_team_router)
+app.include_router(resources_router)
 # ── /brain/* prefix mounts (Vercel proxy: /brain/:path* → Railway /:path*) ──
 # Auth endpoints (for cookie-based auth)
 app.include_router(auth_router, prefix="/brain")
@@ -243,6 +245,7 @@ app.include_router(daily_bread_router, prefix="/brain")
 app.include_router(standards_router, prefix="/brain")
 app.include_router(games_router, prefix="/brain")
 app.include_router(agent_team_router, prefix="/brain")
+app.include_router(resources_router, prefix="/brain")
 app.include_router(focus_router, prefix="/brain")
 app.include_router(coppa_router, prefix="/brain")
 

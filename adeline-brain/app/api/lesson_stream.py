@@ -499,6 +499,18 @@ async def _stream_lesson(
             canonical_dummy = {"topic": request.topic, "blocks": blocks_data}
             blocks_data = await adapt_canonical_for_student(canonical_dummy, adaptation_req)
 
+            # Live outside resources enrich the learner view only. They are not
+            # written back into the durable canonical lesson.
+            try:
+                from app.services.resource_router import resource_block_for_lesson
+                resource_block = await resource_block_for_lesson(
+                    request.topic, request.track.value, request.grade_level,
+                )
+                if resource_block:
+                    blocks_data.append(resource_block)
+            except Exception as e:
+                logger.warning(f"[LessonStream] Resource routing failed (non-fatal): {e}")
+
             # Ensure every block has a block_id for frontend React keys
             for idx, block in enumerate(blocks_data):
                 if not block.get("block_id"):
@@ -661,6 +673,18 @@ async def _stream_lesson(
         yield _sse({"type": "status", "message": "Personalizing lesson for you..."})
         canonical_dummy = {"topic": request.topic, "blocks": canonical_blocks}
         state["blocks"] = await adapt_canonical_for_student(canonical_dummy, adaptation_req)
+
+    # Add provider results only to this adapted learner view. canonical_blocks
+    # above remains the clean, permanent teaching source.
+    try:
+        from app.services.resource_router import resource_block_for_lesson
+        resource_block = await resource_block_for_lesson(
+            request.topic, request.track.value, request.grade_level,
+        )
+        if resource_block:
+            state["blocks"].append(resource_block)
+    except Exception as e:
+        logger.warning(f"[LessonStream] Resource routing failed (non-fatal): {e}")
 
     # ── Safety net: if every fallback failed, synthesize a minimal lesson ───
     if not state["blocks"]:
@@ -1013,6 +1037,7 @@ _BLOCK_MODALITY_MAP: dict[str, list[str]] = {
     "TEXT_DEEP":        ["reading", "text"],
     "REAL_WORLD_APP":   ["kinesthetic", "reading"],
     "CONCEPT_MAP":      ["visual"],
+    "RESOURCE_COLLECTION": ["kinesthetic", "visual", "reading"],
 }
 
 _BLOCK_DIFFICULTY_MAP: dict[str, str] = {
@@ -1031,6 +1056,7 @@ _BLOCK_DIFFICULTY_MAP: dict[str, str] = {
     "GENUI_ASSEMBLY":   "DEVELOPING",
     "SIMULATION":       "EXPANDING",
     "REAL_WORLD_APP":   "MASTERING",
+    "RESOURCE_COLLECTION": "DEVELOPING",
 }
 
 _BLOCK_COGNITIVE_LOAD: dict[str, float] = {
@@ -1050,6 +1076,7 @@ _BLOCK_COGNITIVE_LOAD: dict[str, float] = {
     "SIMULATION":       6.5,
     "REAL_WORLD_APP":   7.5,
     "CONCEPT_MAP":      5.0,
+    "RESOURCE_COLLECTION": 4.5,
 }
 
 # Block types that fire their own cognitive interrupt inline — lower friction threshold

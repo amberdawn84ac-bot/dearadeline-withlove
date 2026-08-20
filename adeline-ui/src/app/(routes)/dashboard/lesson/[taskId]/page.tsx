@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import GenUIRenderer from '@/components/GenUIRenderer';
+import FamilyCanonicalLesson from '@/components/lessons/FamilyCanonicalLesson';
 import { buildLesson, getLearningPlan, lessonRequestFromSuggestion } from '@/lib/brain-client';
 import type { LessonBlockResponse, LessonResponse, LessonSuggestion } from '@/lib/brain-client';
 import { useStudent } from '@/lib/useStudent';
@@ -81,23 +81,7 @@ export default function CanonicalLessonPage() {
 
       {status && <p className="rounded-2xl border border-[#E7DAC3] bg-[#FDF6E9] p-5 text-sm italic text-[#2F4731]/70" role="status">{status}</p>}
       {error && <div className="rounded-2xl bg-red-50 p-5 text-sm text-red-700" role="alert"><p>{error}</p><Link href="/dashboard/journey" className="mt-3 inline-flex font-bold underline">Return to the learning plan</Link></div>}
-      {lesson && (
-        <section className="rounded-[30px] border border-[#D9CFBC] bg-[#FFFEF7] p-6 shadow-sm md:p-10" aria-label="Family lesson">
-          <header className="mb-8 border-b border-[#E7DAC3] pb-6">
-            <p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">{lesson.track.replace(/_/g, ' ')}</p>
-            <h1 className="mt-2 text-4xl leading-tight text-[#2F4731]" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>{lesson.title}</h1>
-          </header>
-          <GenUIRenderer
-            lessonId={lesson.lesson_id}
-            blocks={lesson.blocks}
-            isHomestead={lesson.track === 'HOMESTEADING'}
-            oasStandards={lesson.oas_standards}
-            agentName={lesson.agent_name}
-            creditHours={lesson.credits_awarded?.[0]?.credit_hours}
-            studentId={student.id}
-          />
-        </section>
-      )}
+      {lesson && <FamilyCanonicalLesson lesson={lesson} studentId={student.id} />}
     </div>
   );
 }

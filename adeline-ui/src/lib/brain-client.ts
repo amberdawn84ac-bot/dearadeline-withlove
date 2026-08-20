@@ -149,6 +149,13 @@ export interface LessonBlockResponse {
   block_id: string;
   block_type: string;
   content: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+  family_roles?: {
+    elementary?: string;
+    middle?: string;
+    high_school?: string;
+  };
   evidence: Evidence[];
   is_silenced: boolean;
   homestead_content?: string;

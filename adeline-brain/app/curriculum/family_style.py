@@ -9,7 +9,7 @@ from copy import deepcopy
 import re
 from typing import Any
 
-CANONICAL_FORMAT_VERSION = 4
+CANONICAL_FORMAT_VERSION = 5
 
 _OBSOLETE_FORMATS = {
     "ANIMATED_SKETCHNOTE_LESSON",
@@ -76,6 +76,11 @@ CANONICAL LESSON AUTHOR — FAMILY-STYLE, NON-NEGOTIABLE:
 - The adaptation contract must stay short: 3–5 rules describing only what grade/mastery may change.
 - Never invent quotations, source identities, dates, measurements, research findings, or evidence.
 - Never print frontend behavior, CSS, page coordinates, rendering instructions, or internal metadata in prose.
+- The learner-facing renderer follows the Kitchen Chemistry pattern: a compelling family question,
+  three age/mastery responsibility layers, preparation and safety where relevant, real teaching,
+  a shared investigation, explicit concepts, an interactive mastery finish, reflection, and portfolio evidence.
+- Outside resources never replace the lesson. A rights-aware Resource Router may add a separate live
+  evidence/simulation/game/creation section after adaptation; live results are never saved into the canonical.
 """.strip()
 
 

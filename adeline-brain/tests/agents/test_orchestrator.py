@@ -106,7 +106,7 @@ class TestCanonicalAuthor:
             "is_silenced": False,
         }]
         authored = {
-            "canonical_format_version": 4,
+            "canonical_format_version": 5,
             "title": "Soil and Yield",
             "track": "TRUTH_HISTORY",
             "blocks": [
@@ -128,7 +128,7 @@ class TestCanonicalAuthor:
 
         assert len(result) == 6
         assert result[0]["block_type"] == "PRIMARY_SOURCE"
-        assert all(block["canonical_format_version"] == 4 for block in result)
+        assert all(block["canonical_format_version"] == 5 for block in result)
 
     @pytest.mark.asyncio
     async def test_complete_valid_canonical_skips_second_model_call(self):
