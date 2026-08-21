@@ -85,6 +85,9 @@ class BookRecommendation(BaseModel):
     track: str
     cover_url: Optional[str] = None
     relevance_score: float
+    source_url: Optional[str] = None
+    source_library: Optional[str] = None
+    is_external: bool = False
 
 
 class RecommendationsResponse(BaseModel):
@@ -612,6 +615,9 @@ async def get_recommendations(
                 track=book["track"],
                 cover_url=book.get("cover_url"),
                 relevance_score=book.get("relevance_score", 0.0),
+                source_url=book.get("source_url"),
+                source_library=book.get("source_library"),
+                is_external=bool(book.get("is_external", False)),
             )
             for book in books
         ]

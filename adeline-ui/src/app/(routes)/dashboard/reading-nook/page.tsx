@@ -7,12 +7,15 @@ import Bookshelf from '@/components/reading-nook/Bookshelf';
 import { AddBookDialog } from '@/components/reading-nook/AddBookDialog';
 import { useStudent } from '@/lib/useStudent';
 import { CURATED_PUBLIC_DOMAIN_BOOKS } from '@/data/learningVault';
+import { addBook } from '@/lib/brain-client';
+import { startReading } from '@/lib/bookshelf-client';
 
 export default function ReadingNookPage() {
   const router = useRouter();
   const { student } = useStudent();
   const studentId = student?.id ?? '';
   const [refreshKey, setRefreshKey] = useState(0);
+  const [addingClassic, setAddingClassic] = useState<string | null>(null);
 
   const handleBookClick = useCallback((bookId: string) => {
     router.push(`/dashboard/reading-nook/${bookId}`);
@@ -21,6 +24,18 @@ export default function ReadingNookPage() {
   const handleBookAdded = useCallback(() => {
     setRefreshKey((k) => k + 1);
   }, []);
+
+  const addClassicToList = useCallback(async (book: { id: string; title: string; author: string }) => {
+    if (!studentId) return;
+    setAddingClassic(book.id);
+    try {
+      const imported = await addBook(book.title, book.author);
+      await startReading(studentId, imported.id, 'wishlist');
+      setRefreshKey((key) => key + 1);
+    } finally {
+      setAddingClassic(null);
+    }
+  }, [studentId]);
 
   return (
     <div className="min-h-screen bg-[#FFFEF7] pb-12">
@@ -59,6 +74,13 @@ export default function ReadingNookPage() {
                 <p className="text-xs text-[#2F4731]/65 mt-3 line-clamp-4">{book.description}</p>
                 {book.notes && <p className="text-[11px] text-[#2F4731]/50 mt-3 italic">{book.notes}</p>}
                 <div className="mt-auto pt-4 flex gap-2">
+                  <button
+                    onClick={() => void addClassicToList(book)}
+                    disabled={addingClassic === book.id || !studentId}
+                    className="rounded-lg bg-[#2F4731] px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                  >
+                    {addingClassic === book.id ? 'Adding…' : 'Add to Reading List'}
+                  </button>
                   {book.readingUrl && (
                     <a href={book.readingUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-[#BD6809] hover:text-[#2F4731]">
                       Read edition <ExternalLink className="w-3 h-3" />

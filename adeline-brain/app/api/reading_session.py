@@ -180,13 +180,22 @@ async def create_reading_session(
                     f"[ReadingSession] Session already exists: "
                     f"student={student_id}, book={payload.book_id}, session={existing['id']}"
                 )
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "message": "Reading session already exists for this book",
-                        "session_id": existing["id"],
-                    },
-                )
+                # Starting a book is idempotent. A duplicate tap or a restored
+                # browser session must resume instead of trapping the reader on
+                # an HTTP 409. Moving wishlist → reading is also safe here.
+                if existing["status"] == "wishlist" and payload.status == "reading":
+                    result = await conn.fetchrow(
+                        '''
+                        UPDATE "ReadingSession" SET status = 'reading', "updatedAt" = NOW()
+                        WHERE id = $1
+                        RETURNING id, "studentId", "bookId", status, "startedAt",
+                                  "completedAt", "pagesRead", "totalPages",
+                                  "currentLocation", "studentReflection", "minutesRead"
+                        ''',
+                        existing["id"],
+                    )
+                else:
+                    result = existing
             else:
                 # Should not happen, but handle gracefully
                 logger.error(

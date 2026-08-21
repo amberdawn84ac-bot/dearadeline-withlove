@@ -15,7 +15,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { BookCard } from "./BookCard";
-import type { BookSummary } from "@/lib/brain-client";
+import { addBook } from "@/lib/brain-client";
+import { startReading } from "@/lib/bookshelf-client";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -23,10 +24,10 @@ export interface BookInSession {
   id: string;
   title: string;
   author: string;
-  sourceLibrary: string | null;
-  isDownloaded: boolean;
+  source_library?: string;
+  is_downloaded: boolean;
   format: string;
-  coverUrl: string | null;
+  cover_url?: string;
   track: string;
   lexile_level: number;
   grade_band: string;
@@ -35,8 +36,8 @@ export interface BookInSession {
   totalPages?: number;
   studentReflection?: string;
   completedAt?: string;
-  isExternal?: boolean;
-  sourceUrl?: string;
+  is_external?: boolean;
+  source_url?: string;
 }
 
 export interface ShelfData {
@@ -59,6 +60,7 @@ interface ShelfSectionProps {
   onBookClick: (bookId: string) => void;
   onAddToList?: (bookId: string) => void;
   loading?: boolean;
+  addingBookId?: string | null;
 }
 
 // ── Shelf Section Sub-component ────────────────────────────────────────────
@@ -71,6 +73,7 @@ function ShelfSection({
   onBookClick,
   onAddToList,
   loading,
+  addingBookId,
 }: ShelfSectionProps) {
   if (loading) {
     return (
@@ -123,16 +126,17 @@ function ShelfSection({
               className="cursor-pointer transition-opacity hover:opacity-80"
               onClick={() => onBookClick(book.id)}
             >
-              <BookCard book={book} />
+              <BookCard book={book} onStart={() => onBookClick(book.id)} />
               {isDiscover && onAddToList && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    onAddToList(book.id);
+                    void onAddToList(book.id);
                   }}
+                  disabled={addingBookId === book.id}
                   className="mt-2 w-full py-2 bg-[#BD6809] text-white text-xs font-bold rounded-lg hover:bg-[#9A5507] transition-colors"
                 >
-                  Add to Reading List
+                  {addingBookId === book.id ? 'Adding…' : 'Add to Reading List'}
                 </button>
               )}
             </div>
@@ -185,10 +189,10 @@ export default function Bookshelf({
         id: session.book.id,
         title: session.book.title,
         author: session.book.author,
-        sourceLibrary: null,
-        isDownloaded: false,
+        source_library: undefined,
+        is_downloaded: false,
         format: "epub",
-        coverUrl: session.book.cover_url || null,
+        cover_url: session.book.cover_url || undefined,
         track: session.book.track || "",
         lexile_level: session.book.lexile_level || 0,
         grade_band: session.book.grade_band || "",
@@ -238,17 +242,17 @@ export default function Bookshelf({
           id: book.id,
           title: book.title,
           author: book.author,
-          sourceLibrary: book.source_library || null,
-          isDownloaded: false,
+          source_library: book.source_library || undefined,
+          is_downloaded: false,
           format: "epub",
-          coverUrl: book.cover_url || null,
+          cover_url: book.cover_url || undefined,
           track: book.track || "",
           lexile_level: book.lexile_level || 0,
           grade_band: book.grade_band || "",
           sessionId: "",
           pagesRead: 0,
-          isExternal: book.is_external || false,
-          sourceUrl: book.source_url || undefined,
+          is_external: book.is_external || false,
+          source_url: book.source_url || undefined,
         })
       );
 
@@ -282,9 +286,11 @@ export default function Bookshelf({
 
       // Check if this is an external book from Discover
       const discoverBook = recommendations.find((b) => b.id === bookId);
-      if (discoverBook?.isExternal && discoverBook?.sourceUrl) {
-        // External books: open source URL in new tab
-        window.open(discoverBook.sourceUrl, "_blank", "noopener,noreferrer");
+      if (discoverBook?.is_external && discoverBook?.source_url) {
+        const imported = await addBook(discoverBook.title, discoverBook.author);
+        await startReading(studentId, imported.id, 'reading');
+        await fetchShelf();
+        window.open(discoverBook.source_url, "_blank", "noopener,noreferrer");
         return;
       }
 
@@ -333,29 +339,17 @@ export default function Bookshelf({
 
       setAddingToList(bookId);
 
-      const createRes = await fetch("/brain/api/reading-session", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
-        credentials: 'include', // Important: sends auth cookies
-        body: JSON.stringify({
-          book_id: bookId,
-          status: "wishlist",
-        }),
-      });
-
-      if (!createRes.ok) {
-        throw new Error(`Failed to add to reading list: ${createRes.status}`);
-      }
+      const shelfBookId = book?.is_external
+        ? (await addBook(book.title, book.author)).id
+        : bookId;
+      await startReading(studentId, shelfBookId, 'wishlist');
 
       // Refetch shelf to show the new book in Want to Read
       await fetchShelf();
 
       // Show success notification
       if (book) {
-        alert(`Added "${book.title}" to Want to Read!`);
+        setRecommendations((current) => current.filter((candidate) => candidate.id !== bookId));
       }
     } catch (err) {
       console.error("[Bookshelf] Add to reading list failed:", err);
@@ -442,6 +436,7 @@ export default function Bookshelf({
         isDiscover={true}
         onBookClick={handleBookClick}
         onAddToList={handleAddToReadingList}
+        addingBookId={addingToList}
         loading={loading}
       />
 

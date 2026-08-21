@@ -213,24 +213,38 @@ async def add_book(request: AddBookRequest, background_tasks: BackgroundTasks):
     book_id = str(uuid.uuid4())
     conn = await _get_conn()
     try:
-        await conn.execute(
-            """
-            INSERT INTO "Book" (id, title, author, track, "updatedAt")
-            VALUES ($1, $2, $3, 'ENGLISH_LITERATURE', now())
-            """,
-            book_id, request.title, request.author,
+        existing = await conn.fetchrow(
+            '''SELECT id, "sourceLibrary", "isDownloaded" FROM "Book"
+               WHERE lower(title) = lower($1) AND lower(author) = lower($2)
+               ORDER BY "updatedAt" DESC LIMIT 1''',
+            request.title, request.author,
         )
+        if existing:
+            book_id = str(existing["id"])
+            status = "downloaded" if existing["isDownloaded"] else "fetching"
+            source_library = existing["sourceLibrary"]
+        else:
+            await conn.execute(
+                """
+                INSERT INTO "Book" (id, title, author, track, "updatedAt")
+                VALUES ($1, $2, $3, 'ENGLISH_LITERATURE', now())
+                """,
+                book_id, request.title, request.author,
+            )
+            status = "fetching"
+            source_library = None
     finally:
         await conn.close()
 
-    background_tasks.add_task(_run_waterfall, book_id, request.title, request.author)
+    if status != "downloaded":
+        background_tasks.add_task(_run_waterfall, book_id, request.title, request.author)
 
     return AddBookResponse(
         id=book_id,
         title=request.title,
         author=request.author,
-        status="fetching",
-        sourceLibrary=None,
+        status=status,
+        sourceLibrary=source_library,
     )
 
 
