@@ -159,6 +159,9 @@ class RoadmapDay(BaseModel):
     description: str
     emoji: str
     planning_status: str  # "ready" near-term; "forecast" farther out
+    activity_kind: str
+    # Planning handoff metadata. Student views deliberately never render these codes.
+    standard_codes: list[str] = Field(default_factory=list)
 
 
 class RoadmapWeek(BaseModel):
@@ -186,6 +189,21 @@ class AcademicRoadmap(BaseModel):
     adaptive: bool = True
     revision_policy: str = "Recalculate after completed evidence, mastery changes, pace changes, new interests, or changed credit gaps."
 
+class SubjectCoverage(BaseModel):
+    subject: str
+    required: int
+    mastered: int
+    remaining: int
+    scheduled: int
+
+class CurriculumCoverage(BaseModel):
+    total_required: int
+    mastered: int
+    remaining: int
+    scheduled: int
+    all_required_accounted_for: bool
+    subjects: list[SubjectCoverage]
+
 class LearningPlanResponse(BaseModel):
     student_id: str
     suggestions: list[LessonSuggestion]
@@ -201,6 +219,7 @@ class LearningPlanResponse(BaseModel):
     grade_standards: list[GradeLevelStandard]  # K-8 grade-level standards progress
     roadmap: AcademicRoadmap
     placement: PlacementProfile
+    coverage: CurriculumCoverage
     generated_at: str
 
 
@@ -575,7 +594,8 @@ def _build_academic_roadmap(
     grade_level: str,
     suggestions: list[LessonSuggestion],
     active_tracks: list[str],
-) -> AcademicRoadmap:
+    standards: list[GradeLevelStandard],
+) -> tuple[AcademicRoadmap, CurriculumCoverage]:
     """Build a stable rolling 36-week, four-day academic roadmap.
 
     This is deliberately planning metadata, not 144 pre-generated lessons. Opening a
@@ -593,20 +613,34 @@ def _build_academic_roadmap(
     if not seeds:
         seeds = [("roadmap-discovery", "Family Discovery Lab", "CREATION_SCIENCE", "Observe, test, document, and explain one real phenomenon.", "🔬")]
 
+    remaining = [standard for standard in standards if not standard.mastered]
+    # Every required concept receives an introduction and a later retrieval/review.
+    # Codes stay server-side; children see the investigation that teaches them.
+    assignments: list[list[str]] = [[] for _ in range(36 * 4)]
+    for index, standard in enumerate(remaining):
+        first_day = index % len(assignments)
+        review_day = (first_day + 16 + (index // len(assignments)) * 4) % len(assignments)
+        assignments[first_day].append(standard.standard_id)
+        if review_day != first_day:
+            assignments[review_day].append(standard.standard_id)
+
+    activity_kinds = ["investigate", "experiment or game", "make or map", "share and demonstrate"]
     weeks: list[RoadmapWeek] = []
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday"]
     for week_index in range(36):
         week_start = start + timedelta(weeks=week_index)
         days: list[RoadmapDay] = []
+        seed_index = week_index % len(seeds)
+        lesson_id, title, track, description, emoji = seeds[seed_index]
         for day_index, day_name in enumerate(day_names):
-            seed_index = (week_index * 4 + day_index) % len(seeds)
-            lesson_id, title, track, description, emoji = seeds[seed_index]
             lesson_date = week_start + timedelta(days=day_index)
             days.append(RoadmapDay(
                 date=lesson_date.isoformat(), day=day_name,
-                lesson_id=lesson_id, title=title, track=track,
+                lesson_id=f"{lesson_id}-w{week_index + 1}-d{day_index + 1}", title=title, track=track,
                 description=description, emoji=emoji,
                 planning_status="ready" if week_index < 4 else "forecast",
+                activity_kind=activity_kinds[day_index],
+                standard_codes=assignments[week_index * 4 + day_index],
             ))
         weeks.append(RoadmapWeek(
             week=week_index + 1,
@@ -628,11 +662,29 @@ def _build_academic_roadmap(
             focus=month_weeks[0].theme,
             weeks=month_weeks,
         ))
-    return AcademicRoadmap(
+    roadmap = AcademicRoadmap(
         starts_on=start.isoformat(),
         ends_on=(start + timedelta(weeks=35, days=3)).isoformat(),
         months=months,
     )
+    scheduled_codes = {code for day in assignments for code in day}
+    subject_rows: list[SubjectCoverage] = []
+    for subject in sorted({standard.subject for standard in standards}):
+        subject_standards = [standard for standard in standards if standard.subject == subject]
+        subject_rows.append(SubjectCoverage(
+            subject=subject,
+            required=len(subject_standards),
+            mastered=sum(standard.mastered for standard in subject_standards),
+            remaining=sum(not standard.mastered for standard in subject_standards),
+            scheduled=sum(standard.standard_id in scheduled_codes for standard in subject_standards if not standard.mastered),
+        ))
+    coverage = CurriculumCoverage(
+        total_required=len(standards), mastered=sum(standard.mastered for standard in standards),
+        remaining=len(remaining), scheduled=len(scheduled_codes),
+        all_required_accounted_for=all(standard.mastered or standard.standard_id in scheduled_codes for standard in standards),
+        subjects=subject_rows,
+    )
+    return roadmap, coverage
 
 
 def _zpd_to_suggestion(candidate: ZPDCandidate, priority_boost: float = 0.0) -> LessonSuggestion:
@@ -958,7 +1010,9 @@ async def _get_grade_level_standards(student_id: str, grade_level: str) -> list[
         grade_num = int(m.group(1)) if m else 0
 
     try:
-        rows = await curriculum_graph.get_grade_standards(student_id, grade_num, limit=30)
+        rows = await curriculum_graph.get_grade_standards(
+            student_id, grade_num, limit=500, per_subject_limit=None,
+        )
         return [
             GradeLevelStandard(
                 standard_id=r["id"],
@@ -1004,7 +1058,7 @@ async def _get_available_projects(track: str = None, limit: int = 3) -> list[Pro
 # ── Redis sliding-window helpers ──────────────────────────────────────────────
 
 def _plan_cache_key(student_id: str) -> str:
-    return f"learning_plan:v3:{student_id}"
+    return f"learning_plan:v4:{student_id}"
 
 
 async def pop_completed_lesson(student_id: str, lesson_title: str) -> None:
@@ -1423,6 +1477,12 @@ async def get_learning_plan(
         f"{len(grade_standards)} standards for student={student_id}"
     )
 
+    roadmap, coverage = _build_academic_roadmap(
+        grade_level, final_suggestions, active_tracks, grade_standards,
+    )
+    if grade_standards and not coverage.all_required_accounted_for:
+        logger.error("[LearningPlan] Coverage invariant failed for student=%s", student_id)
+
     response = LearningPlanResponse(
         student_id=student_id,
         suggestions=final_suggestions,
@@ -1436,7 +1496,7 @@ async def get_learning_plan(
         graduation_progress=graduation_progress,
         credit_gaps=credit_gaps if graduation_progress.is_high_school else [],  # Empty for K-8
         grade_standards=grade_standards,  # Only populated for K-8
-        roadmap=_build_academic_roadmap(grade_level, final_suggestions, active_tracks),
+        roadmap=roadmap,
         placement=PlacementProfile(
             declared_level=profile.get("declared_level", grade_level),
             working_grade=grade_level,
@@ -1444,6 +1504,7 @@ async def get_learning_plan(
             reason=profile.get("placement_reason"),
             subject_levels=profile.get("subject_levels", {}),
         ),
+        coverage=coverage,
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
 

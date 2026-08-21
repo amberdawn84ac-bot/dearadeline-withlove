@@ -25,21 +25,25 @@ export default function CanonicalLessonPage() {
         const plan = await getLearningPlan(student.id, 12);
         const requestedId = decodeURIComponent(params.taskId);
         let selected = plan.suggestions.find((item) => item.id === requestedId);
+        let requiredStandardCodes: string[] = selected?.standard_code ? [selected.standard_code] : [];
         if (!selected) {
           const roadmapDay = plan.roadmap.months.flatMap((month) => month.weeks).flatMap((week) => week.days).find((day) => day.lesson_id === requestedId);
-          if (roadmapDay) selected = {
+          if (roadmapDay) {
+            requiredStandardCodes = roadmapDay.standard_codes ?? [];
+            selected = {
             id: roadmapDay.lesson_id, title: roadmapDay.title, track: roadmapDay.track,
             description: roadmapDay.description, emoji: roadmapDay.emoji,
             priority: 0.5, source: 'explore', canonical_ready: false,
             mission_kind: 'learning_mission', success_criteria: [],
-          };
+            };
+          }
         }
         if (!selected) throw new Error('That assignment is no longer in the current learning plan.');
         if (cancelled) return;
         setTask(selected);
 
         const blocks: LessonBlockResponse[] = [];
-        for await (const event of buildLesson(lessonRequestFromSuggestion(selected, student.id, plan.placement.working_grade))) {
+        for await (const event of buildLesson(lessonRequestFromSuggestion(selected, student.id, plan.placement.working_grade, requiredStandardCodes))) {
           if (cancelled) return;
           if (event.type === 'status') setStatus(event.message);
           if (event.type === 'block') blocks.push(event.block);

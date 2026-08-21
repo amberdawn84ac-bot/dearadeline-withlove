@@ -48,6 +48,7 @@ export interface LessonRequest {
   is_homestead: boolean;
   grade_level: string;
   force_regenerate?: boolean;
+  required_standard_codes?: string[];
 }
 
 /**
@@ -59,6 +60,7 @@ export function lessonRequestFromSuggestion(
   suggestion: Pick<LessonSuggestion, "title" | "description" | "track">,
   studentId: string,
   gradeLevel: string,
+  requiredStandardCodes: string[] = [],
 ): LessonRequest {
   return {
     student_id: studentId,
@@ -69,6 +71,7 @@ export function lessonRequestFromSuggestion(
     track: suggestion.track,
     grade_level: gradeLevel,
     is_homestead: suggestion.track === "HOMESTEADING",
+    required_standard_codes: requiredStandardCodes,
   };
 }
 
@@ -1150,7 +1153,7 @@ export interface LearningPlanResponse {
         week: number;
         starts_on: string;
         theme: string;
-        days: Array<{ date: string; day: string; lesson_id: string; title: string; track: Track; description: string; emoji: string; planning_status: 'ready' | 'forecast' }>;
+        days: Array<{ date: string; day: string; lesson_id: string; title: string; track: Track; description: string; emoji: string; planning_status: 'ready' | 'forecast'; activity_kind: string; standard_codes?: string[] }>;
       }>;
     }>;
     adaptive: boolean;
@@ -1162,6 +1165,11 @@ export interface LearningPlanResponse {
     placement_required: boolean;
     reason?: string;
     subject_levels: Record<string, number | null>;
+  };
+  coverage: {
+    total_required: number; mastered: number; remaining: number; scheduled: number;
+    all_required_accounted_for: boolean;
+    subjects: Array<{ subject: string; required: number; mastered: number; remaining: number; scheduled: number }>;
   };
   generated_at: string;
 }

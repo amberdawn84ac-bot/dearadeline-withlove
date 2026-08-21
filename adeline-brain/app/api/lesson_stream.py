@@ -525,11 +525,18 @@ async def _stream_lesson(
             # Cached and newly authored lessons share the same registrar draft.
             # A cache hit must not silently lose its proposed credit metadata.
             from app.agents.orchestrator import registrar_agent
+            canonical_standards = list(canonical.get("oas_standards", []))
+            known_codes = {item.get("standard_id") for item in canonical_standards}
+            canonical_standards.extend(
+                {"standard_id": code, "source_type": "required_plan"}
+                for code in request.required_standard_codes
+                if code not in known_codes
+            )
             cached_state = {
                 "request": request,
                 "lesson_id": lesson_id,
                 "blocks": blocks_data,
-                "oas_standards": canonical.get("oas_standards", []),
+                "oas_standards": canonical_standards,
                 "researcher_activated": canonical.get("researcher_activated", False),
                 "agent_name": canonical.get("agent_name", "Adeline"),
                 "xapi_statements": [],
@@ -609,7 +616,10 @@ async def _stream_lesson(
         "lesson_id":             lesson_id,
         "query_embedding":       query_embedding,
         "blocks":                [],
-        "oas_standards":         [],
+        "oas_standards":         [
+            {"standard_id": code, "source_type": "required_plan"}
+            for code in request.required_standard_codes
+        ],
         "has_research_missions": False,
         "researcher_activated":  False,
         "agent_name":            "",
@@ -779,7 +789,19 @@ async def _stream_lesson(
     # ── Phase 2: Postgres curriculum relationship context ─────────────────────
     try:
         yield _sse({"type": "status", "message": "Linking OAS standards..."})
-        state["oas_standards"] = await _fetch_graph_context(request.track.value)
+        graph_standards = await _fetch_graph_context(request.track.value)
+        required = {
+            item.get("standard_id"): item
+            for item in state.get("oas_standards", [])
+            if item.get("standard_id")
+        }
+        for item in graph_standards:
+            code = item.get("standard_id")
+            if code in required:
+                required[code] = {**item, "source_type": "required_plan"}
+            elif code:
+                required[code] = item
+        state["oas_standards"] = list(required.values())
     except Exception as e:
         logger.warning(f"[LessonStream] Graph context failed (non-fatal): {e}")
 

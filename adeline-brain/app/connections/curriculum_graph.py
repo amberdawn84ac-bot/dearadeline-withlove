@@ -266,7 +266,10 @@ class CurriculumGraph:
             '''), {"student_id": student_id})
             return [dict(row) for row in result.mappings().all()]
 
-    async def get_grade_standards(self, student_id: str, grade: int, limit: int = 10) -> list[dict]:
+    async def get_grade_standards(
+        self, student_id: str, grade: int, limit: int = 10,
+        per_subject_limit: int | None = 6,
+    ) -> list[dict]:
         async with _get_session_factory()() as session:
             result = await session.execute(text('''
                 WITH s AS (
@@ -282,9 +285,12 @@ class CurriculumGraph:
                 FROM s
                 LEFT JOIN "StandardMastery" m
                   ON m."standardId" = s.code AND m."studentId" = :student_id
-                WHERE s.subject_rank <= 6
+                WHERE (:per_subject_limit IS NULL OR s.subject_rank <= :per_subject_limit)
                 ORDER BY s.subject, s.code LIMIT :limit
-            '''), {"student_id": student_id, "grade": grade, "limit": limit})
+            '''), {
+                "student_id": student_id, "grade": grade, "limit": limit,
+                "per_subject_limit": per_subject_limit,
+            })
             return [dict(row) for row in result.mappings().all()]
 
     async def get_next_standards(self, standard_id: str, student_id: str, limit: int = 5) -> list[dict]:
