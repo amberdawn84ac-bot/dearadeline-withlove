@@ -81,9 +81,10 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
     const collect = (event: Event) => {
       const detail = (event as CustomEvent<{ lessonId?: string; blockId?: string; correct?: boolean }>).detail;
       if (detail?.lessonId !== lesson.lesson_id || typeof detail.correct !== 'boolean') return;
+      const correct = detail.correct;
       setQuizResults((current) => [
         ...current.filter((result) => result.concept_id !== detail.blockId),
-        { correct: detail.correct, concept_id: detail.blockId },
+        { correct, concept_id: detail.blockId },
       ]);
     };
     window.addEventListener('adeline:learning-evidence', collect);
