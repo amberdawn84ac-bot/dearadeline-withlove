@@ -14,7 +14,6 @@ interface DailyBread {
   bigIdea: string;
   readTogether: string[];
   familyDiscussion: string[];
-  practice: string;
   prayer: string;
   creditConnections: string[];
   portfolioEvidence: string[];
@@ -66,7 +65,7 @@ export function DailyBreadWidget({ onStudy, gradeLevel = '8' }: DailyBreadWidget
 
   const handleStudy = () => {
     if (!data) return;
-    const prompt = `Daily Bread deep-dive study on ${data.reference}. The key word is "${data.original}" — ${data.originalMeaning}. Teach me what this passage actually says in the original language, the historical context, and what it means for how I live today.`;
+    const prompt = `Daily Bread deep-dive study on ${data.reference}. The key word is "${data.original}" — ${data.originalMeaning}. Begin with the surviving source text, give a close name-preserving translation or the labeled Everett Fox translation when available, explain historical context and intended meaning, and distinguish documented textual or translation changes from disputed claims.`;
     onStudy?.(prompt);
   };
 
@@ -152,7 +151,6 @@ export function DailyBreadWidget({ onStudy, gradeLevel = '8' }: DailyBreadWidget
 
         {data.readTogether?.length > 0 && <div className="mb-4"><p className="text-xs font-bold uppercase tracking-wide text-[#BD6809]">Read together</p><ul className="mt-1 list-disc pl-4 text-xs leading-5 text-[#2F4731]/75">{data.readTogether.map((item) => <li key={item}>{item}</li>)}</ul></div>}
         {data.familyDiscussion?.length > 0 && <div className="mb-4"><p className="text-xs font-bold uppercase tracking-wide text-[#BD6809]">Talk about it</p><ol className="mt-1 list-decimal pl-4 text-xs leading-5 text-[#2F4731]/75">{data.familyDiscussion.map((item) => <li key={item}>{item}</li>)}</ol></div>}
-        {data.practice && <div className="mb-4 rounded-lg bg-[#EEF4E9] p-3"><p className="text-xs font-bold text-[#2F4731]">Live it today</p><p className="mt-1 text-xs leading-5 text-[#2F4731]/75">{data.practice}</p></div>}
         {data.prayer && <p className="mb-4 text-xs italic leading-5 text-[#2F4731]/70">{data.prayer}</p>}
         {data.creditConnections?.length > 0 && <div className="mb-4 border-t border-[#E7DAC3] pt-3"><p className="text-[11px] font-bold uppercase text-[#2F4731]/50">Evidence can support</p><p className="mt-1 text-xs text-[#2F4731]/70">{data.creditConnections.map((track) => track.replace(/_/g, ' ')).join(' · ')}</p>{data.portfolioEvidence?.[0] && <p className="mt-2 text-[11px] italic text-[#2F4731]/55">Portfolio evidence: {data.portfolioEvidence[0]}</p>}</div>}
 
