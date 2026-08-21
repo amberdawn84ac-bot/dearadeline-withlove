@@ -92,7 +92,6 @@ jobs:
             --ignore=tests/test_hippocampus_source_type.py \
             --ignore=tests/test_justice_parser.py \
             --ignore=tests/test_launch_readiness.py \
-            --ignore=tests/test_parent_api.py \
             --ignore=tests/test_pgvector_duplicate_detection.py \
             --ignore=tests/test_projects_api.py \
             --ignore=tests/test_search_witnesses_deep_web.py \

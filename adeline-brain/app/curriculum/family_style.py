@@ -9,7 +9,7 @@ from copy import deepcopy
 import re
 from typing import Any
 
-from app.curriculum.experience_contract import annotate_experience, validate_experience
+from app.curriculum.experience_contract import ExperienceStage, annotate_experience, validate_experience
 
 CANONICAL_FORMAT_VERSION = 6
 
@@ -154,6 +154,8 @@ def validate_canonical_lesson(
             errors.append(f"track {track} requires at least one evidence/action-oriented block")
 
     for index, block in enumerate(blocks):
+        if str(block.get("experience_stage") or "").upper() not in ExperienceStage._value2member_map_:
+            errors.append(f"block {index} must directly declare a valid experience_stage")
         if str(block.get("block_type") or "").upper() == "NARRATIVE":
             content = str(block.get("content") or "").lower()
             if any(phrase in content for phrase in ("family workshop:", "do this together:", "coming soon", "check back")):
@@ -199,8 +201,10 @@ def finalize_family_lesson(blocks: list[dict], topic: str, *, track: str | None 
         seen.add(fingerprint)
         finalized.append(block)
 
-    # Enforce a safety ceiling without inventing, padding, or rewriting content.
-    finalized = annotate_experience(finalized[:_MAX_CANONICAL_BLOCKS])
+    # New specialists/authors must state instructional purpose directly. Stage
+    # inference remains available only when reading archived legacy material;
+    # it is not allowed to make new output appear contract-complete.
+    finalized = finalized[:_MAX_CANONICAL_BLOCKS]
 
     errors = validate_canonical_lesson(finalized, track=track)
     if errors:
@@ -208,7 +212,7 @@ def finalize_family_lesson(blocks: list[dict], topic: str, *, track: str | None 
         # disguised as a generic narrative lesson.
         return []
 
-    return finalized
+    return annotate_experience(finalized)
 
 
 def is_current_family_canonical(blocks: list[dict]) -> bool:

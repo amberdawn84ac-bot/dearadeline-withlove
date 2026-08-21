@@ -25,7 +25,7 @@ Prefer concrete evidence and meaningful tasks over explanatory prose.
 OUTPUT CONTRACT:
 Return ONLY valid JSON for exactly one CanonicalLesson object:
 {{
-  "canonical_format_version": 5,
+  "canonical_format_version": 6,
   "title": "",
   "track": "",
   "big_question": "",
@@ -56,8 +56,12 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
 BLOCK CONTRACT:
 - Return 6–10 substantive blocks. Never pad to reach six.
 - Preserve semantic block types rather than converting everything to NARRATIVE.
-- Each block should contain, when applicable: block_id, block_type, title,
-  content, purpose, evidence, visual_spec, family_roles, adaptation_notes.
+- Every block MUST contain experience_stage: INVITATION, DISCOVERY, ACTION,
+  CREATION, DEMONSTRATION, REFLECTION, or RESOURCE. This is the instructional
+  purpose; block_type is only the rendering tool.
+- Each block should contain, when applicable: block_id, block_type,
+  experience_stage, title, content, purpose, evidence, visual_spec,
+  family_roles, adaptation_notes.
 - When the track supports evidence, investigation, experimentation, or application,
   include at least one appropriate PRIMARY_SOURCE, LAB_MISSION, EXPERIMENT,
   REAL_WORLD_APP, or comparable substantive evidence/action block.

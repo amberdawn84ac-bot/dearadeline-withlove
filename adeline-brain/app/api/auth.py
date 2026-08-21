@@ -9,7 +9,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Header, Response, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.middleware import get_current_user_id
 
@@ -31,6 +31,10 @@ class SessionResponse(BaseModel):
     """Response from session endpoints."""
     ok: bool
     user_id: Optional[str] = None
+
+
+class ParentBootstrapRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
 
 
 @router.post("/session", response_model=SessionResponse)
@@ -76,6 +80,36 @@ async def set_auth_cookie(
     except Exception as e:
         logger.error(f"[Auth] Failed to set auth cookie: {e}")
         raise HTTPException(status_code=401, detail="Invalid token")
+
+
+@router.post("/parent/bootstrap", response_model=SessionResponse)
+async def bootstrap_parent_account(
+    body: ParentBootstrapRequest,
+    authorization: Optional[str] = Header(default=None),
+):
+    """Create or confirm the durable household owner for a Supabase identity."""
+    from app.api.middleware import get_auth_claims
+    from app.config import get_db_conn
+    user_id, email = get_auth_claims(authorization)
+    if not email:
+        raise HTTPException(status_code=400, detail="A verified parent email is required.")
+    conn = await get_db_conn()
+    try:
+        existing = await conn.fetchrow('SELECT role FROM "User" WHERE id = $1', user_id)
+        if existing and str(existing["role"]).upper() != "PARENT":
+            raise HTTPException(status_code=409, detail="This login already belongs to a learner account.")
+        await conn.execute(
+            '''
+            INSERT INTO "User" (id, name, email, role, "onboardingComplete", "coppaVerified", "createdAt", "updatedAt")
+            VALUES ($1, $2, $3, 'PARENT', TRUE, TRUE, NOW(), NOW())
+            ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email,
+                role = 'PARENT', "updatedAt" = NOW()
+            ''',
+            user_id, body.name.strip(), email.lower(),
+        )
+    finally:
+        await conn.close()
+    return SessionResponse(ok=True, user_id=user_id)
 
 
 @router.delete("/session", response_model=SessionResponse)

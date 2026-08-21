@@ -28,7 +28,8 @@ export interface StudentSummary {
 
 export interface AddStudentRequest {
   name: string;
-  email: string;
+  username: string;
+  pin: string;
   grade_level?: string;
   interests?: string[];
 }

@@ -41,6 +41,12 @@ router = APIRouter(prefix="/lesson", tags=["lesson-stream"])
 limiter = Limiter(key_func=get_remote_address)
 
 
+def shared_family_canonical_slug(request: LessonRequest) -> str:
+    """Canonical identity excludes every learner-specific adaptation input."""
+    from app.connections.canonical_store import canonical_slug
+    return canonical_slug(request.topic, request.track.value)
+
+
 def _sse(payload: dict) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
@@ -363,7 +369,7 @@ async def _stream_lesson(
     Registrar is skipped here — caller runs it via BackgroundTask.
     """
     import openai
-    from app.connections.canonical_store import canonical_store, canonical_slug
+    from app.connections.canonical_store import canonical_store
     from app.agents.orchestrator import (
         historian_agent, justice_agent, science_agent, literature_agent,
         practical_agent, discipleship_agent, _fetch_graph_context, _route,
@@ -449,12 +455,12 @@ async def _stream_lesson(
 
     # ── Phase 1: Canonical check ──────────────────────────────────────────────
     yield _sse({"type": "status", "message": "Checking curated lesson library..."})
-    # A canonical is reusable only when its grade and required curriculum match.
-    # The child sees the clean topic; the internal key prevents a cached lesson
-    # from satisfying a different student's assignment on paper only.
-    standards_scope = ",".join(sorted(set(request.required_standard_codes))) or "theme"
-    canonical_scope = f"{request.topic}|grade:{request.grade_level}|standards:{standards_scope}"
-    slug = canonical_slug(canonical_scope, request.track.value)
+    # The canonical is the household's shared investigation spine. Grade,
+    # mastery, interests, accommodations, and required standards belong to the
+    # learner adaptation and evidence record—not to the shared canonical key.
+    # This guarantees siblings open the same experience while receiving
+    # different reading depth, prompts, demonstrations, and credit mapping.
+    slug = shared_family_canonical_slug(request)
     logger.info(f"[LessonStream] topic='{request.topic}' track={request.track.value} force_regenerate={request.force_regenerate} slug={slug}")
 
     if request.force_regenerate:
@@ -1332,7 +1338,13 @@ async def _save_canonical_background(
                 state_for_canonical.get("blocks", []),
                 state_for_canonical.get("topic", ""),
             ),
-            "oas_standards": state_for_canonical.get("oas_standards", []),
+            # Learner-required standards are attached to that learner's
+            # registrar/evidence record. Persisting them on the family spine
+            # would make the first sibling's grade define every sibling.
+            "oas_standards": [
+                item for item in state_for_canonical.get("oas_standards", [])
+                if item.get("source_type") != "required_plan"
+            ],
             "researcher_activated": state_for_canonical.get("researcher_activated", False),
             "agent_name": state_for_canonical.get("agent_name", ""),
         }

@@ -1,8 +1,10 @@
 'use client';
 
 import { FormEvent, Suspense, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase';
+import { setAuthCookie } from '@/lib/auth-cookies';
 
 const ADELINE_FACE = '/adeline-face.webp';
 
@@ -15,6 +17,8 @@ function playerKey(name: string) {
 
 function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [audience, setAudience] = useState<'student' | 'parent'>(searchParams.get('parent') === '1' ? 'parent' : 'student');
   const [mode, setMode] = useState<Mode>('login');
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
@@ -22,6 +26,9 @@ function LoginContent() {
   const [gradeLevel, setGradeLevel] = useState('PLACEMENT');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [parentName, setParentName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
     fetch('/api/student-auth', { cache: 'no-store' })
@@ -37,6 +44,27 @@ function LoginContent() {
     setError('');
 
     try {
+      if (audience === 'parent') {
+        const authResult = mode === 'register'
+          ? await supabase.auth.signUp({ email: email.trim(), password })
+          : await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        if (authResult.error) throw authResult.error;
+        const session = authResult.data.session;
+        if (!session) {
+          throw new Error('Check your email to confirm the account, then return to sign in.');
+        }
+        await setAuthCookie(session.access_token);
+        const bootstrap = await fetch('/brain/auth/parent/bootstrap', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: parentName.trim() || email.split('@')[0] || 'Parent' }),
+        });
+        const bootstrapBody = await bootstrap.json().catch(() => ({}));
+        if (!bootstrap.ok) throw new Error(bootstrapBody.detail || 'Could not open the family account.');
+        router.push('/dashboard/parent');
+        router.refresh();
+        return;
+      }
       const body: Record<string, string> = {
         mode,
         username: playerKey(mode === 'register' ? displayName : username),
@@ -112,7 +140,34 @@ function LoginContent() {
           </button>
         </div>
 
+        <button
+          type="button"
+          onClick={() => { setAudience(audience === 'student' ? 'parent' : 'student'); setError(''); }}
+          className="mb-5 w-full border-0 bg-transparent text-xs font-black text-[#49654e] underline underline-offset-4"
+        >
+          {audience === 'student' ? 'I am a parent or guardian' : 'Back to learner sign in'}
+        </button>
+
         <form onSubmit={submit} className="grid gap-4">
+          {audience === 'parent' && mode === 'register' && (
+            <label className="grid gap-2 text-xs font-black text-[#3c5140]">
+              Your name
+              <input required autoComplete="name" value={parentName} onChange={(event) => setParentName(event.target.value)} className="min-h-[49px] rounded-[13px] border border-[#d7cdbb] bg-[#fffefa] px-3" />
+            </label>
+          )}
+          {audience === 'parent' && (
+            <>
+              <label className="grid gap-2 text-xs font-black text-[#3c5140]">
+                Parent email
+                <input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="min-h-[49px] rounded-[13px] border border-[#d7cdbb] bg-[#fffefa] px-3" />
+              </label>
+              <label className="grid gap-2 text-xs font-black text-[#3c5140]">
+                Password
+                <input required type="password" minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} onChange={(event) => setPassword(event.target.value)} className="min-h-[49px] rounded-[13px] border border-[#d7cdbb] bg-[#fffefa] px-3" />
+              </label>
+            </>
+          )}
+          {audience === 'student' && <>
           {mode === 'register' && (
             <>
               <label className="grid gap-2 text-xs font-black text-[#3c5140]">
@@ -166,6 +221,7 @@ function LoginContent() {
               className="min-h-[49px] rounded-[13px] border border-[#d7cdbb] bg-[#fffefa] px-3 text-[#243429] outline-none focus:border-[#6e8a68] focus:ring-4 focus:ring-[#6e8a6826]"
             />
           </label>
+          </>}
 
           {error && <p className="m-0 rounded-xl bg-[#fae2dc] px-3 py-2 text-xs font-bold text-[#8a352b]">{error}</p>}
 
@@ -174,12 +230,12 @@ function LoginContent() {
             disabled={busy}
             className="mt-1 min-h-[52px] rounded-[15px] border-0 bg-[#66845e] font-black text-white shadow-[0_8px_20px_rgba(72,103,68,.22)] disabled:opacity-60"
           >
-            {busy ? 'Opening your adventure…' : mode === 'login' ? 'Enter Dear Adeline' : 'Start my adventure'}
+            {busy ? 'Opening your adventure…' : mode === 'login' ? 'Enter Dear Adeline' : audience === 'parent' ? 'Create family account' : 'Start my adventure'}
           </button>
         </form>
 
         <p className="mt-6 text-center text-[11px] leading-relaxed text-[#73786f]">
-          One student identity keeps learning, projects, games, portfolio work, and graduation progress together.
+          {audience === 'parent' ? 'One family account securely connects siblings while preserving each learner’s own plan and evidence.' : 'One student identity keeps learning, projects, games, portfolio work, and graduation progress together.'}
         </p>
       </section>
     </main>

@@ -170,6 +170,18 @@ async def verify_student_access(
     user_id = _extract_user_id(payload)
     role_str = _extract_role(payload)
 
+    # Supabase tokens do not reliably carry Dear Adeline's database role.
+    # Resolve it from the account row before making a household decision.
+    if role_str not in {UserRole.PARENT.value, UserRole.ADMIN.value}:
+        from app.config import get_db_conn
+        role_conn = await get_db_conn()
+        try:
+            stored_role = await role_conn.fetchval('SELECT role FROM "User" WHERE id = $1', user_id)
+            if stored_role:
+                role_str = str(stored_role).upper()
+        finally:
+            await role_conn.close()
+
     if user_id == student_id:
         return user_id
     if role_str == UserRole.ADMIN.value:
@@ -192,6 +204,28 @@ async def verify_student_access(
         status_code=403,
         detail="You do not have access to this student's data.",
     )
+
+
+def require_account_role(*allowed_roles: UserRole):
+    """Authorize using the verified token identity and the durable User role."""
+    async def _check(
+        authorization: Optional[str] = Header(default=None),
+        auth_token: Optional[str] = Cookie(default=None),
+    ) -> str:
+        token = _token_from_sources(authorization, auth_token)
+        user_id = _extract_user_id(_decode_jwt(token))
+        from app.config import get_db_conn
+        conn = await get_db_conn()
+        try:
+            stored_role = await conn.fetchval('SELECT role FROM "User" WHERE id = $1', user_id)
+        finally:
+            await conn.close()
+        role = str(stored_role or "").upper()
+        allowed = {item.value for item in allowed_roles}
+        if role not in allowed:
+            raise HTTPException(status_code=403, detail=f"Access denied. Required account role: {sorted(allowed)}")
+        return role
+    return _check
 
 
 def require_internal_key(

@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from app.api.middleware import get_current_user_id, verify_student_access, require_role
+from app.api.middleware import get_current_user_id, verify_student_access, require_role, require_account_role
 from app.api.student_auth import load_student_user, StudentUserOut
 from app.schemas.api_models import UserRole
 
@@ -449,7 +449,7 @@ async def claim_student(
     request: Request,
     body: ClaimStudentRequest,
     parent_id: str = Depends(get_current_user_id),
-    _role: str = Depends(require_role(UserRole.PARENT, UserRole.ADMIN)),
+    _role: str = Depends(require_account_role(UserRole.PARENT, UserRole.ADMIN)),
 ):
     code = body.code.strip().upper()
     conn = await _get_conn()

@@ -2,6 +2,7 @@
 Tests for Parent Dashboard API endpoints.
 """
 import pytest
+from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch
 from app.main import app
@@ -36,7 +37,7 @@ def test_list_students_success(mock_parent_auth, mock_db_conn):
             "email": "alice@example.com",
             "gradeLevel": "8",
             "interests": ["science", "art"],
-            "createdAt": "2024-01-01T00:00:00Z",
+            "createdAt": datetime(2024, 1, 1, tzinfo=timezone.utc),
         }
     ]
     mock_db_conn.return_value.__aenter__.return_value = mock_conn
@@ -66,14 +67,15 @@ def test_add_student_success(mock_parent_auth, mock_db_conn):
     mock_conn = AsyncMock()
     mock_conn.fetchrow.side_effect = [
         {"role": "PARENT"},  # Parent role check
-        None,  # Email doesn't exist
+        None,  # Player identity doesn't exist
     ]
     mock_conn.execute.return_value = None
     mock_db_conn.return_value.__aenter__.return_value = mock_conn
     
     payload = {
         "name": "Bob Smith",
-        "email": "bob@example.com",
+        "username": "bob_smith",
+        "pin": "1234",
         "grade_level": "6",
     }
     
@@ -82,21 +84,22 @@ def test_add_student_success(mock_parent_auth, mock_db_conn):
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == "Bob Smith"
-    assert data["email"] == "bob@example.com"
+    assert data["email"] == "bob_smith@mobile.adelineworld.local"
 
 
-def test_add_student_duplicate_email(mock_parent_auth, mock_db_conn):
-    """Test that duplicate email is rejected."""
+def test_add_student_duplicate_player_name(mock_parent_auth, mock_db_conn):
+    """Test that duplicate player identity is rejected."""
     mock_conn = AsyncMock()
     mock_conn.fetchrow.side_effect = [
         {"role": "PARENT"},
-        {"id": "existing-student"},  # Email exists
+        {"id": "existing-student"},
     ]
     mock_db_conn.return_value.__aenter__.return_value = mock_conn
     
     payload = {
         "name": "Bob Smith",
-        "email": "existing@example.com",
+        "username": "existing_player",
+        "pin": "1234",
         "grade_level": "6",
     }
     

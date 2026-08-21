@@ -1,6 +1,7 @@
 from app.api.journal import SealRequest, _evidence_proficiency
 from app.curriculum.experience_contract import annotate_experience, validate_experience
-from app.schemas.api_models import Track
+from app.schemas.api_models import LessonRequest, Track
+from app.api.lesson_stream import shared_family_canonical_slug
 
 
 def test_experience_requires_action_and_demonstration():
@@ -39,3 +40,10 @@ def test_extending_requires_strong_score_plus_real_artifact():
         artifact_refs=["portfolio://artifact-1"],
     )
     assert _evidence_proficiency(request) == "EXTENDING"
+
+
+def test_siblings_share_canonical_but_keep_individual_standards():
+    first = LessonRequest(student_id="first", track=Track.CREATION_SCIENCE, topic="Creek Detectives", grade_level="1", required_standard_codes=["1.LS1.1"])
+    older = LessonRequest(student_id="older", track=Track.CREATION_SCIENCE, topic="Creek Detectives", grade_level="7", required_standard_codes=["7.ESS3.2"])
+    assert shared_family_canonical_slug(first) == shared_family_canonical_slug(older)
+    assert first.required_standard_codes != older.required_standard_codes

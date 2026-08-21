@@ -899,6 +899,7 @@ async def _author_family_canonical(
     for block in seed_blocks[:10]:
         seed.append({
             "block_type": block.get("block_type"),
+            "experience_stage": block.get("experience_stage"),
             "title": block.get("title"),
             "content": str(block.get("content") or "")[:6000],
             "evidence": block.get("evidence") or [],
@@ -932,6 +933,7 @@ async def _author_family_canonical(
                 candidate["block_type"] = str(
                     candidate.get("block_type") or ""
                 ).upper()
+                candidate["experience_stage"] = str(candidate.get("experience_stage") or "").upper()
                 candidate.setdefault("evidence", [])
                 candidate.setdefault("is_silenced", False)
                 normalized.append(candidate)

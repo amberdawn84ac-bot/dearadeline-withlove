@@ -47,20 +47,21 @@ def test_only_current_family_canonicals_are_reused():
 
 def test_finalizer_preserves_structure_and_removes_obsolete_rebuilders():
     blocks = [
-        {"block_type": "NARRATIVE", "content": "A complete explanation."},
-        {"block_type": "NARRATIVE", "content": "A complete explanation."},
+        {"block_type": "NARRATIVE", "experience_stage": "INVITATION", "content": "A complete explanation."},
+        {"block_type": "NARRATIVE", "experience_stage": "INVITATION", "content": "A complete explanation."},
         {"block_type": "NARRATED_SLIDE", "content": "An obsolete slide rebuild."},
         {"block_type": "ANIMATED_SKETCHNOTE_LESSON", "content": "An obsolete animation rebuild."},
         {"block_type": "GENUI_ASSEMBLY", "content": "Malformed widget."},
         {
             "block_type": "GENUI_ASSEMBLY",
+            "experience_stage": "CREATION",
             "content": "A real project.",
             "genui_assembly_data": {"component_type": "ProjectBuilder", "props": {"title": "Build"}},
         },
-        {"block_type": "TEXT", "content": "Measure the material."},
-        {"block_type": "REAL_WORLD_APP", "content": "Build the useful object."},
-        {"block_type": "QUIZ", "content": "Check the plan."},
-        {"block_type": "TEXT", "content": "Record the result."},
+        {"block_type": "TEXT", "experience_stage": "DISCOVERY", "content": "Measure the material."},
+        {"block_type": "REAL_WORLD_APP", "experience_stage": "ACTION", "content": "Build the useful object."},
+        {"block_type": "QUIZ", "experience_stage": "DEMONSTRATION", "content": "Check the plan."},
+        {"block_type": "TEXT", "experience_stage": "REFLECTION", "content": "Record the result."},
     ]
 
     finalized = finalize_family_lesson(blocks, "Woodworking", track="CREATIVE_ECONOMY")

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from datetime import datetime, timezone
 from dataclasses import asdict, dataclass, field
 from typing import Any
 from urllib.parse import quote_plus
@@ -51,6 +52,10 @@ class RoutedResource:
     mastery_prompt: str = "What did you discover, and what evidence supports your answer?"
     portfolio_output: str = "Save an observation or creation that demonstrates what you learned."
     score: float = 0.0
+    source_item_id: str | None = None
+    rights_url: str | None = None
+    availability: str = "COLLECTION_SEARCH"
+    verified_at: str | None = None
 
 
 def _terms(text: str) -> set[str]:
@@ -92,6 +97,9 @@ async def _loc(query: ResourceQuery, client: httpx.AsyncClient) -> list[RoutedRe
             commercial_use="CHECK_ITEM", skills_practiced=["source analysis", "corroboration"],
             discovery_prompt="Examine the item before reading its description. What can you establish directly?",
             portfolio_output="Save an annotated observation with the permanent Library of Congress URL.",
+            source_item_id=str(row.get("id") or url),
+            rights_url=(row.get("rights") or [None])[0] if isinstance(row.get("rights"), list) else None,
+            availability="VERIFIED_API_ITEM", verified_at=datetime.now(timezone.utc).isoformat(),
         ))
     return output
 
@@ -115,6 +123,8 @@ async def _nasa(query: ResourceQuery, client: httpx.AsyncClient) -> list[RoutedR
             license="NASA_MEDIA_GUIDELINES", attribution=f"NASA — {data.get('center', 'NASA')}",
             commercial_use="CHECK_ASSET", skills_practiced=["observation", "scientific interpretation"],
             portfolio_output="Annotate what the image shows separately from what you infer.",
+            source_item_id=nasa_id, availability="VERIFIED_API_ITEM",
+            verified_at=datetime.now(timezone.utc).isoformat(),
         ))
     return output
 
@@ -131,6 +141,8 @@ async def _smithsonian(query: ResourceQuery, client: httpx.AsyncClient) -> list[
             description="Search museum objects, specimens, images, records, and selected manipulable 3D models.",
             license="ITEM_LEVEL_CC0", commercial_use="ONLY_WHEN_CC0",
             skills_practiced=["artifact analysis", "observation"],
+            source_item_id=str(row.get("id", url)), availability="VERIFIED_API_ITEM",
+            verified_at=datetime.now(timezone.utc).isoformat(),
             discovery_prompt="What do the object's materials, shape, wear, or construction reveal?",
             portfolio_output="Save an object study with the Smithsonian record and its rights statement.",
         )]
@@ -178,6 +190,8 @@ async def _inaturalist(query: ResourceQuery, client: httpx.AsyncClient) -> list[
             discovery_prompt="Which visible features support this identification, and what could still be mistaken?",
             mastery_prompt="Explain the identification using observable traits rather than relying only on the label.",
             portfolio_output="Save a field-journal comparison or contribute a family observation under the provider's privacy rules.",
+            source_item_id=str(observation_id), availability="VERIFIED_API_ITEM",
+            verified_at=datetime.now(timezone.utc).isoformat(),
         ))
     return output
 

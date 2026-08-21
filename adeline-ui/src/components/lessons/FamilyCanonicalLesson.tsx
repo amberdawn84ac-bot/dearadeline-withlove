@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { Archive, CheckCircle2, ExternalLink, Gamepad2, Search, ShieldCheck } from "lucide-react";
 import GenUIRenderer from "@/components/GenUIRenderer";
-import { sealJournal } from "@/lib/brain-client";
+import { buildGame, sealJournal } from "@/lib/brain-client";
 import type { LessonBlockResponse, LessonResponse } from "@/lib/brain-client";
+import type { PlayableGame } from "@/lib/brain-client";
+import { InvestigationGame } from "@/components/games/InvestigationGame";
 
 type Resource = {
   id?: string; title?: string; provider?: string; resource_type?: string;
@@ -54,7 +56,7 @@ function ResourceCollection({ block }: { block: LessonBlockResponse }) {
   );
 }
 
-export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: LessonResponse; studentId: string }) {
+export default function FamilyCanonicalLesson({ lesson, studentId, gradeLevel }: { lesson: LessonResponse; studentId: string; gradeLevel: string }) {
   const [sealing, setSealing] = useState(false);
   const [sealed, setSealed] = useState(false);
   const [sealError, setSealError] = useState("");
@@ -62,6 +64,9 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
   const [learningStatus, setLearningStatus] = useState("");
   const [creditSealed, setCreditSealed] = useState(false);
   const [quizResults, setQuizResults] = useState<Array<{ correct: boolean; concept_id?: string }>>([]);
+  const [game, setGame] = useState<PlayableGame | null>(null);
+  const [gameError, setGameError] = useState("");
+  const [buildingGame, setBuildingGame] = useState(false);
   const visible = lesson.blocks.filter((block) => !block.is_silenced);
   const resources = visible.filter((block) => block.block_type === "RESOURCE_COLLECTION");
   const teaching = visible.filter((block) => block.block_type !== "RESOURCE_COLLECTION");
@@ -115,6 +120,18 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
     }
   }
 
+  async function openGame() {
+    setBuildingGame(true);
+    setGameError("");
+    try {
+      setGame(await buildGame({ student_id: studentId, topic: lesson.title, track: lesson.track, grade_level: gradeLevel }));
+    } catch (reason) {
+      setGameError(reason instanceof Error ? reason.message : "The game could not open yet.");
+    } finally {
+      setBuildingGame(false);
+    }
+  }
+
   return <article className="space-y-6 pb-20 text-[#2F4731]">
     <header className="overflow-hidden rounded-[30px] border border-[#D9CFBC] bg-[linear-gradient(135deg,#F5E6C8,#E3ECDD)] shadow-sm">
       <div className="grid gap-8 p-7 md:grid-cols-[1.2fr_.8fr] md:p-11">
@@ -126,6 +143,8 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
     {invitation.length > 0 && <section>{render(invitation)}</section>}
     {discovery.length > 0 && <section><p className="mb-4 text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Clues and tools</p>{render(discovery)}</section>}
     {action.length > 0 && <section><p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Do something with it</p><h2 className="mt-2 mb-6 text-3xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>Investigate, make, test, or decide</h2>{render(action)}</section>}
+    {!game && <section className="rounded-[26px] border border-[#D9CFBC] bg-[#FDF6E9] p-6 text-center"><Gamepad2 className="mx-auto h-7 w-7" /><h2 className="mt-2 text-2xl font-bold">Try the investigation as a game</h2><button type="button" onClick={() => void openGame()} disabled={buildingGame} className="mt-4 rounded-xl bg-[#2F4731] px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{buildingGame ? "Building…" : "Open game"}</button>{gameError && <p className="mt-3 text-sm text-red-700">{gameError}</p>}</section>}
+    {game && <InvestigationGame game={game} lessonId={lesson.lesson_id} />}
     {resources.map((block) => <ResourceCollection key={block.block_id} block={block} />)}
     {demonstration.length > 0 && <section className="border-y-2 border-[#2F4731] py-8"><p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">Demonstrate</p><h2 className="mt-2 mb-6 text-4xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>Show what the experience helped you understand</h2>{render(demonstration)}</section>}
     {reflectionBlocks.length > 0 && <section>{render(reflectionBlocks)}</section>}

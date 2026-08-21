@@ -61,9 +61,9 @@ export default function ParentDashboardPage() {
       .finally(() => setPlanLoading(false));
   }, [selectedStudentId]);
 
-  const handleAddStudent = useCallback(async (name: string, email: string, gradeLevel: string) => {
+  const handleAddStudent = useCallback(async (name: string, username: string, pin: string, gradeLevel: string) => {
     try {
-      await addStudent({ name, email, grade_level: gradeLevel });
+      await addStudent({ name, username, pin, grade_level: gradeLevel });
       setShowAddStudent(false);
       fetchData(); // Refresh data
     } catch (err) {

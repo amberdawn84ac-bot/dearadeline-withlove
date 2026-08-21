@@ -55,7 +55,7 @@ async def test_lesson_resource_block_is_live_not_canonical_content(monkeypatch):
     monkeypatch.setattr("app.services.resource_router.resource_router.search", fake_search)
     block = await resource_block_for_lesson("energy", "CREATION_SCIENCE", "8")
     assert block["block_type"] == "RESOURCE_COLLECTION"
-    assert block["canonical_format_version"] == 5
+    assert block["canonical_format_version"] == 6
     assert block["metadata"]["resources"][0]["id"] == "makecode:arcade"
 
 

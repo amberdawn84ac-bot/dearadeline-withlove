@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Optional, List
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel, Field, field_validator
 
 from app.api.middleware import get_current_user_id
@@ -40,18 +40,15 @@ class StudentSummary(BaseModel):
 class AddStudentRequest(BaseModel):
     """Request to add a new student to family."""
     name: str = Field(..., min_length=1, max_length=100)
-    email: str = Field(..., min_length=3, max_length=255)
+    username: str = Field(..., min_length=3, max_length=20, pattern=r"^[a-z0-9_]+$")
+    pin: str = Field(..., min_length=4, max_length=4, pattern=r"^[0-9]{4}$")
     grade_level: str = Field(default="8")
     interests: List[str] = Field(default_factory=list, max_items=20)
     
-    @field_validator('email')
+    @field_validator('username')
     @classmethod
-    def validate_email(cls, v: str) -> str:
-        """Validate email format."""
-        import re
-        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', v):
-            raise ValueError('Invalid email format')
-        return v.lower()
+    def normalize_username(cls, v: str) -> str:
+        return v.strip().lower()
     
     @field_validator('grade_level')
     @classmethod
@@ -118,7 +115,7 @@ async def _get_conn():
 
 @router.get("/students", response_model=List[StudentSummary])
 async def list_students(
-    authorization: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None),
 ):
     """
     List all students for the authenticated parent.
@@ -138,7 +135,7 @@ async def list_students(
         )
         if not parent_row or parent_row["role"] != "PARENT":
             raise HTTPException(status_code=403, detail="Parent role required")
-        
+
         # Fetch all children
         rows = await conn.fetch(
             '''
@@ -185,7 +182,7 @@ async def list_students(
 @router.post("/students", response_model=StudentSummary)
 async def add_student(
     payload: AddStudentRequest,
-    authorization: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None),
 ):
     """
     Add a new student to the parent's family.
@@ -194,6 +191,13 @@ async def add_student(
     parent_id = get_current_user_id(authorization=authorization)
     
     async with _get_conn() as conn:
+        await conn.execute(
+            '''CREATE TABLE IF NOT EXISTS student_profiles (
+                id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', email TEXT UNIQUE,
+                grade_level TEXT NOT NULL DEFAULT 'K', is_homestead BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )'''
+        )
         # Verify parent role
         parent_row = await conn.fetchrow(
             'SELECT role FROM "User" WHERE id = $1',
@@ -202,33 +206,49 @@ async def add_student(
         if not parent_row or parent_row["role"] != "PARENT":
             raise HTTPException(status_code=403, detail="Parent role required")
         
-        # Check if email already exists
+        placeholder_email = f"{payload.username}@mobile.adelineworld.local"
         existing = await conn.fetchrow(
-            'SELECT id FROM "User" WHERE email = $1',
-            payload.email,
+            'SELECT id FROM "User" WHERE username = $1 OR email = $2',
+            payload.username,
+            placeholder_email,
         )
         if existing:
-            raise HTTPException(status_code=409, detail="Email already in use")
+            raise HTTPException(status_code=409, detail="That player name is already in use")
         
         # Create new student
         student_id = str(uuid4())
+        link_code = student_id.replace("-", "")[:6].upper()
+        import bcrypt
+        pin_hash = bcrypt.hashpw(payload.pin.encode(), bcrypt.gensalt()).decode()
         now = datetime.now(timezone.utc)
         
         await conn.execute(
             '''
             INSERT INTO "User" (
-                id, name, email, role, "gradeLevel", interests, "parentId", "createdAt", "updatedAt"
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                id, name, email, role, "gradeLevel", interests, "parentId",
+                username, "pinHash", "linkCode", "isHomestead", "createdAt", "updatedAt"
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, $11, $12)
             ''',
             student_id,
             payload.name,
-            payload.email,
+            placeholder_email,
             "STUDENT",
             payload.grade_level,
             payload.interests,
             parent_id,
+            payload.username,
+            pin_hash,
+            link_code,
             now,
             now,
+        )
+        await conn.execute(
+            '''
+            INSERT INTO student_profiles (id, name, email, grade_level, is_homestead)
+            VALUES ($1, $2, $3, $4, TRUE)
+            ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, grade_level = EXCLUDED.grade_level
+            ''',
+            student_id, payload.name, placeholder_email, payload.grade_level,
         )
         
         logger.info(f"[Parent] Added student {student_id} to parent {parent_id}")
@@ -236,7 +256,7 @@ async def add_student(
         return StudentSummary(
             id=student_id,
             name=payload.name,
-            email=payload.email,
+            email=placeholder_email,
             grade_level=payload.grade_level,
             interests=payload.interests,
             created_at=now.isoformat(),
@@ -246,7 +266,7 @@ async def add_student(
 
 @router.get("/dashboard", response_model=FamilyDashboard)
 async def get_family_dashboard(
-    authorization: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None),
 ):
     """
     Get aggregated progress across all students in the family.
@@ -367,7 +387,7 @@ async def get_family_dashboard(
 async def update_student(
     student_id: str,
     payload: UpdateStudentRequest,
-    authorization: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None),
 ):
     """
     Update a student's profile.
@@ -421,7 +441,7 @@ async def update_student(
 @router.delete("/students/{student_id}")
 async def remove_student(
     student_id: str,
-    authorization: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None),
 ):
     """
     Remove a student from the family (soft delete by setting parentId to NULL).

@@ -106,16 +106,16 @@ class TestCanonicalAuthor:
             "is_silenced": False,
         }]
         authored = {
-            "canonical_format_version": 5,
+            "canonical_format_version": 6,
             "title": "Soil and Yield",
             "track": "TRUTH_HISTORY",
             "blocks": [
-                {"block_type": "PRIMARY_SOURCE", "content": "Inspect the verified document."},
-                {"block_type": "TEXT", "content": "Establish the historical context."},
-                {"block_type": "TIMELINE", "content": "Sequence the documented events."},
-                {"block_type": "REAL_WORLD_APP", "content": "Compare the claim with a local record."},
-                {"block_type": "QUIZ", "content": "Check the evidence and reasoning."},
-                {"block_type": "TEXT", "content": "Preserve a source-based portfolio reflection."},
+                {"block_type": "PRIMARY_SOURCE", "experience_stage": "INVITATION", "content": "Inspect the verified document."},
+                {"block_type": "TEXT", "experience_stage": "DISCOVERY", "content": "Establish the historical context."},
+                {"block_type": "TIMELINE", "experience_stage": "CREATION", "content": "Sequence the documented events."},
+                {"block_type": "REAL_WORLD_APP", "experience_stage": "ACTION", "content": "Compare the claim with a local record."},
+                {"block_type": "QUIZ", "experience_stage": "DEMONSTRATION", "content": "Check the evidence and reasoning."},
+                {"block_type": "TEXT", "experience_stage": "REFLECTION", "content": "Preserve a source-based portfolio reflection."},
             ],
         }
 
@@ -128,18 +128,18 @@ class TestCanonicalAuthor:
 
         assert len(result) == 6
         assert result[0]["block_type"] == "PRIMARY_SOURCE"
-        assert all(block["canonical_format_version"] == 5 for block in result)
+        assert all(block["canonical_format_version"] == 6 for block in result)
 
     @pytest.mark.asyncio
     async def test_complete_valid_canonical_skips_second_model_call(self):
         state = _make_state(Track.TRUTH_HISTORY)
         blocks = [
-            {"block_type": "PRIMARY_SOURCE", "content": "Verified source"},
-            {"block_type": "TEXT", "content": "Context"},
-            {"block_type": "TIMELINE", "content": "Sequence"},
-            {"block_type": "REAL_WORLD_APP", "content": "Application"},
-            {"block_type": "QUIZ", "content": "Assessment"},
-            {"block_type": "TEXT", "content": "Reflection"},
+            {"block_type": "PRIMARY_SOURCE", "experience_stage": "INVITATION", "content": "Verified source"},
+            {"block_type": "TEXT", "experience_stage": "DISCOVERY", "content": "Context"},
+            {"block_type": "TIMELINE", "experience_stage": "CREATION", "content": "Sequence"},
+            {"block_type": "REAL_WORLD_APP", "experience_stage": "ACTION", "content": "Application"},
+            {"block_type": "QUIZ", "experience_stage": "DEMONSTRATION", "content": "Assessment"},
+            {"block_type": "TEXT", "experience_stage": "REFLECTION", "content": "Reflection"},
         ]
 
         with patch(
