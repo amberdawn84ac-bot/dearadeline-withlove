@@ -181,6 +181,8 @@ function ConversationBlockCard({ block, onReflect }: { block: Record<string, unk
             const url = (resource.editor_url || resource.embed_url || resource.source_url) as string | undefined;
             const title = (resource.title as string) || `Resource ${index + 1}`;
             const resourceId = (resource.id as string) || `${title}-${index}`;
+            const description = typeof resource.description === 'string' ? resource.description : '';
+            const masteryPrompt = typeof resource.mastery_prompt === 'string' ? resource.mastery_prompt : '';
             async function shareWithFamily() {
               if (!url) return;
               const response = await fetch('/brain/family/feed', {
@@ -198,8 +200,8 @@ function ConversationBlockCard({ block, onReflect }: { block: Record<string, unk
                   </div>
                   {url && <a href={url} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-lg bg-[#2F4731] px-3 py-2 text-xs font-bold text-white no-underline">Open</a>}
                 </div>
-                {resource.description && <p className="mt-2 text-xs leading-5 text-[#2F4731]/70">{String(resource.description)}</p>}
-                {resource.mastery_prompt && onReflect && (
+                {description && <p className="mt-2 text-xs leading-5 text-[#2F4731]/70">{description}</p>}
+                {masteryPrompt && onReflect && (
                   <div className="mt-2 flex flex-wrap gap-3">
                     <button type="button" onClick={() => onReflect(`I worked with ${title}. Here is what I built, tested, decided, or learned: `)} className="text-xs font-bold text-[#2F4731] underline underline-offset-4">I finished—talk with Adeline</button>
                     {url && <button type="button" onClick={() => void shareWithFamily()} className="text-xs font-bold text-[#BD6809] underline underline-offset-4">{sharedResource === resourceId ? 'Shared with family' : 'Invite my family'}</button>}
