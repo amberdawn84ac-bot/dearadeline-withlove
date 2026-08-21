@@ -63,6 +63,23 @@
 .agendaBody p { margin:0; color:var(--muted); font-size:13px; line-height:1.5; }
 .agendaBody em { display:block; margin-top:8px; color:#7b6a4d; font-size:11px; }
 .agendaBody ul { margin:9px 0 0; padding-left:18px; color:var(--forest); font-size:12px; line-height:1.55; }
+.planFootnote { margin:2px 4px 0; text-align:right; }
+.planFootnote a { color:var(--forest); font-size:12px; font-weight:900; }
+.kanban { display:grid; grid-template-columns:1.15fr 1fr 1fr; gap:16px; align-items:start; }
+.kanbanColumn { min-height:360px; padding:14px; border:1px solid #e2d8c6; border-radius:24px; background:rgba(244,239,229,.72); }
+.kanbanColumn > header { display:flex; align-items:center; gap:10px; padding:3px 4px 13px; }
+.kanbanColumn > header > span { display:grid; place-items:center; width:32px; height:32px; border-radius:50%; background:#dfe8d9; color:var(--forest); font-weight:900; }
+.kanbanColumn header small { color:var(--coral); font-size:8px; font-weight:900; text-transform:uppercase; letter-spacing:.12em; }
+.kanbanColumn header h2 { margin:1px 0 0; color:var(--forest); font-size:19px; }
+.kanbanToday { background:rgba(255,248,232,.92); border-color:#dec89e; }
+.kanbanCard { margin-bottom:11px; padding:17px; border:1px solid #e7ddcc; border-radius:17px; background:#fffdf9; box-shadow:0 5px 14px rgba(55,65,48,.05); }
+.kanbanCard small { color:var(--coral); font-size:8px; font-weight:900; text-transform:uppercase; letter-spacing:.1em; }
+.kanbanCard h3 { margin:5px 0 7px; color:var(--forest); font-size:16px; }
+.kanbanCard p { margin:0; color:var(--muted); font-size:12px; line-height:1.48; }
+.kanbanCard ul { margin:10px 0 0; padding-left:18px; color:var(--forest); font-size:11px; line-height:1.55; }
+.kanbanCard a { display:flex; justify-content:center; margin-top:14px; padding:11px 14px; border-radius:12px; background:var(--forest); color:white; text-decoration:none; font-size:12px; font-weight:900; }
+.finishedCard { background:#f1f6ed; }
+.emptyKanban { border-style:dashed; background:rgba(255,255,255,.5); box-shadow:none; }
 .agendaCard > button,.agendaCard > a,.backButton { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:0 16px; border:0; border-radius:14px; background:var(--forest); color:white; text-decoration:none; font-weight:900; cursor:pointer; white-space:nowrap; }
 .hero { width:100%; min-height:390px; display:grid; grid-template-columns:40% 60%; align-items:center; overflow:hidden; border:1px solid rgba(41,76,53,.12); border-radius:34px 34px 0 0; background:linear-gradient(135deg,#e3ecdd,#f7ead2); }
 .adelineArt { position:relative; height:390px; overflow:hidden; }
@@ -111,6 +128,8 @@
   .menu { flex-direction:row; overflow-x:auto; border-radius:18px; }
   .menu a { min-width:max-content; }
   .dailyBread { display:none; }
+  .kanban { grid-template-columns:1fr; }
+  .kanbanColumn { min-height:0; }
   .hero { grid-template-columns:1fr; }
   .adelineArt { height:270px; }
   .adelineArt img { width:min(430px,90%); left:50%; transform:translateX(-50%); bottom:-15%; }

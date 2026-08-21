@@ -1186,6 +1186,25 @@ export async function getLearningPlan(
   return res.json();
 }
 
+export interface TranscriptEntry {
+  id: string;
+  lessonId: string;
+  courseTitle: string;
+  track: Track;
+  completedAt?: string;
+  sealedAt?: string;
+}
+
+export async function getRecentTranscript(studentId: string, limit = 4): Promise<TranscriptEntry[]> {
+  const res = await fetch(
+    `${BRAIN_URL}/learning/transcript/${encodeURIComponent(studentId)}?limit=${limit}`,
+    { headers: await getBrainHeaders(), cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`Could not load finished work (${res.status})`);
+  const payload = await res.json();
+  return payload.entries ?? [];
+}
+
 // ── Real-time / Cognitive Twin ────────────────────────────────────────────────
 
 export interface CognitiveTwinSnapshot {

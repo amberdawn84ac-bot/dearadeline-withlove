@@ -3,15 +3,26 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useStudent } from '@/lib/useStudent';
-import { getLearningPlan } from '@/lib/brain-client';
-import type { BookRecommendation, LessonSuggestion, ProjectSuggestion } from '@/lib/brain-client';
+import { getLearningPlan, getRecentTranscript } from '@/lib/brain-client';
+import type { LearningPlanResponse, TranscriptEntry } from '@/lib/brain-client';
 import styles from '@/components/nav/sites-dashboard.module.css';
+
+type RoadmapDay = LearningPlanResponse['roadmap']['months'][number]['weeks'][number]['days'][number];
+
+function localDateKey(value = new Date()) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 export default function TodayPage() {
   const { student, loading: studentLoading } = useStudent();
-  const [tasks, setTasks] = useState<LessonSuggestion[]>([]);
-  const [projects, setProjects] = useState<ProjectSuggestion[]>([]);
-  const [books, setBooks] = useState<BookRecommendation[]>([]);
+  const [today, setToday] = useState<RoadmapDay | null>(null);
+  const [weekTheme, setWeekTheme] = useState('');
+  const [comingUp, setComingUp] = useState<RoadmapDay[]>([]);
+  const [finished, setFinished] = useState<TranscriptEntry[]>([]);
+  const [isNextSchoolDay, setIsNextSchoolDay] = useState(false);
   const [planLoading, setPlanLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -21,10 +32,21 @@ export default function TodayPage() {
     if (!studentId) return;
     setPlanLoading(true);
     try {
-      const plan = await getLearningPlan(studentId, 6);
-      setTasks((plan.suggestions ?? []).slice(0, 4));
-      setProjects((plan.projects ?? []).slice(0, 1));
-      setBooks((plan.recommended_books ?? []).slice(0, 1));
+      const [plan, recent] = await Promise.all([
+        getLearningPlan(studentId, 6),
+        getRecentTranscript(studentId, 4).catch(() => []),
+      ]);
+      const dateKey = localDateKey();
+      const weeks = plan.roadmap.months.flatMap((month) => month.weeks);
+      const exactWeek = weeks.find((week) => week.days.some((day) => day.date === dateKey));
+      const exactDay = exactWeek?.days.find((day) => day.date === dateKey);
+      const upcomingWeek = exactDay ? exactWeek : weeks.find((week) => week.days.some((day) => day.date >= dateKey));
+      const upcomingDay = exactDay ?? upcomingWeek?.days.find((day) => day.date >= dateKey) ?? null;
+      setToday(upcomingDay);
+      setWeekTheme(upcomingWeek?.theme ?? 'Family investigation');
+      setComingUp((upcomingWeek?.days ?? []).filter((day) => day.date > (upcomingDay?.date ?? dateKey)));
+      setFinished(recent);
+      setIsNextSchoolDay(Boolean(upcomingDay && upcomingDay.date !== dateKey));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Adeline could not load today yet.');
     } finally {
@@ -40,53 +62,48 @@ export default function TodayPage() {
   return (
     <div className={styles.todayWorkspace}>
       <header className={styles.todayTitle}>
-        <span>A balanced daily itinerary drawn from the larger learning plan. Open each task when you are ready to work.</span>
+        <p>{isNextSchoolDay ? 'Your next school day' : 'Zoomed in from My Learning Plan'}</p>
+        <h1>{isNextSchoolDay ? 'Coming up next' : 'Today'}</h1>
+        <span>{weekTheme} · This view changes whenever the living learning plan changes.</span>
       </header>
 
       {error && <p className={styles.error} role="alert">{error}</p>}
 
-      <section className={styles.dailyAgenda} aria-label="Today's complete learning agenda">
-          <article className={styles.agendaCard}>
-            <div className={styles.agendaNumber}>🍞</div>
-            <div className={styles.agendaBody}>
-              <small>Featured family lab · Creation Science + Applied Mathematics</small>
-              <h2>Kitchen Chemistry: Bread</h2>
-              <p>Investigate living yeast, fermentation, gas bubbles, gluten structure, ingredient ratios, temperature, and oven transformations in one shared family lesson.</p>
-              <em>Includes a printable workbook, layered roles for different ages, and a registrar-verified portfolio finish.</em>
-            </div>
-            <Link href="/dashboard/lesson/kitchen-chemistry-bread">Open family lab →</Link>
-          </article>
-          {tasks.map((task, index) => (
-            <article key={task.id} className={styles.agendaCard}>
-              <div className={styles.agendaNumber}>{index + 1}</div>
-              <div className={styles.agendaBody}>
-                <small>{task.track.replace(/_/g, ' ')}</small>
-                <h2>{task.emoji} {task.title}</h2>
-                <p>{task.description}</p>
-                {task.personalization_reason && <em>Why today: {task.personalization_reason}</em>}
-                {task.success_criteria?.length > 0 && (
-                  <ul>{task.success_criteria.slice(0, 3).map((criterion) => <li key={criterion}>{criterion}</li>)}</ul>
-                )}
-              </div>
-              <Link href={`/dashboard/lesson/${encodeURIComponent(task.id)}`}>Open task →</Link>
-            </article>
-          ))}
-          {projects.map((project) => (
-            <article key={`project-${project.id}`} className={styles.agendaCard}>
-              <div className={styles.agendaNumber}>⚒</div>
-              <div className={styles.agendaBody}><small>Project workshop · {project.track.replace(/_/g, ' ')}</small><h2>{project.emoji} {project.title}</h2><p>{project.tagline}</p><em>Estimated project time: {project.estimated_hours} hours. Touch the next manageable step today.</em></div>
-              <Link href={`/dashboard/projects/${project.id}`}>Open project →</Link>
-            </article>
-          ))}
-          {books.map((book) => (
-            <article key={`book-${book.id}`} className={styles.agendaCard}>
-              <div className={styles.agendaNumber}>▤</div>
-              <div className={styles.agendaBody}><small>Reading · {book.track.replace(/_/g, ' ')}</small><h2>{book.title}</h2><p>By {book.author}{book.grade_band ? ` · ${book.grade_band}` : ''}</p><em>Read or continue a meaningful section today.</em></div>
-              <Link href={`/dashboard/reading-nook/${book.id}`}>Open book →</Link>
-            </article>
-          ))}
-          {!tasks.length && !projects.length && !books.length && <div className={styles.agendaCard}><div className={styles.agendaBody}><h2>Today is open.</h2><p>Ask Adeline what you want to explore, or tell her about something real you completed.</p></div></div>}
+      <section className={styles.kanban} aria-label="Today's learning board">
+        <div className={`${styles.kanbanColumn} ${styles.kanbanToday}`}>
+          <header><span>1</span><div><small>Right now</small><h2>Today</h2></div></header>
+          {today ? <article className={styles.kanbanCard}>
+            <small>{today.day} · {today.track.replace(/_/g, ' ')}</small>
+            <h3>{today.emoji} {today.activity_kind}</h3>
+            <p>{today.description}</p>
+            <ul>{today.daily_rhythm.map((item) => <li key={item}>{item}</li>)}</ul>
+            <Link href={`/dashboard/lesson/${encodeURIComponent(today.lesson_id)}`}>Begin →</Link>
+          </article> : <EmptyCard text="The next plan is being arranged." />}
+        </div>
+
+        <div className={styles.kanbanColumn}>
+          <header><span>2</span><div><small>This investigation</small><h2>Coming Up</h2></div></header>
+          {comingUp.map((day) => <article key={day.lesson_id} className={styles.kanbanCard}>
+            <small>{day.day}</small><h3>{day.emoji} {day.activity_kind}</h3>
+            <p>{day.daily_rhythm.join(' · ')}</p>
+          </article>)}
+          {!comingUp.length && <EmptyCard text="Nothing else is queued for this week." />}
+        </div>
+
+        <div className={styles.kanbanColumn}>
+          <header><span>✓</span><div><small>Real recorded evidence</small><h2>Finished</h2></div></header>
+          {finished.map((entry) => <article key={entry.id} className={`${styles.kanbanCard} ${styles.finishedCard}`}>
+            <small>{entry.track.replace(/_/g, ' ')}</small><h3>✓ {entry.courseTitle}</h3>
+            <p>{entry.completedAt ? new Date(entry.completedAt).toLocaleDateString() : 'Recorded in the learning journal'}</p>
+          </article>)}
+          {!finished.length && <EmptyCard text="Completed lessons appear here after evidence is recorded." />}
+        </div>
       </section>
+      <p className={styles.planFootnote}><Link href="/dashboard/journey">See the month and year around today →</Link></p>
     </div>
   );
+}
+
+function EmptyCard({ text }: { text: string }) {
+  return <div className={`${styles.kanbanCard} ${styles.emptyKanban}`}><p>{text}</p></div>;
 }
