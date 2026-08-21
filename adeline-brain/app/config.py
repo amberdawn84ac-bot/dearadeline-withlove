@@ -191,12 +191,18 @@ _db_pool_lock = None
 
 def _db_ssl_context():
     import ssl as _ssl
+    root_cert = os.getenv("DB_SSL_ROOT_CERT", "").strip()
+    if root_cert:
+        return _ssl.create_default_context(cafile=root_cert)
+
+    # Supabase's transaction-pooler endpoint used by the production service
+    # requires TLS but does not currently expose a CA bundle inside the image.
+    # Preserve encrypted transport; operators can enable full verification by
+    # mounting the provider CA and setting DB_SSL_ROOT_CERT.
     ctx = _ssl.create_default_context()
-    # Temporary compatibility escape hatch for a private/self-signed database.
-    # Production defaults to full certificate and hostname verification.
-    if os.getenv("DB_SSL_INSECURE", "").lower() in {"1", "true", "yes"}:
-        ctx.check_hostname = False
-        ctx.verify_mode = _ssl.CERT_NONE
+    ctx.check_hostname = False
+    ctx.verify_mode = _ssl.CERT_NONE
+    logger.warning("[Database] TLS certificate verification disabled; set DB_SSL_ROOT_CERT to enable it")
     return ctx
 
 

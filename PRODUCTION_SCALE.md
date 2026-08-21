@@ -17,7 +17,8 @@ evidence private.
 - `SENTRY_DSN`
 - production `CORS_ORIGINS`
 
-Never set `DB_SSL_INSECURE` in production.
+Database transport is always TLS. Set `DB_SSL_ROOT_CERT` to a mounted provider
+CA bundle to additionally enforce certificate and hostname verification.
 
 ## Capacity controls
 

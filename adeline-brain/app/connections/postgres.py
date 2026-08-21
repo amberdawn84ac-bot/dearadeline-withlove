@@ -11,7 +11,7 @@ from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
-from app.config import ASYNC_POSTGRES_DSN, DB_POOL_MAX_SIZE
+from app.config import ASYNC_POSTGRES_DSN, DB_POOL_MAX_SIZE, _db_ssl_context
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +23,7 @@ _session_factory = None
 def _get_engine():
     global _engine
     if _engine is None:
-        import ssl as _ssl
-        ctx = _ssl.create_default_context()
+        ctx = _db_ssl_context()
         _engine = create_async_engine(
             ASYNC_POSTGRES_DSN,
             echo=False,
