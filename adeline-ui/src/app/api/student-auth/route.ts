@@ -32,12 +32,21 @@ export async function POST(request: NextRequest) {
   const body = { ...payload };
   delete body.mode;
 
-  const upstream = await fetch(`${BRAIN_URL}/auth/student/${mode}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    cache: 'no-store',
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${BRAIN_URL}/auth/student/${mode}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+    });
+  } catch (error) {
+    console.error('[student-auth] Brain auth service unavailable', error);
+    return NextResponse.json(
+      { detail: 'Account service is temporarily unavailable. Please try again in a moment.' },
+      { status: 503 },
+    );
+  }
 
   const data = await upstream.json().catch(() => ({ detail: 'Authentication failed.' }));
   if (!upstream.ok || typeof data?.token !== 'string') {

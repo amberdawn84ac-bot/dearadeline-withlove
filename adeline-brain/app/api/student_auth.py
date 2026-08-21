@@ -214,10 +214,15 @@ async def register_student_account(request: Request, body: StudentRegisterReques
                     body.username, pin_hash, link_code,
                 )
             except asyncpg.UniqueViolationError as e:
-                if e.constraint_name == "User_username_key":
-                    raise HTTPException(status_code=409, detail="That username is already taken.")
-                logger.warning(f"Unique violation on {e.constraint_name} during student registration")
-                raise HTTPException(status_code=409, detail="Could not create that account — please try again.")
+                # Both username and the derived placeholder email represent the
+                # same player identity. Old partial registrations may collide on
+                # either constraint, so report the real remedy.
+                constraint = (e.constraint_name or "").lower()
+                if "linkcode" in constraint or "link_code" in constraint:
+                    logger.warning("Rare link-code collision during registration; user may retry")
+                    raise HTTPException(status_code=409, detail="We could not reserve a link code. Please try once more.")
+                logger.info("Player identity already exists during registration (constraint=%s)", e.constraint_name)
+                raise HTTPException(status_code=409, detail="That player name is already in use. Try adding a last initial.")
             except asyncpg.PostgresError:
                 logger.exception("Database error during student registration")
                 raise HTTPException(status_code=500, detail="Registration failed.")

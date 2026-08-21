@@ -8,6 +8,11 @@ const ADELINE_FACE = '/adeline-face.webp';
 
 type Mode = 'login' | 'register';
 
+function playerKey(name: string) {
+  const normalized = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
+  return normalized.length >= 3 ? normalized : `${normalized || 'new'}_player`.slice(0, 20);
+}
+
 function LoginContent() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('login');
@@ -34,7 +39,7 @@ function LoginContent() {
     try {
       const body: Record<string, string> = {
         mode,
-        username: username.trim().toLowerCase(),
+        username: playerKey(mode === 'register' ? displayName : username),
         pin,
       };
       if (mode === 'register') {
@@ -136,21 +141,17 @@ function LoginContent() {
             </>
           )}
 
-          <label className="grid gap-2 text-xs font-black text-[#3c5140]">
-            Player username
+          {mode === 'login' && <label className="grid gap-2 text-xs font-black text-[#3c5140]">
+            What does Adeline call you?
             <input
               required
-              autoCapitalize="none"
               autoComplete="username"
-              minLength={3}
-              maxLength={20}
-              pattern="[a-z0-9_]+"
-              title="Use lowercase letters, numbers, or underscores"
+              maxLength={100}
               value={username}
-              onChange={(event) => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+              onChange={(event) => setUsername(event.target.value)}
               className="min-h-[49px] rounded-[13px] border border-[#d7cdbb] bg-[#fffefa] px-3 text-[#243429] outline-none focus:border-[#6e8a68] focus:ring-4 focus:ring-[#6e8a6826]"
             />
-          </label>
+          </label>}
 
           <label className="grid gap-2 text-xs font-black text-[#3c5140]">
             4-digit PIN
