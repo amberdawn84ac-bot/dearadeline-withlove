@@ -28,6 +28,7 @@ export default function LearningPlanPage() {
       <p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">The wider view</p>
       <h1 className="mt-1 text-4xl text-[#2F4731]" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>My Learning Plan</h1>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-[#2F4731]/65">A living 36-week, four-day forecast—not a locked syllabus. The near term is specific; later months shift as interests, mastery, pace, completed evidence, and graduation needs change.</p>
+      {plan?.family_context.shared_with_siblings && <p className="mt-3 rounded-xl bg-[#FFF8EC] px-4 py-3 text-sm font-semibold text-[#2F4731]">Shared with {plan.family_context.sibling_count === 1 ? 'one sibling' : `${plan.family_context.sibling_count} siblings`}: the family investigates the same weekly question together. Your reading level, math, standards, evidence, pace, and credits remain your own.</p>}
       <Link href="/dashboard" className="mt-5 inline-flex rounded-xl bg-[#2F4731] px-4 py-2 text-sm font-bold text-white">Open today →</Link>
     </header>
     {error && <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}

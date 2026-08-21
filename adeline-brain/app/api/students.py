@@ -462,7 +462,7 @@ async def claim_student(
             raise HTTPException(status_code=404, detail="Link code not found.")
 
         result = await conn.fetchrow(
-            'UPDATE "User" SET "parentId" = $1 WHERE id = $2 AND ("parentId" IS NULL OR "parentId" = $1) RETURNING id',
+            'UPDATE "User" SET "parentId" = $1, "updatedAt" = NOW() WHERE id = $2 AND role = \'STUDENT\' AND ("parentId" IS NULL OR "parentId" = $1) RETURNING id',
             parent_id, student["id"],
         )
         if not result:
@@ -472,6 +472,13 @@ async def claim_student(
         raise HTTPException(status_code=500, detail="A database error occurred.")
     finally:
         await conn.close()
+
+    # Linking changes the household-wide investigation identity immediately.
+    try:
+        from app.connections.redis_client import redis_client
+        await redis_client.delete(f"learning_plan:v6:{student['id']}")
+    except Exception as exc:
+        logger.warning("Could not invalidate claimed student's plan cache: %s", exc)
 
     return ClaimStudentResponse(
         student_id=student["id"],

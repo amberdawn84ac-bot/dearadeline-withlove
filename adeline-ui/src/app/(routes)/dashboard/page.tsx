@@ -20,6 +20,7 @@ export default function TodayPage() {
   const { student, loading: studentLoading } = useStudent();
   const [today, setToday] = useState<RoadmapDay | null>(null);
   const [weekTheme, setWeekTheme] = useState('');
+  const [sharedWithSiblings, setSharedWithSiblings] = useState(false);
   const [comingUp, setComingUp] = useState<RoadmapDay[]>([]);
   const [finished, setFinished] = useState<TranscriptEntry[]>([]);
   const [isNextSchoolDay, setIsNextSchoolDay] = useState(false);
@@ -44,6 +45,7 @@ export default function TodayPage() {
       const upcomingDay = exactDay ?? upcomingWeek?.days.find((day) => day.date >= dateKey) ?? null;
       setToday(upcomingDay);
       setWeekTheme(upcomingWeek?.theme ?? 'Family investigation');
+      setSharedWithSiblings(plan.family_context.shared_with_siblings);
       setComingUp((upcomingWeek?.days ?? []).filter((day) => day.date > (upcomingDay?.date ?? dateKey)));
       setFinished(recent);
       setIsNextSchoolDay(Boolean(upcomingDay && upcomingDay.date !== dateKey));
@@ -64,7 +66,7 @@ export default function TodayPage() {
       <header className={styles.todayTitle}>
         <p>{isNextSchoolDay ? 'Your next school day' : 'Zoomed in from My Learning Plan'}</p>
         <h1>{isNextSchoolDay ? 'Coming up next' : 'Today'}</h1>
-        <span>{weekTheme} · This view changes whenever the living learning plan changes.</span>
+        <span>{weekTheme} · {sharedWithSiblings ? 'Shared family investigation; your work and credits are individual.' : 'This view changes whenever the living learning plan changes.'}</span>
       </header>
 
       {error && <p className={styles.error} role="alert">{error}</p>}

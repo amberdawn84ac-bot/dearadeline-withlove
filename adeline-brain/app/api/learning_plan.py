@@ -192,6 +192,13 @@ class AcademicRoadmap(BaseModel):
     adaptive: bool = True
     revision_policy: str = "Recalculate after completed evidence, mastery changes, pace changes, new interests, or changed credit gaps."
 
+class FamilyLearningContext(BaseModel):
+    household_id: str
+    shared_with_siblings: bool
+    sibling_count: int = 0
+    shared_layer: str = "One weekly family investigation"
+    individual_layer: str = "Grade-, mastery-, gap-, evidence-, and credit-specific work"
+
 class SubjectCoverage(BaseModel):
     subject: str
     required: int
@@ -223,6 +230,7 @@ class LearningPlanResponse(BaseModel):
     roadmap: AcademicRoadmap
     placement: PlacementProfile
     coverage: CurriculumCoverage
+    family_context: FamilyLearningContext
     generated_at: str
 
 
@@ -598,6 +606,7 @@ def _build_academic_roadmap(
     suggestions: list[LessonSuggestion],
     active_tracks: list[str],
     standards: list[GradeLevelStandard],
+    household_id: str,
 ) -> tuple[AcademicRoadmap, CurriculumCoverage]:
     """Build a stable rolling 36-week, four-day academic roadmap.
 
@@ -606,16 +615,7 @@ def _build_academic_roadmap(
     """
     today = date.today()
     start = today - timedelta(days=today.weekday())
-    tracks = active_tracks or list(STARTER_TOPICS_BY_GRADE[_get_grade_band(grade_level)])
-    seeds: list[tuple[str, str, str, str, str]] = []
-    for item in suggestions:
-        seeds.append((item.id, item.title, item.track, item.description, item.emoji))
-    for track in tracks:
-        for index, (title, description) in enumerate(_get_grade_appropriate_starters(track, grade_level)):
-            seeds.append((f"roadmap-{track.lower()}-{index}", title, track, description, TRACK_EMOJI.get(track, "✦")))
-    if not seeds:
-        seeds = [("roadmap-discovery", "Family Discovery Lab", "CREATION_SCIENCE", "Observe, test, document, and explain one real phenomenon.", "🔬")]
-    seeds = personalized_curriculum_planner.balance_weekly_seeds(seeds)
+    seeds = personalized_curriculum_planner.family_investigation_cycle(household_id)
 
     remaining = [standard for standard in standards if not standard.mastered]
     assignments = personalized_curriculum_planner.assign_sequence(standards)
@@ -626,7 +626,8 @@ def _build_academic_roadmap(
         week_start = start + timedelta(weeks=week_index)
         days: list[RoadmapDay] = []
         seed_index = week_index % len(seeds)
-        lesson_id, title, track, description, emoji = seeds[seed_index]
+        lesson_id, title, track, description = seeds[seed_index]
+        emoji = TRACK_EMOJI.get(track, "✦")
         for day_index, day_name in enumerate(day_names):
             activity_title, activity_description = activity_stages[day_index]
             lesson_date = week_start + timedelta(days=day_index)
@@ -838,6 +839,38 @@ async def _get_student_profile(student_id: str) -> dict:
         "placement_reason": "The student profile could not be read, so only kindergarten-safe material may be shown until placement is restored.",
         "subject_levels": {}, "learning_style": "EXPEDITION",
     }
+
+
+async def _get_family_context(student_id: str) -> FamilyLearningContext:
+    """Resolve a privacy-safe household identity from the existing parent link."""
+    from app.config import get_db_conn
+    conn = None
+    try:
+        conn = await get_db_conn()
+        row = await conn.fetchrow(
+            'SELECT id, "parentId" FROM "User" WHERE id = $1 AND role = \'STUDENT\'',
+            student_id,
+        )
+        if not row:
+            return FamilyLearningContext(household_id=student_id, shared_with_siblings=False)
+        parent_id = str(row["parentId"]) if row["parentId"] else None
+        if not parent_id:
+            return FamilyLearningContext(household_id=student_id, shared_with_siblings=False)
+        child_count = int(await conn.fetchval(
+            'SELECT COUNT(*) FROM "User" WHERE "parentId" = $1 AND role = \'STUDENT\'',
+            parent_id,
+        ) or 0)
+        return FamilyLearningContext(
+            household_id=parent_id,
+            shared_with_siblings=child_count > 1,
+            sibling_count=max(0, child_count - 1),
+        )
+    except Exception as e:
+        logger.warning("[LearningPlan] Failed to resolve family context for %s: %s", student_id, e)
+        return FamilyLearningContext(household_id=student_id, shared_with_siblings=False)
+    finally:
+        if conn:
+            await conn.close()
 
 
 async def _get_credit_summary(student_id: str) -> tuple[float, float]:
@@ -1056,7 +1089,7 @@ async def _get_available_projects(track: str = None, limit: int = 3) -> list[Pro
 # ── Redis sliding-window helpers ──────────────────────────────────────────────
 
 def _plan_cache_key(student_id: str) -> str:
-    return f"learning_plan:v5:{student_id}"
+    return f"learning_plan:v6:{student_id}"
 
 
 async def pop_completed_lesson(student_id: str, lesson_title: str) -> None:
@@ -1233,6 +1266,7 @@ async def get_learning_plan(
     interests = profile.get("interests", [])
     grade_level = profile.get("grade_level", "8")
     learning_style = profile.get("learning_style", "EXPEDITION")
+    family_context = await _get_family_context(student_id)
     
     logger.info(
         f"[LearningPlan] Generating plan for student={student_id}, "
@@ -1476,7 +1510,7 @@ async def get_learning_plan(
     )
 
     roadmap, coverage = _build_academic_roadmap(
-        grade_level, final_suggestions, active_tracks, grade_standards,
+        grade_level, final_suggestions, active_tracks, grade_standards, family_context.household_id,
     )
     if grade_standards and not coverage.all_required_accounted_for:
         logger.error("[LearningPlan] Coverage invariant failed for student=%s", student_id)
@@ -1503,6 +1537,7 @@ async def get_learning_plan(
             subject_levels=profile.get("subject_levels", {}),
         ),
         coverage=coverage,
+        family_context=family_context,
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
 

@@ -1171,6 +1171,13 @@ export interface LearningPlanResponse {
     all_required_accounted_for: boolean;
     subjects: Array<{ subject: string; required: number; mastered: number; remaining: number; scheduled: number }>;
   };
+  family_context: {
+    household_id: string;
+    shared_with_siblings: boolean;
+    sibling_count: number;
+    shared_layer: string;
+    individual_layer: string;
+  };
   generated_at: string;
 }
 

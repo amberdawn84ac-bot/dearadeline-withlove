@@ -252,27 +252,11 @@ async def login_student(request: Request, body: StudentLoginRequest):
         if not row or not row["pinHash"] or not bcrypt.checkpw(body.pin.encode(), row["pinHash"].encode()):
             raise HTTPException(status_code=401, detail="Username or PIN is incorrect.")
         student_id = str(row["id"])
+        user = await load_student_user(conn, student_id)
     finally:
         await conn.close()
 
-    # Keep authentication independent from optional User columns and response
-    # model coercion. Rich profile data is loaded after the session exists.
+    if not user:
+        raise HTTPException(status_code=404, detail="Student profile was not found.")
     token = mint_student_token(student_id)
-    return {
-        "token": token,
-        "student_id": student_id,
-        "user": {
-            "id": student_id,
-            "display_name": username,
-            "username": username,
-            "xp": 0,
-            "ade_coins": 0,
-            "avatar_data": {},
-            "grade_level": "K-2",
-            "link_code": "",
-            "parent_id": None,
-            "parent_display_name": None,
-            "town_id": None,
-            "reputation": 0,
-        },
-    }
+    return StudentAuthResponse(token=token, student_id=student_id, user=user)

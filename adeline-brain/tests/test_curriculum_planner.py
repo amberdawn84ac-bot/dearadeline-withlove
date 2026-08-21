@@ -49,3 +49,20 @@ def test_weekly_themes_round_robin_tracks():
     ]
     ordered = planner.balance_weekly_seeds(seeds)
     assert [seed[2] for seed in ordered[:10]] == list(planner.TRACKS)
+
+
+def test_siblings_receive_the_same_family_investigation_cycle():
+    planner = PersonalizedCurriculumPlannerAgent()
+    older_sibling_cycle = planner.family_investigation_cycle("parent-1")
+    younger_sibling_cycle = planner.family_investigation_cycle("parent-1")
+
+    assert older_sibling_cycle == younger_sibling_cycle
+    assert len(older_sibling_cycle) == 36
+    assert len({seed[2] for seed in older_sibling_cycle}) == 10
+
+
+def test_households_get_distinct_stable_investigation_orders():
+    planner = PersonalizedCurriculumPlannerAgent()
+
+    assert planner.family_investigation_cycle("family-a") == planner.family_investigation_cycle("family-a")
+    assert planner.family_investigation_cycle("family-a") != planner.family_investigation_cycle("family-b")
