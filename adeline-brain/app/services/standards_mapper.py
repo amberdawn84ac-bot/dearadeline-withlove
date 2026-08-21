@@ -455,9 +455,27 @@ class StandardsMapper:
             evidence.score or 75, evidence.evidence_type
         )
 
-        # Get subject from standard_id (e.g., "OAS.MATH.7.N.1" -> MATH)
-        subject = self._parse_subject_from_code(standard_id)
-        grade = self._parse_grade_from_code(standard_id)
+        # The seeded OAS codes are compound source identifiers and are not safe
+        # to parse for grade/subject. Read the authoritative metadata instead.
+        standard_result = await pg_session.execute(
+            text('SELECT subject, grade FROM "OASStandard" WHERE code = :code'),
+            {"code": standard_id},
+        )
+        standard_row = standard_result.mappings().first()
+        if standard_row:
+            subject_name = str(standard_row["subject"] or "").lower()
+            subject = (
+                StandardsSubject.MATH if "math" in subject_name else
+                StandardsSubject.SCIENCE if "science" in subject_name else
+                StandardsSubject.SOCIAL_STUDIES if any(word in subject_name for word in ("social", "history", "civic")) else
+                StandardsSubject.HEALTH if "health" in subject_name else
+                StandardsSubject.ELA
+            )
+            grade = int(standard_row["grade"] or 0)
+        else:
+            logger.warning("Unknown OAS standard %s; using conservative code fallback", standard_id)
+            subject = self._parse_subject_from_code(standard_id)
+            grade = self._parse_grade_from_code(standard_id)
 
         # Upsert StandardMastery record
         await pg_session.execute(

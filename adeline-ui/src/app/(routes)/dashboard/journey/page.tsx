@@ -32,6 +32,7 @@ export default function LearningPlanPage() {
     </header>
     {error && <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
     {plan && <>
+      {plan.placement.placement_required && <section className="rounded-2xl border border-[#D6A64B] bg-[#FFF8E8] p-5"><p className="text-xs font-black uppercase tracking-wide text-[#BD6809]">Grade discovery in progress</p><h2 className="mt-2 text-xl font-bold text-[#2F4731]">Working at grade {plan.placement.working_grade === 'K' ? 'K' : plan.placement.working_grade} for now</h2><p className="mt-2 text-sm leading-6 text-[#2F4731]/70">{plan.placement.reason} Adeline should adjust individual subjects as Jack demonstrates what he already knows; this working grade is not a permanent label.</p></section>}
       <section className="grid gap-4 sm:grid-cols-3">
         <Stat label="This month" value={`${firstMonth?.weeks.length ?? 0} weeks`} note="four school days each week" />
         <Stat label="This year" value={`${plan.roadmap.total_weeks} weeks`} note={`adaptive ${plan.roadmap.school_days_per_week}-day forecast`} />

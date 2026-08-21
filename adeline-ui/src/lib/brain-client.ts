@@ -1040,7 +1040,7 @@ export interface LessonSuggestion {
   description: string;
   emoji: string;
   priority: number;
-  source: "zpd" | "cross_track" | "continue" | "explore" | "interest";
+  source: "zpd" | "cross_track" | "continue" | "explore" | "interest" | "standard";
   concept_id?: string;
   standard_code?: string;
   grade_band?: string;
@@ -1155,6 +1155,13 @@ export interface LearningPlanResponse {
     }>;
     adaptive: boolean;
     revision_policy: string;
+  };
+  placement: {
+    declared_level: string;
+    working_grade: string;
+    placement_required: boolean;
+    reason?: string;
+    subject_levels: Record<string, number | null>;
   };
   generated_at: string;
 }

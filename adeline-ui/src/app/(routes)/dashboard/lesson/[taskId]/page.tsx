@@ -39,7 +39,7 @@ export default function CanonicalLessonPage() {
         setTask(selected);
 
         const blocks: LessonBlockResponse[] = [];
-        for await (const event of buildLesson(lessonRequestFromSuggestion(selected, student.id, student.gradeLevel ?? '8'))) {
+        for await (const event of buildLesson(lessonRequestFromSuggestion(selected, student.id, plan.placement.working_grade))) {
           if (cancelled) return;
           if (event.type === 'status') setStatus(event.message);
           if (event.type === 'block') blocks.push(event.block);

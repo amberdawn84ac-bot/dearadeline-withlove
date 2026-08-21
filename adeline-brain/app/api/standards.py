@@ -183,6 +183,28 @@ async def submit_standard_evidence(
         )
         
         await db.commit()
+
+        # Let demonstrated mastery—not a one-time label—move subject placement.
+        if mastery.proficiency.value in {"understanding", "extending"}:
+            level_column = {
+                "MATH": "mathLevel", "ELA": "elaLevel",
+                "SCIENCE": "scienceLevel", "SOCIAL_STUDIES": "historyLevel",
+            }.get(mastery.subject.value)
+            if level_column:
+                from app.config import get_db_conn
+                conn = await get_db_conn()
+                try:
+                    await conn.execute(
+                        f'UPDATE "User" SET "{level_column}" = GREATEST(COALESCE("{level_column}", 0), $1), "updatedAt" = NOW() WHERE id = $2',
+                        mastery.grade, request.student_id,
+                    )
+                finally:
+                    await conn.close()
+        try:
+            from app.connections.redis_client import redis_client
+            await redis_client.delete(f"learning_plan:v3:{request.student_id}")
+        except Exception as cache_error:
+            logger.warning("[Standards] Learning-plan invalidation failed: %s", cache_error)
         
         return EvidenceSubmitResponse(
             success=True,

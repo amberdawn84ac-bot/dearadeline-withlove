@@ -19,7 +19,7 @@ function LoginContent() {
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [gradeLevel, setGradeLevel] = useState('6-8');
+  const [gradeLevel, setGradeLevel] = useState('PLACEMENT');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -132,10 +132,9 @@ function LoginContent() {
                   onChange={(event) => setGradeLevel(event.target.value)}
                   className="min-h-[49px] rounded-[13px] border border-[#d7cdbb] bg-[#fffefa] px-3 text-[#243429] outline-none"
                 >
-                  <option>K-2</option>
-                  <option>3-5</option>
-                  <option>6-8</option>
-                  <option>9-12</option>
+                  <option value="PLACEMENT">Not sure — let Adeline discover it</option>
+                  <option value="K">Kindergarten</option>
+                  {Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={String(index + 1)}>Grade {index + 1}</option>)}
                 </select>
               </label>
             </>

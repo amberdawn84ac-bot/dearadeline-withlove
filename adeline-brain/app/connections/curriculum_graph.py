@@ -269,14 +269,21 @@ class CurriculumGraph:
     async def get_grade_standards(self, student_id: str, grade: int, limit: int = 10) -> list[dict]:
         async with _get_session_factory()() as session:
             result = await session.execute(text('''
+                WITH s AS (
+                    SELECT base.*,
+                           ROW_NUMBER() OVER (PARTITION BY base.subject ORDER BY base.code) AS subject_rank
+                    FROM "OASStandard" base
+                    WHERE base.grade = :grade
+                )
                 SELECT s.code AS id, s.description, s.grade, s.subject,
+                       s.track::text AS track, s.strand, s."lessonHook" AS lesson_hook,
                        CASE WHEN m.proficiency IN ('UNDERSTANDING', 'EXTENDING')
                             THEN true ELSE false END AS mastered
-                FROM "OASStandard" s
+                FROM s
                 LEFT JOIN "StandardMastery" m
                   ON m."standardId" = s.code AND m."studentId" = :student_id
-                WHERE s.grade = :grade
-                ORDER BY s.code LIMIT :limit
+                WHERE s.subject_rank <= 6
+                ORDER BY s.subject, s.code LIMIT :limit
             '''), {"student_id": student_id, "grade": grade, "limit": limit})
             return [dict(row) for row in result.mappings().all()]
 

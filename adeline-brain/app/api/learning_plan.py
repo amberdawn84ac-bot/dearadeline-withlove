@@ -129,6 +129,17 @@ class GradeLevelStandard(BaseModel):
     description: str
     mastered: bool
     priority: int
+    track: Optional[str] = None
+    strand: Optional[str] = None
+    lesson_hook: Optional[str] = None
+
+
+class PlacementProfile(BaseModel):
+    declared_level: str
+    working_grade: str
+    placement_required: bool
+    reason: Optional[str] = None
+    subject_levels: dict[str, Optional[int]] = Field(default_factory=dict)
 
 class GraduationProgress(BaseModel):
     total_required: float
@@ -189,6 +200,7 @@ class LearningPlanResponse(BaseModel):
     credit_gaps: list[CreditGap]  # What's still needed for graduation (9-12 only)
     grade_standards: list[GradeLevelStandard]  # K-8 grade-level standards progress
     roadmap: AcademicRoadmap
+    placement: PlacementProfile
     generated_at: str
 
 
@@ -544,6 +556,15 @@ def _get_grade_band(grade_level: str) -> str:
     return "9-12"
 
 
+def _candidate_matches_grade(candidate: ZPDCandidate, grade_level: str) -> bool:
+    """Keep shared concepts from leaking across grade bands."""
+    band = (candidate.grade_band or "").lower().replace("-", "").replace("_", "")
+    if not band:
+        return True
+    expected = {"K-2": "k2", "3-5": "35", "6-8": "68", "9-12": "912"}[_get_grade_band(grade_level)]
+    return band == expected
+
+
 def _get_grade_appropriate_starters(track: str, grade_level: str) -> list[tuple[str, str]]:
     """Return grade-band-filtered starter topics for a track."""
     band = _get_grade_band(grade_level)
@@ -657,6 +678,40 @@ def _interest_suggestion(interest: str, topic: tuple[str, str], track: str, idx:
     )
 
 
+def _standard_suggestion(standard: GradeLevelStandard) -> LessonSuggestion:
+    subject = standard.subject.lower()
+    fallback_track = (
+        "APPLIED_MATHEMATICS" if "math" in subject else
+        "CREATION_SCIENCE" if "science" in subject else
+        "TRUTH_HISTORY" if any(word in subject for word in ("social", "history", "civic")) else
+        "ENGLISH_LITERATURE"
+    )
+
+
+def _standard_subject_key(subject: str) -> str:
+    normalized = subject.lower()
+    if "math" in normalized:
+        return "math"
+    if "science" in normalized:
+        return "science"
+    if any(word in normalized for word in ("social", "history", "civic")):
+        return "history"
+    if any(word in normalized for word in ("english", "language arts", "ela")):
+        return "ela"
+    return "other"
+    valid_tracks = {track.value for track in Track}
+    track = standard.track if standard.track in valid_tracks else fallback_track
+    hook = (standard.lesson_hook or "").strip()
+    title = hook if hook else f"Discover: {standard.description[:72].rstrip('.')}"
+    return LessonSuggestion(
+        id=f"standard-{standard.standard_id}", title=title, track=track,
+        description=standard.description, emoji=TRACK_EMOJI.get(track, "✦"),
+        priority=0.93, source="standard", standard_code=standard.standard_id,
+        grade_band=str(standard.grade), agent=TRACK_AGENT_MAP.get(track),
+        personalization_reason=f"This is an unfinished grade-{standard.grade} concept, connected to the student's interests and demonstrated through real evidence.",
+    )
+
+
 def _starter_suggestion(track: str, topic: tuple[str, str], idx: int) -> LessonSuggestion:
     """Create a starter suggestion for a track with no ZPD data."""
     title, description = topic
@@ -679,7 +734,8 @@ async def _get_student_profile(student_id: str) -> dict:
         conn = await get_db_conn()
         row = await conn.fetchrow(
             """
-            SELECT "name", "gradeLevel", "interests", "learningStyle", "pacingMultiplier", "state"
+            SELECT "name", "gradeLevel", "interests", "learningStyle", "pacingMultiplier", "state",
+                   "mathLevel", "elaLevel", "scienceLevel", "historyLevel"
             FROM "User"
             WHERE "id" = $1
             """,
@@ -688,9 +744,36 @@ async def _get_student_profile(student_id: str) -> dict:
         await conn.close()
         if row:
             interests = list(row["interests"]) if row["interests"] else []
+            declared = str(row["gradeLevel"] or "")
+            exact_grades = {"K", *{str(i) for i in range(1, 13)}}
+            subject_levels = {
+                "math": row["mathLevel"], "ela": row["elaLevel"],
+                "science": row["scienceLevel"], "history": row["historyLevel"],
+            }
+            known_levels = [int(value) for value in subject_levels.values() if value is not None]
+            if declared in exact_grades:
+                working_grade = declared
+                placement_required = False
+                placement_reason = None
+            elif known_levels:
+                working_grade = "K" if round(sum(known_levels) / len(known_levels)) == 0 else str(round(sum(known_levels) / len(known_levels)))
+                placement_required = len(known_levels) < 3
+                placement_reason = (
+                    "The broad grade band needs confirmation; current subject evidence provides a provisional working grade."
+                    if placement_required else
+                    "The working grade was inferred from demonstrated mastery across multiple subjects and will keep adapting."
+                )
+            else:
+                working_grade = {"K-2": "1", "3-5": "4", "6-8": "7", "9-12": "10"}.get(declared, "K")
+                placement_required = True
+                placement_reason = "An exact grade has not been established yet. Adeline is using the middle of the selected band temporarily."
             return {
                 "name": row["name"],
-                "grade_level": row["gradeLevel"],
+                "grade_level": working_grade,
+                "declared_level": declared or "unknown",
+                "placement_required": placement_required,
+                "placement_reason": placement_reason,
+                "subject_levels": subject_levels,
                 "interests": interests,
                 "learning_style": row["learningStyle"],
                 "pacing_multiplier": row["pacingMultiplier"] or 1.0,
@@ -698,7 +781,13 @@ async def _get_student_profile(student_id: str) -> dict:
             }
     except Exception as e:
         logger.warning(f"[LearningPlan] Failed to fetch student profile: {e}")
-    return {"interests": [], "grade_level": "8", "learning_style": "EXPEDITION"}
+    # Never silently turn a missing/failed profile into an eighth grader.
+    return {
+        "interests": [], "grade_level": "K", "declared_level": "unknown",
+        "placement_required": True,
+        "placement_reason": "The student profile could not be read, so only kindergarten-safe material may be shown until placement is restored.",
+        "subject_levels": {}, "learning_style": "EXPEDITION",
+    }
 
 
 async def _get_credit_summary(student_id: str) -> tuple[float, float]:
@@ -868,12 +957,8 @@ async def _get_grade_level_standards(student_id: str, grade_level: str) -> list[
         m = re.match(r"(\d+)", grade_level)
         grade_num = int(m.group(1)) if m else 0
 
-    # Standards only tracked for K-8
-    if grade_num > 8:
-        return []
-
     try:
-        rows = await curriculum_graph.get_grade_standards(student_id, grade_num, limit=10)
+        rows = await curriculum_graph.get_grade_standards(student_id, grade_num, limit=30)
         return [
             GradeLevelStandard(
                 standard_id=r["id"],
@@ -882,6 +967,9 @@ async def _get_grade_level_standards(student_id: str, grade_level: str) -> list[
                 description=r["description"] or "",
                 mastered=bool(r["mastered"]),
                 priority=i + 1,
+                track=r.get("track"),
+                strand=r.get("strand"),
+                lesson_hook=r.get("lesson_hook"),
             )
             for i, r in enumerate(rows)
         ]
@@ -916,7 +1004,7 @@ async def _get_available_projects(track: str = None, limit: int = 3) -> list[Pro
 # ── Redis sliding-window helpers ──────────────────────────────────────────────
 
 def _plan_cache_key(student_id: str) -> str:
-    return f"learning_plan:v2:{student_id}"
+    return f"learning_plan:v3:{student_id}"
 
 
 async def pop_completed_lesson(student_id: str, lesson_title: str) -> None:
@@ -1175,7 +1263,7 @@ async def get_learning_plan(
         priority_boost = (1.0 - track_scores.get(track, 0.0)) * 0.2  # Up to 0.2 boost
         
         try:
-            candidates = await tool_get_zpd_candidates(student_id, track, limit=2)
+            candidates = [candidate for candidate in await tool_get_zpd_candidates(student_id, track, limit=8) if _candidate_matches_grade(candidate, grade_level)][:2]
             
             for candidate in candidates:
                 suggestion = _zpd_to_suggestion(candidate, priority_boost + 0.3)  # Extra boost for gaps
@@ -1212,7 +1300,7 @@ async def get_learning_plan(
     # 9. Fetch ZPD candidates for each track
     for track in active_tracks:
         try:
-            candidates = await tool_get_zpd_candidates(student_id, track, limit=2)
+            candidates = [candidate for candidate in await tool_get_zpd_candidates(student_id, track, limit=8) if _candidate_matches_grade(candidate, grade_level)][:2]
             
             # Boost priority for weaker tracks (help balance progress)
             mastery = track_scores.get(track, 0.0)
@@ -1244,23 +1332,40 @@ async def get_learning_plan(
                 if not any(s.title == suggestion.title for s in suggestions):
                     suggestions.append(suggestion)
 
+    # Pull exact-grade public-school standards before final selection. Standards
+    # define coverage; interests and family projects determine how they are taught.
+    grade_standards = []
+    try:
+        grade_standards = await _get_grade_level_standards(student_id, grade_level)
+        existing_codes = {standard.standard_id for standard in grade_standards}
+        for subject_key, subject_grade in profile.get("subject_levels", {}).items():
+            if subject_grade is None:
+                continue
+            subject_grade_label = "K" if int(subject_grade) == 0 else str(subject_grade)
+            if subject_grade_label == grade_level:
+                continue
+            for standard in await _get_grade_level_standards(student_id, subject_grade_label):
+                if _standard_subject_key(standard.subject) == subject_key and standard.standard_id not in existing_codes:
+                    grade_standards.append(standard)
+                    existing_codes.add(standard.standard_id)
+        for standard in grade_standards:
+            if not standard.mastered:
+                suggestion = _standard_suggestion(standard)
+                if not any(s.standard_code == suggestion.standard_code for s in suggestions):
+                    suggestions.append(suggestion)
+    except Exception as e:
+        logger.warning(f"[LearningPlan] Failed to get grade standards: {e}")
+
     # Mission Architect owns final selection and handoff: priority, variety,
     # canonical reuse, finish line, portfolio contribution, and rationale.
     try:
         from app.agents.mission_team import mission_architect
-        final_suggestions = mission_architect.select_balanced(suggestions[:limit * 2], limit)
+        final_suggestions = mission_architect.select_balanced(suggestions, limit)
         final_suggestions = await mission_architect.compose(final_suggestions, grade_level, interests)
     except Exception as e:
         logger.warning(f"[LearningPlan] Mission Architect enrichment failed (non-fatal): {e}")
         suggestions.sort(key=lambda s: s.priority, reverse=True)
         final_suggestions = suggestions[:limit]
-
-    # 11. Fetch grade-level standards for K-8 students
-    grade_standards = []
-    try:
-        grade_standards = await _get_grade_level_standards(student_id, grade_level)
-    except Exception as e:
-        logger.warning(f"[LearningPlan] Failed to get grade standards: {e}")
 
     # 12. Fetch available portfolio projects — prefer tracks matching interests or weakest track
     try:
@@ -1332,6 +1437,13 @@ async def get_learning_plan(
         credit_gaps=credit_gaps if graduation_progress.is_high_school else [],  # Empty for K-8
         grade_standards=grade_standards,  # Only populated for K-8
         roadmap=_build_academic_roadmap(grade_level, final_suggestions, active_tracks),
+        placement=PlacementProfile(
+            declared_level=profile.get("declared_level", grade_level),
+            working_grade=grade_level,
+            placement_required=bool(profile.get("placement_required")),
+            reason=profile.get("placement_reason"),
+            subject_levels=profile.get("subject_levels", {}),
+        ),
         generated_at=datetime.now(timezone.utc).isoformat(),
     )
 
