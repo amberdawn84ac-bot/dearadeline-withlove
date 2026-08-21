@@ -72,13 +72,14 @@ class ConversationStore:
             try:
                 import ssl as _ssl
                 ctx = _ssl.create_default_context()
-                ctx.check_hostname = False
-                ctx.verify_mode = _ssl.CERT_NONE
                 self._engine = create_async_engine(
                     ASYNC_DSN,
                     echo=False,
                     pool_pre_ping=True,
                     pool_recycle=300,
+                    pool_size=3,
+                    max_overflow=2,
+                    pool_timeout=30,
                     connect_args={"ssl": ctx, "statement_cache_size": 0},
                 )
                 self._session_factory = async_sessionmaker(
@@ -86,6 +87,10 @@ class ConversationStore:
                 )
                 async with self._engine.begin() as conn:
                     await conn.run_sync(ConversationBase.metadata.create_all)
+                    await conn.execute(text(
+                        "CREATE INDEX IF NOT EXISTS conversation_messages_student_created_idx "
+                        "ON conversation_messages(student_id, created_at DESC)"
+                    ))
                 logger.info("[ConversationStore] Connected — conversation_messages table ready")
                 return
             except Exception as exc:

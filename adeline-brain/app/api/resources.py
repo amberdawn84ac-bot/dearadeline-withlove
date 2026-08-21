@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from app.api.middleware import verify_student_access
 from app.services.resource_router import ResourceQuery, resource_router
+from app.services.rate_limit import enforce_rate_limit
 
 router = APIRouter(prefix="/resources", tags=["resources"])
 
@@ -23,6 +24,7 @@ class ResourceSearchRequest(BaseModel):
 @router.post("/search")
 async def search_resources(body: ResourceSearchRequest, authorization: str | None = Header(default=None)):
     await verify_student_access(body.student_id, authorization)
+    await enforce_rate_limit("resources", body.student_id, limit=30)
     return await resource_router.search(ResourceQuery(
         topic=body.topic, track=body.track, grade_level=body.grade_level,
         objective=body.objective, resource_types=tuple(body.resource_types),

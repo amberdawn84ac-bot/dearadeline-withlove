@@ -45,6 +45,8 @@ model User {
   standardMastery      StandardMastery[]
 
   @@index([townId])
+  @@index([parentId])
+  @@index([role])
 }
 
 model FamilyPost {
@@ -239,6 +241,8 @@ model InviteCode {
   isUsed         Boolean  @default(false)
   claimedByEmail String?
   createdAt      DateTime @default(now())
+
+  @@unique([code])
 }
 
 model Subscription {
@@ -278,6 +282,10 @@ model LearningRecord {
   statementJson Json       @default("{}")
   timestamp     DateTime   @default(now())
   createdAt     DateTime   @default(now())
+
+  @@index([studentId, timestamp])
+  @@index([lessonId])
+  @@index([studentId, lessonId])
 }
 
 model TranscriptEntry {
@@ -299,6 +307,10 @@ model TranscriptEntry {
   sealedAt            DateTime?
   xapiStatementId     String?
   createdAt           DateTime     @default(now())
+
+  @@index([studentId, completedAt])
+  @@index([studentId, sealedAt])
+  @@index([lessonId])
 }
 
 model ActivityEvidence {
@@ -329,6 +341,9 @@ model SpacedRepetitionCard {
   lastReviewedAt DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+
+  @@index([studentId, dueAt])
+  @@unique([studentId, conceptId])
 }
 
 model StandardMastery {

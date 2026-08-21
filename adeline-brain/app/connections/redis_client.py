@@ -53,6 +53,12 @@ class _UpstashRedis:
     async def delete(self, key: str) -> None:
         await self._call("DEL", key)
 
+    async def incr(self, key: str) -> int:
+        return int(await self._call("INCR", key))
+
+    async def expire(self, key: str, seconds: int) -> bool:
+        return bool(await self._call("EXPIRE", key, str(seconds)))
+
     async def ping(self) -> bool:
         result = await self._call("PING")
         return str(result).upper() == "PONG"

@@ -15,18 +15,20 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Optional, AsyncIterator
+from typing import Optional, AsyncIterator, Literal
 
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from app.connections.conversation_store import conversation_store
 
-from app.api.middleware import get_current_user_id
+from app.api.middleware import get_current_user_id, verify_student_access_for_user
 from app.algorithms.pedagogical_directives import get_mode_directives, get_quick_directives
 from app.agents.pedagogy import detect_zpd_zone
 from app.agents.persona import SCRIPTURE_TRANSLATION_POLICY
 from app.models.student import load_student_state, MasteryBand
 from app.services.resource_router import ResourceQuery, resource_block_from_packet, resource_router
+from app.services.rate_limit import enforce_rate_limit
 from app.utils.stream_parser import parse_stream
 
 logger = logging.getLogger(__name__)
@@ -93,20 +95,25 @@ TONE: Warm, bookish, like a trusted older sibling who loves stories. Encourage c
 
 
 class CurrentBookContext(BaseModel):
-    id: str
-    title: str
-    author: str
+    id: str = Field(max_length=200)
+    title: str = Field(max_length=300)
+    author: str = Field(max_length=200)
     cfi: Optional[str] = None
-    chapter: Optional[str] = None
+    chapter: Optional[str] = Field(default=None, max_length=300)
     progress_percent: Optional[int] = None
+
+
+class ConversationTurn(BaseModel):
+    role: Literal["user", "adeline", "assistant"]
+    content: str = Field(max_length=4000)
 
 
 class ConversationRequest(BaseModel):
     student_id: str
-    message: str
+    message: str = Field(min_length=1, max_length=4000)
     track: Optional[str] = None
     grade_level: Optional[str] = "8"  # Default to middle school
-    conversation_history: list[dict] = []
+    conversation_history: list[ConversationTurn] = Field(default_factory=list, max_length=20)
     # Reading context for Literature Agent
     current_book: Optional[CurrentBookContext] = None
     highlighted_text: Optional[str] = None
@@ -287,6 +294,19 @@ async def _conversation_sse(
     try:
         tracks = _infer_tracks(message, track)
 
+        if not history:
+            try:
+                stored_history = await conversation_store.get_recent_history(student_id, limit=8)
+                history = [
+                    {
+                        "role": "user" if item.get("role") == "USER" else "adeline",
+                        "content": str(item.get("content") or "")[:4000],
+                    }
+                    for item in stored_history
+                ]
+            except Exception:
+                logger.warning("[/conversation/stream] Persistent history unavailable", exc_info=True)
+
         # Load student mastery for ZPD directives
         try:
             student_state = await load_student_state(student_id)
@@ -349,9 +369,11 @@ async def _conversation_sse(
         llm_messages.append({"role": "user", "content": message})
 
         # Stream + parse
+        assistant_text = ""
         try:
             async for event in parse_stream(_stream_llm(system_prompt, llm_messages)):
                 if event["type"] == "text":
+                    assistant_text += event["delta"]
                     yield _sse("text", {"delta": event["delta"]})
                 elif event["type"] == "block":
                     yield _sse("block", event["block"])
@@ -359,6 +381,18 @@ async def _conversation_sse(
             logger.exception(f"[/conversation/stream] LLM stream failed: {llm_err}")
             yield _sse("error", {"message": "I ran into a hiccup — give me a moment and try again."})
             return
+
+        try:
+            await conversation_store.save_interaction(
+                student_id,
+                message,
+                assistant_text,
+                zpd_zone=zpd_zone.value,
+                mastery_band=mastery_band.value,
+                track=tracks[0],
+            )
+        except Exception:
+            logger.exception("[/conversation/stream] Could not persist conversation")
 
         yield _sse("done", {})
 
@@ -385,13 +419,16 @@ async def conversation_stream(
     if not body.message.strip():
         raise HTTPException(status_code=422, detail="Message cannot be empty")
 
+    await verify_student_access_for_user(current_user_id, body.student_id)
+    await enforce_rate_limit("conversation", body.student_id, limit=30)
+
     return StreamingResponse(
         _conversation_sse(
             student_id=body.student_id,
             message=body.message,
             track=body.track,
             grade_level=body.grade_level,
-            history=body.conversation_history,
+            history=[item.model_dump() for item in body.conversation_history],
             current_book=body.current_book,
             highlighted_text=body.highlighted_text,
         ),

@@ -22,6 +22,7 @@ from app.connections.canonical_store import canonical_store, canonical_slug
 from app.agents.adapter import adapt_canonical_for_student
 from app.services.resource_router import resource_router, ResourceQuery, resource_block_from_packet
 from app.services.learner_context import adaptation_for, learner_contribution
+from app.services.rate_limit import enforce_rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/experience", tags=["canonical-experience"])
@@ -129,6 +130,7 @@ async def _stream(request: LessonRequest):
 @router.post("/build")
 async def build_experience(request: LessonRequest, authorization: str | None = Header(default=None)):
     await verify_student_access(request.student_id, authorization)
+    await enforce_rate_limit("experience-build", request.student_id, limit=8)
     return StreamingResponse(_stream(request), media_type="text/event-stream")
 
 

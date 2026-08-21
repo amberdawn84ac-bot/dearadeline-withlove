@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, HttpUrl
 
 from app.api.middleware import get_current_user_id
 from app.config import get_db_conn
+from app.services.rate_limit import enforce_rate_limit
 
 router = APIRouter(prefix="/family", tags=["family"])
 
@@ -62,6 +63,7 @@ async def family_feed(user_id: str = Depends(get_current_user_id)):
 
 @router.post("/feed", status_code=201)
 async def create_family_post(body: FamilyPostCreate, user_id: str = Depends(get_current_user_id)):
+    await enforce_rate_limit("family-post", user_id, limit=20)
     conn = await get_db_conn()
     try:
         household_id, author_name = await _identity(conn, user_id)

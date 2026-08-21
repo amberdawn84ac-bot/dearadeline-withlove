@@ -61,10 +61,13 @@ fi
 echo "[entrypoint] Starting gunicorn on port ${PORT:-8000}..."
 exec gunicorn app.main:app \
   --worker-class uvicorn.workers.UvicornWorker \
-  --workers 1 \
+  --workers "${WEB_CONCURRENCY:-1}" \
   --bind "0.0.0.0:${PORT:-8000}" \
   --timeout 120 \
+  --graceful-timeout 30 \
   --keep-alive 5 \
+  --max-requests "${MAX_REQUESTS_PER_WORKER:-5000}" \
+  --max-requests-jitter 500 \
   --access-logfile - \
   --error-logfile - \
   "$@"

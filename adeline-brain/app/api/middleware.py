@@ -170,40 +170,41 @@ async def verify_student_access(
     user_id = _extract_user_id(payload)
     role_str = _extract_role(payload)
 
-    # Supabase tokens do not reliably carry Dear Adeline's database role.
-    # Resolve it from the account row before making a household decision.
-    if role_str not in {UserRole.PARENT.value, UserRole.ADMIN.value}:
-        from app.config import get_db_conn
-        role_conn = await get_db_conn()
-        try:
-            stored_role = await role_conn.fetchval('SELECT role FROM "User" WHERE id = $1', user_id)
-            if stored_role:
-                role_str = str(stored_role).upper()
-        finally:
-            await role_conn.close()
+    return await verify_student_access_for_user(user_id, student_id, token_role=role_str)
 
-    if user_id == student_id:
-        return user_id
-    if role_str == UserRole.ADMIN.value:
-        return user_id
-    if role_str == UserRole.PARENT.value:
-        from app.config import get_db_conn
-        conn = await get_db_conn()
-        try:
-            row = await conn.fetchrow(
-                'SELECT id FROM "User" WHERE id = $1 AND "parentId" = $2',
+
+async def verify_student_access_for_user(
+    user_id: str,
+    student_id: str,
+    *,
+    token_role: str | None = None,
+) -> str:
+    """Enforce tenant ownership when a route already resolved the caller identity."""
+    from app.config import get_db_conn
+
+    conn = await get_db_conn()
+    try:
+        # Authorization follows the durable account record, not a potentially
+        # stale role claim carried by a long-lived browser token.
+        stored_role = await conn.fetchval('SELECT role FROM "User" WHERE id = $1', user_id)
+        role_str = str(stored_role or "").upper()
+
+        if user_id == student_id and role_str == UserRole.STUDENT.value:
+            return user_id
+        if role_str == UserRole.ADMIN.value:
+            return user_id
+        if role_str == UserRole.PARENT.value:
+            owns_student = await conn.fetchval(
+                'SELECT EXISTS(SELECT 1 FROM "User" WHERE id = $1 AND "parentId" = $2 AND role = \'STUDENT\')',
                 student_id,
                 user_id,
             )
-        finally:
-            await conn.close()
-        if row:
-            return user_id
+            if owns_student:
+                return user_id
+    finally:
+        await conn.close()
 
-    raise HTTPException(
-        status_code=403,
-        detail="You do not have access to this student's data.",
-    )
+    raise HTTPException(status_code=403, detail="You do not have access to this student's data.")
 
 
 def require_account_role(*allowed_roles: UserRole):

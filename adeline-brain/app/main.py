@@ -5,13 +5,15 @@ The Intelligence Layer of Dear Adeline 2.0
 import asyncio
 import logging
 import os
+import time
+import uuid
 
 import openai
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -24,6 +26,7 @@ from app.connections.pgvector_client import hippocampus
 from app.connections.bookshelf_search import bookshelf_search
 from app.connections.redis_client import ping as redis_ping
 from app.api.coppa import router as coppa_router
+from app.api.middleware import require_internal_key
 from app.api.lessons import router as lessons_router
 from app.api.opportunities import router as opportunities_router
 from app.api.journal import router as journal_router
@@ -65,6 +68,7 @@ from app.api.family import router as family_router
 from app.connections.journal_store import journal_store
 from app.connections.conversation_store import conversation_store
 from app.connections.postgres import init_postgres
+from app.config import close_db_pool, db_pool_status, init_db_pool
 from app.jobs.seed_scheduler import startup_seed_scheduler, shutdown_seed_scheduler
 
 from pythonjsonlogger import jsonlogger
@@ -100,6 +104,13 @@ if _SENTRY_DSN:
 async def lifespan(app: FastAPI):
     logger.info("[adeline-brain] Starting up...")
 
+    # PostgreSQL is a hard dependency. Do not advertise readiness or begin
+    # accepting curriculum writes while the primary pool is unavailable.
+    app.state.ready = False
+    await asyncio.wait_for(init_db_pool(), timeout=15.0)
+    app.state.ready = True
+    logger.info("[adeline-brain] DatabasePool connected")
+
     async def _connect_services():
         for name, coro in [
             ("CurriculumGraph", curriculum_graph.connect()),
@@ -119,11 +130,13 @@ async def lifespan(app: FastAPI):
     await startup_seed_scheduler()
     yield
     logger.info("[adeline-brain] Shutting down...")
+    app.state.ready = False
     await shutdown_seed_scheduler()
     try:
         await bookshelf_search.disconnect()
     except Exception:
         pass
+    await close_db_pool()
 
 
 # ── Rate limiter (Redis-backed when available, in-memory fallback) ─
@@ -162,6 +175,37 @@ class ForceHTTPSMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(ForceHTTPSMiddleware)
+
+
+class RequestTelemetryMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        started = time.perf_counter()
+        request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+        try:
+            response = await call_next(request)
+        except Exception:
+            logger.exception(
+                "request_failed",
+                extra={"request_id": request_id, "method": request.method, "path": request.url.path},
+            )
+            raise
+        duration_ms = round((time.perf_counter() - started) * 1000, 1)
+        response.headers["X-Request-ID"] = request_id
+        response.headers["Server-Timing"] = f"app;dur={duration_ms}"
+        logger.info(
+            "request_completed",
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms,
+            },
+        )
+        return response
+
+
+app.add_middleware(RequestTelemetryMiddleware)
 
 
 from app.config import CORS_ORIGINS as _cors_env  # noqa: E402
@@ -255,7 +299,27 @@ async def health():
     return {"status": "ok", "service": "adeline-brain", "version": "0.2.0"}
 
 
-@app.get("/health/detailed")
+@app.get("/health/ready")
+async def health_ready():
+    """Load-balancer readiness probe: verifies the primary database path."""
+    from fastapi.responses import JSONResponse
+    from app.config import get_db_conn
+
+    if not getattr(app.state, "ready", False):
+        return JSONResponse(status_code=503, content={"status": "starting"})
+    try:
+        conn = await asyncio.wait_for(get_db_conn(), timeout=3.0)
+        try:
+            await asyncio.wait_for(conn.fetchval("SELECT 1"), timeout=3.0)
+        finally:
+            await conn.close()
+    except Exception:
+        logger.exception("readiness_check_failed")
+        return JSONResponse(status_code=503, content={"status": "unavailable"})
+    return {"status": "ready"}
+
+
+@app.get("/health/detailed", dependencies=[Depends(require_internal_key)])
 async def health_detailed():
     """Detailed health check with Postgres and Redis connectivity."""
     from app.config import get_db_conn
@@ -268,6 +332,7 @@ async def health_detailed():
         "curriculum_concepts": 0,
         "curriculum_prerequisites": 0,
         "books": 0,
+        "database_pool": db_pool_status(),
     }
 
     try:
@@ -312,7 +377,7 @@ async def health_detailed():
     return health_status
 
 
-@app.get("/health/truth")
+@app.get("/health/truth", dependencies=[Depends(require_internal_key)])
 async def health_truth():
     """
     Truth Engine health check.

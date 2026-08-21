@@ -56,19 +56,10 @@ export async function middleware(request: NextRequest) {
   // routes render.
   const studentCookie = request.cookies.get('auth_token')?.value;
   if (studentCookie) {
-    try {
-      const sessionUrl = new URL('/api/student-auth', request.url);
-      const sessionResponse = await fetch(sessionUrl, {
-        method: 'GET',
-        headers: { cookie: request.headers.get('cookie') ?? '' },
-        cache: 'no-store',
-      });
-      if (sessionResponse.ok) {
-        return NextResponse.next();
-      }
-    } catch {
-      // Fall through to Supabase compatibility check, then login redirect.
-    }
+    // Protected data is authorized again by every Brain endpoint. Avoid a
+    // Vercel -> Vercel -> Railway round trip on every page navigation merely
+    // to render the shell; expired tokens receive 401 from the data boundary.
+    return NextResponse.next();
   }
 
   // Compatibility path for existing parent/admin Supabase accounts.

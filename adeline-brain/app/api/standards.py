@@ -28,7 +28,7 @@ from app.services.standards_mapper import (
     MasteryEvidence,
     StandardsSubject,
 )
-from app.services.storage import upload_mastery_evidence
+from app.services.storage import evidence_upload_slot, read_upload_limited, upload_mastery_evidence
 
 logger = logging.getLogger(__name__)
 
@@ -268,19 +268,15 @@ async def upload_evidence_file(
         )
     
     try:
-        # Read file bytes
-        file_bytes = await file.read()
-        if len(file_bytes) > 50 * 1024 * 1024:  # 50MB limit
-            raise HTTPException(status_code=400, detail="File too large (max 50MB)")
-        
-        # Upload to S3/Supabase (Wire 2: Blob Storage)
-        file_url = await upload_mastery_evidence(
-            student_id=student_id,
-            standard_id=standard_id,
-            file_bytes=file_bytes,
-            content_type=content_type,
-            original_filename=file.filename,
-        )
+        async with evidence_upload_slot():
+            file_bytes = await read_upload_limited(file)
+            file_url = await upload_mastery_evidence(
+                student_id=student_id,
+                standard_id=standard_id,
+                file_bytes=file_bytes,
+                content_type=content_type,
+                original_filename=file.filename,
+            )
         
         # Record in database (just the URL, not the bytes!)
         mapper = StandardsMapper(db)
@@ -308,6 +304,12 @@ async def upload_evidence_file(
             message=f"Evidence uploaded to {file_url[:50]}... Proficiency: {mastery.proficiency.value}",
         )
         
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(status_code=413, detail=str(e)) from e
+    except RuntimeError as e:
+        await db.rollback()
+        raise HTTPException(status_code=503, detail=str(e)) from e
     except HTTPException:
         raise
     except Exception as e:

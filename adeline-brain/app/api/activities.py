@@ -11,6 +11,7 @@ lesson content. Adeline trusts the student and records what they did.
 POST /activities/report           — submit a home activity, receive credit
 GET  /activities/{student_id}     — list a student's credited activities
 """
+import asyncio
 import json
 import logging
 import os
@@ -26,7 +27,8 @@ from app.config import create_llm, GOOGLE_API_KEY, GEMINI_MODEL
 from app.schemas.api_models import Track
 from app.api.middleware import get_current_user_id, verify_student_access
 from app.connections.journal_store import journal_store
-from app.services.storage import upload_mastery_evidence
+from app.services.storage import evidence_upload_slot, get_evidence_url, read_upload_limited, upload_mastery_evidence
+from app.services.rate_limit import enforce_rate_limit
 from contextlib import asynccontextmanager
 
 logger = logging.getLogger(__name__)
@@ -550,6 +552,7 @@ async def report_activity(
     No Witness Protocol — this is student-reported real-world activity.
     Adeline trusts it and records it.
     """
+    await enforce_rate_limit("activity-report", student_id, limit=12)
     logger.info(
         f"[/activities/report] student={student_id} "
         f"grade={body.grade_level} time={body.time_minutes or 'unspecified'}min"
@@ -729,17 +732,18 @@ async def upload_activity_evidence(
         if not owns_activity:
             raise HTTPException(status_code=404, detail="Activity not found")
 
-    file_bytes = await file.read()
-    if len(file_bytes) > 50 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File too large (50MB maximum)")
-
-    file_url = await upload_mastery_evidence(
-        student_id=student_id,
-        standard_id=activity_id,
-        file_bytes=file_bytes,
-        content_type=content_type,
-        original_filename=file.filename,
-    )
+    try:
+        async with evidence_upload_slot():
+            file_bytes = await read_upload_limited(file)
+            file_url = await upload_mastery_evidence(
+                student_id=student_id,
+                standard_id=activity_id,
+                file_bytes=file_bytes,
+                content_type=content_type,
+                original_filename=file.filename,
+            )
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=413 if isinstance(exc, ValueError) else 503, detail=str(exc)) from exc
 
     evidence_id = str(uuid.uuid4())
     async with _get_conn() as conn:
@@ -747,7 +751,11 @@ async def upload_activity_evidence(
             'INSERT INTO "ActivityEvidence" (id, "studentId", "activityId", "fileUrl", "contentType", description) VALUES ($1,$2,$3,$4,$5,$6)',
             evidence_id, student_id, activity_id, file_url, content_type, description or file.filename or "Project evidence",
         )
-    return {"evidence_id": evidence_id, "activity_id": activity_id, "file_url": file_url}
+    return {
+        "evidence_id": evidence_id,
+        "activity_id": activity_id,
+        "file_url": await get_evidence_url(file_url) or "",
+    }
 
 
 # ── GET /activities/{student_id} ──────────────────────────────────────────────
@@ -782,6 +790,10 @@ async def list_activities(
 
     entries = []
     for r in rows:
+        signed_evidence = await asyncio.gather(
+            *(get_evidence_url(value) for value in list(r["evidenceUrls"] or [])),
+            return_exceptions=True,
+        )
         entries.append(ActivityEntry(
             activity_id=str(r["lessonId"]),
             course_title=str(r["courseTitle"]),
@@ -791,7 +803,7 @@ async def list_activities(
             credit_type=str(r["creditType"]),
             activity_date=r["completedAt"].isoformat() if r["completedAt"] else "",
             sealed_at=r["sealedAt"].isoformat() if r["sealedAt"] else "",
-            evidence_urls=list(r["evidenceUrls"] or []),
+            evidence_urls=[value for value in signed_evidence if isinstance(value, str) and value],
         ))
 
     total_credits = sum(e.credit_hours for e in entries)

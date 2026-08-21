@@ -35,6 +35,7 @@ from app.models.student import load_student_state
 from app.connections.journal_store import journal_store
 from app.connections.curriculum_graph import curriculum_graph
 from app.connections.redis_client import redis_client
+from app.services.rate_limit import enforce_rate_limit
 from app.tools.graph_query import tool_get_zpd_candidates, ZPDCandidate
 from app.agents.curriculum_planner import personalized_curriculum_planner
 
@@ -1257,6 +1258,8 @@ async def get_learning_plan(
     """
     # ── Redis sliding-window cache check ─────────────────────────────────────────
     cache_key = _plan_cache_key(student_id)
+    if refresh:
+        await enforce_rate_limit("learning-plan-refresh", student_id, limit=4)
     if not refresh:
         try:
             cached = await redis_client.get(cache_key)

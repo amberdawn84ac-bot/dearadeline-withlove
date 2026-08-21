@@ -7,6 +7,8 @@ never become permission to import.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import os
 from datetime import datetime, timezone
 from dataclasses import asdict, dataclass, field
@@ -413,6 +415,17 @@ class ResourceRouter:
     ]
 
     async def search(self, query: ResourceQuery) -> dict[str, Any]:
+        cache_key = "resource-router:v2:" + hashlib.sha256(
+            json.dumps(asdict(query), sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        try:
+            from app.connections.redis_client import redis_client
+            cached = await redis_client.get(cache_key)
+            if cached:
+                return json.loads(cached)
+        except Exception:
+            pass
+
         async with httpx.AsyncClient(timeout=httpx.Timeout(6, connect=3), follow_redirects=True, headers={"User-Agent": "DearAdelineResourceRouter/1.0"}) as client:
             calls = [fn(query, client) for fn in (_loc, _smithsonian, _nasa, _inaturalist, _curated)]
             settled = await asyncio.gather(*calls, return_exceptions=True)
@@ -428,7 +441,13 @@ class ResourceRouter:
                 item.use_mode = "LINK"
             item.score = _score(item, query)
         resources.sort(key=lambda item: (-item.score, item.provider, item.title))
-        return {"query": asdict(query), "resources": [asdict(item) for item in resources[:query.limit]], "rules": self.rules, "provider_failures": failures}
+        packet = {"query": asdict(query), "resources": [asdict(item) for item in resources[:query.limit]], "rules": self.rules, "provider_failures": failures}
+        try:
+            from app.connections.redis_client import redis_client
+            await redis_client.set(cache_key, json.dumps(packet), ex=3600)
+        except Exception:
+            pass
+        return packet
 
 
 resource_router = ResourceRouter()

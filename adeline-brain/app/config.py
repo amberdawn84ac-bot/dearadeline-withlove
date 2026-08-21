@@ -6,6 +6,7 @@ In production (ADELINE_ENV=production), missing database credentials
 cause an immediate startup failure instead of silent fallback.
 """
 import hashlib as _hashlib
+import asyncio as _asyncio
 import logging
 import os
 
@@ -91,7 +92,7 @@ LEARNLM_MODEL   = os.getenv("LEARNLM_MODEL",   "gemini-2.5-flash")
 #   "claude"  → ChatAnthropic           (uses ANTHROPIC_API_KEY)
 #   "gpt"     → ChatOpenAI              (uses OPENAI_API_KEY)
 
-ADELINE_MODEL   = os.getenv("ADELINE_MODEL", "claude-3-5-sonnet-20241022")
+ADELINE_MODEL   = os.getenv("ADELINE_MODEL", "gemini-2.5-flash")
 GOOGLE_API_KEY  = os.getenv("GOOGLE_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
@@ -178,13 +179,92 @@ INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "dev-internal-key-not-for-produ
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000")
 
 
-# ── Shared DB connection helper ──────────────────────────────────────────────
+# ── Shared DB connection pool ────────────────────────────────────────────────
 
-async def get_db_conn():
-    """Get an asyncpg connection with SSL for Supabase pooler compatibility."""
-    import asyncpg
+DB_POOL_MIN_SIZE = max(1, int(os.getenv("DB_POOL_MIN_SIZE", "1")))
+DB_POOL_MAX_SIZE = max(DB_POOL_MIN_SIZE, int(os.getenv("DB_POOL_MAX_SIZE", "10")))
+DB_COMMAND_TIMEOUT_SECONDS = max(5, int(os.getenv("DB_COMMAND_TIMEOUT_SECONDS", "30")))
+
+_db_pool = None
+_db_pool_lock = None
+
+
+def _db_ssl_context():
     import ssl as _ssl
     ctx = _ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = _ssl.CERT_NONE
-    return await asyncpg.connect(POSTGRES_DSN, ssl=ctx, statement_cache_size=0)
+    # Temporary compatibility escape hatch for a private/self-signed database.
+    # Production defaults to full certificate and hostname verification.
+    if os.getenv("DB_SSL_INSECURE", "").lower() in {"1", "true", "yes"}:
+        ctx.check_hostname = False
+        ctx.verify_mode = _ssl.CERT_NONE
+    return ctx
+
+
+class _PooledConnection:
+    """Connection proxy whose existing ``close()`` calls safely release to the pool."""
+
+    def __init__(self, pool, connection):
+        self._pool = pool
+        self._connection = connection
+        self._released = False
+
+    def __getattr__(self, name):
+        return getattr(self._connection, name)
+
+    async def close(self):
+        if not self._released:
+            self._released = True
+            await self._pool.release(self._connection)
+
+
+async def init_db_pool():
+    """Initialize the process-wide asyncpg pool once."""
+    global _db_pool, _db_pool_lock
+    if _db_pool is not None:
+        return _db_pool
+    if _db_pool_lock is None:
+        _db_pool_lock = _asyncio.Lock()
+    async with _db_pool_lock:
+        if _db_pool is None:
+            import asyncpg
+            _db_pool = await asyncpg.create_pool(
+                POSTGRES_DSN,
+                ssl=_db_ssl_context(),
+                statement_cache_size=0,
+                min_size=DB_POOL_MIN_SIZE,
+                max_size=DB_POOL_MAX_SIZE,
+                command_timeout=DB_COMMAND_TIMEOUT_SECONDS,
+                max_inactive_connection_lifetime=300,
+            )
+            logger.info(
+                "[Database] Connection pool ready (min=%s max=%s)",
+                DB_POOL_MIN_SIZE,
+                DB_POOL_MAX_SIZE,
+            )
+    return _db_pool
+
+
+async def get_db_conn():
+    """Acquire a pooled connection; callers release it with their existing ``close()``."""
+    pool = await init_db_pool()
+    connection = await pool.acquire(timeout=DB_COMMAND_TIMEOUT_SECONDS)
+    return _PooledConnection(pool, connection)
+
+
+async def close_db_pool():
+    global _db_pool
+    if _db_pool is not None:
+        await _db_pool.close()
+        _db_pool = None
+
+
+def db_pool_status() -> dict:
+    if _db_pool is None:
+        return {"initialized": False}
+    return {
+        "initialized": True,
+        "size": _db_pool.get_size(),
+        "idle": _db_pool.get_idle_size(),
+        "min": _db_pool.get_min_size(),
+        "max": _db_pool.get_max_size(),
+    }
