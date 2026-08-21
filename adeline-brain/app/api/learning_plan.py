@@ -92,7 +92,6 @@ class LessonSuggestion(BaseModel):
     portfolio_prompt: Optional[str] = None
     next_action: Optional[str] = None
     personalization_reason: Optional[str] = None
-    game_blueprint: Optional[dict] = None
 
 
 class ProjectSuggestion(BaseModel):

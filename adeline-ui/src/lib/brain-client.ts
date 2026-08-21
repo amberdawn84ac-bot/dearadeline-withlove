@@ -1032,45 +1032,6 @@ export interface LessonSuggestion {
   portfolio_prompt?: string;
   next_action?: string;
   personalization_reason?: string;
-  game_blueprint?: GameBlueprint;
-}
-
-export interface GameBlueprint {
-  template: "maze_quest" | "investigation_adventure" | "journey_simulation" | "systems_builder" | "market_simulation";
-  title: string;
-  learning_objective: string;
-  content_source: { type: "canonical_lesson"; slug: string };
-  grade_level: string;
-  play_time_minutes: number;
-  rules: string[];
-  win_condition: string;
-  runtime: "declarative_only";
-}
-
-export interface PlayableGame extends GameBlueprint {
-  canonical_ready: boolean;
-  interactive: {
-    mechanic: "top_down_2d";
-    game_kind: GameBlueprint["template"];
-    scenario: string;
-    world: { width: number; height: number; theme: string };
-    player: { x: number; y: number; sprite: string };
-    goal: { x: number; y: number; label: string };
-    obstacles: Array<{ x: number; y: number; sprite: string }>;
-    objects: Array<{ id: string; x: number; y: number; sprite: string; label: string; effect: string; value: number }>;
-    required_objects: number;
-    success_message: string;
-  };
-}
-
-export async function buildGame(input: { student_id: string; topic: string; track: Track; grade_level: string }): Promise<PlayableGame> {
-  const res = await fetch(`${BRAIN_URL}/games/build`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
-    body: JSON.stringify(input),
-  });
-  if (!res.ok) throw new Error(`Failed to build game: ${res.status}`);
-  return res.json();
 }
 
 export interface ProjectSuggestion {

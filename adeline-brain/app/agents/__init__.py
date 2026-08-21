@@ -2,7 +2,6 @@
 
 from app.agents.mission_team import (
     CurriculumLibrarianAgent,
-    GameSmithAgent,
     MissionArchitectAgent,
     PortfolioCuratorAgent,
     mission_architect,
@@ -11,7 +10,6 @@ from app.agents.resource_intelligence import ResourceIntelligenceAgent, resource
 
 __all__ = [
     "CurriculumLibrarianAgent",
-    "GameSmithAgent",
     "MissionArchitectAgent",
     "PortfolioCuratorAgent",
     "ResourceIntelligenceAgent",

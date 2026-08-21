@@ -59,7 +59,6 @@ from app.api.conversation import router as conversation_router
 from app.api.learning_path import router as learning_path_router
 from app.api.lesson_stream import router as lesson_stream_router
 from app.api.standards import router as standards_router
-from app.api.games import router as games_router
 from app.api.agent_team import router as agent_team_router
 from app.api.resources import router as resources_router
 from app.connections.journal_store import journal_store
@@ -209,7 +208,6 @@ app.include_router(admin_router)
 app.include_router(learning_plan_router)
 app.include_router(genui_router)
 app.include_router(standards_router)
-app.include_router(games_router)
 app.include_router(agent_team_router)
 app.include_router(resources_router)
 # ── /brain/* prefix mounts (Vercel proxy: /brain/:path* → Railway /:path*) ──
@@ -242,7 +240,6 @@ app.include_router(realtime_router, prefix="/brain")
 app.include_router(conversation_router, prefix="/brain")
 app.include_router(learning_path_router, prefix="/brain")
 app.include_router(standards_router, prefix="/brain")
-app.include_router(games_router, prefix="/brain")
 app.include_router(agent_team_router, prefix="/brain")
 app.include_router(resources_router, prefix="/brain")
 app.include_router(focus_router, prefix="/brain")

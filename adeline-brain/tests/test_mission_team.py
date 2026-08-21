@@ -2,7 +2,6 @@ import pytest
 
 from app.agents.mission_team import (
     CurriculumAvailability,
-    GameSmithAgent,
     MissionArchitectAgent,
     PortfolioCuratorAgent,
 )
@@ -57,28 +56,6 @@ def test_mission_architect_owns_priority_and_track_variety():
     ]
     chosen = agent.select_balanced(candidates, 3)
     assert [item.id for item in chosen] == ["math-1", "math-2", "history"]
-
-
-def test_gamesmith_uses_constrained_declarative_blueprints():
-    game = GameSmithAgent().blueprint_for(suggestion(), "canonical-slug", "8")
-    assert game["template"] == "maze_quest"
-    assert game["content_source"] == {"type": "canonical_lesson", "slug": "canonical-slug"}
-    assert game["runtime"] == "declarative_only"
-    assert game["play_time_minutes"] == 6
-
-
-def test_gamesmith_fallback_is_a_playable_2d_level_grounded_in_canonical():
-    game = GameSmithAgent()._fallback_2d(
-        {"title": "Water Systems", "track": "CREATION_SCIENCE", "blocks": [
-            {"title": f"Concept {index}", "content": f"Canonical explanation {index}. More detail."}
-            for index in range(6)
-        ]},
-        "systems_builder",
-    )
-    assert game["mechanic"] == "top_down_2d"
-    assert len(game["objects"]) == 6
-    assert game["objects"][0]["effect"].startswith("Canonical explanation")
-    assert game["required_objects"] == 4
 
 
 @pytest.mark.asyncio

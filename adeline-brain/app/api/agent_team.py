@@ -18,7 +18,7 @@ async def agent_team_status():
             {"name": "Literature", "owns": ["ENGLISH_LITERATURE"]},
             {"name": "Practical", "owns": ["APPLIED_MATHEMATICS", "GOVERNMENT_ECONOMICS", "CREATIVE_ECONOMY"]},
             {"name": "Discipleship", "owns": ["DISCIPLESHIP"]},
-            {"name": "GameSmith", "owns": "canonical-grounded 2D game contract", "hands_off_to": "Game Portal runtime"},
+            {"name": "ResourceRouter", "owns": "approved outside games, simulations, and creation tools", "hands_off_to": "lesson experience and evidence record"},
             {"name": "PortfolioCurator", "owns": "learner-facing portfolio invitation", "hands_off_to": "portfolio and standards storage"},
             {"name": "Registrar", "owns": "alignment draft and completion-sealed credit", "awards_on_generation": False},
         ],

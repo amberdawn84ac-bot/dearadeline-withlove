@@ -192,7 +192,6 @@ class MissionArchitectAgent:
     def __init__(self) -> None:
         self.librarian = CurriculumLibrarianAgent()
         self.curator = PortfolioCuratorAgent()
-        self.gamesmith = GameSmithAgent()
         self.resource_intelligence = ResourceIntelligenceAgent()
 
     def select_balanced(self, candidates: list[Any], limit: int) -> list[Any]:
@@ -266,7 +265,6 @@ class MissionArchitectAgent:
                 else f"Chosen from your grade {grade_level} readiness, current mastery, and credit path."
             ),
             "resource_packet": resource_packet or {"topic": item.title, "track": item.track, "sources": [], "rules": []},
-            "game_blueprint": self.gamesmith.blueprint_for(item, availability.slug, grade_level),
         }
 
 

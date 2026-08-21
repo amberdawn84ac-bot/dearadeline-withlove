@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { getPlayerSession } from "../lib/player-session";
 import InvestigationGame from "./InvestigationGame";
 
 type Command = "forward" | "left" | "right";
@@ -17,8 +16,6 @@ const worldLevels: Record<string, { title: string; brief: string; player: string
 
 const defaultLevel = { title: "Town Quest", brief: "Explore the district, collect the six tools that matter, and bring them to the destination.", player: "🧑‍🚀", goal: "✨", objects: ["Tool", "Clue", "Plan", "Material", "Record", "Key"].map((label, i) => ({ id: label, x: [2,4,7,9,3,8][i], y: [6,2,6,3,1,1][i], sprite: ["🔧","🔎","📐","🧱","📓","🗝️"][i], label, effect: `${label} helps complete the mission.` })) };
 const worldObstacles = new Set(["5,0","5,1","5,2","5,4","5,5","5,6","1,3","2,3","8,4","9,4","10,4"]);
-const trackByBuilding: Record<string, string> = { justice: "JUSTICE_CHANGEMAKING", greenhouse: "HOMESTEADING", maker: "APPLIED_MATHEMATICS", library: "ENGLISH_LITERATURE", observatory: "CREATION_SCIENCE", civic: "GOVERNMENT_ECONOMICS", wellness: "HEALTH_NATUROPATHY", market: "CREATIVE_ECONOMY", history: "TRUTH_HISTORY" };
-const gameSprite: Record<string, string> = { scroll: "📜", journal: "📔", tool: "🔧", map: "🗺️", lantern: "🏮", key: "🗝️", explorer: "🧭" };
 
 const buildings = [
   {
@@ -132,7 +129,6 @@ export default function GamePortal() {
   const [worldPlayer, setWorldPlayer] = useState({ x: 0, y: 7 });
   const [collected, setCollected] = useState<string[]>([]);
   const [worldMessage, setWorldMessage] = useState("Use the arrow keys or controls to explore.");
-  const [generatedLevel, setGeneratedLevel] = useState<(typeof defaultLevel) | null>(null);
   const [commands, setCommands] = useState<Command[]>([]);
   const [robot, setRobot] = useState<Robot>({ x: 0, y: 4, direction: 0 });
   const [runState, setRunState] = useState<"ready" | "running" | "success" | "failed">("ready");
@@ -182,42 +178,13 @@ export default function GamePortal() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [labOpen, worldOpen, investigationOpen]);
 
-  const level = generatedLevel || worldLevels[selected.id] || defaultLevel;
+  const level = worldLevels[selected.id] || defaultLevel;
 
-  async function openWorld() {
-    const authored = worldLevels[selected.id] || defaultLevel;
-    setGeneratedLevel(null);
+  function openWorld() {
     setWorldPlayer({ x: 0, y: 7 });
     setCollected([]);
     setWorldMessage("Find the six useful objects, then reach the glowing destination.");
     setWorldOpen(true);
-    const session = getPlayerSession();
-    const track = trackByBuilding[selected.id];
-    if (!session || !track) return;
-    try {
-      const response = await fetch("/api/brain/brain/games/build", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` },
-        body: JSON.stringify({ student_id: session.studentId, topic: selected.name, track, grade_level: String(session.player.grade_level || 8) }),
-      });
-      if (!response.ok) return;
-      const payload = await response.json() as { interactive?: Record<string, unknown> };
-      const game = payload.interactive;
-      const objects = Array.isArray(game?.objects) ? game.objects as Record<string, unknown>[] : [];
-      if (game?.mechanic !== "top_down_2d" || objects.length !== 6) return;
-      setGeneratedLevel({
-        title: typeof game.scenario === "string" ? selected.name : authored.title,
-        brief: typeof game.scenario === "string" ? game.scenario : authored.brief,
-        player: "🧭",
-        goal: "✨",
-        objects: objects.map((item, index) => ({
-          id: String(item.id || `object-${index}`), x: Number(item.x), y: Number(item.y),
-          sprite: gameSprite[String(item.sprite)] || authored.objects[index]?.sprite || "✦",
-          label: String(item.label || `Discovery ${index + 1}`), effect: String(item.effect || "This unlocks another part of the lesson."),
-        })),
-      });
-      setWorldMessage("GameSmith loaded this level from the saved lesson.");
-    } catch { /* Authored level remains immediately playable. */ }
   }
 
   function moveInWorld(dx: number, dy: number) {

@@ -15,7 +15,7 @@ identity-to-record journey. A page rendering is not end-to-end verification.
 | One canonical experience pipeline | In progress | No hard-coded lesson route, repository lesson, chat shortcut, or legacy generator may bypass the approved canonical store and adapter. |
 | Experience-first learner presentation | In progress | Every experience has a meaningful invitation, action/creation, and reviewable demonstration; narrative is never the default container. |
 | Resource Router with rights-aware use | Partial | Provider result includes item URL, rights, attribution, access mode, age/type match, and availability; unknown rights means link only. |
-| Real games tied to curriculum | Prototype | Game mechanics and completion evidence derive from the canonical experience; quizzes are not the game loop. |
+| Outside games and game-building tools tied to curriculum | Partial | The Resource Router selects an approved playable game or builder, preserves provider terms, and brings the resulting work back as learner-owned evidence. Dear Adeline does not synthesize a replacement game. |
 | Evidence-based mastery | In progress | Reflection records exposure; artifacts, scored demonstrations, or reviewed observations advance proficiency. |
 | Traceable credit and graduation records | Partial | Credit points to evaluated evidence and cannot be sealed by generation, elapsed time, keywords, or a completion click. |
 | Portfolio of accomplishments | Partial | Artifact is retrievable, owned by the learner, linked to concepts and any resulting credit, and visible to the parent. |

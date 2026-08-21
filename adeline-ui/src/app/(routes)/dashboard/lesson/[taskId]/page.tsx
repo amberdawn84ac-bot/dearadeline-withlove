@@ -94,7 +94,7 @@ export default function CanonicalLessonPage() {
 
       {status && <p className="rounded-2xl border border-[#E7DAC3] bg-[#FDF6E9] p-5 text-sm italic text-[#2F4731]/70" role="status">{status}</p>}
       {error && <div className="rounded-2xl bg-red-50 p-5 text-sm text-red-700" role="alert"><p>{error}</p><Link href="/dashboard" className="mt-3 inline-flex font-bold underline">Return to today</Link></div>}
-      {lesson && <FamilyCanonicalLesson lesson={lesson} studentId={student.id} gradeLevel={student.gradeLevel} />}
+      {lesson && <FamilyCanonicalLesson lesson={lesson} studentId={student.id} />}
     </div>
   );
 }
