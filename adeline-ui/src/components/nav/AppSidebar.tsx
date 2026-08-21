@@ -9,7 +9,6 @@ import styles from './sites-dashboard.module.css';
 
 const NAV_ITEMS = [
   ['☀', 'Today', '/dashboard'],
-  ['✦', 'Learning Plan', '/dashboard/journey'],
   ['⚒', 'Project Workshop', '/dashboard/projects'],
   ['▧', 'Portfolio', '/dashboard/portfolio'],
   ['▤', 'Reading Nook', '/dashboard/reading-nook'],

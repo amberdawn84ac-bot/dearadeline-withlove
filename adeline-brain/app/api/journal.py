@@ -93,9 +93,9 @@ async def seal_journal(
 
     # Record standards mastery in the same Postgres transaction system.
     if body.oas_standards:
-        asyncio.create_task(
-            _record_mastery_safe(student_id, body.track.value, body.oas_standards)
-        )
+        # Await this write so the parent Learning Map is correct immediately
+        # after the learner saves the experience.
+        await _record_mastery_safe(student_id, body.track.value, body.oas_standards)
 
     # Fire-and-forget BKT + SM-2 card update with quiz-derived quality signal
     asyncio.create_task(
@@ -126,6 +126,14 @@ async def seal_journal(
         except Exception as exc:
             logger.exception("[/journal/seal] Transcript credit seal failed")
             raise HTTPException(status_code=500, detail=f"Journal saved but transcript credit failed: {exc}")
+
+    # Completion changes both mastery coverage and the next-best experience.
+    # Invalidate the whole adaptive plan even when the lesson earns no credit.
+    try:
+        from app.api.learning_plan import pop_completed_lesson
+        await pop_completed_lesson(student_id, body.lesson_id)
+    except Exception as exc:
+        logger.warning("Learning plan invalidation failed after journal seal: %s", exc)
 
     return SealResponse(
         sealed=True,

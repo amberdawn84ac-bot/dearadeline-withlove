@@ -64,7 +64,7 @@ export default function TodayPage() {
   return (
     <div className={styles.todayWorkspace}>
       <header className={styles.todayTitle}>
-        <p>{isNextSchoolDay ? 'Your next school day' : 'Zoomed in from My Learning Plan'}</p>
+        <p>{isNextSchoolDay ? 'Your next school day' : 'Ready when you are'}</p>
         <h1>{isNextSchoolDay ? 'Coming up next' : 'Today'}</h1>
         <span>{weekTheme} · {sharedWithSiblings ? 'Shared family investigation; your work and credits are individual.' : 'This view changes whenever the living learning plan changes.'}</span>
       </header>
@@ -101,7 +101,7 @@ export default function TodayPage() {
           {!finished.length && <EmptyCard text="Completed lessons appear here after evidence is recorded." />}
         </div>
       </section>
-      <p className={styles.planFootnote}><Link href="/dashboard/journey">See the month and year around today →</Link></p>
+      <p className={styles.planFootnote}><Link href="/dashboard/portfolio">See what you have made and learned →</Link></p>
     </div>
   );
 }

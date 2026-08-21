@@ -82,7 +82,6 @@ export default function CanonicalLessonPage() {
     <div className="pb-16">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <Link href="/dashboard" className="text-sm font-bold text-[#2F4731]">← Back to today</Link>
-        <Link href="/dashboard/journey" className="text-sm font-bold text-[#BD6809]">View the full learning plan</Link>
       </div>
 
       {task && !lesson && (
@@ -94,7 +93,7 @@ export default function CanonicalLessonPage() {
       )}
 
       {status && <p className="rounded-2xl border border-[#E7DAC3] bg-[#FDF6E9] p-5 text-sm italic text-[#2F4731]/70" role="status">{status}</p>}
-      {error && <div className="rounded-2xl bg-red-50 p-5 text-sm text-red-700" role="alert"><p>{error}</p><Link href="/dashboard/journey" className="mt-3 inline-flex font-bold underline">Return to the learning plan</Link></div>}
+      {error && <div className="rounded-2xl bg-red-50 p-5 text-sm text-red-700" role="alert"><p>{error}</p><Link href="/dashboard" className="mt-3 inline-flex font-bold underline">Return to today</Link></div>}
       {lesson && <FamilyCanonicalLesson lesson={lesson} studentId={student.id} />}
     </div>
   );

@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Loader2, Users, BookOpen, Trophy, Plus, TrendingUp, GraduationCap, ExternalLink, LibraryBig } from 'lucide-react';
+import { Loader2, Users, BookOpen, Trophy, Plus, TrendingUp, GraduationCap, ExternalLink, LibraryBig, CheckCircle2, CircleDashed } from 'lucide-react';
 import { getFamilyDashboard, listStudents, addStudent, type FamilyDashboard, type StudentSummary } from '@/lib/parent-client';
-import { getLearningPlan, type LearningPlanResponse, type BookRecommendation, type LessonSuggestion } from '@/lib/brain-client';
+import { getLearningPlan, type LearningPlanResponse } from '@/lib/brain-client';
 import { AddStudentDialog } from '@/components/parent/AddStudentDialog';
 import { ClaimStudentDialog } from '@/components/parent/ClaimStudentDialog';
 import { FamilyProgressGrid } from '@/components/parent/FamilyProgressGrid';
@@ -260,6 +260,51 @@ export default function ParentDashboardPage() {
                         Transcript &amp; graduation <ExternalLink className="h-4 w-4" />
                       </Link>
                     </div>
+
+                    {/* Parent-only concept map. Children see experiences, not standards. */}
+                    <section className="rounded-2xl border-2 border-[#E7DAC3] bg-white p-5 sm:p-6">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Parent learning map</p>
+                          <h3 className="mt-1 text-2xl font-bold text-[#2F4731]" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>
+                            What has been learned - and what remains
+                          </h3>
+                          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#2F4731]/65">
+                            Adeline uses this private checklist to choose experiences, games, books, projects, and review. The child never has to march through this list.
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-left sm:text-right">
+                          <p className="text-3xl font-black text-[#2F4731]">
+                            {studentPlan.coverage.mastered}<span className="text-lg text-[#2F4731]/40"> / {studentPlan.coverage.total_required}</span>
+                          </p>
+                          <p className="text-xs font-bold text-[#2F4731]/55">concepts demonstrated</p>
+                        </div>
+                      </div>
+                      <div className="mt-5 h-3 overflow-hidden rounded-full bg-[#E7DAC3]">
+                        <div className="h-full rounded-full bg-[#4F7A58] transition-all" style={{ width: `${studentPlan.coverage.total_required ? Math.round((studentPlan.coverage.mastered / studentPlan.coverage.total_required) * 100) : 0}%` }} />
+                      </div>
+                      {studentPlan.grade_standards.length ? (
+                        <div className="mt-6 space-y-3">
+                          {Array.from(new Set(studentPlan.grade_standards.map((standard) => standard.subject))).sort().map((subject) => {
+                            const concepts = studentPlan.grade_standards.filter((standard) => standard.subject === subject);
+                            const mastered = concepts.filter((standard) => standard.mastered).length;
+                            return <details key={subject} className="group rounded-xl border border-[#E7DAC3] bg-[#FFFEF9] open:bg-white">
+                              <summary className="flex cursor-pointer list-none items-center gap-3 p-4">
+                                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#2F4731]/10 text-sm font-black text-[#2F4731]">{mastered}/{concepts.length}</span>
+                                <div className="min-w-0 flex-1"><p className="font-bold text-[#2F4731]">{subject}</p><p className="text-xs text-[#2F4731]/55">{concepts.length - mastered} still to demonstrate</p></div>
+                                <span className="text-sm font-bold text-[#BD6809] group-open:hidden">See concepts</span><span className="hidden text-sm font-bold text-[#BD6809] group-open:inline">Hide</span>
+                              </summary>
+                              <div className="border-t border-[#E7DAC3] px-4 py-2">
+                                {concepts.map((concept) => <div key={concept.standard_id} className="flex gap-3 border-b border-[#E7DAC3]/70 py-3 last:border-0">
+                                  {concept.mastered ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#4F7A58]" aria-label="Demonstrated" /> : <CircleDashed className="mt-0.5 h-5 w-5 shrink-0 text-[#BD6809]" aria-label="Still learning" />}
+                                  <div><p className={`text-sm leading-5 ${concept.mastered ? 'text-[#2F4731]/60' : 'font-semibold text-[#2F4731]'}`}>{concept.description}</p><p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-[#2F4731]/40">{concept.mastered ? 'Demonstrated with evidence' : 'Still available for a future experience'}</p></div>
+                                </div>)}
+                              </div>
+                            </details>;
+                          })}
+                        </div>
+                      ) : <p className="mt-5 rounded-xl bg-[#FFF8EC] p-4 text-sm text-[#2F4731]/65">Adeline has not loaded this student&rsquo;s grade-level concept records yet. Placement evidence will establish the working grade before the checklist is used.</p>}
+                    </section>
 
                     {/* Recommended Lessons */}
                     {studentPlan.suggestions.length > 0 && (

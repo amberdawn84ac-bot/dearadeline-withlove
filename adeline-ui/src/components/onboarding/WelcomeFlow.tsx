@@ -281,10 +281,11 @@ export function WelcomeFlow({ onComplete, isSubmitting = false }: WelcomeFlowPro
             </div>
           )}
 
-          {/* Step 3: Graduation Plan */}
+          {/* Step 3: private coverage setup */}
           {step === 3 && (
             <div className="space-y-4">
-              <h2 className="text-2xl font-bold text-[#2F4731]">Create Your Learning Plan</h2>
+              <h2 className="text-2xl font-bold text-[#2F4731]">Help Adeline Track What Matters</h2>
+              <p className="text-sm leading-6 text-[#2F4731]/65">This helps Adeline quietly track required concepts and graduation needs while your learner sees meaningful experiences instead of a syllabus.</p>
 
               {/* State */}
               <div>
