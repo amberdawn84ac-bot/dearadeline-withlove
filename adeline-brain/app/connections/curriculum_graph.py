@@ -293,6 +293,21 @@ class CurriculumGraph:
             })
             return [dict(row) for row in result.mappings().all()]
 
+    async def get_standards_by_codes(self, codes: list[str]) -> list[dict]:
+        """Return complete teaching context for planner-assigned standards."""
+        if not codes:
+            return []
+        async with _get_session_factory()() as session:
+            result = await session.execute(text('''
+                SELECT code AS standard_id, description AS text, grade, subject,
+                       strand, track::text AS track, "lessonHook" AS lesson_hook,
+                       'required_plan' AS source_type
+                FROM "OASStandard"
+                WHERE code = ANY(:codes)
+                ORDER BY subject, strand, code
+            '''), {"codes": codes})
+            return [dict(row) for row in result.mappings().all()]
+
     async def get_next_standards(self, standard_id: str, student_id: str, limit: int = 5) -> list[dict]:
         async with _get_session_factory()() as session:
             result = await session.execute(text('''

@@ -389,10 +389,8 @@ class ResourceRouter:
 resource_router = ResourceRouter()
 
 
-async def resource_block_for_lesson(topic: str, track: str, grade_level: str) -> dict[str, Any] | None:
+def resource_block_from_packet(packet: dict[str, Any]) -> dict[str, Any] | None:
     from app.curriculum.family_style import CANONICAL_FORMAT_VERSION
-
-    packet = await resource_router.search(ResourceQuery(topic=topic, track=track, grade_level=grade_level, limit=4))
     resources = packet["resources"]
     if not resources:
         return None
@@ -409,3 +407,14 @@ async def resource_block_for_lesson(topic: str, track: str, grade_level: str) ->
             "high_school": "evaluate evidence, model, design, build, or critique limitations",
         },
     }
+
+
+async def resource_block_for_lesson(
+    topic: str, track: str, grade_level: str, objective: str = "",
+    resource_types: tuple[str, ...] = (),
+) -> dict[str, Any] | None:
+    packet = await resource_router.search(ResourceQuery(
+        topic=topic, track=track, grade_level=grade_level, objective=objective,
+        resource_types=resource_types, limit=4,
+    ))
+    return resource_block_from_packet(packet)

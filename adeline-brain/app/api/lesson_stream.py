@@ -449,7 +449,12 @@ async def _stream_lesson(
 
     # ── Phase 1: Canonical check ──────────────────────────────────────────────
     yield _sse({"type": "status", "message": "Checking curated lesson library..."})
-    slug = canonical_slug(request.topic, request.track.value)
+    # A canonical is reusable only when its grade and required curriculum match.
+    # The child sees the clean topic; the internal key prevents a cached lesson
+    # from satisfying a different student's assignment on paper only.
+    standards_scope = ",".join(sorted(set(request.required_standard_codes))) or "theme"
+    canonical_scope = f"{request.topic}|grade:{request.grade_level}|standards:{standards_scope}"
+    slug = canonical_slug(canonical_scope, request.track.value)
     logger.info(f"[LessonStream] topic='{request.topic}' track={request.track.value} force_regenerate={request.force_regenerate} slug={slug}")
 
     if request.force_regenerate:
@@ -611,15 +616,50 @@ async def _stream_lesson(
     # components the student has already seen frequently
     profiler_components = getattr(adaptation_req, "_preferred_components", [])
 
+    try:
+        required_standards = await curriculum_graph.get_standards_by_codes(
+            request.required_standard_codes,
+        )
+    except Exception as e:
+        logger.warning(f"[LessonStream] Required curriculum context failed (non-fatal): {e}")
+        required_standards = [
+            {"standard_id": code, "source_type": "required_plan"}
+            for code in request.required_standard_codes
+        ]
+
+    resource_packet = {"resources": [], "rules": []}
+    try:
+        from app.services.resource_router import ResourceQuery, resource_router
+        activity_types: tuple[str, ...] = ()
+        topic_lower = request.topic.lower()
+        if "experiment or game" in topic_lower:
+            activity_types = ("GAME", "SIMULATION", "GAME_BUILDER")
+        elif "question hunt" in topic_lower:
+            activity_types = ("PRIMARY_SOURCE", "ARTIFACT_3D", "READING")
+        elif "make, map, or solve" in topic_lower:
+            activity_types = ("GAME_BUILDER", "DATASET", "SIMULATION")
+        objective = " ".join(
+            item.get("text", "") for item in required_standards if item.get("text")
+        )
+        resource_packet = await resource_router.search(ResourceQuery(
+            topic=request.topic, track=request.track.value,
+            grade_level=request.grade_level, objective=objective,
+            resource_types=activity_types, limit=4,
+        ))
+    except Exception as e:
+        logger.warning(f"[LessonStream] Pre-authoring resource route failed (non-fatal): {e}")
+
+    request = request.model_copy(update={
+        "required_standard_context": required_standards,
+        "routed_resource_context": resource_packet.get("resources", []),
+    })
+
     state: AdelineState = {
         "request":               request,
         "lesson_id":             lesson_id,
         "query_embedding":       query_embedding,
         "blocks":                [],
-        "oas_standards":         [
-            {"standard_id": code, "source_type": "required_plan"}
-            for code in request.required_standard_codes
-        ],
+        "oas_standards":         required_standards,
         "has_research_missions": False,
         "researcher_activated":  False,
         "agent_name":            "",
@@ -634,6 +674,7 @@ async def _stream_lesson(
         "recent_struggle_count": recent_struggle_count,
         "recently_used_components": recently_used_components,
         "profiler_components":   profiler_components,
+        "outside_resources":     resource_packet.get("resources", []),
     }
 
     route = _route(state)
@@ -687,10 +728,8 @@ async def _stream_lesson(
     # Add provider results only to this adapted learner view. canonical_blocks
     # above remains the clean, permanent teaching source.
     try:
-        from app.services.resource_router import resource_block_for_lesson
-        resource_block = await resource_block_for_lesson(
-            request.topic, request.track.value, request.grade_level,
-        )
+        from app.services.resource_router import resource_block_from_packet
+        resource_block = resource_block_from_packet(resource_packet)
         if resource_block:
             state["blocks"].append(resource_block)
     except Exception as e:

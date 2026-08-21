@@ -213,6 +213,9 @@ class LessonRequest(BaseModel):
     grade_level: str
     force_regenerate: bool = False  # Bypass canonical cache and regenerate fresh lesson content
     required_standard_codes: list[str] = Field(default_factory=list)
+    # Hydrated server-side by the planner/router before specialist generation.
+    required_standard_context: list[dict] = Field(default_factory=list)
+    routed_resource_context: list[dict] = Field(default_factory=list)
 
 class LessonBlockResponse(BaseModel):
     block_id:         str = Field(default_factory=lambda: str(uuid.uuid4()))

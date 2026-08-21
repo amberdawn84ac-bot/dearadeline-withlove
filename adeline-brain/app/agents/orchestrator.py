@@ -373,6 +373,21 @@ SCRIPTURE RULES (non-negotiable):
 """
 
 
+def _request_planning_context(request: LessonRequest) -> str:
+    standards = "\n".join(
+        f"- {item.get('text', item.get('standard_id', ''))}"
+        for item in request.required_standard_context
+    ) or "- No additional assigned concept."
+    resources = "\n".join(
+        f"- {item.get('provider')}: {item.get('title')} — {item.get('description', '')} ({item.get('source_url', '')})"
+        for item in request.routed_resource_context[:2]
+    ) or "- Use the family's real materials and surroundings."
+    return (
+        "REQUIRED CURRICULUM (teach it; never print internal codes):\n"
+        f"{standards}\n\nROUTED EXPERIENCE (make the best fit central, not decorative):\n{resources}"
+    )
+
+
 async def _synthesize_content(
     request: LessonRequest,
     block_type: str,
@@ -448,6 +463,7 @@ async def _synthesize_content(
         f"Topic: {request.topic}\n"
         f"Track: {track_name}\n"
         f"Block type: {block_label}\n\n"
+        f"{_request_planning_context(request)}\n\n"
         f"Source(s):\n{sources_text}\n\n"
         f"Write the {block_label} content in Adeline's voice. "
         f"Ground every claim in the source. Make it land."
@@ -524,6 +540,7 @@ class AdelineState(TypedDict):
     recent_struggle_count: int  # Consecutive wrong attempts in this session
     recently_used_components: list[str]  # Component IDs used recently to avoid repetition
     profiler_components: list[str]  # Top components from learner_profiler decision tree
+    outside_resources: list[dict]
 
 
 # ── Postgres curriculum relationships (multi-hop) ────────────────────────────
@@ -2200,6 +2217,7 @@ async def _synthesize_practical(request: LessonRequest) -> str:
     user_prompt = (
         f"Topic: {request.topic}\n"
         f"Track: {request.track.value.replace('_', ' ').title()}\n\n"
+        f"{_request_planning_context(request)}\n\n"
         f"Write a practical lesson in Adeline's voice. Ground it in something real "
         f"the student can do this week."
     )

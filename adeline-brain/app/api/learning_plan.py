@@ -22,6 +22,7 @@ This is the heart of Adeline's adaptive curriculum — connecting:
 """
 import json
 import logging
+import re
 from typing import Optional
 from datetime import date, datetime, timedelta, timezone
 
@@ -35,6 +36,7 @@ from app.connections.journal_store import journal_store
 from app.connections.curriculum_graph import curriculum_graph
 from app.connections.redis_client import redis_client
 from app.tools.graph_query import tool_get_zpd_candidates, ZPDCandidate
+from app.agents.curriculum_planner import personalized_curriculum_planner
 
 # Graduation requirements (Oklahoma public school standards - 23 credits)
 GRADUATION_REQUIREMENTS = {
@@ -160,6 +162,7 @@ class RoadmapDay(BaseModel):
     emoji: str
     planning_status: str  # "ready" near-term; "forecast" farther out
     activity_kind: str
+    daily_rhythm: list[str] = Field(default_factory=list)
     # Planning handoff metadata. Student views deliberately never render these codes.
     standard_codes: list[str] = Field(default_factory=list)
 
@@ -612,19 +615,11 @@ def _build_academic_roadmap(
             seeds.append((f"roadmap-{track.lower()}-{index}", title, track, description, TRACK_EMOJI.get(track, "✦")))
     if not seeds:
         seeds = [("roadmap-discovery", "Family Discovery Lab", "CREATION_SCIENCE", "Observe, test, document, and explain one real phenomenon.", "🔬")]
+    seeds = personalized_curriculum_planner.balance_weekly_seeds(seeds)
 
     remaining = [standard for standard in standards if not standard.mastered]
-    # Every required concept receives an introduction and a later retrieval/review.
-    # Codes stay server-side; children see the investigation that teaches them.
-    assignments: list[list[str]] = [[] for _ in range(36 * 4)]
-    for index, standard in enumerate(remaining):
-        first_day = index % len(assignments)
-        review_day = (first_day + 16 + (index // len(assignments)) * 4) % len(assignments)
-        assignments[first_day].append(standard.standard_id)
-        if review_day != first_day:
-            assignments[review_day].append(standard.standard_id)
-
-    activity_kinds = ["investigate", "experiment or game", "make or map", "share and demonstrate"]
+    assignments = personalized_curriculum_planner.assign_sequence(standards)
+    activity_stages = personalized_curriculum_planner.ACTIVITY_STAGES
     weeks: list[RoadmapWeek] = []
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday"]
     for week_index in range(36):
@@ -633,19 +628,22 @@ def _build_academic_roadmap(
         seed_index = week_index % len(seeds)
         lesson_id, title, track, description, emoji = seeds[seed_index]
         for day_index, day_name in enumerate(day_names):
+            activity_title, activity_description = activity_stages[day_index]
             lesson_date = week_start + timedelta(days=day_index)
             days.append(RoadmapDay(
                 date=lesson_date.isoformat(), day=day_name,
-                lesson_id=f"{lesson_id}-w{week_index + 1}-d{day_index + 1}", title=title, track=track,
-                description=description, emoji=emoji,
+                lesson_id=f"{lesson_id}-w{week_index + 1}-d{day_index + 1}",
+                title=f"{title} — {activity_title}", track=track,
+                description=f"{activity_description} Weekly mission: {description}", emoji=emoji,
                 planning_status="ready" if week_index < 4 else "forecast",
-                activity_kind=activity_kinds[day_index],
+                activity_kind=activity_title,
+                daily_rhythm=list(personalized_curriculum_planner.DAILY_RHYTHM),
                 standard_codes=assignments[week_index * 4 + day_index],
             ))
         weeks.append(RoadmapWeek(
             week=week_index + 1,
             starts_on=week_start.isoformat(),
-            theme=days[0].title,
+            theme=title,
             days=days,
         ))
 
@@ -1058,7 +1056,7 @@ async def _get_available_projects(track: str = None, limit: int = 3) -> list[Pro
 # ── Redis sliding-window helpers ──────────────────────────────────────────────
 
 def _plan_cache_key(student_id: str) -> str:
-    return f"learning_plan:v4:{student_id}"
+    return f"learning_plan:v5:{student_id}"
 
 
 async def pop_completed_lesson(student_id: str, lesson_title: str) -> None:
