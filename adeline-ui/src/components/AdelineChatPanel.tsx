@@ -136,6 +136,7 @@ function ActivityCreditCard({ result }: { result: ActivityReportResponse }) {
 // ── Inline conversation block card ────────────────────────────────────────────
 
 const BLOCK_CONFIGS: Record<string, { icon: string; bg: string; border: string; color: string; label: string }> = {
+  RESOURCE_COLLECTION: { icon: "🎮", bg: "#F0FDF4", border: "#2F4731", color: "#2F4731", label: "Choose an experience" },
   PRIMARY_SOURCE:       { icon: "📜", bg: "#F0FDF4", border: "#166534",  color: "#166534",  label: "Primary Source" },
   LAB_MISSION:          { icon: "🧪", bg: "#FFF7ED", border: "#BD6809",  color: "#BD6809",  label: "Lab Mission" },
   LAB_GUIDE:            { icon: "📋", bg: "#FFF7ED", border: "#BD6809",  color: "#BD6809",  label: "Lab Guide" },
@@ -152,11 +153,14 @@ const BLOCK_CONFIGS: Record<string, { icon: string; bg: string; border: string; 
   NARRATIVE:            { icon: "📖", bg: "#FDF6E9", border: "#E7DAC3",  color: "#2F4731",  label: "Narrative" },
 };
 
-function ConversationBlockCard({ block }: { block: Record<string, unknown> }) {
+function ConversationBlockCard({ block, onReflect }: { block: Record<string, unknown>; onReflect?: (prompt: string) => void }) {
+  const [sharedResource, setSharedResource] = useState<string | null>(null);
   const blockType = (block.block_type as string) ?? "NARRATIVE";
   const c = BLOCK_CONFIGS[blockType] ?? BLOCK_CONFIGS.NARRATIVE;
   const title   = block.title   as string | undefined;
   const content = block.content as string | undefined;
+  const metadata = block.metadata as { resources?: Array<Record<string, unknown>> } | undefined;
+  const resources = metadata?.resources ?? [];
 
   return (
     <div
@@ -171,6 +175,42 @@ function ConversationBlockCard({ block }: { block: Record<string, unknown> }) {
       </div>
       {title   && <p className="text-xs font-semibold" style={{ color: c.color }}>{title}</p>}
       {content && <p className="text-sm leading-relaxed text-[#2F4731]">{content}</p>}
+      {blockType === "RESOURCE_COLLECTION" && resources.length > 0 && (
+        <div className="space-y-2 pt-2">
+          {resources.map((resource, index) => {
+            const url = (resource.editor_url || resource.embed_url || resource.source_url) as string | undefined;
+            const title = (resource.title as string) || `Resource ${index + 1}`;
+            const resourceId = (resource.id as string) || `${title}-${index}`;
+            async function shareWithFamily() {
+              if (!url) return;
+              const response = await fetch('/brain/family/feed', {
+                method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ kind: 'GAME', title, body: `Would anyone like to try this with me? ${String(resource.mastery_prompt || '')}`.trim(), resource_url: url }),
+              });
+              if (response.ok) setSharedResource(resourceId);
+            }
+            return (
+              <div key={resourceId} className="rounded-lg border border-[#2F4731]/15 bg-white p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-[#2F4731]">{title}</p>
+                    <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#BD6809]">{String(resource.provider || '')} · {String(resource.resource_type || '').replaceAll('_', ' ')}</p>
+                  </div>
+                  {url && <a href={url} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-lg bg-[#2F4731] px-3 py-2 text-xs font-bold text-white no-underline">Open</a>}
+                </div>
+                {resource.description && <p className="mt-2 text-xs leading-5 text-[#2F4731]/70">{String(resource.description)}</p>}
+                {resource.mastery_prompt && onReflect && (
+                  <div className="mt-2 flex flex-wrap gap-3">
+                    <button type="button" onClick={() => onReflect(`I worked with ${title}. Here is what I built, tested, decided, or learned: `)} className="text-xs font-bold text-[#2F4731] underline underline-offset-4">I finished—talk with Adeline</button>
+                    {url && <button type="button" onClick={() => void shareWithFamily()} className="text-xs font-bold text-[#BD6809] underline underline-offset-4">{sharedResource === resourceId ? 'Shared with family' : 'Invite my family'}</button>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <p className="text-[11px] text-[#2F4731]/60">Credit comes from what you can demonstrate or explain afterward—not from opening the link or time spent.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -507,7 +547,7 @@ export function AdelineChatPanel({
                           )}
                         </p>
                       ) : (
-                        <ConversationBlockCard key={i} block={seg.data} />
+                        <ConversationBlockCard key={i} block={seg.data} onReflect={(prompt) => { setInput(prompt); inputRef.current?.focus(); }} />
                       )
                     )
                   )}

@@ -11,6 +11,7 @@ for these tokens.
 """
 import json
 import logging
+import secrets
 import time
 import uuid
 
@@ -112,6 +113,24 @@ async def load_student_user(conn: asyncpg.Connection, user_id: str) -> StudentUs
         logger.error("Unexpected User JSON type for student %s: %s", user_id, type(profile_raw).__name__)
         return None
 
+    # Never let a parent Supabase session be projected as a learner profile.
+    if str(profile.get("role") or "").upper() != "STUDENT":
+        return None
+
+    # Transparently retire the old UUID-derived six-character credentials when
+    # an unlinked learner next signs in or opens their profile.
+    current_link_code = str(profile.get("linkCode") or "")
+    if not profile.get("parentId") and len(current_link_code) < 12:
+        replacement = secrets.token_hex(6).upper()
+        try:
+            await conn.execute(
+                'UPDATE "User" SET "linkCode" = $1, "updatedAt" = NOW() WHERE id = $2',
+                replacement, user_id,
+            )
+            profile["linkCode"] = replacement
+        except asyncpg.UniqueViolationError:
+            logger.warning("Link-code collision while upgrading student %s; retaining current code", user_id)
+
     avatar_raw = profile.get("avatarData")
     if isinstance(avatar_raw, dict):
         avatar_data = avatar_raw
@@ -179,7 +198,9 @@ async def _ensure_student_profiles_row(conn: asyncpg.Connection, user_id: str, n
 @limiter.limit("5/minute;30/hour")
 async def register_student_account(request: Request, body: StudentRegisterRequest):
     user_id = str(uuid.uuid4())
-    link_code = user_id.replace("-", "")[:6].upper()
+    # This is an invitation credential, not a display identifier.  Do not derive
+    # it from the student's UUID: that made old six-character codes guessable.
+    link_code = secrets.token_hex(6).upper()
     pin_hash = bcrypt.hashpw(body.pin.encode(), bcrypt.gensalt()).decode()
     placeholder_email = f"{body.username}@mobile.adelineworld.local"
 

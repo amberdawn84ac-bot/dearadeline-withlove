@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { SettingsForm } from '@/components/settings/SettingsForm';
+import { FamilyConnection } from '@/components/settings/FamilyConnection';
 
 interface UserProfile {
   id: string;
@@ -130,6 +131,7 @@ export default function SettingsPage() {
           <p className="text-[#2F4731]/60 mt-0.5 text-sm">Manage your learning preferences and profile</p>
         </header>
         <main className="px-6 py-8 max-w-5xl">
+          <div className="mb-6"><FamilyConnection /></div>
           <SettingsForm initialProfile={profile} />
         </main>
       </div>

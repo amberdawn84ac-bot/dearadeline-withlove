@@ -10,6 +10,7 @@ PATCH /api/parent/students/{id}     — Update student profile
 DELETE /api/parent/students/{id}    — Archive/remove student from family
 """
 import logging
+import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional, List
@@ -53,14 +54,16 @@ class AddStudentRequest(BaseModel):
     @field_validator('grade_level')
     @classmethod
     def validate_grade_level(cls, v: str) -> str:
-        """Validate grade level is 0-12."""
+        """Validate and normalize the canonical K-12 grade value."""
+        if v.strip().upper() in {"K", "0"}:
+            return "K"
         try:
             grade = int(v)
-            if not 0 <= grade <= 12:
-                raise ValueError('Grade level must be between 0 and 12')
+            if not 1 <= grade <= 12:
+                raise ValueError('Grade level must be Kindergarten through 12')
         except ValueError:
-            raise ValueError('Grade level must be a number between 0 and 12')
-        return v
+            raise ValueError('Grade level must be Kindergarten through 12')
+        return str(grade)
 
 
 class UpdateStudentRequest(BaseModel):
@@ -217,7 +220,7 @@ async def add_student(
         
         # Create new student
         student_id = str(uuid4())
-        link_code = student_id.replace("-", "")[:6].upper()
+        link_code = secrets.token_hex(6).upper()
         import bcrypt
         pin_hash = bcrypt.hashpw(payload.pin.encode(), bcrypt.gensalt()).decode()
         now = datetime.now(timezone.utc)

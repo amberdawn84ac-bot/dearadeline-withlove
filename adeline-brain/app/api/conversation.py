@@ -26,6 +26,7 @@ from app.algorithms.pedagogical_directives import get_mode_directives, get_quick
 from app.agents.pedagogy import detect_zpd_zone
 from app.agents.persona import SCRIPTURE_TRANSLATION_POLICY
 from app.models.student import load_student_state, MasteryBand
+from app.services.resource_router import ResourceQuery, resource_block_from_packet, resource_router
 from app.utils.stream_parser import parse_stream
 
 logger = logging.getLogger(__name__)
@@ -202,7 +203,45 @@ def _infer_tracks(message: str, explicit_track: Optional[str]) -> list[str]:
     """
     if explicit_track:
         return [explicit_track]
+    words = message.lower()
+    if any(term in words for term in ("code", "coding", "program", "game design", "makecode", "business", "sell")):
+        return ["CREATIVE_ECONOMY"]
+    if any(term in words for term in ("history", "war", "ancient", "primary source", "historical")):
+        return ["TRUTH_HISTORY"]
+    if any(term in words for term in ("government", "civics", "election", "economics", "law")):
+        return ["GOVERNMENT_ECONOMICS"]
+    if any(term in words for term in ("science", "chemistry", "physics", "biology", "energy", "circuit", "experiment")):
+        return ["CREATION_SCIENCE"]
+    if any(term in words for term in ("math", "algebra", "geometry", "fraction", "number")):
+        return ["APPLIED_MATHEMATICS"]
+    if any(term in words for term in ("book", "read", "writing", "literature", "poem")):
+        return ["ENGLISH_LITERATURE"]
     return ["DISCIPLESHIP"]
+
+
+def _wants_outside_resource(message: str) -> bool:
+    normalized = message.lower()
+    return any(term in normalized for term in (
+        "play a game", "find a game", "learning game", "learn coding", "learn to code",
+        "makecode", "arcade", "simulation", "interactive", "outside resource",
+        "find a video", "watch a video", "youtube channel", "find a source",
+        "primary source", "find an experiment", "real artifact", "museum object",
+    ))
+
+
+def _requested_resource_types(message: str) -> tuple[str, ...]:
+    normalized = message.lower()
+    if "video" in normalized or "youtube" in normalized:
+        return ("VIDEO",)
+    if any(term in normalized for term in ("coding", "code", "makecode", "arcade")):
+        return ("GAME_BUILDER", "GAME")
+    if any(term in normalized for term in ("simulation", "interactive")):
+        return ("SIMULATION", "GAME")
+    if any(term in normalized for term in ("primary source", "source", "artifact", "museum")):
+        return ("PRIMARY_SOURCE", "ARTIFACT_3D")
+    if "experiment" in normalized:
+        return ("EXPERIMENT", "SIMULATION")
+    return ("GAME", "GAME_BUILDER")
 
 
 async def _stream_llm(
@@ -269,6 +308,23 @@ async def _conversation_sse(
             "mastery_band": mastery_band.value,
         })
 
+        routed_resource_count = 0
+        if _wants_outside_resource(message):
+            try:
+                packet = await resource_router.search(ResourceQuery(
+                    topic=message,
+                    track=tracks[0],
+                    grade_level=grade_level,
+                    resource_types=_requested_resource_types(message),
+                    limit=4,
+                ))
+                resource_block = resource_block_from_packet(packet)
+                if resource_block:
+                    routed_resource_count = len(packet.get("resources", []))
+                    yield _sse("block", resource_block)
+            except Exception:
+                logger.exception("[/conversation/stream] Resource Router failed")
+
         system_prompt = _build_conversation_prompt(
             topic=message[:120],
             tracks=tracks,
@@ -278,6 +334,12 @@ async def _conversation_sse(
             highlighted_text=highlighted_text,
             learner_turn_count=1 + sum(1 for item in history if item.get("role") == "user"),
         )
+        if routed_resource_count:
+            system_prompt += (
+                f"\n\nRESOURCE ROUTER: {routed_resource_count} approved options have already been shown. "
+                "Briefly explain how the learner should use one as a curricular experience. Tell them to return "
+                "and explain what they built, tested, decided, or understood; opening or playing alone earns no credit."
+            )
 
         # Build message list (cap history at last 10 turns)
         llm_messages = []

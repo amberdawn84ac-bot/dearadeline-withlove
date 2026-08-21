@@ -300,7 +300,9 @@ class UpdateSeasonPassRequest(BaseModel):
 
 
 class ClaimStudentRequest(BaseModel):
-    code: str = Field(..., min_length=6, max_length=6)
+    # Six characters keeps existing accounts linkable; new invitations use a
+    # random twelve-character credential.
+    code: str = Field(..., min_length=6, max_length=32, pattern=r"^[A-Za-z0-9]+$")
 
 
 class ClaimStudentResponse(BaseModel):

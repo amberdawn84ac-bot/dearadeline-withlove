@@ -61,6 +61,7 @@ from app.api.experience_builder import router as experience_builder_router
 from app.api.standards import router as standards_router
 from app.api.agent_team import router as agent_team_router
 from app.api.resources import router as resources_router
+from app.api.family import router as family_router
 from app.connections.journal_store import journal_store
 from app.connections.conversation_store import conversation_store
 from app.connections.postgres import init_postgres
@@ -210,6 +211,7 @@ app.include_router(genui_router)
 app.include_router(standards_router)
 app.include_router(agent_team_router)
 app.include_router(resources_router)
+app.include_router(family_router)
 # ── /brain/* prefix mounts (Vercel proxy: /brain/:path* → Railway /:path*) ──
 # Auth endpoints (for cookie-based auth)
 app.include_router(auth_router, prefix="/brain")
@@ -242,6 +244,7 @@ app.include_router(learning_path_router, prefix="/brain")
 app.include_router(standards_router, prefix="/brain")
 app.include_router(agent_team_router, prefix="/brain")
 app.include_router(resources_router, prefix="/brain")
+app.include_router(family_router, prefix="/brain")
 app.include_router(focus_router, prefix="/brain")
 app.include_router(coppa_router, prefix="/brain")
 

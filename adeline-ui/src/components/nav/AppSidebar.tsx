@@ -5,10 +5,12 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useStudent } from '@/lib/useStudent';
 import { PersistentAdeline } from '@/components/PersistentAdeline';
+import { supabase } from '@/lib/supabase';
 import styles from './sites-dashboard.module.css';
 
 const NAV_ITEMS = [
   ['☀', 'Today', '/dashboard'],
+  ['☕', 'Family Room', '/dashboard/family'],
   ['⚒', 'Project Workshop', '/dashboard/projects'],
   ['▧', 'Portfolio', '/dashboard/portfolio'],
   ['▤', 'Reading Nook', '/dashboard/reading-nook'],
@@ -41,7 +43,11 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
   };
 
   async function signOut() {
-    await fetch('/api/student-auth', { method: 'DELETE' }).catch(() => undefined);
+    await Promise.allSettled([
+      fetch('/api/student-auth', { method: 'DELETE' }),
+      fetch('/brain/auth/session', { method: 'DELETE', credentials: 'include' }),
+      supabase.auth.signOut(),
+    ]);
     router.replace('/login');
     router.refresh();
   }
@@ -87,8 +93,6 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
             <cite>{dailyBread?.reference || 'Today’s Scripture'}</cite>
             <hr />
             <p>{dailyBread?.bigIdea || 'A new family Bible lesson is ready each day.'}</p>
-            <strong>Today&apos;s practice</strong>
-            <em>{dailyBread?.practice || 'Read, understand, and live the passage today.'}</em>
             <Link href="/dashboard/daily-bread" className="mt-4 inline-flex rounded-lg bg-[#2F4731] px-3 py-2 text-xs font-bold text-white">
               Start Deep Dive Study →
             </Link>

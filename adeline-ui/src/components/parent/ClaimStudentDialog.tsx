@@ -33,16 +33,16 @@ export function ClaimStudentDialog({ onClose, onClaimed }: Props) {
       <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full space-y-4" onClick={e => e.stopPropagation()}>
         <h3 className="text-lg font-bold text-[#2F4731]">Link a Mobile Kid</h3>
         <p className="text-sm text-[#2F4731]/70">
-          Ask your kid to open Adelinemobile → Settings → "Link with a parent" for their 6-digit code.
+          Ask your learner to open Settings → Family connection. They can share their code or send you a parent invitation link.
         </p>
         <form onSubmit={handleSubmit} className="space-y-3">
           <input
             type="text"
             required
             value={code}
-            onChange={e => setCode(e.target.value.toUpperCase().slice(0, 6))}
-            maxLength={6}
-            placeholder="A3F9C2"
+            onChange={e => setCode(e.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 32))}
+            maxLength={32}
+            placeholder="A3F9C2B7D4E1"
             className="w-full px-4 py-3 border border-[#2F4731]/20 rounded-xl text-center font-mono text-xl tracking-widest focus:outline-none focus:border-[#BD6809]"
           />
           {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
@@ -50,7 +50,7 @@ export function ClaimStudentDialog({ onClose, onClaimed }: Props) {
             <button type="button" onClick={onClose} className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold text-[#2F4731]">
               Cancel
             </button>
-            <button type="submit" disabled={loading || code.length !== 6} className="flex-1 py-2.5 bg-[#2F4731] hover:bg-[#BD6809] disabled:opacity-50 text-white rounded-xl font-semibold">
+            <button type="submit" disabled={loading || code.length < 6} className="flex-1 py-2.5 bg-[#2F4731] hover:bg-[#BD6809] disabled:opacity-50 text-white rounded-xl font-semibold">
               {loading ? 'Linking...' : 'Link'}
             </button>
           </div>

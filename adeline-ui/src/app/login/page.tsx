@@ -18,8 +18,10 @@ function playerKey(name: string) {
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const invitationCode = searchParams.get('invite')?.replace(/[^a-z0-9]/gi, '').toUpperCase() ?? '';
+  const isParentInvitation = searchParams.get('parent') === '1' && invitationCode.length >= 6;
   const [audience, setAudience] = useState<'student' | 'parent'>(searchParams.get('parent') === '1' ? 'parent' : 'student');
-  const [mode, setMode] = useState<Mode>('login');
+  const [mode, setMode] = useState<Mode>(searchParams.get('mode') === 'register' || isParentInvitation ? 'register' : 'login');
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -29,14 +31,26 @@ function LoginContent() {
   const [parentName, setParentName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [pendingInvite, setPendingInvite] = useState(invitationCode);
 
   useEffect(() => {
+    if (audience === 'parent') return;
     fetch('/api/student-auth', { cache: 'no-store' })
       .then((response) => {
         if (response.ok) router.replace('/dashboard');
       })
       .catch(() => undefined);
-  }, [router]);
+  }, [audience, router]);
+
+  useEffect(() => {
+    if (invitationCode) {
+      window.localStorage.setItem('adeline_parent_invite', invitationCode);
+      setPendingInvite(invitationCode);
+      return;
+    }
+    const saved = window.localStorage.getItem('adeline_parent_invite') ?? '';
+    if (/^[A-Z0-9]{6,32}$/.test(saved)) setPendingInvite(saved);
+  }, [invitationCode]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -45,8 +59,15 @@ function LoginContent() {
 
     try {
       if (audience === 'parent') {
+        if (pendingInvite) window.localStorage.setItem('adeline_parent_invite', pendingInvite);
+        const emailRedirectTo = pendingInvite
+          ? `${window.location.origin}/login?parent=1&mode=login&invite=${encodeURIComponent(pendingInvite)}`
+          : `${window.location.origin}/login?parent=1&mode=login`;
         const authResult = mode === 'register'
-          ? await supabase.auth.signUp({ email: email.trim(), password })
+          ? await supabase.auth.signUp({
+              email: email.trim(), password,
+              options: { emailRedirectTo, data: { name: parentName.trim() } },
+            })
           : await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (authResult.error) throw authResult.error;
         const session = authResult.data.session;
@@ -61,6 +82,16 @@ function LoginContent() {
         });
         const bootstrapBody = await bootstrap.json().catch(() => ({}));
         if (!bootstrap.ok) throw new Error(bootstrapBody.detail || 'Could not open the family account.');
+        if (pendingInvite) {
+          const claim = await fetch('/brain/students/claim', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: pendingInvite }),
+          });
+          const claimBody = await claim.json().catch(() => ({}));
+          if (!claim.ok) throw new Error(claimBody.detail || 'Your parent account was created, but the learner invitation could not be linked.');
+          window.localStorage.removeItem('adeline_parent_invite');
+        }
         router.push('/dashboard/parent');
         router.refresh();
         return;
@@ -149,6 +180,11 @@ function LoginContent() {
         </button>
 
         <form onSubmit={submit} className="grid gap-4">
+          {audience === 'parent' && pendingInvite && (
+            <div className="rounded-xl border border-[#cbdcc7] bg-[#edf4ea] px-4 py-3 text-sm text-[#2F4731]">
+              <strong>Family invitation ready.</strong> {mode === 'register' ? 'Create your parent account' : 'Sign in'} and this learner will be connected automatically.
+            </div>
+          )}
           {audience === 'parent' && mode === 'register' && (
             <label className="grid gap-2 text-xs font-black text-[#3c5140]">
               Your name

@@ -62,6 +62,16 @@ def _terms(text: str) -> set[str]:
     return {word.strip(".,:;!?()[]{}\"'").lower() for word in text.split() if len(word) > 1}
 
 
+def _grade_number(value: str) -> int:
+    normalized = str(value).strip().upper()
+    if normalized in {"K", "KINDERGARTEN", "K-2", "PLACEMENT"}:
+        return 0
+    try:
+        return max(0, min(12, int(normalized)))
+    except ValueError:
+        return 8
+
+
 def _score(item: RoutedResource, query: ResourceQuery) -> float:
     wanted = _terms(f"{query.topic} {query.objective}")
     found = _terms(f"{item.title} {item.description} {' '.join(item.skills_practiced)}")
@@ -227,6 +237,7 @@ def _youtube_resources(query: ResourceQuery) -> list[RoutedResource]:
 
 async def _curated(query: ResourceQuery, _client: httpx.AsyncClient) -> list[RoutedResource]:
     words = _terms(f"{query.topic} {query.objective}")
+    grade = _grade_number(query.grade_level)
     output: list[RoutedResource] = []
     science = bool(words & _terms("physics chemistry energy circuit force waves matter atom molecule math algebra probability"))
     if query.track in {"CREATION_SCIENCE", "APPLIED_MATHEMATICS"} and science:
@@ -243,10 +254,10 @@ async def _curated(query: ResourceQuery, _client: httpx.AsyncClient) -> list[Rou
             portfolio_output="Save a prediction-results-explanation record naming the controlled variable.",
         ))
     wants_game = bool(words & _terms("game coding program build model simulate interactive arcade")) or bool(set(query.resource_types) & {"GAME", "GAME_BUILDER"})
-    if wants_game or (query.interactive_preferred and query.track in {
+    if grade >= 3 and (wants_game or (not query.resource_types and query.interactive_preferred and query.track in {
         "APPLIED_MATHEMATICS", "CREATIVE_ECONOMY", "CREATION_SCIENCE",
         "TRUTH_HISTORY", "JUSTICE_CHANGEMAKING", "GOVERNMENT_ECONOMICS",
-    }):
+    })):
         output.append(RoutedResource(
             id="makecode:arcade", title=f"Build or remix a {query.topic} game", provider="Microsoft MakeCode",
             resource_type="GAME_BUILDER", source_url="https://arcade.makecode.com/", editor_url="https://arcade.makecode.com/",
@@ -257,6 +268,26 @@ async def _curated(query: ResourceQuery, _client: httpx.AsyncClient) -> list[Rou
             discovery_prompt="What game rule will model the lesson concept instead of merely decorating it?",
             mastery_prompt="Show the rule in your code that represents the concept and explain what changes when you alter it.",
             portfolio_output="Publish the playable project and save its share link with a design or debugging explanation.",
+        ))
+    if wants_game and grade <= 2:
+        output.append(RoutedResource(
+            id="pbskids:games", title=f"Explore a playful {query.topic} challenge", provider="PBS KIDS",
+            resource_type="GAME", source_url="https://pbskids.org/games/",
+            description="Choose a short, age-appropriate game with a parent, then explain the rule, pattern, fact, or strategy you discovered.",
+            license="LINK_ONLY", commercial_use="LINK_ONLY", game_mode="PLAY", age_range="5–8",
+            skills_practiced=["patterns", "problem solving", "explanation"], estimated_minutes=15,
+            mastery_prompt="Show or explain one rule, pattern, or idea you understand now that you did not notice at first.",
+            portfolio_output="Save a drawing or spoken explanation of the strategy or concept—not a screenshot of time played.",
+        ))
+    if bool(words & _terms("code coding program programming makecode arcade")):
+        output.append(RoutedResource(
+            id="codeorg:learn", title=f"Learn coding through a {query.topic} puzzle", provider="Code.org",
+            resource_type="GAME_BUILDER", source_url="https://studio.code.org/courses",
+            description="Choose an age-appropriate coding course, solve a puzzle, then explain the sequence, loop, condition, or debugging decision you used.",
+            license="PLATFORM_TERMS", commercial_use="LINK_ONLY", game_mode="BUILD",
+            age_range="5–18", skills_practiced=["sequencing", "loops", "conditionals", "debugging"],
+            mastery_prompt="Explain one piece of your program and why it behaves that way; if it failed, show how you debugged it.",
+            portfolio_output="Save the project or course share link with a brief code explanation.",
         ))
     if query.track in {"GOVERNMENT_ECONOMICS", "JUSTICE_CHANGEMAKING", "TRUTH_HISTORY"}:
         output.append(RoutedResource(

@@ -47,6 +47,20 @@ model User {
   @@index([townId])
 }
 
+model FamilyPost {
+  id          String   @id @default(uuid())
+  householdId String
+  authorId    String
+  authorName  String
+  kind        String   @default("MESSAGE")
+  title       String?
+  body        String
+  resourceUrl String?
+  createdAt   DateTime @default(now())
+
+  @@index([householdId, createdAt])
+}
+
 model Town {
   id                      String   @id @default(uuid())
   name                    String

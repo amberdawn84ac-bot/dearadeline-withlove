@@ -85,11 +85,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
 
-  const profileResponse = await fetch(`${BRAIN_URL}/students/${studentId}`, {
+  const profileResponse = await fetch(`${BRAIN_URL}/students/${studentId}/profile`, {
     headers: authHeaders,
     cache: 'no-store',
   });
-  const profile = profileResponse.ok ? await profileResponse.json() : null;
+  if (!profileResponse.ok) {
+    // A valid parent session is not a student session. Do not clear the shared
+    // auth cookie; simply tell student-only consumers that no learner is active.
+    return NextResponse.json({ ok: false }, { status: 403 });
+  }
+  const profile = await profileResponse.json();
 
   return NextResponse.json({
     ok: true,
@@ -104,6 +109,12 @@ export async function GET(request: NextRequest) {
       learningStyle: null,
       state: null,
       onboardingComplete: true,
+      linkCode: profile?.link_code ?? '',
+      link_code: profile?.link_code ?? '',
+      parentId: profile?.parent_id ?? null,
+      parent_id: profile?.parent_id ?? null,
+      parentDisplayName: profile?.parent_display_name ?? null,
+      parent_display_name: profile?.parent_display_name ?? null,
     },
   });
 }

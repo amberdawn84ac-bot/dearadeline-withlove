@@ -107,7 +107,7 @@ export function AddStudentDialog({ onClose, onAdd }: AddStudentDialogProps) {
               disabled={loading}
             >
               {Array.from({ length: 13 }, (_, i) => i).map((grade) => (
-                <option key={grade} value={grade.toString()}>
+                <option key={grade} value={grade === 0 ? 'K' : grade.toString()}>
                   {grade === 0 ? 'Kindergarten' : `Grade ${grade}`}
                 </option>
               ))}
