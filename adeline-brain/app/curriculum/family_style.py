@@ -9,7 +9,9 @@ from copy import deepcopy
 import re
 from typing import Any
 
-CANONICAL_FORMAT_VERSION = 5
+from app.curriculum.experience_contract import annotate_experience, validate_experience
+
+CANONICAL_FORMAT_VERSION = 6
 
 _OBSOLETE_FORMATS = {
     "ANIMATED_SKETCHNOTE_LESSON",
@@ -24,8 +26,8 @@ _PLACEHOLDER_PHRASES = (
     "lesson is being prepared",
     "come back later",
 )
-_MAX_CANONICAL_BLOCKS = 10
-_MIN_CANONICAL_BLOCKS = 6
+_MAX_CANONICAL_BLOCKS = 12
+_MIN_CANONICAL_BLOCKS = 3
 _SUBSTANTIVE_BLOCK_TYPES = frozenset({
     "PRIMARY_SOURCE",
     "LAB_MISSION",
@@ -51,36 +53,32 @@ _TRACKS_EXPECTING_SUBSTANTIVE_BLOCKS = frozenset({
 })
 
 FAMILY_CANONICAL_AUTHORING_RULES = """
-CANONICAL LESSON AUTHOR — FAMILY-STYLE, NON-NEGOTIABLE:
-- Author ONE rich shared family learning experience at full adult/high-school depth.
-- This canonical lesson is the durable source of truth; a separate adapter changes grade,
-  mastery, scaffolding, vocabulary, independence, and depth of responsibility only.
-- Do not write a generic lesson, article, or explanatory narrative and do not append a generic
-  family-workshop paragraph. Family style is the structure of the actual learning experience.
-- Prefer concrete evidence and meaningful tasks over explanatory prose.
-- Keep the central question, learning goal, verified facts, evidence, worldview lens, shared work,
-  and real-world outcome fixed across ages.
-- Give elementary, middle, and high-school learners different responsibility in the SAME shared work:
-  notice/label/build; explain/compare/apply; evaluate/design/calculate/lead.
-- Every substantive lesson should produce something real when the subject supports it: an experiment,
-  model, map, record, source dossier, performance, plan, service, written argument, useful creation,
-  or other authentic deliverable.
-- Include a concrete individual contribution that can be preserved as portfolio evidence.
-- Use NARRATIVE only when narrative itself is the best instructional medium. Never use it as a fallback,
-  placeholder, family-instructions block, filler, or status message.
-- Use semantic visuals only when they improve understanding. The renderer decides page layout and UI.
-- Keep the canonical lesson to 6–10 substantive blocks. Never pad the lesson to reach the count.
-- When the track supports evidence, experimentation, investigation, or real-world application, include at
-  least one appropriate substantive block such as PRIMARY_SOURCE, LAB_MISSION, EXPERIMENT, REAL_WORLD_APP,
-  or another evidence/action block. Do not force an inappropriate activity.
-- The adaptation contract must stay short: 3–5 rules describing only what grade/mastery may change.
-- Never invent quotations, source identities, dates, measurements, research findings, or evidence.
-- Never print frontend behavior, CSS, page coordinates, rendering instructions, or internal metadata in prose.
-- The learner-facing renderer follows the Kitchen Chemistry pattern: a compelling family question,
-  three age/mastery responsibility layers, preparation and safety where relevant, real teaching,
-  a shared investigation, explicit concepts, an interactive mastery finish, reflection, and portfolio evidence.
-- Outside resources never replace the lesson. A rights-aware Resource Router may add a separate live
-  evidence/simulation/game/creation section after adaptation; live results are never saved into the canonical.
+CANONICAL EXPERIENCE AUTHOR — NON-NEGOTIABLE:
+- Author ONE coherent experience, not a stack of explanatory cards, a worksheet, a slideshow,
+  a chapter, or a decorated chat answer.
+- Begin with a consequential question, mystery, problem, creation, or decision that gives the
+  learner a real reason to continue. Do not announce standards or academic bookkeeping.
+- Use only the teaching needed to act intelligently. Put facts, sources, demonstrations, and
+  explanations beside the moment in which the learner needs them.
+- The learner must DO something intellectually or physically meaningful: examine evidence,
+  manipulate a system, investigate, experiment, play a real rules-based game, build, design,
+  interview, calculate, perform, write for an audience, or solve a consequential problem.
+- The finish must produce reviewable evidence. Name the artifact, observation, explanation,
+  performance, decision trail, or scored interaction that could demonstrate each target concept.
+- Completion, exposure, elapsed time, and button clicks are never mastery. Proposed credit remains
+  a draft until the evidence is evaluated.
+- A shared family experience keeps one central question and shared outcome. Give each learner an
+  age-, mastery-, and prerequisite-appropriate contribution; siblings do not receive cloned work.
+- The canonical is full-depth and durable. Adaptation may change vocabulary, scaffolding,
+  independence, examples, and responsibility, but never facts, sources, central question, or goal.
+- Outside resources are routed as tools, evidence, games, simulations, objects, texts, or practice.
+  Record item-level rights and use mode. They enrich the experience; they do not become the teacher.
+- Use NARRATIVE only when story itself is the learning medium. Never use narrative as filler,
+  status, directions, a default explanation box, or a substitute for an experience.
+- Use semantic visuals only when they materially improve understanding. The renderer owns layout.
+- Use only as many substantive parts as the experience needs; never pad to hit a count.
+- Never invent facts, quotations, sources, measurements, standards, results, or certainty.
+- Never include CSS, screen layout, internal agent language, or renderer instructions in learner prose.
 """.strip()
 
 
@@ -161,6 +159,8 @@ def validate_canonical_lesson(
             if any(phrase in content for phrase in ("family workshop:", "do this together:", "coming soon", "check back")):
                 errors.append(f"block {index} is a generic family/status narrative and is not allowed")
 
+    errors.extend(validate_experience(blocks))
+
     return errors
 
 
@@ -199,8 +199,8 @@ def finalize_family_lesson(blocks: list[dict], topic: str, *, track: str | None 
         seen.add(fingerprint)
         finalized.append(block)
 
-    # Enforce the ceiling without inventing or rewriting content.
-    finalized = finalized[:_MAX_CANONICAL_BLOCKS]
+    # Enforce a safety ceiling without inventing, padding, or rewriting content.
+    finalized = annotate_experience(finalized[:_MAX_CANONICAL_BLOCKS])
 
     errors = validate_canonical_lesson(finalized, track=track)
     if errors:

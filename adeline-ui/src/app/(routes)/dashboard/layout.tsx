@@ -1,17 +1,7 @@
-import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
-
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const cookieStore = await cookies();
-  const studentToken = cookieStore.get('auth_token')?.value;
-
-  // Middleware validates the token before this layout renders. This second
-  // check prevents accidental exposure if middleware configuration changes.
-  if (!studentToken) {
-    redirect('/login');
-  }
-
+  // Middleware validates either the Brain student cookie or the parent/admin
+  // Supabase session. Requiring only auth_token here locked valid parents out.
   return <>{children}</>;
 }

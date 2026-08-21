@@ -13,6 +13,7 @@
 
 import { useState } from "react";
 import { CheckCircle, XCircle, Brain } from "lucide-react";
+import { fireGenUICallback } from '@/lib/genui-callback';
 
 interface MasteryCheckWidgetProps {
   blockId: string;
@@ -103,17 +104,14 @@ export function MasteryCheckWidget({
       
       try {
         // Send callback to GenUI system
-        await fetch("/brain/genui/callback", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            lesson_id: lessonId,
-            component_type: "QUIZ",
-            event: "onAnswer",
-            block_id: blockId,
-            track,
-            state: { isCorrect: correct },
-          }),
+        await fireGenUICallback({
+          studentId,
+          lessonId,
+          componentType: 'QUIZ',
+          event: 'onAnswer',
+          blockId,
+          track,
+          state: { isCorrect: correct },
         });
         
         // Submit evidence to OAS standards tracker if applicable

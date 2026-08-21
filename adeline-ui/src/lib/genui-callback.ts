@@ -36,7 +36,18 @@ export async function fireGenUICallback(params: {
       }),
     });
     if (!res.ok) return null;
-    return res.json();
+    const result = await res.json() as GenUICallbackResult;
+    if (typeof window !== 'undefined' && params.event === 'onAnswer' && typeof params.state.isCorrect === 'boolean') {
+      window.dispatchEvent(new CustomEvent('adeline:learning-evidence', {
+        detail: {
+          lessonId: params.lessonId,
+          blockId: params.blockId,
+          componentType: params.componentType,
+          correct: params.state.isCorrect,
+        },
+      }));
+    }
+    return result;
   } catch {
     return null;
   }

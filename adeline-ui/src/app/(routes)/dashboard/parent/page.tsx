@@ -297,7 +297,7 @@ export default function ParentDashboardPage() {
                               <div className="border-t border-[#E7DAC3] px-4 py-2">
                                 {concepts.map((concept) => <div key={concept.standard_id} className="flex gap-3 border-b border-[#E7DAC3]/70 py-3 last:border-0">
                                   {concept.mastered ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#4F7A58]" aria-label="Demonstrated" /> : <CircleDashed className="mt-0.5 h-5 w-5 shrink-0 text-[#BD6809]" aria-label="Still learning" />}
-                                  <div><p className={`text-sm leading-5 ${concept.mastered ? 'text-[#2F4731]/60' : 'font-semibold text-[#2F4731]'}`}>{concept.description}</p><p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-[#2F4731]/40">{concept.mastered ? 'Demonstrated with evidence' : 'Still available for a future experience'}</p></div>
+                                  <div><p className={`text-sm leading-5 ${concept.mastered ? 'text-[#2F4731]/60' : 'font-semibold text-[#2F4731]'}`}>{concept.description}</p><p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-[#2F4731]/40">{{ NOT_STARTED: 'Not started', DEVELOPING: 'Introduced · more experience needed', APPROACHING: 'Practicing · not yet demonstrated', UNDERSTANDING: 'Demonstrated with evidence', EXTENDING: 'Demonstrated and applied deeply' }[concept.proficiency]}</p></div>
                                 </div>)}
                               </div>
                             </details>;

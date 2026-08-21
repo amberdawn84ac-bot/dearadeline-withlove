@@ -28,9 +28,9 @@ def test_ensure_family_workshop_is_idempotent():
 
 
 def test_canonical_rules_keep_truth_fixed_while_roles_change():
-    assert "full adult/high-school depth" in FAMILY_CANONICAL_AUTHORING_RULES
-    assert "different responsibility" in FAMILY_CANONICAL_AUTHORING_RULES
-    assert "central question, learning goal, verified facts" in FAMILY_CANONICAL_AUTHORING_RULES
+    assert "full-depth and durable" in FAMILY_CANONICAL_AUTHORING_RULES
+    assert "siblings do not receive cloned work" in FAMILY_CANONICAL_AUTHORING_RULES
+    assert "button clicks are never mastery" in FAMILY_CANONICAL_AUTHORING_RULES
 
 
 def test_only_current_family_canonicals_are_reused():
@@ -69,6 +69,9 @@ def test_finalizer_preserves_structure_and_removes_obsolete_rebuilders():
         "NARRATIVE", "GENUI_ASSEMBLY", "TEXT", "REAL_WORLD_APP", "QUIZ", "TEXT",
     ]
     assert all(block["canonical_format_version"] == CANONICAL_FORMAT_VERSION for block in finalized)
+    assert {block["experience_stage"] for block in finalized} >= {
+        "INVITATION", "ACTION", "DEMONSTRATION",
+    }
 
 
 def test_learner_text_removes_internal_notes_and_identity_errors():

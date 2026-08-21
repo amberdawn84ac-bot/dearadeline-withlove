@@ -26,81 +26,39 @@ class PersonalizedCurriculumPlannerAgent:
         ("Make, Map, or Solve", "Build something useful, map the evidence, solve a real problem, and write about what changed."),
         ("Family Field Report", "Explain, demonstrate, revise, and save the strongest evidence of learning to the portfolio."),
     )
-    # These are intentionally multi-age investigation frames. The household gets
-    # one shared frame; grade/mastery-specific standards are assigned separately.
-    FAMILY_INVESTIGATIONS = {
-        "CREATION_SCIENCE": (
-            ("Kitchen Chemistry", "What changes when a family cooks, mixes, heats, and cools ordinary ingredients?"),
-            ("Backyard Ecosystem Census", "Observe the living network just outside the door and explain what depends on what."),
-            ("Weather Detectives", "Measure local weather, look for patterns, and test a forecast."),
-            ("Light, Sound, and Shadows", "Build simple tests that make invisible waves easier to notice."),
-        ),
-        "HEALTH_NATUROPATHY": (
-            ("Family Sleep Lab", "Collect safe family observations about rest and design a better bedtime experiment."),
-            ("Food as Fuel", "Compare meals, labels, energy, and evidence to plan food that serves the family well."),
-            ("Move and Measure", "Explore how movement changes pulse, breathing, balance, strength, and mood."),
-            ("Herb and Remedy Evidence Hunt", "Investigate a traditional household remedy and separate history, claims, safety, and evidence."),
-        ),
-        "HOMESTEADING": (
-            ("Seed-to-Supper Challenge", "Plan how one food travels from soil or farm to the family table."),
-            ("Water Wise Household", "Measure household water use and invent one practical conservation improvement."),
-            ("Build a Better Garden", "Observe a growing space, map its needs, and propose a useful design."),
-            ("Preserve the Harvest", "Explore why food spoils and compare safe ways people make it last."),
-        ),
-        "GOVERNMENT_ECONOMICS": (
-            ("Run a Family Market", "Create a tiny market to investigate price, scarcity, choice, work, and value."),
-            ("Who Decides Here?", "Map how a real local decision moves through family, neighborhood, and government."),
-            ("Needs, Wants, and a Real Budget", "Make tradeoffs with a realistic family mission and explain every choice."),
-            ("The Journey of a Dollar", "Trace where money comes from, where it goes, and what each exchange means."),
-        ),
-        "JUSTICE_CHANGEMAKING": (
-            ("Fair Is Not Always Equal", "Use stories and real scenarios to investigate fairness, responsibility, and repair."),
-            ("One Helpful Change", "Notice a local problem, listen to affected people, and take one documented action."),
-            ("Whose Voice Is Missing?", "Compare accounts of the same event and look for people the record leaves out."),
-            ("Design for Welcome", "Audit a familiar place for access and belonging, then propose an improvement."),
-        ),
-        "DISCIPLESHIP": (
-            ("A Table of Hospitality", "Study biblical hospitality and practice welcoming someone in a concrete way."),
-            ("Wisdom in Everyday Choices", "Use a wisdom text to examine a real decision and live one principle together."),
-            ("Creation Care Mission", "Study stewardship, observe one part of creation, and care for it together."),
-            ("Courage and Faithfulness", "Investigate a biblical story of courage and practice one faithful action."),
-        ),
-        "TRUTH_HISTORY": (
-            ("Family History Detective", "Use interviews, photographs, objects, maps, and records to test a family story."),
-            ("A Week in Another Time", "Reconstruct ordinary life in one historical place using primary evidence."),
-            ("Map the Story", "Use old and new maps to discover how a place changed and why."),
-            ("Newsroom from the Past", "Compare period sources and publish a careful account of what happened."),
-        ),
-        "ENGLISH_LITERATURE": (
-            ("Storytelling Studio", "Read a strong story together, study its craft, and create a family version."),
-            ("Poetry You Can Hear", "Explore rhythm, image, voice, and meaning by performing and making poems."),
-            ("Book-to-Life Challenge", "Follow a question from a shared text into observation, discussion, and action."),
-            ("Family Oral History", "Turn a recorded family memory into a truthful, vivid piece for an audience."),
-        ),
-        "APPLIED_MATHEMATICS": (
-            ("Measure, Design, Build", "Use measurement, number, geometry, and revision to make something the family can use."),
-            ("Family Game Lab", "Play, analyze, and redesign a game using patterns, strategy, probability, and data."),
-            ("Plan a Real Trip", "Use maps, time, distance, cost, and tradeoffs to build a workable family plan."),
-            ("Data in Our House", "Collect a harmless household dataset, represent it clearly, and explain what it does and does not show."),
-        ),
-        "CREATIVE_ECONOMY": (
-            ("Make Something Worth Sharing", "Design, prototype, price, and present something useful or beautiful."),
-            ("Family Pop-Up Studio", "Choose roles and turn a creative idea into a tiny collaborative production."),
-            ("Solve a Household Problem", "Interview the users, build a prototype, test it, and improve it."),
-            ("Tell the Story of a Product", "Investigate materials, labor, cost, design, and honest communication."),
-        ),
+    TRACK_LABELS = {
+        "CREATION_SCIENCE": "Creation and science",
+        "HEALTH_NATUROPATHY": "Health and the body",
+        "HOMESTEADING": "Homesteading and stewardship",
+        "GOVERNMENT_ECONOMICS": "Government and economics",
+        "JUSTICE_CHANGEMAKING": "Justice and change-making",
+        "DISCIPLESHIP": "Discipleship and discernment",
+        "TRUTH_HISTORY": "Truth-based history",
+        "ENGLISH_LITERATURE": "Language and literature",
+        "APPLIED_MATHEMATICS": "Applied mathematics",
+        "CREATIVE_ECONOMY": "Creative economy",
     }
 
     def family_investigation_cycle(self, household_id: str, total_weeks: int = 36) -> list[tuple]:
-        """Return a stable household-wide cycle spanning all ten learning tracks."""
-        seeds = []
-        for track in self.TRACKS:
-            for index, (title, description) in enumerate(self.FAMILY_INVESTIGATIONS[track]):
-                seeds.append((f"family-{track.lower()}-{index}", title, track, description))
-        balanced = self.balance_weekly_seeds(seeds, total_weeks=len(seeds))
-        offset = int(hashlib.sha256(household_id.encode("utf-8")).hexdigest()[:8], 16) % len(balanced)
-        rotated = balanced[offset:] + balanced[:offset]
-        return rotated[:total_weeks]
+        """Return stable household slots; the adaptive planner supplies their content.
+
+        There is deliberately no canned topic catalog here. A slot coordinates siblings
+        around one track and week while standards, gaps, interests, local context, and
+        routed resources determine the actual experience at generation time.
+        """
+        offset = int(hashlib.sha256(household_id.encode("utf-8")).hexdigest()[:8], 16) % len(self.TRACKS)
+        tracks = list(self.TRACKS[offset:] + self.TRACKS[:offset])
+        seeds: list[tuple] = []
+        for week in range(total_weeks):
+            track = tracks[week % len(tracks)]
+            label = self.TRACK_LABELS[track]
+            seeds.append((
+                f"family-{track.lower()}-week-{week + 1}",
+                f"Family investigation {week + 1}",
+                track,
+                f"Adeline will shape this {label.lower()} experience from the household's current concepts, interests, gaps, and available real-world resources.",
+            ))
+        return seeds
 
     @staticmethod
     def standard_family(subject: str) -> str:

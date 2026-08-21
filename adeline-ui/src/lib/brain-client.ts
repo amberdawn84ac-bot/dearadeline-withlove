@@ -153,6 +153,7 @@ export interface LessonBlockResponse {
   block_type: string;
   content: string;
   title?: string;
+  experience_stage?: 'INVITATION' | 'DISCOVERY' | 'ACTION' | 'CREATION' | 'DEMONSTRATION' | 'REFLECTION' | 'RESOURCE';
   metadata?: Record<string, unknown>;
   family_roles?: {
     elementary?: string;
@@ -361,6 +362,10 @@ export interface SealJournalRequest {
   completed_blocks: number;
   oas_standards?: Array<{ standard_id: string; text: string; grade: number }>;
   evidence_sources?: Array<{ title: string; url: string; author: string; year: number | null }>;
+  quiz_results?: Array<{ correct: boolean; concept_id?: string }>;
+  learner_reflection?: string;
+  artifact_refs?: string[];
+  parent_attested?: boolean;
   credit_draft?: CASECredit;
 }
 
@@ -369,6 +374,8 @@ export interface SealJournalResponse {
   lesson_id: string;
   track: Track;
   track_progress: Record<string, number>;
+  learning_status: 'DEVELOPING' | 'APPROACHING' | 'UNDERSTANDING' | 'EXTENDING';
+  credit_sealed: boolean;
 }
 
 export async function sealJournal(
@@ -749,19 +756,6 @@ export interface ActivityReportResponse {
   evidence_urls: string[];
 }
 
-export interface BreadLessonCompletionRequest {
-  grade_level: string;
-  answers: Record<string, string>;
-  observations: string;
-  next_test: string;
-}
-
-export interface BreadLessonCompletionResponse extends ActivityReportResponse {
-  score_percent: number;
-  concepts_demonstrated: string[];
-  oas_standards: string[];
-}
-
 export interface ActivityEntry {
   activity_id: string;
   course_title: string;
@@ -792,23 +786,6 @@ export async function reportActivity(
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`reportActivity failed: ${res.status}`);
-  return res.json();
-}
-
-export async function completeBreadLesson(
-  payload: BreadLessonCompletionRequest,
-): Promise<BreadLessonCompletionResponse> {
-  const res = await fetch(`${BRAIN_URL}/activities/kitchen-chemistry-bread/complete`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
-    body: JSON.stringify(payload),
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    const message = detail?.detail?.message ?? `Bread lesson review failed: ${res.status}`;
-    throw new Error(message);
-  }
   return res.json();
 }
 
@@ -1137,7 +1114,7 @@ export interface LearningPlanResponse {
     is_high_school: boolean;
   };
   credit_gaps: Array<{ bucket: string; required: number; earned: number; remaining: number; priority: number }>;
-  grade_standards: Array<{ standard_id: string; subject: string; grade: number; description: string; mastered: boolean; priority: number }>;
+  grade_standards: Array<{ standard_id: string; subject: string; grade: number; description: string; mastered: boolean; proficiency: 'NOT_STARTED' | 'DEVELOPING' | 'APPROACHING' | 'UNDERSTANDING' | 'EXTENDING'; priority: number }>;
   roadmap: {
     school_days_per_week: number;
     total_weeks: number;

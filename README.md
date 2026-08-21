@@ -110,17 +110,22 @@ A portfolio is a record of **accomplishments, not assignments**.
 
 Not: "I completed 20 assignments."
 
-## Roadmap
+## Capability status
+
+The detailed, testable source of truth is
+[`docs/CAPABILITY_CONTRACT.md`](docs/CAPABILITY_CONTRACT.md). “Code exists” and
+“the complete family journey is verified” are deliberately different claims.
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Bookshelf & Reading Coach | Done | EPUB reader, progress tracking, reading-to-credit pipeline, gap-weighted recommendations |
-| Project Catalog & Guide | Done | In-memory curated catalog, seal-to-credit flow, portfolio integration |
-| Spaced Repetition Widget | Done | SM-2 review queue with quality ratings on dashboard |
-| Parent Dashboard | Done | Multi-student management, per-kid progress, family activity feed |
-| Auth Hardening | Done | JWT ownership on every endpoint, parent/student/admin access control, internal API keys |
-| Track-Specific Agents | Done | Literature + Practical agents split from Discipleship — correct protocols per track |
-| Learning Path | Planned | Visual path through year-end (K-8) or graduation (9-12) |
+| Bookshelf & Reading Coach | Partial | Shelf and reader exist; full identity-to-credit journey still needs enabled CI coverage |
+| Project Catalog & Guide | Partial | Catalog and sealing exist; artifact and credit traceability still need full verification |
+| Spaced Repetition | Present | SM-2/BKT logic exists; whole-journey behavior is not yet verified |
+| Parent Dashboard | Partial | Multi-student UI exists; role and household flows are being integration-tested |
+| Auth Hardening | Partial | Ownership helpers exist; the complete route matrix is not yet proven |
+| Track-Specific Agents | Present | Specialist routing exists; output must satisfy the new experience contract |
+| Adaptive internal plan | Partial | Exact-grade coverage and forecasts exist; selection is still being made fully evidence-driven |
+| Learner-facing year path | Not a feature | Requirements remain private; learners see Today and meaningful experiences |
 | Content Expansion | Ongoing | Nightly self-seeding + manual corpus expansion across all 10 tracks |
 
 ## Pricing

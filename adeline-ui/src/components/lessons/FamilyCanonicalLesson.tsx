@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Archive, CheckCircle2, ExternalLink, Gamepad2, Search, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Archive, CheckCircle2, ExternalLink, Gamepad2, Search, ShieldCheck } from "lucide-react";
 import GenUIRenderer from "@/components/GenUIRenderer";
 import { sealJournal } from "@/lib/brain-client";
 import type { LessonBlockResponse, LessonResponse } from "@/lib/brain-client";
@@ -16,10 +16,6 @@ type Resource = {
 function resourcesFrom(block: LessonBlockResponse): Resource[] {
   const value = block.metadata?.resources;
   return Array.isArray(value) ? value.filter((item): item is Resource => !!item && typeof item === "object") : [];
-}
-
-function role(blocks: LessonBlockResponse[], key: "elementary" | "middle" | "high_school", fallback: string) {
-  return blocks.find((block) => block.family_roles?.[key])?.family_roles?.[key] ?? fallback;
 }
 
 function questionFrom(blocks: LessonBlockResponse[], title: string) {
@@ -62,29 +58,54 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
   const [sealing, setSealing] = useState(false);
   const [sealed, setSealed] = useState(false);
   const [sealError, setSealError] = useState("");
+  const [reflection, setReflection] = useState("");
+  const [learningStatus, setLearningStatus] = useState("");
+  const [creditSealed, setCreditSealed] = useState(false);
+  const [quizResults, setQuizResults] = useState<Array<{ correct: boolean; concept_id?: string }>>([]);
   const visible = lesson.blocks.filter((block) => !block.is_silenced);
   const resources = visible.filter((block) => block.block_type === "RESOURCE_COLLECTION");
   const teaching = visible.filter((block) => block.block_type !== "RESOURCE_COLLECTION");
-  const actionTypes = new Set(["LAB_MISSION", "EXPERIMENT", "REAL_WORLD_APP", "SIMULATION", "PROJECT_BUILDER"]);
-  const masteryTypes = new Set(["QUIZ", "FLASHCARD", "GENUI_ASSEMBLY", "SCAFFOLDED_PROBLEM"]);
-  const investigation = teaching.filter((block) => actionTypes.has(block.block_type));
-  const mastery = teaching.filter((block) => masteryTypes.has(block.block_type));
-  const knowledge = teaching.filter((block) => !actionTypes.has(block.block_type) && !masteryTypes.has(block.block_type));
+  const byStage = (stage: LessonBlockResponse['experience_stage']) => teaching.filter((block) => block.experience_stage === stage);
+  const invitation = byStage('INVITATION');
+  const discovery = byStage('DISCOVERY');
+  const action = [...byStage('ACTION'), ...byStage('CREATION')];
+  const demonstration = byStage('DEMONSTRATION');
+  const reflectionBlocks = byStage('REFLECTION');
+  // Compatibility for an old canonical during cache turnover. Version 6
+  // canonicals arrive with explicit semantic stages from the Brain.
+  const unstaged = teaching.filter((block) => !block.experience_stage);
 
   const render = (blocks: LessonBlockResponse[]) => blocks.length ? <GenUIRenderer lessonId={lesson.lesson_id} blocks={blocks} isHomestead={lesson.track === "HOMESTEADING"} oasStandards={[]} agentName={lesson.agent_name} studentId={studentId} /> : null;
+
+  useEffect(() => {
+    const collect = (event: Event) => {
+      const detail = (event as CustomEvent<{ lessonId?: string; blockId?: string; correct?: boolean }>).detail;
+      if (detail?.lessonId !== lesson.lesson_id || typeof detail.correct !== 'boolean') return;
+      setQuizResults((current) => [
+        ...current.filter((result) => result.concept_id !== detail.blockId),
+        { correct: detail.correct, concept_id: detail.blockId },
+      ]);
+    };
+    window.addEventListener('adeline:learning-evidence', collect);
+    return () => window.removeEventListener('adeline:learning-evidence', collect);
+  }, [lesson.lesson_id]);
 
   async function finishLesson() {
     if (sealing || sealed) return;
     setSealing(true);
     setSealError("");
     try {
-      await sealJournal({
+      const result = await sealJournal({
         lesson_id: lesson.lesson_id,
         track: lesson.track,
         completed_blocks: visible.length,
         oas_standards: lesson.oas_standards.map(({ standard_id, text, grade }) => ({ standard_id, text, grade })),
         credit_draft: lesson.credits_awarded[0],
+        learner_reflection: reflection.trim(),
+        quiz_results: quizResults,
       });
+      setLearningStatus(result.learning_status);
+      setCreditSealed(result.credit_sealed);
       setSealed(true);
     } catch (reason) {
       setSealError(reason instanceof Error ? reason.message : "Adeline could not save this work yet.");
@@ -96,25 +117,20 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
   return <article className="space-y-6 pb-20 text-[#2F4731]">
     <header className="overflow-hidden rounded-[30px] border border-[#D9CFBC] bg-[linear-gradient(135deg,#F5E6C8,#E3ECDD)] shadow-sm">
       <div className="grid gap-8 p-7 md:grid-cols-[1.2fr_.8fr] md:p-11">
-        <div><p className="text-xs font-black uppercase tracking-[.2em] text-[#A95322]">One shared family lesson · {lesson.track.replaceAll("_", " ")}</p><h1 className="mt-3 text-5xl leading-[.95] md:text-6xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{lesson.title}</h1><p className="mt-5 max-w-2xl text-base leading-7 text-[#2F4731]/75">Learn the truth together, investigate something real, demonstrate understanding, and preserve meaningful evidence.</p></div>
-        <div className="rounded-[26px] border border-white/70 bg-white/70 p-6"><p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">The family question</p><p className="mt-3 text-2xl leading-snug" style={{ fontFamily: "var(--font-kalam), cursive" }}>{questionFrom(teaching, lesson.title)}</p></div>
+        <div><p className="text-xs font-black uppercase tracking-[.2em] text-[#A95322]">Today&apos;s experience</p><h1 className="mt-3 text-5xl leading-[.95] md:text-6xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{lesson.title}</h1><p className="mt-5 max-w-2xl text-base leading-7 text-[#2F4731]/75">Follow the question. Use what helps. Make, test, examine, or decide something real.</p></div>
+        <div className="self-center border-l-4 border-[#BD6809] pl-6"><p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">The question worth following</p><p className="mt-3 text-2xl leading-snug" style={{ fontFamily: "var(--font-kalam), cursive" }}>{questionFrom(teaching, lesson.title)}</p></div>
       </div>
     </header>
 
-    <section className="grid gap-4 md:grid-cols-3" aria-label="Family learning levels">
-      {[
-        ["Younger learners", role(teaching, "elementary", "Notice, identify, draw, retell, measure, or build.")],
-        ["Middle learners", role(teaching, "middle", "Explain cause and effect, compare evidence, record results, and apply.")],
-        ["Older learners", role(teaching, "high_school", "Evaluate sources, calculate, design, lead, and defend conclusions.")],
-      ].map(([title, text], index) => <div key={title} className="rounded-2xl border border-[#E7DAC3] bg-white p-5"><div className="flex items-center gap-2 text-[#BD6809]"><Users className="h-4 w-4" /><span className="text-xs font-black uppercase tracking-wider">Layer {index + 1}</span></div><h2 className="mt-3 text-lg font-bold">{title}</h2><p className="mt-1 text-sm leading-6 text-[#2F4731]/65">{text}</p></div>)}
-    </section>
-
-    {knowledge.length > 0 && <section className="rounded-[26px] border border-[#E7DAC3] bg-[#FFFEF7] p-6 md:p-8"><div className="mb-6 flex items-center gap-3"><Sparkles className="h-6 w-6 text-[#BD6809]" /><h2 className="text-3xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>Learn enough to investigate well</h2></div>{render(knowledge)}</section>}
-    {investigation.length > 0 && <section className="rounded-[26px] border border-[#E7DAC3] bg-white p-6 md:p-8"><p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">The shared investigation</p><h2 className="mt-2 mb-6 text-3xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>Try it in the real world</h2>{render(investigation)}</section>}
+    {invitation.length > 0 && <section>{render(invitation)}</section>}
+    {discovery.length > 0 && <section><p className="mb-4 text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Clues and tools</p>{render(discovery)}</section>}
+    {action.length > 0 && <section><p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Do something with it</p><h2 className="mt-2 mb-6 text-3xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>Investigate, make, test, or decide</h2>{render(action)}</section>}
     {resources.map((block) => <ResourceCollection key={block.block_id} block={block} />)}
-    {mastery.length > 0 && <section className="rounded-[30px] border-2 border-[#2F4731] bg-[#FFFEF7] p-6 md:p-9"><p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">Interactive finish</p><h2 className="mt-2 mb-6 text-4xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>Show what you understand</h2>{render(mastery)}</section>}
+    {demonstration.length > 0 && <section className="border-y-2 border-[#2F4731] py-8"><p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">Demonstrate</p><h2 className="mt-2 mb-6 text-4xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>Show what the experience helped you understand</h2>{render(demonstration)}</section>}
+    {reflectionBlocks.length > 0 && <section>{render(reflectionBlocks)}</section>}
+    {unstaged.length > 0 && <section>{render(unstaged)}</section>}
     <section className="rounded-[26px] border border-[#D9CFBC] bg-[#F0FDF4] p-6 text-center md:p-8">
-      {sealed ? <><CheckCircle2 className="mx-auto h-9 w-9 text-[#4F7A58]" /><h2 className="mt-3 text-2xl font-bold">Saved to your learning record</h2><p className="mt-2 text-sm text-[#2F4731]/65">Adeline updated what you have demonstrated and will use it to choose what comes next.</p></> : <><h2 className="text-2xl font-bold">Finished this experience?</h2><p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-[#2F4731]/65">Save the work only after you have completed the investigation and the interactive finish. Your concepts, evidence, and any earned credit stay private in the learning record.</p><button type="button" onClick={() => void finishLesson()} disabled={sealing} className="mt-5 rounded-xl bg-[#2F4731] px-6 py-3 text-sm font-bold text-white disabled:opacity-50">{sealing ? "Saving…" : "Save what I learned"}</button></>}
+      {sealed ? <><CheckCircle2 className="mx-auto h-9 w-9 text-[#4F7A58]" /><h2 className="mt-3 text-2xl font-bold">Saved to your learning record</h2><p className="mt-2 text-sm text-[#2F4731]/65">This experience is recorded as {learningStatus.toLowerCase().replaceAll("_", " ")}. {creditSealed ? "The demonstrated work also earned traceable credit." : "It did not automatically award mastery or credit; Adeline will use later demonstrations and review to update the concept."}</p></> : <><h2 className="text-2xl font-bold">What changed in your thinking?</h2><p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-[#2F4731]/65">Tell Adeline what you noticed, made, tested, decided, or can now explain. This records the experience. Mastery and credit require a scored demonstration, artifact, or reviewed observation.</p><label className="mx-auto mt-5 grid max-w-2xl gap-2 text-left text-sm font-bold"><span>Your field note</span><textarea value={reflection} onChange={(event) => setReflection(event.target.value)} rows={4} minLength={20} placeholder="I noticed… I tested… The result changed my thinking because…" className="rounded-xl border border-[#BFB39E] bg-white p-3 font-normal" /></label><button type="button" onClick={() => void finishLesson()} disabled={sealing || reflection.trim().length < 20} className="mt-5 rounded-xl bg-[#2F4731] px-6 py-3 text-sm font-bold text-white disabled:opacity-50">{sealing ? "Saving…" : "Save this field note"}</button></>}
       {sealError && <p className="mt-3 text-sm font-semibold text-red-700" role="alert">{sealError}</p>}
     </section>
   </article>;

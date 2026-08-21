@@ -32,6 +32,9 @@ class SealRequest(BaseModel):
     concept_id:   str | None = None   # ZPD concept_id if known
     concept_name: str | None = None   # Human-readable concept title
     quiz_results: list[dict[str, Any]] = Field(default_factory=list)  # [{correct: bool}, ...]
+    learner_reflection: str | None = Field(default=None, max_length=4000)
+    artifact_refs: list[str] = Field(default_factory=list, max_length=20)
+    parent_attested: bool = False
     credit_draft: dict[str, Any] | None = None
 
 
@@ -40,6 +43,8 @@ class SealResponse(BaseModel):
     lesson_id:      str
     track:          Track
     track_progress: dict[str, int]
+    learning_status: str
+    credit_sealed: bool = False
 
 
 class ProgressResponse(BaseModel):
@@ -75,13 +80,26 @@ async def seal_journal(
         f"lesson={body.lesson_id} track={body.track.value} "
         f"blocks={body.completed_blocks}"
     )
+    reflection = (body.learner_reflection or "").strip()
+    if not reflection and not body.quiz_results and not body.artifact_refs and not body.parent_attested:
+        raise HTTPException(
+            status_code=422,
+            detail="Save a reflection, scored demonstration, artifact, or parent observation before recording this experience.",
+        )
+
+    proficiency = _evidence_proficiency(body)
+    demonstrated = proficiency in {"UNDERSTANDING", "EXTENDING"}
+
     try:
         track_progress = await journal_store.seal(
             student_id=student_id,
             lesson_id=body.lesson_id,
             track=body.track.value,
             completed_blocks=body.completed_blocks,
-            sources=body.evidence_sources or None,
+            sources=(body.evidence_sources + [
+                {"type": "learner_reflection", "content": reflection},
+                *({"type": "artifact", "url": ref} for ref in body.artifact_refs),
+            ]) or None,
         )
     except Exception as e:
         logger.exception("[/journal/seal] DB error")
@@ -95,7 +113,9 @@ async def seal_journal(
     if body.oas_standards:
         # Await this write so the parent Learning Map is correct immediately
         # after the learner saves the experience.
-        await _record_mastery_safe(student_id, body.track.value, body.oas_standards)
+        await _record_mastery_safe(
+            student_id, body.track.value, body.oas_standards, proficiency,
+        )
 
     # Fire-and-forget BKT + SM-2 card update with quiz-derived quality signal
     asyncio.create_task(
@@ -105,7 +125,8 @@ async def seal_journal(
     # A generated lesson carries only proposed credit. Sealing is the learner's
     # completion signal, so this is the one place that turns it into transcript
     # credit. Never trust the student id embedded in the client payload.
-    if body.credit_draft:
+    credit_sealed = False
+    if body.credit_draft and demonstrated:
         try:
             from app.api.learning_records import _seal_transcript_db, TranscriptEntryIn
             credit = body.credit_draft
@@ -123,6 +144,7 @@ async def seal_journal(
                 agent_name=credit.get("agent_name"),
                 researcher_activated=bool(credit.get("researcher_activated", False)),
             ))
+            credit_sealed = True
         except Exception as exc:
             logger.exception("[/journal/seal] Transcript credit seal failed")
             raise HTTPException(status_code=500, detail=f"Journal saved but transcript credit failed: {exc}")
@@ -140,13 +162,22 @@ async def seal_journal(
         lesson_id=body.lesson_id,
         track=body.track,
         track_progress=track_progress,
+        learning_status=proficiency,
+        credit_sealed=credit_sealed,
     )
 
 
-async def _record_mastery_safe(student_id: str, track: str, oas_standards: list[dict]) -> None:
+async def _record_mastery_safe(
+    student_id: str, track: str, oas_standards: list[dict], proficiency: str,
+) -> None:
     try:
-        await curriculum_graph.record_standard_mastery(student_id, track, oas_standards)
-        logger.info(f"[CurriculumGraph] Mastery recorded for {student_id} — {len(oas_standards)} standards")
+        await curriculum_graph.record_standard_mastery(
+            student_id, track, oas_standards, proficiency=proficiency,
+        )
+        logger.info(
+            "[CurriculumGraph] %s recorded for %s — %s standards",
+            proficiency, student_id, len(oas_standards),
+        )
     except Exception as exc:
         logger.warning(f"[CurriculumGraph] Mastery write failed (non-fatal): {exc}")
 
@@ -166,6 +197,25 @@ def _quiz_quality(quiz_results: list[dict]) -> int:
     if ratio >= 0.25:
         return 2
     return 1
+
+
+def _evidence_proficiency(body: SealRequest) -> str:
+    """Translate reviewable evidence into a conservative learning status."""
+    if body.quiz_results:
+        correct = sum(1 for result in body.quiz_results if result.get("correct"))
+        ratio = correct / len(body.quiz_results)
+        if ratio >= 0.9 and (body.artifact_refs or body.parent_attested):
+            return "EXTENDING"
+        if ratio >= 0.75:
+            return "UNDERSTANDING"
+        if ratio >= 0.5:
+            return "APPROACHING"
+        return "DEVELOPING"
+    if body.parent_attested and body.artifact_refs:
+        return "UNDERSTANDING"
+    if body.artifact_refs:
+        return "APPROACHING"
+    return "DEVELOPING"
 
 
 async def _update_card_safe(student_id: str, body: SealRequest) -> None:

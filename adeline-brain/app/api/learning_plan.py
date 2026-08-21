@@ -130,6 +130,7 @@ class GradeLevelStandard(BaseModel):
     grade: int
     description: str
     mastered: bool
+    proficiency: str = "NOT_STARTED"
     priority: int
     track: Optional[str] = None
     strand: Optional[str] = None
@@ -620,31 +621,41 @@ def _build_academic_roadmap(
     remaining = [standard for standard in standards if not standard.mastered]
     assignments = personalized_curriculum_planner.assign_sequence(standards)
     activity_stages = personalized_curriculum_planner.ACTIVITY_STAGES
+    standards_by_code = {standard.standard_id: standard for standard in standards}
     weeks: list[RoadmapWeek] = []
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday"]
     for week_index in range(36):
         week_start = start + timedelta(weeks=week_index)
         days: list[RoadmapDay] = []
         seed_index = week_index % len(seeds)
-        lesson_id, title, track, description = seeds[seed_index]
+        lesson_id, _title, track, description = seeds[seed_index]
         emoji = TRACK_EMOJI.get(track, "✦")
         for day_index, day_name in enumerate(day_names):
             activity_title, activity_description = activity_stages[day_index]
             lesson_date = week_start + timedelta(days=day_index)
+            standard_codes = assignments[week_index * 4 + day_index]
+            target = next((standards_by_code[code] for code in standard_codes if code in standards_by_code), None)
+            learner_hook = (
+                (target.lesson_hook or "").strip()
+                if target else ""
+            ) or (
+                f"Use this experience to investigate {target.description.rstrip('.').lower()}."
+                if target else description
+            )
             days.append(RoadmapDay(
                 date=lesson_date.isoformat(), day=day_name,
                 lesson_id=f"{lesson_id}-w{week_index + 1}-d{day_index + 1}",
-                title=f"{title} — {activity_title}", track=track,
-                description=f"{activity_description} Weekly mission: {description}", emoji=emoji,
+                title=f"{personalized_curriculum_planner.TRACK_LABELS[track]} — {activity_title}", track=track,
+                description=f"{activity_description} {learner_hook}", emoji=emoji,
                 planning_status="ready" if week_index < 4 else "forecast",
                 activity_kind=activity_title,
                 daily_rhythm=list(personalized_curriculum_planner.DAILY_RHYTHM),
-                standard_codes=assignments[week_index * 4 + day_index],
+                standard_codes=standard_codes,
             ))
         weeks.append(RoadmapWeek(
             week=week_index + 1,
             starts_on=week_start.isoformat(),
-            theme=title,
+            theme=personalized_curriculum_planner.TRACK_LABELS[track],
             days=days,
         ))
 
@@ -1051,6 +1062,7 @@ async def _get_grade_level_standards(student_id: str, grade_level: str) -> list[
                 grade=int(r["grade"] or grade_num),
                 description=r["description"] or "",
                 mastered=bool(r["mastered"]),
+                proficiency=str(r.get("proficiency") or "NOT_STARTED"),
                 priority=i + 1,
                 track=r.get("track"),
                 strand=r.get("strand"),

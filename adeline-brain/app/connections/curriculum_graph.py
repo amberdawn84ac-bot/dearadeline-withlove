@@ -200,8 +200,11 @@ class CurriculumGraph:
             await session.commit()
 
     async def record_standard_mastery(
-        self, student_id: str, track: str, standards: list[dict]
+        self, student_id: str, track: str, standards: list[dict],
+        proficiency: str = "DEVELOPING",
     ) -> None:
+        allowed = {"DEVELOPING", "APPROACHING", "UNDERSTANDING", "EXTENDING"}
+        level = proficiency if proficiency in allowed else "DEVELOPING"
         async with _get_session_factory()() as session:
             for standard in standards:
                 standard_id = standard.get("standard_id") or standard.get("code") or ""
@@ -215,13 +218,21 @@ class CurriculumGraph:
                          "evidenceCount", "lastEvidenceAt", "lastAssessedAt")
                     VALUES
                         (gen_random_uuid(), :student_id, :standard_id, :subject, :grade,
-                         CAST('UNDERSTANDING' AS "OASProficiencyLevel"), 1, NOW(), NOW())
+                         CAST(:proficiency AS "OASProficiencyLevel"), 1, NOW(), NOW())
                     ON CONFLICT ("studentId", "standardId") DO UPDATE SET
-                        proficiency = CAST('UNDERSTANDING' AS "OASProficiencyLevel"),
+                        proficiency = CASE
+                            WHEN CAST(EXCLUDED.proficiency AS text) = 'EXTENDING' THEN EXCLUDED.proficiency
+                            WHEN CAST("StandardMastery".proficiency AS text) = 'EXTENDING' THEN "StandardMastery".proficiency
+                            WHEN CAST(EXCLUDED.proficiency AS text) = 'UNDERSTANDING' THEN EXCLUDED.proficiency
+                            WHEN CAST("StandardMastery".proficiency AS text) = 'UNDERSTANDING' THEN "StandardMastery".proficiency
+                            WHEN CAST(EXCLUDED.proficiency AS text) = 'APPROACHING' THEN EXCLUDED.proficiency
+                            ELSE "StandardMastery".proficiency
+                        END,
                         "evidenceCount" = "StandardMastery"."evidenceCount" + 1,
                         "lastEvidenceAt" = NOW(), "lastAssessedAt" = NOW()
                 '''), {"student_id": student_id, "standard_id": standard_id,
-                        "subject": subject, "grade": int(grade) if str(grade).isdigit() else 0})
+                        "subject": subject, "grade": int(grade) if str(grade).isdigit() else 0,
+                        "proficiency": level})
             await session.commit()
 
     async def get_concept_graph_for_track(self, track: str) -> list[dict]:
@@ -280,6 +291,7 @@ class CurriculumGraph:
                 )
                 SELECT s.code AS id, s.description, s.grade, s.subject,
                        s.track::text AS track, s.strand, s."lessonHook" AS lesson_hook,
+                       COALESCE(m.proficiency::text, 'NOT_STARTED') AS proficiency,
                        CASE WHEN m.proficiency IN ('UNDERSTANDING', 'EXTENDING')
                             THEN true ELSE false END AS mastered
                 FROM s

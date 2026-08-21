@@ -3,17 +3,15 @@
  * Type-safe client for parent multi-student management endpoints
  */
 
+import { supabase } from '@/lib/supabase';
+
 const BRAIN_URL = "/brain";
 
-/**
- * Authentication is handled via HttpOnly cookies which are
- * automatically sent by the browser with credentials: 'include'.
- * This function now just returns empty headers for backward compatibility.
- */
-function getAuthHeaders(): Record<string, string> {
-  // Cookies are sent automatically by the browser
-  // No need for Authorization header with localStorage token
-  return {};
+/** Parent accounts use Supabase bearer auth; student cookies remain automatic. */
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -70,7 +68,7 @@ export interface FamilyDashboard {
 
 export async function listStudents(): Promise<StudentSummary[]> {
   const res = await fetch(`${BRAIN_URL}/api/parent/students`, {
-    headers: getAuthHeaders(),
+    headers: await getAuthHeaders(),
     credentials: 'include', // Important: sends auth cookies
     cache: "no-store",
   });
@@ -81,7 +79,7 @@ export async function listStudents(): Promise<StudentSummary[]> {
 export async function addStudent(payload: AddStudentRequest): Promise<StudentSummary> {
   const res = await fetch(`${BRAIN_URL}/api/parent/students`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     credentials: 'include', // Important: sends auth cookies
     body: JSON.stringify(payload),
   });
@@ -103,7 +101,7 @@ export interface ClaimStudentResponse {
 export async function claimStudent(code: string): Promise<ClaimStudentResponse> {
   const res = await fetch(`${BRAIN_URL}/students/claim`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
     credentials: 'include',
     body: JSON.stringify({ code }),
   });
@@ -116,7 +114,7 @@ export async function claimStudent(code: string): Promise<ClaimStudentResponse> 
 
 export async function getFamilyDashboard(): Promise<FamilyDashboard> {
   const res = await fetch(`${BRAIN_URL}/api/parent/dashboard`, {
-    headers: getAuthHeaders(),
+    headers: await getAuthHeaders(),
     credentials: 'include', // Important: sends auth cookies
     cache: "no-store",
   });
@@ -130,7 +128,7 @@ export async function updateStudent(
 ): Promise<{ message: string }> {
   const res = await fetch(`${BRAIN_URL}/api/parent/students/${encodeURIComponent(studentId)}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     credentials: 'include', // Important: sends auth cookies
     body: JSON.stringify(payload),
   });
@@ -141,7 +139,7 @@ export async function updateStudent(
 export async function removeStudent(studentId: string): Promise<{ message: string }> {
   const res = await fetch(`${BRAIN_URL}/api/parent/students/${encodeURIComponent(studentId)}`, {
     method: "DELETE",
-    headers: getAuthHeaders(),
+    headers: await getAuthHeaders(),
     credentials: 'include', // Important: sends auth cookies
   });
   if (!res.ok) throw new Error(`removeStudent failed: ${res.status}`);
