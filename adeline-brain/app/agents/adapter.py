@@ -1,7 +1,7 @@
 """Personalize canonical lesson wording without changing lesson structure.
 
-There is deliberately no format selector here. Specialist agents author the
-canonical lesson once; this adapter may adjust vocabulary and scaffolding for a
+There is deliberately no format selector here. The Canonical Experience Author
+authors the shared investigation once; this adapter may adjust vocabulary and scaffolding for a
 learner, but it may not turn content into cards, slides, animations, quizzes, or
 generic widgets.
 """

@@ -243,6 +243,17 @@ export interface LessonResponse {
       artifact_prompt?: string;
       success_criteria?: string[];
     };
+    learner_contribution?: {
+      role?: string;
+      prompt?: string;
+      artifact_prompt?: string;
+      success_criteria?: string[];
+      response_options?: string[];
+      interest_connections?: string[];
+      mastery_snapshot?: number;
+      portfolio_destination?: boolean;
+      credit_requires_demonstrated_understanding?: boolean;
+    };
     portfolio_task?: { description?: string; evidence_to_preserve?: string };
     printable_request?: LessonRequest;
   };

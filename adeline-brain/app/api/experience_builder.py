@@ -19,8 +19,9 @@ from app.schemas.api_models import LessonRequest
 from app.curriculum.canonical_author import CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT
 from app.curriculum.family_style import finalize_family_lesson, is_current_family_canonical
 from app.connections.canonical_store import canonical_store, canonical_slug
-from app.agents.adapter import AdaptationRequest, adapt_canonical_for_student
+from app.agents.adapter import adapt_canonical_for_student
 from app.services.resource_router import resource_router, ResourceQuery, resource_block_from_packet
+from app.services.learner_context import adaptation_for, learner_contribution
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/experience", tags=["canonical-experience"])
@@ -99,9 +100,10 @@ async def _stream(request: LessonRequest):
         }
         canonical = {"id": str(uuid.uuid4()), "topic": request.topic, "track": request.track.value, "title": authored.get("title") or request.topic, "blocks": blocks, "oas_standards": []}
         await canonical_store.save(slug, canonical, pending=False)
+    adaptation = await adaptation_for(request.student_id, request.grade_level, request.track.value)
     blocks = await adapt_canonical_for_student(
         {"topic": request.topic, "blocks": canonical.get("blocks") or []},
-        AdaptationRequest(grade_level=request.grade_level, track=request.track.value),
+        adaptation,
     )
     resource_block = resource_block_from_packet(packet)
     if resource_block:
@@ -120,7 +122,8 @@ async def _stream(request: LessonRequest):
         "agent_name": "Canonical Experience Author", "researcher_activated": False,
     }
     contract = ((canonical.get("blocks") or [{}])[0].get("metadata") or {}).get("canonical_contract") or {}
-    yield _sse({"type": "done", "lesson_id": lesson_id, "title": canonical.get("title") or request.topic, "agent_name": "Canonical Experience Author", "oas_standards": standards, "credits_awarded": [credit_draft], "researcher_activated": False, "metadata": {"canonical_slug": slug, "topic": request.topic, "grade_level": request.grade_level, "demonstration_contract": contract.get("demonstration_contract") or {}, "portfolio_task": contract.get("portfolio_task") or {}}})
+    contribution = learner_contribution(contract, adaptation)
+    yield _sse({"type": "done", "lesson_id": lesson_id, "title": canonical.get("title") or request.topic, "agent_name": "Canonical Experience Author", "oas_standards": standards, "credits_awarded": [credit_draft], "researcher_activated": False, "metadata": {"canonical_slug": slug, "topic": request.topic, "grade_level": request.grade_level, "demonstration_contract": contract.get("demonstration_contract") or {}, "learner_contribution": contribution, "portfolio_task": contract.get("portfolio_task") or {}}})
 
 
 @router.post("/build")
@@ -137,10 +140,16 @@ async def printable_experience(request: LessonRequest, authorization: str | None
     canonical = await canonical_store.get(slug)
     if not canonical:
         raise HTTPException(status_code=404, detail="Open the investigation once before printing it.")
+    adaptation = await adaptation_for(request.student_id, request.grade_level, request.track.value)
     blocks = await adapt_canonical_for_student(
         {"topic": request.topic, "blocks": canonical.get("blocks") or []},
-        AdaptationRequest(grade_level=request.grade_level, track=request.track.value),
+        adaptation,
     )
+    contract = ((canonical.get("blocks") or [{}])[0].get("metadata") or {}).get("canonical_contract") or {}
+    if blocks:
+        blocks[0].setdefault("metadata", {})["learner_contribution"] = learner_contribution(
+            contract, adaptation
+        )
     from app.services.investigation_printable import build_investigation_pdf
     pdf = build_investigation_pdf(title=canonical.get("title") or request.topic, topic=request.topic,
                                   grade_level=request.grade_level, blocks=blocks)

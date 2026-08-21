@@ -82,29 +82,6 @@ CANONICAL EXPERIENCE AUTHOR — NON-NEGOTIABLE:
 """.strip()
 
 
-def family_workshop_block(topic: str) -> dict:
-    """Deprecated compatibility helper; family style is no longer a synthetic block.
-
-    Kept so old imports do not break. New canonical generation must NOT append
-    this block to lessons.
-    """
-    safe_topic = topic.strip() or "this topic"
-    return {
-        "block_type": "NARRATIVE",
-        "content": f"## Family learning: {safe_topic}",
-        "evidence": [],
-        "is_silenced": False,
-        "family_style": True,
-        "canonical_format_version": CANONICAL_FORMAT_VERSION,
-        "deprecated": True,
-    }
-
-
-def ensure_family_workshop(blocks: list[dict], topic: str) -> list[dict]:
-    """Compatibility no-op: family style is authored by the canonical lesson itself."""
-    return list(blocks)
-
-
 def _usable_content(block: dict) -> bool:
     content = str(block.get("content") or "").strip()
     if not content:

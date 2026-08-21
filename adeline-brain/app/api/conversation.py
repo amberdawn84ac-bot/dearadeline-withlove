@@ -204,7 +204,7 @@ async def _stream_llm(
     messages: list[dict],
 ) -> AsyncIterator[str]:
     """Yield text using the active synthesis client (Gemini, with Claude fallback)."""
-    from app.agents.orchestrator import _synthesis_call
+    from app.services.synthesis import synthesize
 
     # Build a single user turn: history + current message concatenated
     history_text = ""
@@ -214,7 +214,7 @@ async def _stream_llm(
     last = messages[-1].get("content", "") if messages else ""
     user_prompt = (history_text + last).strip()
 
-    response = await _synthesis_call(system_prompt, user_prompt, max_tokens=2000)
+    response = await synthesize(system_prompt, user_prompt, max_tokens=2000)
     yield response
 
 

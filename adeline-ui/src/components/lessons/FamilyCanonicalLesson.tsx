@@ -129,6 +129,7 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
   }
 
   const demonstrationContract = lesson.metadata?.demonstration_contract;
+  const learnerContribution = lesson.metadata?.learner_contribution;
 
   return <article className="space-y-6 pb-20 text-[#2F4731]">
     <header className="overflow-hidden rounded-[30px] border border-[#D9CFBC] bg-[linear-gradient(135deg,#F5E6C8,#E3ECDD)] shadow-sm">
@@ -146,8 +147,10 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
     <section className="rounded-[26px] border-2 border-[#BD6809] bg-[#FDF6E9] p-6 md:p-8">
       <p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">Your contribution</p>
       <h2 className="mt-2 text-3xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{demonstrationContract?.invitation || "Leave evidence of what you discovered"}</h2>
-      <p className="mt-3 max-w-3xl text-sm leading-6 text-[#2F4731]/70">{demonstrationContract?.artifact_prompt || lesson.metadata?.portfolio_task?.evidence_to_preserve || "Describe, link, or identify the drawing, build, calculation, photo, recording, source analysis, or other work you want preserved."}</p>
-      {demonstrationContract?.success_criteria?.length ? <ul className="mt-4 grid gap-2 text-sm">{demonstrationContract.success_criteria.map((criterion) => <li key={criterion} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#4F7A58]" />{criterion}</li>)}</ul> : null}
+      {learnerContribution?.role && <p className="mt-3 max-w-3xl text-base font-bold leading-7">{learnerContribution.role}</p>}
+      {learnerContribution?.prompt && learnerContribution.prompt !== learnerContribution.role && <p className="mt-2 max-w-3xl text-sm leading-6">{learnerContribution.prompt}</p>}
+      <p className="mt-3 max-w-3xl text-sm leading-6 text-[#2F4731]/70">{learnerContribution?.artifact_prompt || demonstrationContract?.artifact_prompt || lesson.metadata?.portfolio_task?.evidence_to_preserve || "Describe, link, or identify the drawing, build, calculation, photo, recording, source analysis, or other work you want preserved."}</p>
+      {(learnerContribution?.success_criteria?.length || demonstrationContract?.success_criteria?.length) ? <ul className="mt-4 grid gap-2 text-sm">{(learnerContribution?.success_criteria || demonstrationContract?.success_criteria || []).map((criterion) => <li key={criterion} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#4F7A58]" />{criterion}</li>)}</ul> : null}
       <label className="mt-5 grid gap-2 text-sm font-bold"><span>What should Adeline preserve in your portfolio?</span><textarea value={artifact} onChange={(event) => setArtifact(event.target.value)} rows={4} placeholder="I made… My evidence shows… The link or file is… My part of the family investigation was…" className="rounded-xl border border-[#BFB39E] bg-white p-3 font-normal" /></label>
     </section>
     {reflectionBlocks.length > 0 && <section>{render(reflectionBlocks)}</section>}

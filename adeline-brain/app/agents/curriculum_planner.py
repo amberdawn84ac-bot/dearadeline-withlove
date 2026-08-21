@@ -1,6 +1,6 @@
 """Authoritative rules for a student's living, complete curriculum plan.
 
-This agent plans; specialist agents teach. Canonicals store reusable teaching.
+This agent plans; canonical investigations provide the reusable teaching source.
 The Registrar records evidence. Keeping those responsibilities separate prevents
 an engaging theme list from masquerading as a complete education.
 """

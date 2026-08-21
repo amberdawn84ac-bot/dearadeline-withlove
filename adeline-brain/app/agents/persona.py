@@ -1,14 +1,12 @@
 """
 Adeline Persona — Versioned persona constants and the top-level system prompt.
 
-GRADE_DESC, TRACK_PERSONA, and ADELINE_VOICE live in orchestrator.py as the
-authoritative, detail-rich versions used by all specialist agents.
-This module re-exports those canonical names so new agents can import from
-a single location, and adds ADELINE_SYSTEM_PROMPT — the educational concierge
-framing used for top-level route instructions.
+This module owns the shared conversational Scripture policy and top-level
+Adeline system prompt. Canonical experience authorship is defined separately in
+the curriculum package.
 
 Usage:
-    from app.agents.persona import GRADE_DESC, TRACK_PERSONA, ADELINE_VOICE, ADELINE_SYSTEM_PROMPT
+    from app.agents.persona import ADELINE_SYSTEM_PROMPT
 """
 
 

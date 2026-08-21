@@ -1,30 +1,10 @@
 from app.curriculum.family_style import (
     CANONICAL_FORMAT_VERSION,
     FAMILY_CANONICAL_AUTHORING_RULES,
-    ensure_family_workshop,
     finalize_family_lesson,
-    family_workshop_block,
     is_current_family_canonical,
 )
 from app.agents.adapter import sanitize_learner_text
-
-
-def test_family_workshop_helper_is_explicitly_deprecated():
-    block = family_workshop_block("Children Who Changed History")
-
-    assert block["family_style"] is True
-    assert block["deprecated"] is True
-    assert block["canonical_format_version"] == CANONICAL_FORMAT_VERSION
-
-
-def test_ensure_family_workshop_is_idempotent():
-    original = [{"block_type": "NARRATIVE", "content": "Truth."}]
-    once = ensure_family_workshop(original, "A topic")
-    twice = ensure_family_workshop(once, "A topic")
-
-    assert len(original) == 1
-    assert len(once) == 1
-    assert twice == once
 
 
 def test_canonical_rules_keep_truth_fixed_while_roles_change():
@@ -42,7 +22,6 @@ def test_only_current_family_canonicals_are_reused():
     }
     assert is_current_family_canonical([current])
     assert not is_current_family_canonical([{**current, "canonical_format_version": 1}])
-    assert not is_current_family_canonical([family_workshop_block("Water")])
 
 
 def test_finalizer_preserves_structure_and_removes_obsolete_rebuilders():
