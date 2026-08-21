@@ -235,6 +235,57 @@ async def seed_nature_lost_vault(
     )
 
 
+@router.post(
+    "/seed-canonicals",
+    response_model=TaskResponse,
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+)
+async def seed_canonicals(
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(get_current_user_id),
+) -> TaskResponse:
+    """Pre-seed the current family-investigation canonicals; safe to re-run."""
+    import uuid as _uuid
+
+    task_id = str(_uuid.uuid4())
+    task_status[task_id] = {
+        "status": "running",
+        "progress": "Starting canonical investigation seeder…",
+        "result": None,
+        "error": None,
+        "started_by": user_id,
+        "started_at": "",
+    }
+
+    async def _run() -> None:
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "scripts.seed_canonicals"],
+                cwd=Path(__file__).resolve().parents[2],
+                capture_output=True,
+                text=True,
+                timeout=7200,
+            )
+            if result.returncode == 0:
+                task_status[task_id]["status"] = "completed"
+                task_status[task_id]["progress"] = "Canonical investigation seeding completed"
+                task_status[task_id]["result"] = {"stdout": result.stdout}
+            else:
+                task_status[task_id]["status"] = "failed"
+                task_status[task_id]["error"] = result.stderr
+        except Exception as exc:
+            task_status[task_id]["status"] = "failed"
+            task_status[task_id]["error"] = str(exc)
+
+    background_tasks.add_task(_run)
+    logger.info("Canonical seeding task %s started by %s", task_id, user_id)
+    return TaskResponse(
+        success=True,
+        message="Canonical investigation seeding started. Use the task ID to check progress.",
+        task_id=task_id,
+    )
+
+
 @router.get(
     "/task/{task_id}",
     response_model=TaskStatusResponse,

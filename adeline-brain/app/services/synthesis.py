@@ -1,8 +1,10 @@
-"""Shared, non-curricular language-model client.
+"""Shared language-model transport for Adeline's curricular intelligence.
 
-Lesson authorship must go through the canonical experience builder.  This
-module exists only so conversational and other bounded features do not depend
-on the retired specialist lesson orchestrator.
+Adeline's conversation is curricular: it teaches, notices learning in ordinary
+life, connects that learning to the plan, and hands demonstrated work to the
+portfolio/registrar flow. Canonical investigation authorship still goes through
+the Canonical Experience Author; this transport simply keeps curricular chat
+from depending on the retired lesson orchestrator.
 """
 from __future__ import annotations
 
@@ -29,7 +31,7 @@ def _client():
 
 
 async def synthesize(system: str, user: str, max_tokens: int = 6000) -> str:
-    """Return one complete, non-empty synthesis response, retrying once."""
+    """Run the caller's curriculum-aware system prompt and retry once."""
     client, model = _client()
     last_error: Exception | None = None
     for attempt in range(2):
