@@ -43,7 +43,8 @@ export default function CanonicalLessonPage() {
         setTask(selected);
 
         const blocks: LessonBlockResponse[] = [];
-        for await (const event of buildExperience(lessonRequestFromSuggestion(selected, student.id, plan.placement.working_grade, requiredStandardCodes))) {
+        const experienceRequest = lessonRequestFromSuggestion(selected, student.id, plan.placement.working_grade, requiredStandardCodes);
+        for await (const event of buildExperience(experienceRequest)) {
           if (cancelled) return;
           if (event.type === 'status') setStatus(event.message);
           if (event.type === 'block') blocks.push(event.block);
@@ -60,6 +61,7 @@ export default function CanonicalLessonPage() {
               agent_name: event.agent_name ?? 'Adeline',
               xapi_statements: event.xapi_statements ?? [],
               credits_awarded: event.credits_awarded ?? [],
+              metadata: { ...(event.metadata ?? {}), printable_request: experienceRequest },
             });
             setStatus('');
           }

@@ -233,6 +233,19 @@ export interface LessonResponse {
     /** The OAS standard on the primary track that creates this bridge */
     bridge_standard_text?: string;
   }>;
+  metadata?: {
+    canonical_slug?: string;
+    topic?: string;
+    grade_level?: string;
+    demonstration_contract?: {
+      invitation?: string;
+      learner_prompt?: string;
+      artifact_prompt?: string;
+      success_criteria?: string[];
+    };
+    portfolio_task?: { description?: string; evidence_to_preserve?: string };
+    printable_request?: LessonRequest;
+  };
 }
 
 // ── Client Functions ───────────────────────────────────────────────────────────
@@ -242,7 +255,7 @@ export interface LessonResponse {
 export type LessonStreamEvent =
   | { type: "status"; message: string }
   | { type: "block"; block: LessonBlockResponse }
-  | { type: "done"; lesson_id: string; title: string; oas_standards?: unknown[]; agent_name?: string; researcher_activated?: boolean; xapi_statements?: XAPIStatement[]; credits_awarded?: CASECredit[] }
+  | { type: "done"; lesson_id: string; title: string; oas_standards?: unknown[]; agent_name?: string; researcher_activated?: boolean; xapi_statements?: XAPIStatement[]; credits_awarded?: CASECredit[]; metadata?: LessonResponse['metadata'] }
   | { type: "error"; message: string }
   // GenUI progressive rendering events (Data Stream Protocol)
   | { type: "genui_skeleton"; componentId: string; componentType: string; hints?: Record<string, unknown>; lessonId?: string; track?: string }
@@ -337,6 +350,7 @@ export async function* buildExperience(
             researcher_activated: payload.researcher_activated,
             xapi_statements: payload.xapi_statements,
             credits_awarded: payload.credits_awarded,
+            metadata: payload.metadata,
           };
         } else if (payload.type === "error") {
           yield { type: "error", message: payload.message ?? "Unknown error" };
@@ -346,6 +360,23 @@ export async function* buildExperience(
       }
     }
   }
+}
+
+export async function downloadInvestigationPrintable(request: LessonRequest): Promise<void> {
+  const response = await fetch(`${BRAIN_URL}/experience/printable`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
+    body: JSON.stringify(request),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`printable failed: ${response.status} ${response.statusText}`);
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? "dear-adeline-field-dossier.pdf";
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 export async function listTracks(): Promise<{ tracks: { id: Track; label: string }[] }> {

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Archive, CheckCircle2, ExternalLink, Gamepad2, Search, ShieldCheck } from "lucide-react";
+import { Archive, CheckCircle2, Download, ExternalLink, Gamepad2, Search, ShieldCheck } from "lucide-react";
 import GenUIRenderer from "@/components/GenUIRenderer";
-import { sealJournal } from "@/lib/brain-client";
+import { downloadInvestigationPrintable, sealJournal } from "@/lib/brain-client";
 import type { LessonBlockResponse, LessonResponse } from "@/lib/brain-client";
 
 type Resource = {
@@ -62,6 +62,9 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
   const [learningStatus, setLearningStatus] = useState("");
   const [creditSealed, setCreditSealed] = useState(false);
   const [quizResults, setQuizResults] = useState<Array<{ correct: boolean; concept_id?: string }>>([]);
+  const [artifact, setArtifact] = useState("");
+  const [printing, setPrinting] = useState(false);
+  const [printError, setPrintError] = useState("");
   const visible = lesson.blocks.filter((block) => !block.is_silenced);
   const resources = visible.filter((block) => block.block_type === "RESOURCE_COLLECTION");
   const teaching = visible.filter((block) => block.block_type !== "RESOURCE_COLLECTION");
@@ -104,6 +107,8 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
         credit_draft: lesson.credits_awarded[0],
         learner_reflection: reflection.trim(),
         quiz_results: quizResults,
+        artifact_refs: artifact.trim() ? [`portfolio://investigation/${lesson.lesson_id}`] : [],
+        evidence_sources: artifact.trim() ? [{ title: "Learner investigation artifact", url: `portfolio://investigation/${lesson.lesson_id}`, author: artifact.trim(), year: new Date().getFullYear() }] : [],
       });
       setLearningStatus(result.learning_status);
       setCreditSealed(result.credit_sealed);
@@ -115,10 +120,20 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
     }
   }
 
+  async function printDossier() {
+    if (!lesson.metadata?.printable_request || printing) return;
+    setPrinting(true); setPrintError("");
+    try { await downloadInvestigationPrintable(lesson.metadata.printable_request); }
+    catch (reason) { setPrintError(reason instanceof Error ? reason.message : "The dossier could not be downloaded."); }
+    finally { setPrinting(false); }
+  }
+
+  const demonstrationContract = lesson.metadata?.demonstration_contract;
+
   return <article className="space-y-6 pb-20 text-[#2F4731]">
     <header className="overflow-hidden rounded-[30px] border border-[#D9CFBC] bg-[linear-gradient(135deg,#F5E6C8,#E3ECDD)] shadow-sm">
       <div className="grid gap-8 p-7 md:grid-cols-[1.2fr_.8fr] md:p-11">
-        <div><p className="text-xs font-black uppercase tracking-[.2em] text-[#A95322]">Today&apos;s experience</p><h1 className="mt-3 text-5xl leading-[.95] md:text-6xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{lesson.title}</h1><p className="mt-5 max-w-2xl text-base leading-7 text-[#2F4731]/75">Follow the question. Use what helps. Make, test, examine, or decide something real.</p></div>
+        <div><p className="text-xs font-black uppercase tracking-[.2em] text-[#A95322]">Today&apos;s experience</p><h1 className="mt-3 text-5xl leading-[.95] md:text-6xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{lesson.title}</h1><p className="mt-5 max-w-2xl text-base leading-7 text-[#2F4731]/75">Follow the question. Use what helps. Make, test, examine, or decide something real.</p>{lesson.metadata?.printable_request && <button type="button" onClick={() => void printDossier()} disabled={printing} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#2F4731] bg-white/70 px-4 py-2 text-sm font-bold disabled:opacity-50"><Download className="h-4 w-4" />{printing ? "Preparing dossier…" : "Print field dossier"}</button>}{printError && <p className="mt-2 text-sm font-semibold text-red-700">{printError}</p>}</div>
         <div className="self-center border-l-4 border-[#BD6809] pl-6"><p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">The question worth following</p><p className="mt-3 text-2xl leading-snug" style={{ fontFamily: "var(--font-kalam), cursive" }}>{questionFrom(teaching, lesson.title)}</p></div>
       </div>
     </header>
@@ -128,6 +143,13 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
     {action.length > 0 && <section><p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Do something with it</p><h2 className="mt-2 mb-6 text-3xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>Investigate, make, test, or decide</h2>{render(action)}</section>}
     {resources.map((block) => <ResourceCollection key={block.block_id} block={block} />)}
     {demonstration.length > 0 && <section className="border-y-2 border-[#2F4731] py-8"><p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">Demonstrate</p><h2 className="mt-2 mb-6 text-4xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>Show what the experience helped you understand</h2>{render(demonstration)}</section>}
+    <section className="rounded-[26px] border-2 border-[#BD6809] bg-[#FDF6E9] p-6 md:p-8">
+      <p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">Your contribution</p>
+      <h2 className="mt-2 text-3xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{demonstrationContract?.invitation || "Leave evidence of what you discovered"}</h2>
+      <p className="mt-3 max-w-3xl text-sm leading-6 text-[#2F4731]/70">{demonstrationContract?.artifact_prompt || lesson.metadata?.portfolio_task?.evidence_to_preserve || "Describe, link, or identify the drawing, build, calculation, photo, recording, source analysis, or other work you want preserved."}</p>
+      {demonstrationContract?.success_criteria?.length ? <ul className="mt-4 grid gap-2 text-sm">{demonstrationContract.success_criteria.map((criterion) => <li key={criterion} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#4F7A58]" />{criterion}</li>)}</ul> : null}
+      <label className="mt-5 grid gap-2 text-sm font-bold"><span>What should Adeline preserve in your portfolio?</span><textarea value={artifact} onChange={(event) => setArtifact(event.target.value)} rows={4} placeholder="I made… My evidence shows… The link or file is… My part of the family investigation was…" className="rounded-xl border border-[#BFB39E] bg-white p-3 font-normal" /></label>
+    </section>
     {reflectionBlocks.length > 0 && <section>{render(reflectionBlocks)}</section>}
     {unstaged.length > 0 && <section>{render(unstaged)}</section>}
     <section className="rounded-[26px] border border-[#D9CFBC] bg-[#F0FDF4] p-6 text-center md:p-8">

@@ -43,6 +43,18 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
     "description": "",
     "evidence_to_preserve": ""
   }},
+  "printable_contract": {{
+    "cover_brief": "",
+    "field_pages": [{{"title": "", "purpose": "", "response_mode": "draw|write|measure|calculate|document"}}],
+    "materials": [],
+    "family_launch": ""
+  }},
+  "demonstration_contract": {{
+    "invitation": "",
+    "learner_prompt": "",
+    "artifact_prompt": "",
+    "success_criteria": []
+  }},
   "reflection": [],
   "family_roles": {{
     "elementary": "",
@@ -74,6 +86,11 @@ ADAPTATION CONTRACT:
   and responsibility for grade/mastery.
 - Rules may not change the central question, verified evidence, learning goal,
   worldview lens, shared experience, or real-world outcome.
+
+PRINTABLE AND DEMONSTRATION CONTRACT:
+- printable_contract describes an open-and-go field dossier made from this same canonical; it is not a second lesson.
+- demonstration_contract asks the learner to show, explain, make, test, defend, or document understanding. Never make completion or confidence the success criterion.
+- Do not print standards, internal codes, mastery labels, credit rules, or registrar language for the learner.
 
 VISUAL CONTRACT:
 Visuals are semantic learning assets, not decoration. Describe subject,

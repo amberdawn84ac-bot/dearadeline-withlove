@@ -7,10 +7,11 @@ not route through the retired specialist/orchestrator lesson pipeline.
 import asyncio
 import json
 import logging
+import re
 import uuid
 
 from fastapi import APIRouter, Header, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from app.api.middleware import verify_student_access
 from app.config import GEMINI_API_KEY, GOOGLE_API_KEY, GEMINI_BASE_URL, GEMINI_MODEL
@@ -39,7 +40,7 @@ def _json_object(raw: str) -> dict:
     return json.loads(text[start:end + 1]) if start >= 0 and end > start else {}
 
 
-async def _author(request: LessonRequest, resources: list[dict]) -> list[dict]:
+async def _author(request: LessonRequest, resources: list[dict]) -> dict:
     import openai
     key = GEMINI_API_KEY or GOOGLE_API_KEY
     if not key:
@@ -62,7 +63,8 @@ async def _author(request: LessonRequest, resources: list[dict]) -> list[dict]:
             parsed = _json_object(response.choices[0].message.content or "")
             blocks = finalize_family_lesson(parsed.get("blocks") or [], request.topic, track=request.track.value)
             if blocks:
-                return blocks
+                parsed["blocks"] = blocks
+                return parsed
             last_error = ValueError("author output failed semantic experience validation")
         except Exception as exc:
             last_error = exc
@@ -88,8 +90,14 @@ async def _stream(request: LessonRequest):
             canonical = None
     if not canonical or canonical.get("pending_approval"):
         yield _sse({"type": "status", "message": "Adeline is authoring the experience from the living plan…"})
-        blocks = await _author(request, packet["resources"])
-        canonical = {"id": str(uuid.uuid4()), "topic": request.topic, "track": request.track.value, "title": request.topic, "blocks": blocks, "oas_standards": []}
+        authored = await _author(request, packet["resources"])
+        blocks = authored["blocks"]
+        # Durable contracts live with the canonical blocks so the current DB schema
+        # can preserve one source of truth without introducing a parallel lesson table.
+        blocks[0].setdefault("metadata", {})["canonical_contract"] = {
+            key: authored.get(key) for key in ("big_question", "learning_goal", "shared_experience", "real_world_task", "portfolio_task", "printable_contract", "demonstration_contract", "family_roles")
+        }
+        canonical = {"id": str(uuid.uuid4()), "topic": request.topic, "track": request.track.value, "title": authored.get("title") or request.topic, "blocks": blocks, "oas_standards": []}
         await canonical_store.save(slug, canonical, pending=False)
     blocks = await adapt_canonical_for_student(
         {"topic": request.topic, "blocks": canonical.get("blocks") or []},
@@ -102,10 +110,39 @@ async def _stream(request: LessonRequest):
         block.setdefault("block_id", f"{lesson_id}-{index}")
         yield _sse({"type": "block", "block": block})
     standards = [{"standard_id": code, "text": "Internal learning-plan target", "grade": 0, "source_type": "required_plan"} for code in request.required_standard_codes]
-    yield _sse({"type": "done", "lesson_id": lesson_id, "title": canonical.get("title") or request.topic, "agent_name": "Canonical Experience Author", "oas_standards": standards, "credits_awarded": [], "researcher_activated": False})
+    credit_draft = {
+        "id": str(uuid.uuid4()), "lesson_id": lesson_id, "student_id": request.student_id,
+        "course_title": canonical.get("title") or request.topic, "track": request.track.value,
+        "oas_standards": request.required_standard_codes,
+        "activity_description": f"Individual contribution to the family investigation: {canonical.get('title') or request.topic}",
+        # A small auditable increment; Journal only seals it after demonstrated understanding.
+        "credit_hours": 0.02, "credit_type": "CORE", "is_homestead_credit": request.is_homestead,
+        "agent_name": "Canonical Experience Author", "researcher_activated": False,
+    }
+    contract = ((canonical.get("blocks") or [{}])[0].get("metadata") or {}).get("canonical_contract") or {}
+    yield _sse({"type": "done", "lesson_id": lesson_id, "title": canonical.get("title") or request.topic, "agent_name": "Canonical Experience Author", "oas_standards": standards, "credits_awarded": [credit_draft], "researcher_activated": False, "metadata": {"canonical_slug": slug, "topic": request.topic, "grade_level": request.grade_level, "demonstration_contract": contract.get("demonstration_contract") or {}, "portfolio_task": contract.get("portfolio_task") or {}}})
 
 
 @router.post("/build")
 async def build_experience(request: LessonRequest, authorization: str | None = Header(default=None)):
     await verify_student_access(request.student_id, authorization)
     return StreamingResponse(_stream(request), media_type="text/event-stream")
+
+
+@router.post("/printable")
+async def printable_experience(request: LessonRequest, authorization: str | None = Header(default=None)):
+    """Render the same adapted canonical as a learner-facing printable dossier."""
+    await verify_student_access(request.student_id, authorization)
+    slug = shared_family_canonical_slug(request)
+    canonical = await canonical_store.get(slug)
+    if not canonical:
+        raise HTTPException(status_code=404, detail="Open the investigation once before printing it.")
+    blocks = await adapt_canonical_for_student(
+        {"topic": request.topic, "blocks": canonical.get("blocks") or []},
+        AdaptationRequest(grade_level=request.grade_level, track=request.track.value),
+    )
+    from app.services.investigation_printable import build_investigation_pdf
+    pdf = build_investigation_pdf(title=canonical.get("title") or request.topic, topic=request.topic,
+                                  grade_level=request.grade_level, blocks=blocks)
+    filename = re.sub(r"[^a-z0-9]+", "-", (canonical.get("title") or request.topic).lower()).strip("-") or "investigation"
+    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename}-field-dossier.pdf"'})

@@ -2,6 +2,7 @@ from app.api.journal import SealRequest, _evidence_proficiency
 from app.curriculum.experience_contract import annotate_experience, validate_experience
 from app.schemas.api_models import LessonRequest, Track
 from app.api.experience_builder import shared_family_canonical_slug
+from app.services.investigation_printable import build_investigation_pdf
 
 
 def test_experience_requires_action_and_demonstration():
@@ -54,5 +55,19 @@ def test_only_direct_experience_builder_is_mounted():
     paths = {route.path for route in app.routes}
     assert "/experience/build" in paths
     assert "/brain/experience/build" in paths
+    assert "/experience/printable" in paths
+    assert "/brain/experience/printable" in paths
     assert "/lesson/build" not in paths
     assert "/brain/lesson/build" not in paths
+
+
+def test_printable_is_same_experience_and_hides_internal_standards():
+    pdf = build_investigation_pdf(
+        title="Creek Detectives", topic="erosion", grade_level="Grade 3",
+        blocks=[
+            {"block_type": "PRIMARY_SOURCE", "experience_stage": "DISCOVERY", "title": "Compare the creek maps", "content": "Notice what moved and record your evidence.", "is_silenced": False},
+            {"block_type": "EXPERIMENT", "experience_stage": "ACTION", "title": "Test a stream table", "content": "Change one variable and measure the result.", "is_silenced": False},
+        ],
+    )
+    assert pdf.startswith(b"%PDF")
+    assert b"3-ESS2-1" not in pdf
