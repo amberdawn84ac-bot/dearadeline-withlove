@@ -257,10 +257,10 @@ export type LessonStreamEvent =
  * all at once after the full lesson completes.
  * Model: identical to streamConversation() but for lesson generation.
  */
-export async function* buildLesson(
+export async function* buildExperience(
   request: LessonRequest,
 ): AsyncGenerator<LessonStreamEvent> {
-  const resp = await fetch(`${BRAIN_URL}/lesson/build`, {
+  const resp = await fetch(`${BRAIN_URL}/experience/build`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
     body: JSON.stringify(request),

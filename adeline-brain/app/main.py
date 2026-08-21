@@ -57,7 +57,7 @@ from app.api.auth import router as auth_router
 from app.api.realtime import router as realtime_router
 from app.api.conversation import router as conversation_router
 from app.api.learning_path import router as learning_path_router
-from app.api.lesson_stream import router as lesson_stream_router
+from app.api.experience_builder import router as experience_builder_router
 from app.api.standards import router as standards_router
 from app.api.agent_team import router as agent_team_router
 from app.api.resources import router as resources_router
@@ -183,7 +183,7 @@ app.add_middleware(
 )
 
 app.include_router(lessons_router)
-app.include_router(lesson_stream_router)
+app.include_router(experience_builder_router)
 app.include_router(opportunities_router)
 app.include_router(journal_router)
 app.include_router(transcripts_router)
@@ -216,7 +216,7 @@ app.include_router(auth_router, prefix="/brain")
 # ── Other /brain/* routes ──
 app.include_router(onboarding_router, prefix="/brain")
 app.include_router(lessons_router, prefix="/brain")
-app.include_router(lesson_stream_router, prefix="/brain")
+app.include_router(experience_builder_router, prefix="/brain")
 app.include_router(journal_router, prefix="/brain")
 app.include_router(transcripts_router, prefix="/brain")
 app.include_router(learning_records_router, prefix="/brain")

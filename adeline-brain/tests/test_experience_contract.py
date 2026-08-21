@@ -1,7 +1,7 @@
 from app.api.journal import SealRequest, _evidence_proficiency
 from app.curriculum.experience_contract import annotate_experience, validate_experience
 from app.schemas.api_models import LessonRequest, Track
-from app.api.lesson_stream import shared_family_canonical_slug
+from app.api.experience_builder import shared_family_canonical_slug
 
 
 def test_experience_requires_action_and_demonstration():
@@ -47,3 +47,12 @@ def test_siblings_share_canonical_but_keep_individual_standards():
     older = LessonRequest(student_id="older", track=Track.CREATION_SCIENCE, topic="Creek Detectives", grade_level="7", required_standard_codes=["7.ESS3.2"])
     assert shared_family_canonical_slug(first) == shared_family_canonical_slug(older)
     assert first.required_standard_codes != older.required_standard_codes
+
+
+def test_only_direct_experience_builder_is_mounted():
+    from app.main import app
+    paths = {route.path for route in app.routes}
+    assert "/experience/build" in paths
+    assert "/brain/experience/build" in paths
+    assert "/lesson/build" not in paths
+    assert "/brain/lesson/build" not in paths

@@ -4,24 +4,15 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useStudent } from '@/lib/useStudent';
 import { getLearningPlan, getRecentTranscript } from '@/lib/brain-client';
-import type { LearningPlanResponse, TranscriptEntry } from '@/lib/brain-client';
+import type { LessonSuggestion, TranscriptEntry } from '@/lib/brain-client';
 import styles from '@/components/nav/sites-dashboard.module.css';
-
-type RoadmapDay = LearningPlanResponse['roadmap']['months'][number]['weeks'][number]['days'][number];
-
-function localDateKey(value = new Date()) {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, '0');
-  const day = String(value.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 export default function TodayPage() {
   const { student, loading: studentLoading } = useStudent();
-  const [today, setToday] = useState<RoadmapDay | null>(null);
+  const [today, setToday] = useState<LessonSuggestion | null>(null);
   const [weekTheme, setWeekTheme] = useState('');
   const [sharedWithSiblings, setSharedWithSiblings] = useState(false);
-  const [comingUp, setComingUp] = useState<RoadmapDay[]>([]);
+  const [comingUp, setComingUp] = useState<LessonSuggestion[]>([]);
   const [finished, setFinished] = useState<TranscriptEntry[]>([]);
   const [isNextSchoolDay, setIsNextSchoolDay] = useState(false);
   const [planLoading, setPlanLoading] = useState(true);
@@ -37,18 +28,13 @@ export default function TodayPage() {
         getLearningPlan(studentId, 6),
         getRecentTranscript(studentId, 4).catch(() => []),
       ]);
-      const dateKey = localDateKey();
-      const weeks = plan.roadmap.months.flatMap((month) => month.weeks);
-      const exactWeek = weeks.find((week) => week.days.some((day) => day.date === dateKey));
-      const exactDay = exactWeek?.days.find((day) => day.date === dateKey);
-      const upcomingWeek = exactDay ? exactWeek : weeks.find((week) => week.days.some((day) => day.date >= dateKey));
-      const upcomingDay = exactDay ?? upcomingWeek?.days.find((day) => day.date >= dateKey) ?? null;
-      setToday(upcomingDay);
-      setWeekTheme(upcomingWeek?.theme ?? 'Family investigation');
+      const lineup = plan.suggestions;
+      setToday(lineup[0] ?? null);
+      setWeekTheme(lineup[0]?.title ?? 'Family investigation');
       setSharedWithSiblings(plan.family_context.shared_with_siblings);
-      setComingUp((upcomingWeek?.days ?? []).filter((day) => day.date > (upcomingDay?.date ?? dateKey)));
+      setComingUp(lineup.slice(1, 4));
       setFinished(recent);
-      setIsNextSchoolDay(Boolean(upcomingDay && upcomingDay.date !== dateKey));
+      setIsNextSchoolDay(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Adeline could not load today yet.');
     } finally {
@@ -75,19 +61,18 @@ export default function TodayPage() {
         <div className={`${styles.kanbanColumn} ${styles.kanbanToday}`}>
           <header><span>1</span><div><small>Right now</small><h2>Today</h2></div></header>
           {today ? <article className={styles.kanbanCard}>
-            <small>{today.day} · {today.track.replace(/_/g, ' ')}</small>
-            <h3>{today.emoji} {today.activity_kind}</h3>
+            <small>{today.track.replace(/_/g, ' ')}</small>
+            <h3>{today.emoji} {today.title}</h3>
             <p>{today.description}</p>
-            <ul>{today.daily_rhythm.map((item) => <li key={item}>{item}</li>)}</ul>
-            <Link href={`/dashboard/lesson/${encodeURIComponent(today.lesson_id)}`}>Begin →</Link>
+            <Link href={`/dashboard/lesson/${encodeURIComponent(today.id)}`}>Begin →</Link>
           </article> : <EmptyCard text="The next plan is being arranged." />}
         </div>
 
         <div className={styles.kanbanColumn}>
           <header><span>2</span><div><small>This investigation</small><h2>Coming Up</h2></div></header>
-          {comingUp.map((day) => <article key={day.lesson_id} className={styles.kanbanCard}>
-            <small>{day.day}</small><h3>{day.emoji} {day.activity_kind}</h3>
-            <p>{day.daily_rhythm.join(' · ')}</p>
+          {comingUp.map((mission) => <article key={mission.id} className={styles.kanbanCard}>
+            <small>{mission.track.replace(/_/g, ' ')}</small><h3>{mission.emoji} {mission.title}</h3>
+            <p>{mission.description}</p>
           </article>)}
           {!comingUp.length && <EmptyCard text="Nothing else is queued for this week." />}
         </div>

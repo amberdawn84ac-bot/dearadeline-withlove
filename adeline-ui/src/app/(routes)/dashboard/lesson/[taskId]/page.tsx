@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import FamilyCanonicalLesson from '@/components/lessons/FamilyCanonicalLesson';
-import { buildLesson, getLearningPlan, lessonRequestFromSuggestion } from '@/lib/brain-client';
+import { buildExperience, getLearningPlan, lessonRequestFromSuggestion } from '@/lib/brain-client';
 import type { LessonBlockResponse, LessonResponse, LessonSuggestion } from '@/lib/brain-client';
 import { useStudent } from '@/lib/useStudent';
 
@@ -43,7 +43,7 @@ export default function CanonicalLessonPage() {
         setTask(selected);
 
         const blocks: LessonBlockResponse[] = [];
-        for await (const event of buildLesson(lessonRequestFromSuggestion(selected, student.id, plan.placement.working_grade, requiredStandardCodes))) {
+        for await (const event of buildExperience(lessonRequestFromSuggestion(selected, student.id, plan.placement.working_grade, requiredStandardCodes))) {
           if (cancelled) return;
           if (event.type === 'status') setStatus(event.message);
           if (event.type === 'block') blocks.push(event.block);
