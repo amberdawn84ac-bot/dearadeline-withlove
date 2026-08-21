@@ -25,7 +25,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    void fetch('/brain/daily-bread')
+    void fetch(`/brain/daily-bread?day=${new Date().toLocaleDateString('en-CA')}`, { cache: 'no-store' })
       .then((response) => response.ok ? response.json() : null)
       .then((data) => { if (!cancelled && data?.verse) setDailyBread(data); })
       .catch(() => undefined);

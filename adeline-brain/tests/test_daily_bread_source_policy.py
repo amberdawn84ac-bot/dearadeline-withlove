@@ -9,6 +9,8 @@ def test_daily_bread_requires_source_layers_and_original_names():
         assert required in combined
     assert "do not claim your rendering is Everett Fox" in combined
     assert "never invent who changed it or why" in Path("app/api/daily_bread.py").read_text()
+    assert "America/Chicago" in Path("app/api/daily_bread.py").read_text()
+    assert "Do not repeat any of these recently used references" in _USER_TEMPLATE
 
 
 def test_removed_application_panels_do_not_render():

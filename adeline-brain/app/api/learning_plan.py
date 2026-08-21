@@ -196,7 +196,7 @@ class FamilyLearningContext(BaseModel):
     household_id: str
     shared_with_siblings: bool
     sibling_count: int = 0
-    shared_layer: str = "One weekly family investigation"
+    shared_layer: str = "One living family investigation, paced by the question and evidence rather than a calendar week"
     individual_layer: str = "Grade-, mastery-, gap-, evidence-, and credit-specific work"
 
 class SubjectCoverage(BaseModel):

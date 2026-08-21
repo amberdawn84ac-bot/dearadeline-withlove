@@ -9,10 +9,11 @@ No auth required — public widget endpoints.
 """
 import json
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
@@ -92,6 +93,7 @@ def _complete_lesson(data: dict) -> dict:
 # ── Response model ─────────────────────────────────────────────────────────────
 
 class DailyBreadResponse(BaseModel):
+    forDate: str
     verse: str  # close, name-preserving rendering; never an unlabeled modern-version fallback
     reference: str
     original: str
@@ -120,7 +122,8 @@ _SYSTEM = f"""You are a careful source-text biblical scholar for Christian homes
 For Daily Bread, select a passage from the Hebrew Bible because the current source adapter can verify its Hebrew text. Produce a close English rendering, not a quotation falsely attributed to a published translation. Keep YHWH and meaningful Hebrew names or terms rather than substituting LORD, God, or modernized personal names. Explain unfamiliar terms separately.
 You MUST respond with ONLY valid JSON — no markdown, no code fences, no explanation before or after."""
 
-_USER_TEMPLATE = """Today's date is {today}. Choose a meaningful, uplifting Bible verse appropriate for today.
+_USER_TEMPLATE = """Today's date is {today}. Choose a meaningful Bible passage appropriate for today.
+Do not repeat any of these recently used references: {recent_references}.
 
 Render the passage closely from Hebrew in a sound-conscious manner. Preserve YHWH, Elohim, and original personal/place names when those forms are present. Do not silently quote a modern English version and do not claim your rendering is Everett Fox.
 
@@ -164,16 +167,35 @@ Translate closely into readable English. Preserve YHWH, Elohim, and source-langu
 # ── Endpoint ───────────────────────────────────────────────────────────────────
 
 @router.get("/daily-bread", response_model=DailyBreadResponse)
-async def daily_bread():
-    today = date.today().isoformat()  # YYYY-MM-DD
-    cache_key = f"daily-bread:v4:{today}"
+async def daily_bread(response: Response):
+    # The family experiences a day in Central time; Railway's server timezone is UTC.
+    today_date = datetime.now(ZoneInfo("America/Chicago")).date()
+    today = today_date.isoformat()
+    cache_key = f"daily-bread:v5:{today}"
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    response.headers["Vary"] = "Accept-Encoding"
+
+    recent_references: list[str] = []
+    try:
+        from app.connections.redis_client import redis_client
+        for offset in range(1, 15):
+            prior_day = (today_date - timedelta(days=offset)).isoformat()
+            prior = await redis_client.get(f"daily-bread:v5:{prior_day}") or await redis_client.get(f"daily-bread:v4:{prior_day}")
+            if prior:
+                reference = json.loads(prior).get("reference")
+                if reference and reference not in recent_references:
+                    recent_references.append(reference)
+    except Exception as exc:
+        logger.warning("[DailyBread] recent-reference history unavailable: %s", exc)
 
     # ── Try Redis cache ────────────────────────────────────────────────────────
     try:
         from app.connections.redis_client import redis_client
         cached = await redis_client.get(cache_key)
         if cached:
-            return DailyBreadResponse(**json.loads(cached))
+            cached_data = json.loads(cached)
+            cached_data["forDate"] = today
+            return DailyBreadResponse(**cached_data)
     except Exception as e:
         logger.warning(f"[DailyBread] Redis unavailable: {e}")
 
@@ -182,10 +204,20 @@ async def daily_bread():
         llm = create_llm(model=GEMINI_MODEL, temperature=0.7, max_tokens=1200)
         completion = await llm.ainvoke([
             SystemMessage(content=_SYSTEM),
-            HumanMessage(content=_USER_TEMPLATE.format(today=today)),
+            HumanMessage(content=_USER_TEMPLATE.format(
+                today=today,
+                recent_references=", ".join(recent_references) or "none",
+            )),
         ])
         raw = str(completion.content).strip()
         data = json.loads(raw)
+        if data.get("reference") in recent_references:
+            # The model may ignore exclusions. Enforce rotation rather than
+            # presenting yesterday's study under today's date.
+            data = dict(next(
+                (item for item in _FALLBACKS if item.get("reference") not in recent_references),
+                _FALLBACKS[today_date.timetuple().tm_yday % len(_FALLBACKS)],
+            ))
         # Sefaria is the source of record for Hebrew-Bible text. Gemini builds
         # the lesson but does not get to invent or silently paraphrase the text.
         try:
@@ -218,12 +250,14 @@ async def daily_bread():
             logger.warning(f"[DailyBread] Sefaria source fetch failed (non-fatal): {source_error}")
             data["verse"] = "The source text could not be verified right now. Daily Bread will not substitute an unlabeled modern rendering."
             data["translationLabel"] = "Source verification unavailable"
+        data["forDate"] = today
         result = DailyBreadResponse(**_complete_lesson(data))
 
         # ── Cache for 24 hours ─────────────────────────────────────────────────
         try:
             from app.connections.redis_client import redis_client
-            await redis_client.set(cache_key, result.model_dump_json(), ex=86400)
+            # Keyed by the local calendar date; TTL is cleanup, not selection logic.
+            await redis_client.set(cache_key, result.model_dump_json(), ex=60 * 60 * 48)
         except Exception as e:
             logger.warning(f"[DailyBread] Redis cache write failed (non-fatal): {e}")
 
@@ -232,7 +266,8 @@ async def daily_bread():
     except Exception as e:
         logger.error(f"[DailyBread] Generation failed: {e}")
         # Rotate fallbacks by day of year
-        fallback = dict(_FALLBACKS[date.today().timetuple().tm_yday % len(_FALLBACKS)])
+        fallback = dict(_FALLBACKS[today_date.timetuple().tm_yday % len(_FALLBACKS)])
+        fallback["forDate"] = today
         return DailyBreadResponse(**_complete_lesson(fallback))
 
 

@@ -96,7 +96,7 @@ async def _stream(request: LessonRequest):
         # Durable contracts live with the canonical blocks so the current DB schema
         # can preserve one source of truth without introducing a parallel lesson table.
         blocks[0].setdefault("metadata", {})["canonical_contract"] = {
-            key: authored.get(key) for key in ("big_question", "learning_goal", "shared_experience", "real_world_task", "portfolio_task", "printable_contract", "demonstration_contract", "family_roles")
+            key: authored.get(key) for key in ("big_question", "learning_goal", "shared_experience", "investigation_scope_contract", "real_world_task", "portfolio_task", "printable_contract", "demonstration_contract", "family_roles")
         }
         canonical = {"id": str(uuid.uuid4()), "topic": request.topic, "track": request.track.value, "title": authored.get("title") or request.topic, "blocks": blocks, "oas_standards": []}
         await canonical_store.save(slug, canonical, pending=False)
@@ -123,7 +123,7 @@ async def _stream(request: LessonRequest):
     }
     contract = ((canonical.get("blocks") or [{}])[0].get("metadata") or {}).get("canonical_contract") or {}
     contribution = learner_contribution(contract, adaptation)
-    yield _sse({"type": "done", "lesson_id": lesson_id, "title": canonical.get("title") or request.topic, "agent_name": "Canonical Experience Author", "oas_standards": standards, "credits_awarded": [credit_draft], "researcher_activated": False, "metadata": {"canonical_slug": slug, "topic": request.topic, "grade_level": request.grade_level, "demonstration_contract": contract.get("demonstration_contract") or {}, "learner_contribution": contribution, "portfolio_task": contract.get("portfolio_task") or {}}})
+    yield _sse({"type": "done", "lesson_id": lesson_id, "title": canonical.get("title") or request.topic, "agent_name": "Canonical Experience Author", "oas_standards": standards, "credits_awarded": [credit_draft], "researcher_activated": False, "metadata": {"canonical_slug": slug, "topic": request.topic, "grade_level": request.grade_level, "investigation_scope_contract": contract.get("investigation_scope_contract") or {}, "demonstration_contract": contract.get("demonstration_contract") or {}, "learner_contribution": contribution, "portfolio_task": contract.get("portfolio_task") or {}}})
 
 
 @router.post("/build")

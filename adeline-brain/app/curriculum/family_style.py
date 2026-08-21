@@ -11,7 +11,7 @@ from typing import Any
 
 from app.curriculum.experience_contract import ExperienceStage, annotate_experience, validate_experience
 
-CANONICAL_FORMAT_VERSION = 6
+CANONICAL_FORMAT_VERSION = 7
 
 _OBSOLETE_FORMATS = {
     "ANIMATED_SKETCHNOTE_LESSON",

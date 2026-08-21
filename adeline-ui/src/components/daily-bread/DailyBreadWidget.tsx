@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { BookOpen, Loader2, RotateCcw, ArrowRight } from 'lucide-react';
 
 interface DailyBread {
+  forDate: string;
   verse: string;
   reference: string;
   original: string;
@@ -38,7 +39,7 @@ export function DailyBreadWidget({ onStudy, gradeLevel = '8' }: DailyBreadWidget
     setError(null);
 
     try {
-      const response = await fetch('/brain/daily-bread');
+      const response = await fetch(`/brain/daily-bread?day=${new Date().toLocaleDateString('en-CA')}`, { cache: 'no-store' });
 
       if (!response.ok) {
         throw new Error('Failed to load daily verse');

@@ -25,12 +25,20 @@ Prefer concrete evidence and meaningful tasks over explanatory prose.
 OUTPUT CONTRACT:
 Return ONLY valid JSON for exactly one CanonicalLesson object:
 {{
-  "canonical_format_version": 6,
+  "canonical_format_version": 7,
   "title": "",
   "track": "",
   "big_question": "",
   "learning_goal": "",
   "shared_experience": "",
+  "investigation_scope_contract": {{
+    "completion_basis": "demonstrated understanding and a meaningful shared outcome—not elapsed days",
+    "starting_scope": "",
+    "ways_to_narrow": [],
+    "ways_to_widen": [],
+    "branch_points": [],
+    "pause_or_resume_rule": ""
+  }},
   "worldview_lens": "",
   "blocks": [],
   "real_world_task": {{
@@ -99,6 +107,9 @@ decides page layout, placement, and frontend behavior.
 
 QUALITY CHECK BEFORE OUTPUT:
 - One shared family experience, not three lessons.
+- The investigation has no preset one-week duration. It may take one sitting or many weeks.
+- Give Adeline legitimate ways to narrow, widen, branch, pause, or resume the investigation from learner conversations while preserving its verified evidence and central learning requirements.
+- Completion is based on the shared outcome and demonstrated concepts, never the calendar.
 - Concrete evidence and meaningful action outweigh explanatory prose.
 - Real outcome and portfolio evidence are present when the subject supports them.
 - No filler, generic narrative, fake sources, invented quotations, or placeholder text.

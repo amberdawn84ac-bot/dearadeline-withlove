@@ -6,6 +6,7 @@ import { BookOpen, Loader2 } from 'lucide-react';
 import { useStudent } from '@/lib/useStudent';
 
 interface DailyBread {
+  forDate: string;
   verse: string;
   reference: string;
   original: string;

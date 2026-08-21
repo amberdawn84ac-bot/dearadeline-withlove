@@ -237,6 +237,14 @@ export interface LessonResponse {
     canonical_slug?: string;
     topic?: string;
     grade_level?: string;
+    investigation_scope_contract?: {
+      completion_basis?: string;
+      starting_scope?: string;
+      ways_to_narrow?: string[];
+      ways_to_widen?: string[];
+      branch_points?: string[];
+      pause_or_resume_rule?: string;
+    };
     demonstration_contract?: {
       invitation?: string;
       learner_prompt?: string;
@@ -796,6 +804,10 @@ export interface ActivityReportResponse {
   sealed: boolean;
   adeline_note: string;
   evidence_urls: string[];
+  learning_status: "NOT_YET_DEMONSTRATED" | "APPROACHING" | "UNDERSTANDING" | "EXTENDING";
+  concepts_demonstrated: string[];
+  standards_mastered: string[];
+  mastery_question?: string | null;
 }
 
 export interface ActivityEntry {

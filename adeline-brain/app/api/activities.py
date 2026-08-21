@@ -168,19 +168,8 @@ LIFE_TO_CREDIT: dict[str, dict] = {
 }
 
 
-# ── Credit hour calculation ────────────────────────────────────────────────────
-#
-# Carnegie unit: 120 hours = 1 credit.
-# We use a homeschool-generous ratio: 20 hours of real activity = 1 credit hour.
-# So 1 hour = 0.05 credit hours. Capped at 1.0 per single activity report.
-
-HOURS_PER_CREDIT = 20.0
-
-
-def _calc_credit_hours(time_minutes: int) -> float:
-    hours = time_minutes / 60.0
-    raw   = hours / HOURS_PER_CREDIT
-    return round(min(raw, 1.0), 3)
+# Credit is competency-based. Optional time is retained only as family metadata
+# and never participates in mastery or credit calculations.
 
 
 # ── Gemini mapping prompt ──────────────────────────────────────────────────────
@@ -324,7 +313,7 @@ class ActivityReportRequest(BaseModel):
         default=None,
         ge=5,
         le=1440,
-        description="Optional time spent, used only for clock-hour accounting.",
+        description="Optional family metadata. Never used to calculate mastery or credit.",
     )
     activity_date: Optional[date] = Field(
         default=None,
@@ -347,6 +336,10 @@ class ActivityReportResponse(BaseModel):
     sealed:              bool
     adeline_note:        str
     evidence_urls:       list[str] = Field(default_factory=list)
+    learning_status:     str = "NOT_YET_DEMONSTRATED"
+    concepts_demonstrated: list[str] = Field(default_factory=list)
+    standards_mastered:  list[str] = Field(default_factory=list)
+    mastery_question:    Optional[str] = None
 
 
 class ActivityEntry(BaseModel):
@@ -371,6 +364,8 @@ class ActivityListResponse(BaseModel):
 def _build_learning_note(
     activity_description: str,
     credited_tracks: list[CreditedTrack],
+    concepts_demonstrated: list[str],
+    mastery_question: Optional[str],
 ) -> str:
     """Lead with demonstrated learning instead of clock time."""
     learning_subjects = list(dict.fromkeys(
@@ -379,11 +374,101 @@ def _build_learning_note(
         for subject in credited_track.subjects
     ))
     subjects_display = "; ".join(learning_subjects[:4]) or "Independent Study"
+    if concepts_demonstrated:
+        concepts = "; ".join(concepts_demonstrated[:4])
+        return f"That demonstrates real learning in {subjects_display}: {concepts}."
     return (
-        f"That is real learning. {activity_description.rstrip('.')}—and it connects to "
-        f"{subjects_display}. What did you notice, figure out, or change while doing it, "
-        "and what would you try next time?"
+        f"That activity connects to {subjects_display}, but doing it alone does not prove what you understand. "
+        + (mastery_question or "What did you notice, figure out, change, or learn while doing it?")
     )
+
+
+def _grade_number(grade_level: str) -> int:
+    if str(grade_level).upper().startswith("K"):
+        return 0
+    try:
+        return max(0, min(12, int(str(grade_level).split("-")[0])))
+    except (TypeError, ValueError):
+        return 0
+
+
+async def _evaluate_concept_mastery(
+    description: str,
+    grade_level: str,
+    candidate_standards: list[dict],
+) -> dict:
+    """Match only explicitly demonstrated knowledge to required concepts."""
+    if not candidate_standards or (not GOOGLE_API_KEY and not os.getenv("GEMINI_API_KEY")):
+        return {
+            "learning_status": "NOT_YET_DEMONSTRATED",
+            "concepts_demonstrated": [],
+            "standard_codes": [],
+            "mastery_question": "What did you figure out, and how do you know it worked?",
+        }
+    standards = [
+        {
+            "code": row.get("id") or row.get("code"),
+            "description": row.get("description"),
+            "subject": row.get("subject"),
+            "track": row.get("track"),
+        }
+        for row in candidate_standards[:160]
+    ]
+    prompt = f"""Grade: {grade_level}
+Learner's own report: {description}
+Required grade-level concepts: {json.dumps(standards, ensure_ascii=False)}
+
+Judge only knowledge or skill explicitly demonstrated in the learner's words. Merely naming,
+doing, attending, completing, or spending time on an activity is not mastery. Do not infer an
+explanation the learner did not give. Match at most five standards and only when the report is
+clear evidence of the standard. Return JSON only:
+{{"learning_status":"NOT_YET_DEMONSTRATED|APPROACHING|UNDERSTANDING|EXTENDING",
+"concepts_demonstrated":["plain-language concept"],"standard_codes":["exact code"],
+"mastery_question":"one natural question that would let the learner demonstrate the most relevant missing concept, or null"}}"""
+    llm = create_llm(model=GEMINI_MODEL, max_tokens=700)
+    try:
+        response = await llm.ainvoke([
+            SystemMessage(content="You are Adeline's competency evaluator. Credit mastery, never attendance or time. Be conservative and return strict JSON."),
+            HumanMessage(content=prompt),
+        ])
+        text = str(response.content).strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        result = json.loads(text)
+        allowed = {str(item["code"]) for item in standards if item.get("code")}
+        codes = [str(code) for code in result.get("standard_codes", []) if str(code) in allowed]
+        status = str(result.get("learning_status") or "NOT_YET_DEMONSTRATED")
+        if status not in {"NOT_YET_DEMONSTRATED", "APPROACHING", "UNDERSTANDING", "EXTENDING"}:
+            status = "NOT_YET_DEMONSTRATED"
+        if status in {"UNDERSTANDING", "EXTENDING"} and not codes:
+            status = "APPROACHING"
+        return {
+            "learning_status": status,
+            "concepts_demonstrated": [str(x) for x in result.get("concepts_demonstrated", [])][:5],
+            "standard_codes": codes,
+            "mastery_question": result.get("mastery_question"),
+        }
+    except Exception as exc:
+        logger.warning("[activities] mastery evaluation unavailable: %s", exc)
+        return {
+            "learning_status": "NOT_YET_DEMONSTRATED",
+            "concepts_demonstrated": [],
+            "standard_codes": [],
+            "mastery_question": "What did you figure out, and what evidence showed you were right?",
+        }
+
+
+def _competency_credit(mastered_codes: list[str], candidate_standards: list[dict]) -> float:
+    """Give each mastered requirement its proportional share of a subject credit."""
+    if not mastered_codes:
+        return 0.0
+    subject_by_code = {
+        str(row.get("id") or row.get("code")): str(row.get("subject") or "General")
+        for row in candidate_standards
+    }
+    counts: dict[str, int] = {}
+    for subject in subject_by_code.values():
+        counts[subject] = counts.get(subject, 0) + 1
+    value = sum(1.0 / max(1, counts.get(subject_by_code.get(code, "General"), 1)) for code in set(mastered_codes))
+    return round(min(value, 1.0), 3)
 
 
 async def _seal_activity_transcript(
@@ -517,52 +602,95 @@ async def report_activity(
         ))
         dominant_credit_type = "ELECTIVE"
 
-    # ── 3. Calculate optional clock-hour credit ────────────────────────────────
-    # Learning evidence is still recorded when the student did not provide time.
-    credit_hours = _calc_credit_hours(body.time_minutes or 0)
+    # ── 3. Match explicit understanding to unmastered grade-level requirements ─
+    from app.connections.curriculum_graph import curriculum_graph
+    try:
+        grade_standards = await curriculum_graph.get_grade_standards(
+            student_id, _grade_number(body.grade_level), limit=500, per_subject_limit=None,
+        )
+    except Exception as exc:
+        logger.warning("[activities] grade standards unavailable: %s", exc)
+        grade_standards = []
+    relevant_tracks = seen_tracks or {primary_track}
+    relevant_standards = [
+        row for row in grade_standards
+        if str(row.get("track")) in relevant_tracks
+    ]
+    candidates = [row for row in relevant_standards if not bool(row.get("mastered"))]
+    evaluation = await _evaluate_concept_mastery(body.description, body.grade_level, candidates)
+    learning_status = evaluation["learning_status"]
+    mastered_codes = evaluation["standard_codes"] if learning_status in {"UNDERSTANDING", "EXTENDING"} else []
+    credit_hours = _competency_credit(mastered_codes, relevant_standards)
 
     # ── 4. Generate activity ID and date ──────────────────────────────────────
     activity_id   = f"activity-{uuid.uuid4()}"
     activity_date = body.activity_date or datetime.now(timezone.utc).date()
     sealed_at     = datetime.now(timezone.utc)
 
-    # ── 5. Seal to student_journal (makes it show on dashboard) ───────────────
-    try:
-        await journal_store.seal(
-            student_id=student_id,
-            lesson_id=activity_id,
-            track=primary_track,
-            completed_blocks=max(1, (body.time_minutes or 0) // 30),
-            sources=[],
-        )
-    except Exception as e:
-        logger.warning(f"[activities] Journal seal failed (non-fatal): {e}")
-
-    # ── 6. Seal TranscriptEntry for each credited track ────────────────────────
-    transcript_entry_id = str(uuid.uuid4())
-
-    sealed = await _seal_activity_transcript(
-        transcript_entry_id=transcript_entry_id,
-        student_id=student_id,
-        activity_id=activity_id,
-        course_title=course_title,
-        primary_track=primary_track,
-        oas_standards=[],
-        activity_description=activity_desc,
-        credit_hours=credit_hours,
-        credit_type=dominant_credit_type,
-        is_homestead_credit=dominant_credit_type == "HOMESTEAD",
-        completed_at=activity_date,
-        sealed_at=sealed_at,
-    )
+    # ── 5. Record only demonstrated concepts as mastery and transcript credit ─
+    sealed = False
+    if mastered_codes:
+        matched_standards = [
+            {
+                "standard_id": str(row.get("id")),
+                "text": str(row.get("description") or ""),
+                "grade": int(row.get("grade") or _grade_number(body.grade_level)),
+                "subject": str(row.get("subject") or "General"),
+                "source_type": "everyday_activity",
+            }
+            for row in candidates if str(row.get("id")) in mastered_codes
+        ]
+        try:
+            await curriculum_graph.record_standard_mastery(
+                student_id, primary_track, matched_standards, proficiency=learning_status,
+            )
+            await journal_store.seal(
+                student_id=student_id,
+                lesson_id=activity_id,
+                track=primary_track,
+                completed_blocks=max(1, len(mastered_codes)),
+                sources=[{
+                    "type": "everyday_learning",
+                    "content": body.description,
+                    "concepts": evaluation["concepts_demonstrated"],
+                    "standard_codes": mastered_codes,
+                    "time_minutes": body.time_minutes,  # metadata only
+                }],
+            )
+            sealed = await _seal_activity_transcript(
+                transcript_entry_id=str(uuid.uuid4()),
+                student_id=student_id,
+                activity_id=activity_id,
+                course_title=course_title,
+                primary_track=primary_track,
+                oas_standards=mastered_codes,
+                activity_description=activity_desc,
+                credit_hours=credit_hours,
+                credit_type=dominant_credit_type,
+                is_homestead_credit=dominant_credit_type == "HOMESTEAD",
+                completed_at=activity_date,
+                sealed_at=sealed_at,
+                percent_score=95.0 if learning_status == "EXTENDING" else 85.0,
+            )
+            from app.models.student import invalidate_student_state_cache
+            await invalidate_student_state_cache(student_id)
+            try:
+                from app.api.learning_plan import pop_completed_lesson
+                await pop_completed_lesson(student_id, course_title)
+            except Exception as plan_exc:
+                logger.warning("[activities] learning-plan refresh failed: %s", plan_exc)
+        except Exception as exc:
+            logger.exception("[activities] competency record failed: %s", exc)
 
     logger.info(
-        f"[/activities/report] Sealed '{course_title}' — "
-        f"{credit_hours} {dominant_credit_type} credits for student={student_id}"
+        "[/activities/report] %s — status=%s standards=%s competency_credit=%s student=%s",
+        course_title, learning_status, mastered_codes, credit_hours, student_id,
     )
 
     # ── 7. Build Adeline's response note ──────────────────────────────────────
-    adeline_note = _build_learning_note(activity_desc, credited_tracks)
+    adeline_note = _build_learning_note(
+        activity_desc, credited_tracks, evaluation["concepts_demonstrated"], evaluation.get("mastery_question"),
+    )
 
     return ActivityReportResponse(
         activity_id=activity_id,
@@ -573,6 +701,10 @@ async def report_activity(
         sealed=sealed,
         adeline_note=adeline_note,
         evidence_urls=[],
+        learning_status=learning_status,
+        concepts_demonstrated=evaluation["concepts_demonstrated"],
+        standards_mastered=mastered_codes,
+        mastery_question=evaluation.get("mastery_question"),
     )
 
 

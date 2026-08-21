@@ -52,7 +52,7 @@ export default function TodayPage() {
       <header className={styles.todayTitle}>
         <p>{isNextSchoolDay ? 'Your next school day' : 'Ready when you are'}</p>
         <h1>{isNextSchoolDay ? 'Coming up next' : 'Today'}</h1>
-        <span>{weekTheme} · {sharedWithSiblings ? 'Shared family investigation; your work and credits are individual.' : 'This view changes whenever the living learning plan changes.'}</span>
+        <span>{weekTheme} · {sharedWithSiblings ? 'Shared living investigation; it takes as long as the question needs, while each learner’s work and credits remain individual.' : 'This view changes whenever the living learning plan changes.'}</span>
       </header>
 
       {error && <p className={styles.error} role="alert">{error}</p>}

@@ -47,14 +47,17 @@ SEED_TOPICS: list[tuple[str, str, bool]] = [
 async def seed_one(topic: str, track: str, cross_track: bool) -> str:
     from app.api.experience_builder import _author
     from app.connections.canonical_store import canonical_slug, canonical_store
-    from app.curriculum.family_style import finalize_family_lesson
+    from app.curriculum.family_style import finalize_family_lesson, is_current_family_canonical
     from app.schemas.api_models import LessonRequest, Track
     from app.services.resource_router import ResourceQuery, resource_router
 
     slug = canonical_slug(topic, track)
-    if await canonical_store.get(slug):
-        logger.info("SKIP (exists) — %s / %s", topic, track)
+    existing = await canonical_store.get(slug)
+    if existing and is_current_family_canonical(existing.get("blocks") or []):
+        logger.info("SKIP (current) — %s / %s", topic, track)
         return "skipped"
+    if existing:
+        await canonical_store.archive(slug, reason="canonical_format_upgrade")
 
     try:
         request = LessonRequest(
@@ -72,7 +75,7 @@ async def seed_one(topic: str, track: str, cross_track: bool) -> str:
         blocks[0].setdefault("metadata", {})["canonical_contract"] = {
             key: authored.get(key)
             for key in (
-                "big_question", "learning_goal", "shared_experience", "real_world_task",
+                "big_question", "learning_goal", "shared_experience", "investigation_scope_contract", "real_world_task",
                 "portfolio_task", "printable_contract", "demonstration_contract", "family_roles",
             )
         }

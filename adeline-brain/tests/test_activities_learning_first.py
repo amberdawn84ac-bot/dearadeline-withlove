@@ -1,10 +1,10 @@
-"""Life activities should be recognized for learning before clock time."""
+"""Life activities earn credit for demonstrated concepts, never clock time."""
 
 from app.api.activities import (
     ActivityReportRequest,
     CreditedTrack,
     _build_learning_note,
-    _calc_credit_hours,
+    _competency_credit,
     _map_activity_locally,
 )
 
@@ -19,8 +19,18 @@ def test_activity_time_is_optional():
     assert report.time_minutes is None
 
 
-def test_unspecified_time_does_not_invent_credit_hours():
-    assert _calc_credit_hours(0) == 0.0
+def test_credit_is_proportional_to_mastered_requirements_not_time():
+    standards = [
+        {"id": "SCI.1", "subject": "Science"},
+        {"id": "SCI.2", "subject": "Science"},
+        {"id": "MATH.1", "subject": "Mathematics"},
+        {"id": "MATH.2", "subject": "Mathematics"},
+        {"id": "MATH.3", "subject": "Mathematics"},
+        {"id": "MATH.4", "subject": "Mathematics"},
+    ]
+    assert _competency_credit([], standards) == 0.0
+    assert _competency_credit(["SCI.1"], standards) == 0.5
+    assert _competency_credit(["SCI.1", "MATH.1"], standards) == 0.75
 
 
 def test_learning_note_centers_bread_science_and_reflection():
@@ -36,12 +46,14 @@ def test_learning_note_centers_bread_science_and_reflection():
                 credit_type="CORE",
             )
         ],
+        ["yeast fermentation", "proportional reasoning"],
+        None,
     )
 
-    assert note.startswith("That is real learning.")
+    assert note.startswith("That demonstrates real learning")
     assert "Fermentation" in note
     assert "Ratios & Measurement" in note
-    assert "What did you notice" in note
+    assert "yeast fermentation" in note
     assert "minutes" not in note
 
 
