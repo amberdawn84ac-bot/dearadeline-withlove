@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections.abc import AsyncIterator
 
 from app.config import ADELINE_MODEL, GEMINI_API_KEY, GEMINI_BASE_URL, GEMINI_MODEL, GOOGLE_API_KEY
 
@@ -68,5 +69,29 @@ async def synthesize(system: str, user: str, max_tokens: int = 6000) -> str:
                     logger.warning("Synthesis failed (%s); retrying", exc)
                     await asyncio.sleep(1)
         raise SynthesisError(f"model unavailable after two attempts: {last_error}")
+    finally:
+        _synthesis_slots.release()
+
+
+async def stream_synthesis(system: str, user: str, max_tokens: int = 2000) -> AsyncIterator[str]:
+    """Stream model deltas while keeping the same concurrency and timeout policy."""
+    try:
+        await asyncio.wait_for(_synthesis_slots.acquire(), timeout=10.0)
+    except asyncio.TimeoutError as exc:
+        raise SynthesisError("The learning service is busy; please retry shortly") from exc
+    try:
+        client, model = _client()
+        stream = await client.chat.completions.create(
+            model=model, max_tokens=max_tokens, stream=True,
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        )
+        received = False
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content if chunk.choices else None
+            if delta:
+                received = True
+                yield delta
+        if not received:
+            raise SynthesisError("model returned no streamed content")
     finally:
         _synthesis_slots.release()

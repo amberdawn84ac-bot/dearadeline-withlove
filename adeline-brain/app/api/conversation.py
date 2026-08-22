@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Optional, AsyncIterator, Literal
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -256,7 +257,7 @@ async def _stream_llm(
     messages: list[dict],
 ) -> AsyncIterator[str]:
     """Yield text using the active synthesis client (Gemini, with Claude fallback)."""
-    from app.services.synthesis import synthesize
+    from app.services.synthesis import stream_synthesis
 
     # Build a single user turn: history + current message concatenated
     history_text = ""
@@ -266,8 +267,8 @@ async def _stream_llm(
     last = messages[-1].get("content", "") if messages else ""
     user_prompt = (history_text + last).strip()
 
-    response = await synthesize(system_prompt, user_prompt, max_tokens=2000)
-    yield response
+    async for delta in stream_synthesis(system_prompt, user_prompt, max_tokens=2000):
+        yield delta
 
 
 async def _conversation_sse(
@@ -292,6 +293,8 @@ async def _conversation_sse(
         return f"event: {event}\ndata: {json.dumps(data)}\n\n".encode()
 
     try:
+        started_at = time.perf_counter()
+        first_visible_at: float | None = None
         tracks = _infer_tracks(message, track)
 
         if not history:
@@ -327,6 +330,7 @@ async def _conversation_sse(
             "mastery_score": mastery_score,
             "mastery_band": mastery_band.value,
         })
+        first_visible_at = time.perf_counter()
 
         routed_resource_count = 0
         if _wants_outside_resource(message):
@@ -395,6 +399,14 @@ async def _conversation_sse(
             logger.exception("[/conversation/stream] Could not persist conversation")
 
         yield _sse("done", {})
+        logger.info(
+            "[/conversation/stream] timing student=%s first_event_ms=%.1f total_ms=%.1f resource_count=%d history_turns=%d",
+            student_id,
+            ((first_visible_at or time.perf_counter()) - started_at) * 1000,
+            (time.perf_counter() - started_at) * 1000,
+            routed_resource_count,
+            len(history),
+        )
 
     except Exception as e:
         logger.exception(f"[/conversation/stream] Unhandled error: {e}")
