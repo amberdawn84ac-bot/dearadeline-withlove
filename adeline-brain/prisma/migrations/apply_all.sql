@@ -141,6 +141,35 @@ CREATE TABLE IF NOT EXISTS "StudentLesson" (
     CONSTRAINT "StudentLesson_pkey" PRIMARY KEY ("studentId", "lessonId")
 );
 
+CREATE TABLE IF NOT EXISTS "StudentExperience" (
+    id TEXT NOT NULL,
+    "studentId" TEXT NOT NULL,
+    "planItemId" TEXT NOT NULL,
+    "canonicalSlug" TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'not_started',
+    title TEXT,
+    track TEXT,
+    "blocksJson" JSONB NOT NULL DEFAULT '[]'::jsonb,
+    "metadataJson" JSONB NOT NULL DEFAULT '{}'::jsonb,
+    "errorMessage" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "StudentExperience_pkey" PRIMARY KEY (id),
+    CONSTRAINT "StudentExperience_status_check" CHECK (status IN ('not_started', 'generating', 'ready', 'failed')),
+    CONSTRAINT "StudentExperience_student_plan_key" UNIQUE ("studentId", "planItemId")
+);
+CREATE INDEX IF NOT EXISTS "StudentExperience_student_status_idx" ON "StudentExperience" ("studentId", status);
+
+CREATE TABLE IF NOT EXISTS "DailyPlan" (
+    "studentId" TEXT NOT NULL,
+    "forDate" DATE NOT NULL,
+    "planJson" JSONB NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "DailyPlan_pkey" PRIMARY KEY ("studentId", "forDate")
+);
+CREATE INDEX IF NOT EXISTS "DailyPlan_date_idx" ON "DailyPlan" ("forDate");
+
 CREATE TABLE IF NOT EXISTS "InviteCode" (
     "id"             TEXT    NOT NULL,
     "code"           TEXT    NOT NULL,

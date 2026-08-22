@@ -19,6 +19,7 @@ from app.schemas.api_models import LessonRequest
 from app.curriculum.canonical_author import CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT
 from app.curriculum.family_style import finalize_family_lesson, is_current_family_canonical
 from app.connections.canonical_store import canonical_store, canonical_slug
+from app.connections.student_experience_store import student_experience_store
 from app.agents.adapter import adapt_canonical_for_student
 from app.services.resource_router import resource_router, ResourceQuery, resource_block_from_packet
 from app.services.learner_context import adaptation_for, learner_contribution
@@ -77,54 +78,106 @@ async def _author(request: LessonRequest, resources: list[dict]) -> dict:
 
 
 async def _stream(request: LessonRequest):
-    lesson_id = str(uuid.uuid4())
     slug = shared_family_canonical_slug(request)
+    plan_item_id = request.plan_item_id or f"canonical:{slug}"
     yield _sse({"type": "status", "message": "Opening today's planned experience…"})
-    canonical = await canonical_store.get(slug)
-    packet = await resource_router.search(ResourceQuery(topic=request.topic, track=request.track.value, grade_level=request.grade_level))
-    if canonical:
-        stored_blocks = canonical.get("blocks") or []
-        if isinstance(stored_blocks, str):
-            stored_blocks = json.loads(stored_blocks)
-            canonical["blocks"] = stored_blocks
-        if not is_current_family_canonical(stored_blocks):
-            await canonical_store.archive(slug, reason="retired_lesson_pipeline_format")
-            canonical = None
-    if not canonical or canonical.get("pending_approval"):
-        yield _sse({"type": "status", "message": "Adeline is authoring the experience from the living plan…"})
-        authored = await _author(request, packet["resources"])
-        blocks = authored["blocks"]
+
+    claim = await student_experience_store.claim(request.student_id, plan_item_id, slug)
+    if claim.state == "ready" and claim.record:
+        async for event in _emit_persisted(request, claim.record):
+            yield event
+        return
+    if not claim.claimed:
+        # Another request or instance owns generation. Wait for the durable row;
+        # a reconnect may also discover the completed record here.
+        for _ in range(240):
+            await asyncio.sleep(0.25)
+            record = await student_experience_store.get(request.student_id, plan_item_id)
+            if record and record["status"] == "ready":
+                async for event in _emit_persisted(request, record):
+                    yield event
+                return
+            if record and record["status"] == "failed":
+                yield _sse({"type": "error", "message": "That experience did not finish. Please retry."})
+                return
+        yield _sse({"type": "error", "message": "That experience is still being prepared. Reopen it in a moment."})
+        return
+
+    try:
+        canonical = await canonical_store.get(slug)
+        packet = await resource_router.search(ResourceQuery(topic=request.topic, track=request.track.value, grade_level=request.grade_level))
+        if canonical:
+            stored_blocks = canonical.get("blocks") or []
+            if isinstance(stored_blocks, str):
+                stored_blocks = json.loads(stored_blocks)
+                canonical["blocks"] = stored_blocks
+            if not is_current_family_canonical(stored_blocks):
+                await canonical_store.archive(slug, reason="retired_lesson_pipeline_format")
+                canonical = None
+        if not canonical or canonical.get("pending_approval"):
+            yield _sse({"type": "status", "message": "Adeline is authoring the experience from the living plan…"})
+            authored = await _author(request, packet["resources"])
+            blocks = authored["blocks"]
         # Durable contracts live with the canonical blocks so the current DB schema
         # can preserve one source of truth without introducing a parallel lesson table.
-        blocks[0].setdefault("metadata", {})["canonical_contract"] = {
-            key: authored.get(key) for key in ("big_question", "learning_goal", "shared_experience", "investigation_scope_contract", "real_world_task", "portfolio_task", "printable_contract", "demonstration_contract", "family_roles")
+            blocks[0].setdefault("metadata", {})["canonical_contract"] = {
+                key: authored.get(key) for key in ("big_question", "learning_goal", "shared_experience", "investigation_scope_contract", "real_world_task", "portfolio_task", "printable_contract", "demonstration_contract", "family_roles")
+            }
+            canonical = {"id": str(uuid.uuid4()), "topic": request.topic, "track": request.track.value, "title": authored.get("title") or request.topic, "blocks": blocks, "oas_standards": [], "researcher_activated": False, "agent_name": "Canonical Experience Author"}
+            await canonical_store.save(slug, canonical, pending=False)
+        adaptation = await adaptation_for(request.student_id, request.grade_level, request.track.value)
+        blocks = await adapt_canonical_for_student(
+            {"topic": request.topic, "blocks": canonical.get("blocks") or []}, adaptation,
+        )
+        resource_block = resource_block_from_packet(packet)
+        if resource_block:
+            blocks.append(resource_block)
+        experience_id = claim.record["id"]
+        for index, block in enumerate(blocks):
+            block.setdefault("block_id", f"{experience_id}-{index}")
+        contract = ((canonical.get("blocks") or [{}])[0].get("metadata") or {}).get("canonical_contract") or {}
+        metadata = {
+            "canonical_slug": slug, "topic": request.topic, "grade_level": request.grade_level,
+            "required_standard_codes": request.required_standard_codes,
+            "investigation_scope_contract": contract.get("investigation_scope_contract") or {},
+            "demonstration_contract": contract.get("demonstration_contract") or {},
+            "learner_contribution": learner_contribution(contract, adaptation),
+            "portfolio_task": contract.get("portfolio_task") or {},
         }
-        canonical = {"id": str(uuid.uuid4()), "topic": request.topic, "track": request.track.value, "title": authored.get("title") or request.topic, "blocks": blocks, "oas_standards": []}
-        await canonical_store.save(slug, canonical, pending=False)
-    adaptation = await adaptation_for(request.student_id, request.grade_level, request.track.value)
-    blocks = await adapt_canonical_for_student(
-        {"topic": request.topic, "blocks": canonical.get("blocks") or []},
-        adaptation,
-    )
-    resource_block = resource_block_from_packet(packet)
-    if resource_block:
-        blocks.append(resource_block)
-    for index, block in enumerate(blocks):
-        block.setdefault("block_id", f"{lesson_id}-{index}")
+        record = await student_experience_store.save_ready(
+            request.student_id, plan_item_id, title=canonical.get("title") or request.topic,
+            track=request.track.value, blocks=blocks, metadata=metadata,
+        )
+        async for event in _emit_persisted(request, record):
+            yield event
+    except Exception as exc:
+        await student_experience_store.mark_failed(request.student_id, plan_item_id, str(exc))
+        logger.exception("[ExperienceAuthor] learner experience failed student=%s item=%s", request.student_id, plan_item_id)
+        detail = exc.detail if isinstance(exc, HTTPException) else "Adeline could not finish that experience. Your Today plan is safe; please retry."
+        yield _sse({"type": "error", "message": str(detail)})
+
+
+async def _emit_persisted(request: LessonRequest, record: dict):
+    """Return the exact durable learner record without rerunning any AI work."""
+    lesson_id = record["id"]
+    for block in record.get("blocks") or []:
         yield _sse({"type": "block", "block": block})
-    standards = [{"standard_id": code, "text": "Internal learning-plan target", "grade": 0, "source_type": "required_plan"} for code in request.required_standard_codes]
+    metadata = record.get("metadata") or {}
+    codes = list(metadata.get("required_standard_codes") or request.required_standard_codes)
+    standards = [{"standard_id": code, "text": "Internal learning-plan target", "grade": 0, "source_type": "required_plan"} for code in codes]
+    title = record.get("title") or request.topic
     credit_draft = {
-        "id": str(uuid.uuid4()), "lesson_id": lesson_id, "student_id": request.student_id,
-        "course_title": canonical.get("title") or request.topic, "track": request.track.value,
-        "oas_standards": request.required_standard_codes,
-        "activity_description": f"Individual contribution to the family investigation: {canonical.get('title') or request.topic}",
-        # A small auditable increment; Journal only seals it after demonstrated understanding.
+        "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"credit:{request.student_id}:{lesson_id}")),
+        "lesson_id": lesson_id, "student_id": request.student_id, "course_title": title,
+        "track": record.get("track") or request.track.value, "oas_standards": codes,
+        "activity_description": f"Individual contribution to the family investigation: {title}",
         "credit_hours": 0.02, "credit_type": "CORE", "is_homestead_credit": request.is_homestead,
         "agent_name": "Canonical Experience Author", "researcher_activated": False,
     }
-    contract = ((canonical.get("blocks") or [{}])[0].get("metadata") or {}).get("canonical_contract") or {}
-    contribution = learner_contribution(contract, adaptation)
-    yield _sse({"type": "done", "lesson_id": lesson_id, "title": canonical.get("title") or request.topic, "agent_name": "Canonical Experience Author", "oas_standards": standards, "credits_awarded": [credit_draft], "researcher_activated": False, "metadata": {"canonical_slug": slug, "topic": request.topic, "grade_level": request.grade_level, "investigation_scope_contract": contract.get("investigation_scope_contract") or {}, "demonstration_contract": contract.get("demonstration_contract") or {}, "learner_contribution": contribution, "portfolio_task": contract.get("portfolio_task") or {}}})
+    yield _sse({"type": "done", "lesson_id": lesson_id, "title": title,
+                "agent_name": "Canonical Experience Author", "oas_standards": standards,
+                "credits_awarded": [credit_draft], "researcher_activated": False,
+                "metadata": metadata})
 
 
 @router.post("/build")
@@ -139,6 +192,16 @@ async def printable_experience(request: LessonRequest, authorization: str | None
     """Render the same adapted canonical as a learner-facing printable dossier."""
     await verify_student_access(request.student_id, authorization)
     slug = shared_family_canonical_slug(request)
+    plan_item_id = request.plan_item_id or f"canonical:{slug}"
+    persisted = await student_experience_store.get(request.student_id, plan_item_id)
+    if persisted and persisted["status"] == "ready":
+        from app.services.investigation_printable import build_investigation_pdf
+        pdf = build_investigation_pdf(
+            title=persisted.get("title") or request.topic, topic=request.topic,
+            grade_level=request.grade_level, blocks=persisted.get("blocks") or [],
+        )
+        filename = re.sub(r"[^a-z0-9]+", "-", (persisted.get("title") or request.topic).lower()).strip("-") or "investigation"
+        return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename}-field-dossier.pdf"'})
     canonical = await canonical_store.get(slug)
     if not canonical:
         raise HTTPException(status_code=404, detail="Open the investigation once before printing it.")

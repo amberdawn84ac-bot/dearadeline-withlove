@@ -25,6 +25,7 @@ import logging
 import re
 from typing import Optional
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -35,6 +36,7 @@ from app.models.student import load_student_state
 from app.connections.journal_store import journal_store
 from app.connections.curriculum_graph import curriculum_graph
 from app.connections.redis_client import redis_client
+from app.connections.daily_plan_store import daily_plan_store
 from app.services.rate_limit import enforce_rate_limit
 from app.tools.graph_query import tool_get_zpd_candidates, ZPDCandidate
 from app.agents.curriculum_planner import personalized_curriculum_planner
@@ -1115,6 +1117,7 @@ async def pop_completed_lesson(student_id: str, lesson_title: str) -> None:
         # The whole forecast must be rebuilt; mutating only today's queue leaves a
         # stale month/year plan behind.
         await redis_client.delete(cache_key)
+        await daily_plan_store.invalidate(student_id)
         logger.info(f"[LearningPlan] Invalidated adaptive roadmap after '{lesson_title}' for student={student_id}")
     except Exception as e:
         logger.warning(f"[LearningPlan] Failed to pop completed lesson (non-fatal): {e}")
@@ -1258,9 +1261,17 @@ async def get_learning_plan(
     """
     # ── Redis sliding-window cache check ─────────────────────────────────────────
     cache_key = _plan_cache_key(student_id)
+    plan_date = datetime.now(ZoneInfo("America/Chicago")).date()
     if refresh:
         await enforce_rate_limit("learning-plan-refresh", student_id, limit=4)
     if not refresh:
+        try:
+            persisted = await daily_plan_store.get(student_id, plan_date)
+            if persisted:
+                logger.info("[LearningPlan] Persistent HIT for student=%s date=%s", student_id, plan_date)
+                return LearningPlanResponse(**persisted)
+        except Exception as e:
+            logger.warning("[LearningPlan] Persistent plan read failed (non-fatal): %s", e)
         try:
             cached = await redis_client.get(cache_key)
             if cached:
@@ -1561,5 +1572,11 @@ async def get_learning_plan(
         logger.info(f"[LearningPlan] Cached response for student={student_id} (5 min TTL)")
     except Exception as e:
         logger.warning(f"[LearningPlan] Redis cache write failed (non-fatal): {e}")
+
+    try:
+        await daily_plan_store.save(student_id, plan_date, response.model_dump(mode="json"))
+        logger.info("[LearningPlan] Persisted Today for student=%s date=%s", student_id, plan_date)
+    except Exception as e:
+        logger.warning("[LearningPlan] Persistent plan write failed (non-fatal): %s", e)
 
     return response

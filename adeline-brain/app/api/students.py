@@ -478,7 +478,9 @@ async def claim_student(
     # Linking changes the household-wide investigation identity immediately.
     try:
         from app.connections.redis_client import redis_client
+        from app.connections.daily_plan_store import daily_plan_store
         await redis_client.delete(f"learning_plan:v6:{student['id']}")
+        await daily_plan_store.invalidate(str(student["id"]))
     except Exception as exc:
         logger.warning("Could not invalidate claimed student's plan cache: %s", exc)
 

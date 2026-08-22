@@ -43,6 +43,7 @@ export type Track =
 
 export interface LessonRequest {
   student_id: string;
+  plan_item_id?: string;
   track: Track;
   topic: string;
   is_homestead: boolean;
@@ -57,13 +58,14 @@ export interface LessonRequest {
  * planned title, description, track, grade adaptation, or homestead handling.
  */
 export function lessonRequestFromSuggestion(
-  suggestion: Pick<LessonSuggestion, "title" | "description" | "track">,
+  suggestion: Pick<LessonSuggestion, "id" | "title" | "description" | "track">,
   studentId: string,
   gradeLevel: string,
   requiredStandardCodes: string[] = [],
 ): LessonRequest {
   return {
     student_id: studentId,
+    plan_item_id: suggestion.id,
     // The Curriculum Librarian and Learning Plan both key canonicals by title.
     // Including the card description here creates a different slug, bypasses the
     // approved family lesson, and generates a duplicate generic lesson instead.

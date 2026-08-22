@@ -207,6 +207,9 @@ class User(BaseModel):
 
 class LessonRequest(BaseModel):
     student_id:  str
+    # Stable identifier from the persisted learning plan. Navigation must open
+    # this record; it must never be treated as an instruction to generate anew.
+    plan_item_id: Optional[str] = Field(default=None, max_length=240)
     track:       Track
     topic:       str
     is_homestead: bool = False

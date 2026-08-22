@@ -183,6 +183,35 @@ model StudentLesson {
   @@id([studentId, lessonId])
 }
 
+model StudentExperience {
+  id            String   @id @default(uuid())
+  studentId     String
+  planItemId    String
+  canonicalSlug String
+  status        String   @default("not_started")
+  title         String?
+  track         String?
+  blocksJson    Json     @default("[]")
+  metadataJson  Json     @default("{}")
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([studentId, planItemId])
+  @@index([studentId, status])
+}
+
+model DailyPlan {
+  studentId String
+  forDate   DateTime @db.Date
+  planJson  Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([studentId, forDate])
+  @@index([forDate])
+}
+
 model CanonicalLesson {
   id                  String        @id @default(uuid())
   topicSlug           String        @unique
