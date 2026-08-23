@@ -50,6 +50,7 @@ def learner_contribution(contract: dict, adaptation: AdaptationRequest) -> dict:
     demonstration = contract.get("demonstration_contract") or {}
     real_task = contract.get("real_world_task") or {}
     experience_design = contract.get("experience_design") or {}
+    public_interest = contract.get("public_interest_contract") or {}
     portfolio = contract.get("portfolio_task") or {}
     role = (contract.get("family_roles") or {}).get(band) or real_task.get("individual_contribution") or "Make one meaningful contribution to the shared investigation."
     interests = adaptation.interests[:3]
@@ -64,6 +65,8 @@ def learner_contribution(contract: dict, adaptation: AdaptationRequest) -> dict:
         ],
         "experience_mode": experience_design.get("primary_mode") or "investigation",
         "learner_facing_choices": list(experience_design.get("learner_facing_choices") or []),
+        "live_action_options": list(public_interest.get("live_action_options") or []),
+        "power_and_accountability_question": public_interest.get("power_and_accountability_question"),
         "evidence_to_preserve": {
             "process": list(portfolio.get("process_evidence") or []),
             "product": list(portfolio.get("product_evidence") or []),

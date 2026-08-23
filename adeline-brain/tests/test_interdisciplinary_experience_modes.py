@@ -6,7 +6,7 @@ from app.services.learner_context import learner_contribution
 
 def test_one_generator_owns_interdisciplinary_modes():
     prompt = CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT.lower()
-    assert CANONICAL_FORMAT_VERSION == 8
+    assert CANONICAL_FORMAT_VERSION == 9
     for mode in ("stem", "steam", "arts_integrated", "maker_build", "design_challenge"):
         assert mode in prompt
     assert "not separate subjects, generators, portals" in FAMILY_CANONICAL_AUTHORING_RULES.lower()
@@ -67,3 +67,32 @@ def test_contract_rejects_decorative_steam_and_exposure_credit():
     assert any("observable process or product" in error for error in errors)
     assert any("observable evidence" in error for error in errors)
     assert any("exposure alone" in error for error in errors)
+
+
+def test_public_interest_work_requires_records_claim_discipline_and_real_agency():
+    payload = {
+        "experience_design": {
+            "primary_mode": "public_interest_investigation",
+            "disciplines_integrated": ["public health", "government", "justice"],
+            "integration_rationale": "The policy outcome depends on all three.",
+        },
+        "public_interest_contract": {
+            "power_and_accountability_question": "",
+            "primary_record_types": [],
+            "claim_distinctions": ["verified_fact"],
+            "live_action_options": [{"action": "make a poster"}],
+        },
+        "portfolio_task": {"process_evidence": ["source reliability table"]},
+        "mastery_evidence_map": [{
+            "concept": "civil and criminal accountability",
+            "acceptable_evidence": ["comparison supported by court records and statutes"],
+            "not_awarded_for_exposure_alone": True,
+        }],
+    }
+
+    errors = validate_canonical_contract(payload)
+
+    assert any("primary records" in error for error in errors)
+    assert any("power and accountability" in error for error in errors)
+    assert any("distinguish facts" in error for error in errors)
+    assert any("real recipient" in error for error in errors)

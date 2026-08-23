@@ -9,6 +9,7 @@ from app.curriculum.family_style import FAMILY_CANONICAL_AUTHORING_RULES
 EXPERIENCE_MODES = frozenset({
     "investigation", "stem", "steam", "arts_integrated", "maker_build",
     "design_challenge", "creative_demonstration", "family_project",
+    "public_interest_investigation", "civic_action_project",
 })
 
 
@@ -29,6 +30,23 @@ def validate_canonical_contract(payload: dict) -> list[str]:
     if primary_mode in {"stem", "steam", "maker_build", "design_challenge"}:
         if not list(design.get("constraints") or []):
             errors.append(f"{primary_mode} requires a genuine constraint, not a decorative activity")
+    if primary_mode in {"public_interest_investigation", "civic_action_project"}:
+        public_interest = payload.get("public_interest_contract") or {}
+        if not list(public_interest.get("primary_record_types") or []):
+            errors.append("public-interest work must identify primary records to examine")
+        if not str(public_interest.get("power_and_accountability_question") or "").strip():
+            errors.append("public-interest work must examine power and accountability")
+        distinctions = public_interest.get("claim_distinctions") or []
+        if not {"verified_fact", "allegation", "legal_finding", "unanswered_question"}.issubset(set(distinctions)):
+            errors.append("public-interest work must distinguish facts, allegations, findings, and questions")
+        actions = public_interest.get("live_action_options") or []
+        if not isinstance(actions, list) or not any(
+            isinstance(action, dict)
+            and str(action.get("real_recipient") or "").strip()
+            and str(action.get("intended_change") or "").strip()
+            for action in actions
+        ):
+            errors.append("civic agency requires a feasible action with a real recipient and intended change")
 
     portfolio = payload.get("portfolio_task") or {}
     preserved = (
@@ -72,14 +90,14 @@ Prefer concrete evidence and meaningful tasks over explanatory prose.
 OUTPUT CONTRACT:
 Return ONLY valid JSON for exactly one CanonicalLesson object:
 {{
-  "canonical_format_version": 8,
+  "canonical_format_version": 9,
   "title": "",
   "track": "",
   "big_question": "",
   "learning_goal": "",
   "shared_experience": "",
   "experience_design": {{
-    "primary_mode": "investigation|stem|steam|arts_integrated|maker_build|design_challenge|creative_demonstration|family_project",
+    "primary_mode": "investigation|stem|steam|arts_integrated|maker_build|design_challenge|creative_demonstration|family_project|public_interest_investigation|civic_action_project",
     "supporting_modes": [],
     "why_this_fits": "",
     "learner_facing_choices": [],
@@ -95,6 +113,23 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
     "ways_to_widen": [],
     "branch_points": [],
     "pause_or_resume_rule": ""
+  }},
+  "public_interest_contract": {{
+    "power_and_accountability_question": "",
+    "affected_people_and_perspectives": [],
+    "primary_record_types": [],
+    "claim_distinctions": ["verified_fact", "allegation", "legal_finding", "settlement_without_admission", "interpretation", "advocacy_claim", "unanswered_question"],
+    "accountability_comparisons": [],
+    "competing_explanations_to_test": [],
+    "live_action_options": [{{
+      "action": "",
+      "real_recipient": "",
+      "intended_change": "",
+      "evidence_needed": [],
+      "adult_support_required": false,
+      "safety_and_privacy_limits": []
+    }}],
+    "no_predetermined_verdict": true
   }},
   "worldview_lens": "",
   "blocks": [],
@@ -181,6 +216,8 @@ QUALITY CHECK BEFORE OUTPUT:
 - Completion is based on the shared outcome and demonstrated concepts, never the calendar.
 - Concrete evidence and meaningful action outweigh explanatory prose.
 - Real outcome and portfolio evidence are present when the subject supports them.
+- Public-interest work follows documentary evidence, power, incentives, unequal consequences, and
+  affected people; it culminates in lawful present-day agency with a real recipient, not simulated busywork.
 - No filler, generic narrative, fake sources, invented quotations, or placeholder text.
 - JSON only; no markdown fences and no commentary.
 """.strip()

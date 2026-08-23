@@ -11,7 +11,7 @@ from typing import Any
 
 from app.curriculum.experience_contract import ExperienceStage, annotate_experience, validate_experience
 
-CANONICAL_FORMAT_VERSION = 8
+CANONICAL_FORMAT_VERSION = 9
 
 _OBSOLETE_FORMATS = {
     "ANIMATED_SKETCHNOTE_LESSON",
@@ -99,6 +99,27 @@ INTERDISCIPLINARY EXPERIENCE MODES:
   can actually demonstrate. Mere exposure to a connected discipline earns nothing.
 - Offer a small, meaningful path choice when several modes fit, while preserving the big question,
   required evidence, and concepts needing mastery. Do not announce mode labels to the learner.
+
+REAL PUBLIC-INTEREST AND CIVIC WORK:
+- Young people can investigate hard present-day problems and make a lawful difference now. Do not
+  replace authentic agency with awareness posters, pretend campaigns, generic volunteering, or
+  worksheets when a real investigation, public audience, decision-maker, or community need exists.
+- For corporate, government, justice, public-health, or policy questions, follow power and incentives.
+  Examine primary records such as court filings, company documents, regulatory actions, statutes,
+  lobbying disclosures, campaign-finance records, budgets, testimony, settlements, and credible
+  investigative reporting. Include the experiences of people directly affected.
+- Compare how laws and consequences operate across wealth, race, office, corporate structures,
+  prosecution, civil enforcement, incarceration, and ordinary possession or street-level offenses
+  when the evidence supports that comparison. Do not presume guilt or force a predetermined verdict.
+- Clearly distinguish verified fact, allegation, legal finding, settlement without admission,
+  interpretation, advocacy claim, and unanswered question. Never invent wrongdoing or sources.
+- End with feasible civic agency connected to the evidence: a documented policy proposal, public
+  comment, testimony, meeting request, evidence-backed letter, records request with adult support,
+  public information resource, partnership with a legitimate community organization, diversion or
+  reentry support, or another lawful action with a real recipient and defined purpose.
+- Protect minors and affected people. Do not encourage harassment, doxxing, trespass, deception,
+  confrontation, vigilantism, unauthorized contact with prisoners, or disclosure of private stories.
+  Name when an adult must supervise or send a communication.
 """.strip()
 
 
