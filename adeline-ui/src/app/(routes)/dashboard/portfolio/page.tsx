@@ -5,9 +5,10 @@ import { Download, Loader2, BookOpen, Hammer, Zap } from "lucide-react";
 import {
   downloadMasteryPortfolio,
   fetchStudentState,
+  getLessonPortfolio,
   listActivities,
 } from "@/lib/brain-client";
-import type { ActivityEntry, Track } from "@/lib/brain-client";
+import type { ActivityEntry, LessonPortfolioItem } from "@/lib/brain-client";
 import { useStudent } from "@/lib/useStudent";
 
 const TRACK_LABELS: Record<string, string> = {
@@ -40,6 +41,7 @@ export default function PortfolioPage() {
   const { student } = useStudent();
   const studentId = student?.id ?? '';
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
+  const [investigations, setInvestigations] = useState<LessonPortfolioItem[]>([]);
   const [totalCredits, setTotalCredits] = useState(0);
   const [trackCount, setTrackCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -50,14 +52,19 @@ export default function PortfolioPage() {
     setLoading(true);
     setError(null);
     try {
-      const [actData, stateData] = await Promise.allSettled([
+      const [actData, lessonData, stateData] = await Promise.allSettled([
         listActivities(studentId),
+        getLessonPortfolio(studentId),
         fetchStudentState(studentId),
       ]);
 
       if (actData.status === "fulfilled") {
         setActivities(actData.value.activities);
         setTotalCredits(actData.value.total_credits);
+      }
+
+      if (lessonData.status === "fulfilled") {
+        setInvestigations(lessonData.value);
       }
 
       if (stateData.status === "fulfilled") {
@@ -137,7 +144,7 @@ export default function PortfolioPage() {
               Accomplishments
             </p>
             <p className="text-3xl font-bold text-[#2F4731]">
-              {activities.length}
+              {activities.length + investigations.length}
             </p>
           </div>
           <div className="rounded-2xl border border-[#E7DAC3] bg-white p-4">
@@ -179,7 +186,7 @@ export default function PortfolioPage() {
             </div>
           )}
 
-          {!loading && activities.length === 0 && !error && (
+          {!loading && activities.length === 0 && investigations.length === 0 && !error && (
             <div className="text-center py-16 space-y-4">
               <p className="text-5xl">🌱</p>
               <h2
@@ -196,8 +203,29 @@ export default function PortfolioPage() {
             </div>
           )}
 
-          {!loading && activities.length > 0 && (
+          {!loading && (activities.length > 0 || investigations.length > 0) && (
             <div className="space-y-3">
+              {investigations.map((item) => {
+                const color = TRACK_COLOR[item.track] ?? "#2F4731";
+                return (
+                  <div key={item.lesson_id} className="rounded-2xl border border-[#E7DAC3] bg-white p-5 flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white" style={{ background: color }}>
+                      <Hammer className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-bold text-[#2F4731] text-sm">{item.title}</h3>
+                      {item.artifact_description && <p className="mt-1 text-xs text-[#2F4731]/70">{item.artifact_description}</p>}
+                      {item.reflection && <p className="mt-2 line-clamp-3 text-xs italic text-[#2F4731]/55">“{item.reflection}”</p>}
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full text-white" style={{ background: color }}>
+                          {TRACK_LABELS[item.track] ?? item.track}
+                        </span>
+                        {item.sealed_at && <span className="text-[10px] text-[#2F4731]/40">{new Date(item.sealed_at).toLocaleDateString()}</span>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
               {activities.map((act) => {
                 const color =
                   TRACK_COLOR[act.primary_track] ?? "#2F4731";

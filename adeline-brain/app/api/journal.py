@@ -61,6 +61,19 @@ class RecentResponse(BaseModel):
     student_id: str
     entries:    list[RecentEntry]
 
+class PortfolioItem(BaseModel):
+    lesson_id: str
+    title: str
+    track: str
+    sealed_at: str | None
+    reflection: str | None = None
+    artifact_description: str | None = None
+    artifact_refs: list[str] = Field(default_factory=list)
+
+class PortfolioResponse(BaseModel):
+    student_id: str
+    items: list[PortfolioItem]
+
 
 # ── Routes ───────────────────────────────────────────────
 
@@ -113,9 +126,16 @@ async def seal_journal(
     if body.oas_standards:
         # Await this write so the parent Learning Map is correct immediately
         # after the learner saves the experience.
-        await _record_mastery_safe(
-            student_id, body.track.value, body.oas_standards, proficiency,
-        )
+        try:
+            await curriculum_graph.record_standard_mastery(
+                student_id, body.track.value, body.oas_standards, proficiency=proficiency,
+            )
+        except Exception as exc:
+            logger.exception("[/journal/seal] Mastery persistence failed")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Journal saved but mastery did not finish; retrying is safe: {exc}",
+            ) from exc
 
     # Fire-and-forget BKT + SM-2 card update with quiz-derived quality signal
     asyncio.create_task(
@@ -165,21 +185,6 @@ async def seal_journal(
         learning_status=proficiency,
         credit_sealed=credit_sealed,
     )
-
-
-async def _record_mastery_safe(
-    student_id: str, track: str, oas_standards: list[dict], proficiency: str,
-) -> None:
-    try:
-        await curriculum_graph.record_standard_mastery(
-            student_id, track, oas_standards, proficiency=proficiency,
-        )
-        logger.info(
-            "[CurriculumGraph] %s recorded for %s — %s standards",
-            proficiency, student_id, len(oas_standards),
-        )
-    except Exception as exc:
-        logger.warning(f"[CurriculumGraph] Mastery write failed (non-fatal): {exc}")
 
 
 def _quiz_quality(quiz_results: list[dict]) -> int:
@@ -281,3 +286,44 @@ async def get_recent(
         student_id=student_id,
         entries=[RecentEntry(**e) for e in entries],
     )
+
+
+@router.get("/portfolio/{student_id}", response_model=PortfolioResponse)
+async def get_portfolio_items(
+    student_id: str,
+    limit: int = 100,
+    _user_id: str = Depends(verify_student_access),
+):
+    """Return durable investigation evidence for the learner portfolio."""
+    from app.config import get_db_conn
+    conn = await get_db_conn()
+    try:
+        rows = await conn.fetch(
+            '''SELECT j.lesson_id, j.track, j.sources_json, j.sealed_at,
+                      COALESCE(e.title, j.lesson_id) AS title
+               FROM student_journal j
+               LEFT JOIN "StudentExperience" e
+                 ON e.id = j.lesson_id AND e."studentId" = j.student_id
+               WHERE j.student_id = $1
+               ORDER BY j.sealed_at DESC LIMIT $2''',
+            student_id, min(max(limit, 1), 200),
+        )
+    finally:
+        await conn.close()
+
+    items: list[PortfolioItem] = []
+    for row in rows:
+        try:
+            sources = json.loads(row["sources_json"] or "[]")
+        except (TypeError, json.JSONDecodeError):
+            sources = []
+        reflection = next((str(item.get("content")) for item in sources if item.get("type") == "learner_reflection" and item.get("content")), None)
+        artifact = next((item for item in sources if item.get("type") == "artifact" or str(item.get("url") or "").startswith("portfolio://")), None)
+        artifact_description = str(artifact.get("author") or artifact.get("description") or artifact.get("title") or "Portfolio artifact") if artifact else None
+        refs = [str(item.get("url")) for item in sources if item.get("url")]
+        items.append(PortfolioItem(
+            lesson_id=str(row["lesson_id"]), title=str(row["title"]), track=str(row["track"]),
+            sealed_at=row["sealed_at"].isoformat() if row["sealed_at"] else None,
+            reflection=reflection, artifact_description=artifact_description, artifact_refs=refs,
+        ))
+    return PortfolioResponse(student_id=student_id, items=items)

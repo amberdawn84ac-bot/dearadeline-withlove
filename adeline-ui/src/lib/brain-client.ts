@@ -1196,6 +1196,25 @@ export interface TranscriptEntry {
   sealedAt?: string;
 }
 
+export interface LessonPortfolioItem {
+  lesson_id: string;
+  title: string;
+  track: Track;
+  sealed_at: string | null;
+  reflection?: string | null;
+  artifact_description?: string | null;
+  artifact_refs: string[];
+}
+
+export async function getLessonPortfolio(studentId: string): Promise<LessonPortfolioItem[]> {
+  const res = await fetch(`${BRAIN_URL}/journal/portfolio/${encodeURIComponent(studentId)}`, {
+    headers: await getBrainHeaders(), cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Could not load investigation portfolio (${res.status})`);
+  const payload = await res.json();
+  return payload.items ?? [];
+}
+
 export async function getRecentTranscript(studentId: string, limit = 4): Promise<TranscriptEntry[]> {
   const res = await fetch(
     `${BRAIN_URL}/learning/transcript/${encodeURIComponent(studentId)}?limit=${limit}`,
