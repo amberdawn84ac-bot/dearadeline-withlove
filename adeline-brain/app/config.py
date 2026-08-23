@@ -201,6 +201,10 @@ def _db_ssl_context():
     import ssl as _ssl
     root_cert = os.getenv("DB_SSL_ROOT_CERT", "").strip()
     if root_cert:
+        # Railway secrets are commonly provided as inline PEM. Also accept a
+        # mounted path for operators who manage certificates as files.
+        if "-----BEGIN CERTIFICATE-----" in root_cert:
+            return _ssl.create_default_context(cadata=root_cert.replace("\\n", "\n"))
         return _ssl.create_default_context(cafile=root_cert)
 
     # Use the operating system trust store and verify both the certificate and
