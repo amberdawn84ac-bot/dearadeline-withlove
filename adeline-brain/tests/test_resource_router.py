@@ -1,5 +1,6 @@
 import pytest
 
+from app.curriculum.family_style import CANONICAL_FORMAT_VERSION
 from app.services.resource_router import ResourceQuery, ResourceRouter, _curated, _youtube_resources, resource_block_for_lesson
 
 
@@ -55,7 +56,8 @@ async def test_lesson_resource_block_is_live_not_canonical_content(monkeypatch):
     monkeypatch.setattr("app.services.resource_router.resource_router.search", fake_search)
     block = await resource_block_for_lesson("energy", "CREATION_SCIENCE", "8")
     assert block["block_type"] == "RESOURCE_COLLECTION"
-    assert block["canonical_format_version"] == 6
+    assert block["canonical_format_version"] == CANONICAL_FORMAT_VERSION
+    assert block["experience_stage"] == "RESOURCE"
     assert block["metadata"]["resources"][0]["id"] == "makecode:arcade"
 
 
