@@ -460,9 +460,14 @@ def resource_block_from_packet(packet: dict[str, Any]) -> dict[str, Any] | None:
         return None
     return {
         "block_type": "RESOURCE_COLLECTION",
+        "experience_stage": "RESOURCE",
         "title": "Explore the real thing",
         "content": "Choose the outside resource that gives this family the strongest evidence, manipulation, game, or creation experience. Adeline remains the teacher; the resource is the laboratory or archive.",
-        "metadata": {"resources": resources, "rights_rules": packet["rules"]},
+        "metadata": {
+            "resources": resources,
+            "rights_rules": packet["rules"],
+            "requires_evidence": False,
+        },
         "evidence": [], "is_silenced": False, "family_style": True,
         "canonical_format_version": CANONICAL_FORMAT_VERSION,
         "family_roles": {
