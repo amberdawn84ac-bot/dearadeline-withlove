@@ -333,6 +333,7 @@ async def _conversation_sse(
         first_visible_at = time.perf_counter()
 
         routed_resource_count = 0
+        routed_resource_memory = ""
         if _wants_outside_resource(message):
             try:
                 packet = await resource_router.search(ResourceQuery(
@@ -345,6 +346,16 @@ async def _conversation_sse(
                 resource_block = resource_block_from_packet(packet)
                 if resource_block:
                     routed_resource_count = len(packet.get("resources", []))
+                    remembered = [
+                        f"{item.get('name') or item.get('title')} ({item.get('url')})"
+                        for item in packet.get("resources", [])[:4]
+                        if item.get("name") or item.get("title")
+                    ]
+                    routed_resource_memory = (
+                        "Adeline recommended these outside learning resources for this investigation: "
+                        + "; ".join(remembered)
+                        + ". The learner should return with an explanation, creation, screenshot, code, photo, or other demonstration; opening the resource alone earns no mastery."
+                    )
                     yield _sse("block", resource_block)
             except Exception:
                 logger.exception("[/conversation/stream] Resource Router failed")
@@ -390,7 +401,7 @@ async def _conversation_sse(
             await conversation_store.save_interaction(
                 student_id,
                 message,
-                assistant_text,
+                assistant_text + (f"\n\n{routed_resource_memory}" if routed_resource_memory else ""),
                 zpd_zone=zpd_zone.value,
                 mastery_band=mastery_band.value,
                 track=tracks[0],
