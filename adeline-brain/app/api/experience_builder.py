@@ -57,8 +57,16 @@ async def _author(request: LessonRequest, resources: list[dict]) -> dict:
         f"ROUTED OUTSIDE TOOLS AND SOURCES:\n{json.dumps(resources[:6], ensure_ascii=False)}"
     )
     last_error = None
+    repair_instruction = ""
     for attempt in range(2):
         try:
+            attempt_prompt = prompt
+            if repair_instruction:
+                attempt_prompt += (
+                    "\n\nREPAIR THE PRIOR DRAFT:\n"
+                    + repair_instruction
+                    + "\nReturn the complete corrected JSON object, not a patch or explanation."
+                )
             response = await client.chat.completions.create(
                 model=GEMINI_MODEL,
                 # Canonical experiences contain several substantive blocks and
@@ -66,20 +74,30 @@ async def _author(request: LessonRequest, resources: list[dict]) -> dict:
                 # the middle of an object, leaving every retry unparsable.
                 max_tokens=16000,
                 response_format={"type": "json_object"},
-                messages=[{"role": "system", "content": CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
+                messages=[{"role": "system", "content": CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT}, {"role": "user", "content": attempt_prompt}],
             )
             parsed = _json_object(response.choices[0].message.content or "")
             contract_errors = validate_canonical_contract(parsed)
             if contract_errors:
                 last_error = ValueError("; ".join(contract_errors))
+                repair_instruction = "The draft failed these semantic requirements: " + "; ".join(contract_errors)
                 continue
             blocks = finalize_family_lesson(parsed.get("blocks") or [], request.topic, track=request.track.value)
             if blocks:
                 parsed["blocks"] = blocks
                 return parsed
             last_error = ValueError("author output failed semantic experience validation")
+            repair_instruction = (
+                "The blocks failed the experience contract. Provide 6–10 concise substantive blocks "
+                "with explicit stages, including a meaningful invitation, action or creation, and a "
+                "reviewable demonstration. Do not add filler."
+            )
         except Exception as exc:
             last_error = exc
+            repair_instruction = (
+                f"The prior response could not be accepted ({type(exc).__name__}). Keep the complete "
+                "response concise and ensure it is one syntactically valid JSON object matching every field."
+            )
             if attempt == 0:
                 await asyncio.sleep(1)
     logger.error("[ExperienceAuthor] failed topic=%r: %s", request.topic, last_error)
@@ -162,6 +180,13 @@ async def _stream(request: LessonRequest):
         )
         async for event in _emit_persisted(request, record):
             yield event
+    except asyncio.CancelledError:
+        # A browser navigation or dropped connection must not strand the durable
+        # item in `generating` until the stale-claim timeout expires.
+        await student_experience_store.mark_failed(
+            request.student_id, plan_item_id, "Generation connection closed before completion"
+        )
+        raise
     except Exception as exc:
         await student_experience_store.mark_failed(request.student_id, plan_item_id, str(exc))
         logger.exception("[ExperienceAuthor] learner experience failed student=%s item=%s", request.student_id, plan_item_id)
