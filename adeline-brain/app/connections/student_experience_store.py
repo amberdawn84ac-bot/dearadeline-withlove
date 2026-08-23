@@ -107,10 +107,21 @@ class StudentExperienceStore:
 
     @staticmethod
     def _record(row) -> dict:
+        def decoded(value, fallback):
+            if value is None:
+                return fallback
+            if isinstance(value, str):
+                try:
+                    return json.loads(value)
+                except (TypeError, ValueError):
+                    return fallback
+            return value
+
         return {
             "id": str(row["id"]), "status": str(row["status"]),
             "title": row["title"], "track": row["track"],
-            "blocks": row["blocksJson"] or [], "metadata": row["metadataJson"] or {},
+            "blocks": decoded(row["blocksJson"], []),
+            "metadata": decoded(row["metadataJson"], {}),
             "error_message": row["errorMessage"], "canonical_slug": row["canonicalSlug"],
         }
 
