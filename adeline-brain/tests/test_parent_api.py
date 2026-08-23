@@ -30,15 +30,16 @@ def test_list_students_success(mock_parent_auth, mock_db_conn):
     # Mock database responses
     mock_conn = AsyncMock()
     mock_conn.fetchrow.return_value = {"role": "PARENT"}
-    mock_conn.fetch.return_value = [
-        {
+    mock_conn.fetch.side_effect = [
+        [{
             "id": "student-1",
             "name": "Alice Smith",
             "email": "alice@example.com",
             "gradeLevel": "8",
             "interests": ["science", "art"],
             "createdAt": datetime(2024, 1, 1, tzinfo=timezone.utc),
-        }
+        }],
+        [],
     ]
     mock_db_conn.return_value.__aenter__.return_value = mock_conn
     
@@ -111,7 +112,10 @@ def test_add_student_duplicate_player_name(mock_parent_auth, mock_db_conn):
 def test_get_family_dashboard(mock_parent_auth, mock_db_conn):
     """Test family dashboard aggregation."""
     mock_conn = AsyncMock()
-    mock_conn.fetchrow.return_value = {"role": "PARENT"}
+    mock_conn.fetchrow.side_effect = [
+        {"role": "PARENT"},
+        {"sealed_at": datetime(2024, 1, 2, tzinfo=timezone.utc), "track": "CREATION_SCIENCE"},
+    ]
     mock_conn.fetch.side_effect = [
         [{"id": "student-1", "name": "Alice"}],  # Students
         [{"creditHours": 2.5}],  # Transcript for student-1
@@ -128,6 +132,14 @@ def test_get_family_dashboard(mock_parent_auth, mock_db_conn):
     assert data["family_total_credits"] == 2.5
     assert len(data["students"]) == 1
     assert data["students"][0]["lessons_completed"] == 5
+    issued_sql = "\n".join(
+        str(call.args[0])
+        for method in (mock_conn.fetch, mock_conn.fetchrow, mock_conn.fetchval)
+        for call in method.await_args_list
+        if call.args
+    )
+    assert '"JournalEntry"' not in issued_sql
+    assert "student_journal" in issued_sql
 
 
 def test_update_student(mock_parent_auth, mock_db_conn):

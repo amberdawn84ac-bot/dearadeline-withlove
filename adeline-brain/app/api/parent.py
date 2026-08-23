@@ -156,15 +156,15 @@ async def list_students(
         if student_ids:
             activity_rows = await conn.fetch(
                 '''
-                SELECT "studentId", MAX("sealedAt") as last_sealed
-                FROM "JournalEntry"
-                WHERE "studentId" = ANY($1::uuid[]) AND sealed = true
-                GROUP BY "studentId"
+                SELECT student_id, MAX(sealed_at) AS last_sealed
+                FROM student_journal
+                WHERE student_id = ANY($1::text[])
+                GROUP BY student_id
                 ''',
                 student_ids,
             )
             for ar in activity_rows:
-                last_activity_map[str(ar["studentId"])] = ar["last_sealed"]
+                last_activity_map[str(ar["student_id"])] = ar["last_sealed"]
 
         students = [
             StudentSummary(
@@ -308,7 +308,7 @@ async def get_family_dashboard(
             
             # Get lessons completed (sealed journal entries)
             lessons_count = await conn.fetchval(
-                'SELECT COUNT(*) FROM "JournalEntry" WHERE "studentId" = $1 AND sealed = true',
+                'SELECT COUNT(*) FROM student_journal WHERE student_id = $1',
                 student_id,
             ) or 0
             
@@ -322,8 +322,8 @@ async def get_family_dashboard(
             # Get projects sealed (count journal entries with lesson_id starting with 'project-')
             projects_count = await conn.fetchval(
                 '''
-                SELECT COUNT(*) FROM "JournalEntry"
-                WHERE "studentId" = $1 AND sealed = true AND "lessonId" LIKE 'project-%'
+                SELECT COUNT(*) FROM student_journal
+                WHERE student_id = $1 AND lesson_id LIKE 'project-%'
                 ''',
                 student_id,
             ) or 0
@@ -331,9 +331,9 @@ async def get_family_dashboard(
             # Get last activity and most recent track
             last_entry = await conn.fetchrow(
                 '''
-                SELECT "sealedAt", track FROM "JournalEntry"
-                WHERE "studentId" = $1 AND sealed = true
-                ORDER BY "sealedAt" DESC LIMIT 1
+                SELECT sealed_at, track FROM student_journal
+                WHERE student_id = $1
+                ORDER BY sealed_at DESC LIMIT 1
                 ''',
                 student_id,
             )
@@ -346,7 +346,7 @@ async def get_family_dashboard(
                     lessons_completed=lessons_count,
                     books_finished=books_count,
                     projects_sealed=projects_count,
-                    last_activity=last_entry["sealedAt"].isoformat() if last_entry and last_entry["sealedAt"] else None,
+                    last_activity=last_entry["sealed_at"].isoformat() if last_entry and last_entry["sealed_at"] else None,
                     active_track=last_entry["track"] if last_entry else None,
                 )
             )
@@ -356,11 +356,11 @@ async def get_family_dashboard(
         # Get recent activity (last 10 sealed journal entries across all students)
         activity_rows = await conn.fetch(
             '''
-            SELECT j."studentId", u.name as student_name, j."lessonId", j.track, j."sealedAt"
-            FROM "JournalEntry" j
-            JOIN "User" u ON u.id = j."studentId"
-            WHERE u."parentId" = $1 AND j.sealed = true
-            ORDER BY j."sealedAt" DESC
+            SELECT j.student_id, u.name AS student_name, j.lesson_id, j.track, j.sealed_at
+            FROM student_journal j
+            JOIN "User" u ON u.id = j.student_id
+            WHERE u."parentId" = $1
+            ORDER BY j.sealed_at DESC
             LIMIT 10
             ''',
             parent_id,
@@ -368,11 +368,11 @@ async def get_family_dashboard(
         
         recent_activity = [
             {
-                "student_id": str(row["studentId"]),
+                "student_id": str(row["student_id"]),
                 "student_name": row["student_name"],
-                "lesson_id": row["lessonId"],
+                "lesson_id": row["lesson_id"],
                 "track": row["track"],
-                "completed_at": row["sealedAt"].isoformat() if row["sealedAt"] else None,
+                "completed_at": row["sealed_at"].isoformat() if row["sealed_at"] else None,
             }
             for row in activity_rows
         ]
