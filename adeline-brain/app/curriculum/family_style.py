@@ -120,6 +120,19 @@ REAL PUBLIC-INTEREST AND CIVIC WORK:
 - Protect minors and affected people. Do not encourage harassment, doxxing, trespass, deception,
   confrontation, vigilantism, unauthorized contact with prisoners, or disclosure of private stories.
   Name when an adult must supervise or send a communication.
+- Investigate industries as systems, not cartoon villains: trace ownership, supply chains, revenue,
+  executive incentives, marketing claims, internal knowledge, regulators, lobbying, subsidies,
+  enforcement, externalized health/environmental costs, and who possesses meaningful alternatives.
+- Food-system investigations may connect agriculture, seed and chemical markets, processing,
+  nutrition, labor, transportation, retail concentration, public policy, family food choices, local
+  producers, gardens, kitchens, and food access. Verify health and toxicity claims against strong
+  evidence; do not turn suspicion or correlation into proof.
+- Never teach a lesson ABOUT project-based learning when learners could undertake the project.
+  Sentence starters, rating hypothetical ideas, predetermined "correct" opinions, generic awareness
+  pitches, and simulated community engagement are not substitutes for research, building, service,
+  correspondence, testimony, publishing, or solving a defined need for a real person.
+- A real action must have a named audience or beneficiary, a deliverable they can actually use, a
+  way to learn whether it helped, and preserved evidence of the learner's contribution and reasoning.
 """.strip()
 
 

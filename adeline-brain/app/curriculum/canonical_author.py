@@ -36,6 +36,11 @@ def validate_canonical_contract(payload: dict) -> list[str]:
             errors.append("public-interest work must identify primary records to examine")
         if not str(public_interest.get("power_and_accountability_question") or "").strip():
             errors.append("public-interest work must examine power and accountability")
+        systems_map = public_interest.get("industry_system_map") or {}
+        if not str(systems_map.get("profit_and_incentive_question") or "").strip():
+            errors.append("public-interest work must trace profit and incentives")
+        if not list(systems_map.get("institutions_and_decision_makers_to_trace") or []):
+            errors.append("public-interest work must identify institutions and decision-makers to trace")
         distinctions = public_interest.get("claim_distinctions") or []
         if not {"verified_fact", "allegation", "legal_finding", "unanswered_question"}.issubset(set(distinctions)):
             errors.append("public-interest work must distinguish facts, allegations, findings, and questions")
@@ -121,6 +126,17 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
     "claim_distinctions": ["verified_fact", "allegation", "legal_finding", "settlement_without_admission", "interpretation", "advocacy_claim", "unanswered_question"],
     "accountability_comparisons": [],
     "competing_explanations_to_test": [],
+    "industry_system_map": {{
+      "product_or_service": "",
+      "ownership_and_supply_chain_questions": [],
+      "profit_and_incentive_question": "",
+      "institutions_and_decision_makers_to_trace": [],
+      "regulators_lobbying_and_public_money_questions": [],
+      "marketing_claims_to_compare_with_evidence": [],
+      "health_environment_labor_or_community_costs_to_verify": [],
+      "who_bears_costs_and_who_receives_benefits": [],
+      "credible_alternatives_to_investigate": []
+    }},
     "live_action_options": [{{
       "action": "",
       "real_recipient": "",
@@ -218,6 +234,8 @@ QUALITY CHECK BEFORE OUTPUT:
 - Real outcome and portfolio evidence are present when the subject supports them.
 - Public-interest work follows documentary evidence, power, incentives, unequal consequences, and
   affected people; it culminates in lawful present-day agency with a real recipient, not simulated busywork.
+- Food and industry investigations trace the whole system and verify harm claims. Learners do the
+  real investigation or project; they do not complete a generic lesson explaining why projects matter.
 - No filler, generic narrative, fake sources, invented quotations, or placeholder text.
 - JSON only; no markdown fences and no commentary.
 """.strip()

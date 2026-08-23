@@ -79,6 +79,7 @@ def test_public_interest_work_requires_records_claim_discipline_and_real_agency(
         "public_interest_contract": {
             "power_and_accountability_question": "",
             "primary_record_types": [],
+            "industry_system_map": {},
             "claim_distinctions": ["verified_fact"],
             "live_action_options": [{"action": "make a poster"}],
         },
@@ -94,5 +95,16 @@ def test_public_interest_work_requires_records_claim_discipline_and_real_agency(
 
     assert any("primary records" in error for error in errors)
     assert any("power and accountability" in error for error in errors)
+    assert any("profit and incentives" in error for error in errors)
+    assert any("institutions and decision-makers" in error for error in errors)
     assert any("distinguish facts" in error for error in errors)
     assert any("real recipient" in error for error in errors)
+
+
+def test_prompt_rejects_project_theater_and_maps_food_industries_as_systems():
+    prompt = CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT.lower()
+    assert "lesson about project-based learning" in prompt
+    assert "predetermined \"correct\" opinions" in prompt
+    assert "ownership, supply chains, revenue" in prompt
+    assert "verify health and toxicity claims" in prompt
+    assert "industry_system_map" in prompt
