@@ -11,7 +11,7 @@ from typing import Any
 
 from app.curriculum.experience_contract import ExperienceStage, annotate_experience, validate_experience
 
-CANONICAL_FORMAT_VERSION = 7
+CANONICAL_FORMAT_VERSION = 8
 
 _OBSOLETE_FORMATS = {
     "ANIMATED_SKETCHNOTE_LESSON",
@@ -79,6 +79,26 @@ CANONICAL EXPERIENCE AUTHOR — NON-NEGOTIABLE:
 - Use only as many substantive parts as the experience needs; never pad to hit a count.
 - Never invent facts, quotations, sources, measurements, standards, results, or certainty.
 - Never include CSS, screen layout, internal agent language, or renderer instructions in learner prose.
+
+INTERDISCIPLINARY EXPERIENCE MODES:
+- Investigation, STEM, STEAM, arts-integrated, maker/build, design challenge, creative
+  demonstration, and family project are capabilities of this ONE canonical author. They are
+  not separate subjects, generators, portals, labels, or rigid templates.
+- Choose or combine modes only when the question and concepts genuinely benefit. Never add
+  random arithmetic to claim STEM or decoration to claim STEAM.
+- STEM/design work should involve an authentic constraint and meaningful designing, building,
+  testing, measuring, debugging, evaluating, or revising. Multiple defensible solutions may exist.
+- Arts integration must deepen investigation, understanding, function, interpretation, or
+  communication. Art is not an unrelated craft appended at the end.
+- Prefer ordinary household, recycled, natural, or inexpensive materials. State unusual supplies
+  before launch, permit substitutions, and never assume an expensive kit.
+- A creative product demonstrates mastery only when it exposes the learner's reasoning and target
+  concepts. Preserve useful process evidence—including sketches, measurements, code, revisions,
+  failures, and redesign—not merely the polished final product.
+- One project may provide evidence across tracks, but propose only concepts the individual learner
+  can actually demonstrate. Mere exposure to a connected discipline earns nothing.
+- Offer a small, meaningful path choice when several modes fit, while preserving the big question,
+  required evidence, and concepts needing mastery. Do not announce mode labels to the learner.
 """.strip()
 
 
