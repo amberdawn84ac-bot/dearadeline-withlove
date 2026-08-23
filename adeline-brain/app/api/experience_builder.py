@@ -60,7 +60,12 @@ async def _author(request: LessonRequest, resources: list[dict]) -> dict:
     for attempt in range(2):
         try:
             response = await client.chat.completions.create(
-                model=GEMINI_MODEL, max_tokens=8000,
+                model=GEMINI_MODEL,
+                # Canonical experiences contain several substantive blocks and
+                # their contracts. 8k tokens could cut otherwise valid JSON in
+                # the middle of an object, leaving every retry unparsable.
+                max_tokens=16000,
+                response_format={"type": "json_object"},
                 messages=[{"role": "system", "content": CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
             )
             parsed = _json_object(response.choices[0].message.content or "")
