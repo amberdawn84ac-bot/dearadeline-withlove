@@ -49,6 +49,8 @@ def learner_contribution(contract: dict, adaptation: AdaptationRequest) -> dict:
     band = "elementary" if grade <= 5 else "middle" if grade <= 8 else "high_school"
     demonstration = contract.get("demonstration_contract") or {}
     real_task = contract.get("real_world_task") or {}
+    experience_design = contract.get("experience_design") or {}
+    portfolio = contract.get("portfolio_task") or {}
     role = (contract.get("family_roles") or {}).get(band) or real_task.get("individual_contribution") or "Make one meaningful contribution to the shared investigation."
     interests = adaptation.interests[:3]
     return {
@@ -56,7 +58,18 @@ def learner_contribution(contract: dict, adaptation: AdaptationRequest) -> dict:
         "prompt": demonstration.get("learner_prompt") or real_task.get("individual_contribution") or role,
         "artifact_prompt": demonstration.get("artifact_prompt") or "Preserve a photo, recording, drawing, model, calculation, or explanation that shows what you discovered.",
         "success_criteria": list(demonstration.get("success_criteria") or []),
-        "response_options": ["photo", "audio", "drawing", "written explanation", "calculation or data"],
+        "response_options": [
+            "photo or video", "audio", "drawing or design sketch", "written explanation",
+            "calculation, measurement, graph, or data", "model, prototype, performance, or code",
+        ],
+        "experience_mode": experience_design.get("primary_mode") or "investigation",
+        "learner_facing_choices": list(experience_design.get("learner_facing_choices") or []),
+        "evidence_to_preserve": {
+            "process": list(portfolio.get("process_evidence") or []),
+            "product": list(portfolio.get("product_evidence") or []),
+            "failure_and_revision": list(portfolio.get("failure_and_revision_evidence") or []),
+        },
+        "mastery_evidence_map": list(contract.get("mastery_evidence_map") or []),
         "interest_connections": interests,
         "mastery_snapshot": round(adaptation.bkt_pL, 3),
         "portfolio_destination": True,
