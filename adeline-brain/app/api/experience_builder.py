@@ -16,7 +16,7 @@ from fastapi.responses import Response, StreamingResponse
 from app.api.middleware import verify_student_access
 from app.config import GEMINI_API_KEY, GOOGLE_API_KEY, GEMINI_BASE_URL, GEMINI_MODEL
 from app.schemas.api_models import LessonRequest
-from app.curriculum.canonical_author import CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT
+from app.curriculum.canonical_author import CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT, validate_canonical_contract
 from app.curriculum.family_style import finalize_family_lesson, is_current_family_canonical
 from app.connections.canonical_store import canonical_store, canonical_slug
 from app.connections.student_experience_store import student_experience_store
@@ -69,6 +69,10 @@ async def _author(request: LessonRequest, resources: list[dict]) -> dict:
                 messages=[{"role": "system", "content": CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
             )
             parsed = _json_object(response.choices[0].message.content or "")
+            contract_errors = validate_canonical_contract(parsed)
+            if contract_errors:
+                last_error = ValueError("; ".join(contract_errors))
+                continue
             blocks = finalize_family_lesson(parsed.get("blocks") or [], request.topic, track=request.track.value)
             if blocks:
                 parsed["blocks"] = blocks
@@ -126,7 +130,7 @@ async def _stream(request: LessonRequest):
         # Durable contracts live with the canonical blocks so the current DB schema
         # can preserve one source of truth without introducing a parallel lesson table.
             blocks[0].setdefault("metadata", {})["canonical_contract"] = {
-                key: authored.get(key) for key in ("big_question", "learning_goal", "shared_experience", "investigation_scope_contract", "real_world_task", "portfolio_task", "printable_contract", "demonstration_contract", "family_roles")
+                key: authored.get(key) for key in ("big_question", "learning_goal", "shared_experience", "experience_design", "investigation_scope_contract", "real_world_task", "portfolio_task", "printable_contract", "demonstration_contract", "mastery_evidence_map", "family_roles")
             }
             canonical = {"id": str(uuid.uuid4()), "topic": request.topic, "track": request.track.value, "title": authored.get("title") or request.topic, "blocks": blocks, "oas_standards": [], "researcher_activated": False, "agent_name": "Canonical Experience Author"}
             await canonical_store.save(slug, canonical, pending=False)
@@ -146,6 +150,8 @@ async def _stream(request: LessonRequest):
             "required_standard_codes": request.required_standard_codes,
             "investigation_scope_contract": contract.get("investigation_scope_contract") or {},
             "demonstration_contract": contract.get("demonstration_contract") or {},
+            "experience_design": contract.get("experience_design") or {},
+            "mastery_evidence_map": contract.get("mastery_evidence_map") or [],
             "learner_contribution": learner_contribution(contract, adaptation),
             "portfolio_task": contract.get("portfolio_task") or {},
         }
