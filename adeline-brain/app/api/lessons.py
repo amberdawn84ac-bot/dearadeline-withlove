@@ -1,78 +1,23 @@
-"""
-Lesson Generation API — /lessons/*
-The primary delivery endpoint. Orchestrates retrieval, Witness Protocol
-verification, and Postgres curriculum linking into a structured LessonResponse.
+"""Legacy lesson namespace containing diagnostics only.
+
+No endpoint in this router authors or delivers a learner lesson. Production
+authoring is exclusively ``POST /experience/build``.
 """
 import logging
 import os
-from typing import Optional
 
 import openai
 from fastapi import APIRouter
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.schemas.api_models import LessonResponse
 from app.protocols.witness import get_witness_threshold
 from app.connections.pgvector_client import hippocampus
-from app.connections.canonical_store import canonical_store
-from app.tools.graph_query import tool_get_zpd_candidates
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lesson", tags=["lessons"])
 
 
-async def _get_best_canonical_for_zpd(student_id: str, track: str) -> Optional[tuple[dict, str]]:
-    """
-    Find the best canonical lesson for a student using BKT-scored ZPD candidates.
-
-    Returns (canonical_dict, zpd_concept_title) or None.
-
-    Replaces the old fragile substring match with a priority-ranked approach:
-    1. Fetch BKT-scored ZPD candidates (sorted by compute_priority score)
-    2. For the top candidate, inject its title as the lesson topic
-    3. Check canonical store for an exact slug match
-    4. If no canonical exists, return (None, top_concept_title) so caller
-       can use the ZPD concept as the lesson topic for full generation
-    """
-    try:
-        zpd_candidates = await tool_get_zpd_candidates(student_id, track, limit=5)
-        if not zpd_candidates:
-            logger.info(f"[/lessons/zpd] No ZPD candidates for student={student_id[:8]} track={track}")
-            return None
-
-        # Candidates are already sorted by BKT priority score (highest first)
-        for candidate in zpd_candidates:
-            logger.info(
-                f"[/lessons/zpd] Trying ZPD candidate '{candidate.title}' "
-                f"priority={candidate.priority:.3f} mastery={candidate.current_mastery:.3f}"
-            )
-            # Try exact slug match in canonical store
-            try:
-                from app.connections.canonical_store import canonical_slug
-                slug = canonical_slug(candidate.title, track)
-                canonical = await canonical_store.get(slug)
-                if canonical:
-                    logger.info(
-                        f"[/lessons/zpd] Canonical HIT for ZPD concept '{candidate.title}'"
-                    )
-                    return canonical, candidate.title
-            except Exception:
-                pass
-
-        # No canonical found — return top candidate's title so caller can generate fresh
-        top = zpd_candidates[0]
-        logger.info(
-            f"[/lessons/zpd] No canonical match — returning ZPD topic '{top.title}' "
-            f"for fresh generation (priority={top.priority:.3f})"
-        )
-        return None, top.title
-
-    except Exception as e:
-        logger.warning(f"[/lessons/zpd] ZPD auto-selection failed: {e}")
-        return None
-
-# Per-user lesson rate limit: 20 lessons/hour
 limiter = Limiter(key_func=get_remote_address)
 
 EMBED_MODEL = "text-embedding-3-small"
@@ -82,68 +27,6 @@ async def _embed(text: str) -> list[float]:
     client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     resp = await client.embeddings.create(model=EMBED_MODEL, input=text)
     return resp.data[0].embedding
-
-
-async def _persist_learning_records(lesson: LessonResponse) -> None:
-    """
-    Fire-and-forget: persist xAPI statements and CASE credit entry generated
-    by the RegistrarAgent. Errors are logged but do not fail the lesson response.
-    """
-    from app.api.learning_records import (
-        RecordLearningRequest, XAPIStatementIn, TranscriptEntryIn,
-        record_learning, _seal_transcript_db,
-    )
-    try:
-        verified_statements = [
-            statement for statement in lesson.xapi_statements
-            if statement.get("context", {}).get("extensions", {}).get(
-                "https://adeline.app/xapi/ext/completion_verified"
-            ) is True
-        ]
-        if verified_statements:
-            stmts = [
-                XAPIStatementIn(
-                    id=s.get("id", ""),
-                    student_id=s.get("actor", {}).get("account", {}).get("name", ""),
-                    lesson_id=lesson.lesson_id,
-                    block_id=None,
-                    verb=s.get("verb", {}).get("display", {}).get("en-US", "experienced"),
-                    object_id=s.get("object", {}).get("id", ""),
-                    object_name=s.get("object", {}).get("definition", {}).get("name", {}).get("en-US", ""),
-                    track=lesson.track.value,
-                    agent_name=lesson.agent_name or None,
-                    block_type=s.get("context", {}).get("extensions", {}).get(
-                        "https://adeline.app/xapi/ext/block_type", ""
-                    ),
-                    is_homestead=bool(s.get("context", {}).get("extensions", {}).get(
-                        "https://adeline.app/xapi/ext/is_homestead", False
-                    )),
-                    statement_json=s,
-                )
-                for s in verified_statements
-            ]
-            await record_learning(RecordLearningRequest(statements=stmts))
-
-        verified_credits = [credit for credit in lesson.credits_awarded if credit.get("completion_verified") is True]
-        if verified_credits:
-            credit = verified_credits[0]
-            await _seal_transcript_db(TranscriptEntryIn(
-                id=credit.get("id", ""),
-                student_id=credit.get("student_id", ""),
-                lesson_id=lesson.lesson_id,
-                course_title=credit.get("course_title", lesson.title),
-                track=lesson.track.value,
-                oas_standards=credit.get("oas_standards", []),
-                activity_description=credit.get("activity_description", ""),
-                credit_hours=float(credit.get("credit_hours", 0)),
-                credit_type=credit.get("credit_type", "ELECTIVE"),
-                is_homestead_credit=bool(credit.get("is_homestead_credit", False)),
-                agent_name=lesson.agent_name or None,
-                researcher_activated=bool(credit.get("researcher_activated", False)),
-            ))
-    except Exception as e:
-        logger.warning(f"[Lessons] Learning record persistence failed (non-fatal): {e}")
-
 
 
 @router.get("/health")

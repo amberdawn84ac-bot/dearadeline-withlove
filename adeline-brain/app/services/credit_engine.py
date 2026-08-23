@@ -1,6 +1,10 @@
 """
-Credit accumulation engine — pure functions for standards/credit/evidence ledger logic.
+Mastery-first equivalency engine for standards/evidence ledger logic.
 No database calls — all state passed in, results passed out.
+
+``hours_earned`` is retained as a conventional transcript-equivalency field.
+Academic progress is decided by demonstrated mastery and independent evidence,
+never by this descriptive time value.
 """
 from dataclasses import dataclass
 from typing import Optional
@@ -59,6 +63,9 @@ class CourseProposal:
 
 
 def calculate_weighted_hours(evidence: Evidence, weighting: CreditHourWeighting) -> float:
+    """Calculate descriptive equivalency only for independently demonstrated work."""
+    if evidence.mastery_score < 0.75:
+        return 0.0
     artifact_weight = weighting.get_weight(evidence.artifact_type)
     mastery_factor = 0.5 + (evidence.mastery_score * 0.5)
     return evidence.hours * artifact_weight * mastery_factor
@@ -83,9 +90,15 @@ def check_credit_threshold(
     full_credit_hours: float = 120.0,
     half_credit_hours: float = 60.0,
 ) -> Optional[float]:
-    if bucket.hours_earned >= full_credit_hours:
+    """Translate a body of demonstrated evidence into conventional course units.
+
+    The hour arguments remain for call compatibility, but are not academic
+    thresholds. Multiple independent artifacts and mastery are required.
+    """
+    del full_credit_hours, half_credit_hours
+    if bucket.evidence_count >= 8 and bucket.mastery_average >= 0.85:
         return 1.0
-    elif bucket.hours_earned >= half_credit_hours:
+    elif bucket.evidence_count >= 4 and bucket.mastery_average >= 0.75:
         return 0.5
     return None
 

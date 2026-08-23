@@ -54,7 +54,7 @@ async def genui_callback(
 
     Events:
     - onAnswer: Update BKT based on quiz answer correctness
-    - onComplete: Mark completion, award credit
+    - onComplete: Preserve a completion event; never award mastery or credit
     - onHint: Log hint usage (may affect mastery decay)
     - onStruggle: Detect struggle and trigger scaffolding
 
@@ -143,20 +143,20 @@ async def genui_callback(
             logger.warning(f"[GENUI] Failed to persist mastery update (non-fatal): {e}")
 
     elif request.event == "onComplete":
-        # Mark completion, award credit
+        # Preserve completion as evidence. Completion is not mastery or credit.
         logger.info(f"[GENUI] Component completed: {request.component_type}")
         # Award CASE credit and emit xAPI statement for the interactive widget
         try:
-            await _award_widget_credit(
+            await _record_widget_completion(
                 student_id=request.student_id,
                 lesson_id=request.lesson_id,
                 track=request.track or "TRUTH_HISTORY",
                 component_type=request.component_type,
                 block_id=request.block_id,
             )
-            logger.info(f"[GENUI] Credit awarded for {request.component_type}")
+            logger.info(f"[GENUI] Completion evidence recorded for {request.component_type}")
         except Exception as e:
-            logger.warning(f"[GENUI] Failed to award credit (non-fatal): {e}")
+            logger.warning(f"[GENUI] Failed to record completion evidence (non-fatal): {e}")
 
     elif request.event == "onHint":
         # Log hint usage
@@ -296,7 +296,7 @@ async def genui_telemetry(
 
             # ── Existing BKT/mastery logic ───────────────────────────────────────
             if request.event == "completion":
-                await _award_widget_credit(
+                await _record_widget_completion(
                     student_id=request.student_id,
                     lesson_id=request.lesson_id,
                     track=request.track or "TRUTH_HISTORY",
@@ -525,6 +525,17 @@ async def _persist_mastery_update(
         observed_correct = is_correct if is_correct is not None else mastery_score >= 0.5
         concept_id = block_id or f"{track}-{component_type}"
         await update_bkt(student_id, concept_id, track, observed_correct)
+
+        # The same assessed interaction also updates the ephemeral live-state
+        # layer. No lesson generation or additional model call is involved.
+        from app.agents.cognitive_twin import update_from_response
+        await update_from_response(
+            student_id=student_id,
+            response_text=f"Assessed response in {component_type}",
+            was_correct=observed_correct,
+            zpd_zone="IN_ZPD" if observed_correct else "FRUSTRATED",
+            track=track,
+        )
     except Exception as e:
         logger.warning(f"[GENUI] bkt_tracker.update_bkt failed (non-fatal): {e}")
 
@@ -534,7 +545,7 @@ async def _persist_mastery_update(
     logger.info(f"[GENUI] Mastery persisted: student={student_id}, track={track}, score={mastery_score:.3f}")
 
 
-async def _award_widget_credit(
+async def _record_widget_completion(
     student_id: str,
     lesson_id: str,
     track: str,
@@ -542,16 +553,17 @@ async def _award_widget_credit(
     block_id: Optional[str] = None,
 ) -> None:
     """
-    Award CASE credit for completing an interactive GenUI widget.
-    Emits xAPI 'completed' statement and seals transcript entry (0.15 credits).
+    Preserve xAPI completion evidence for an interactive widget.
+
+    Clicking through a widget cannot independently prove mastery and therefore
+    cannot create transcript credit. Scored responses are handled separately by
+    the mastery evidence path above.
     """
     from app.api.learning_records import (
-        RecordLearningRequest, XAPIStatementIn, TranscriptEntryIn,
-        record_learning, _seal_transcript_db,
+        RecordLearningRequest, XAPIStatementIn, record_learning,
     )
 
     statement_id = str(uuid.uuid4())
-    entry_id = str(uuid.uuid4())
     now_iso = datetime.now(timezone.utc).isoformat()
 
     # 1. Emit xAPI 'completed' statement
@@ -586,25 +598,7 @@ async def _award_widget_credit(
     )
     await record_learning(RecordLearningRequest(statements=[xapi_stmt]))
 
-    # 2. Award CASE credit (0.15 credits for interactive widget completion)
-    credit_hours = 0.15
-    await _seal_transcript_db(TranscriptEntryIn(
-        id=entry_id,
-        student_id=student_id,
-        lesson_id=lesson_id,
-        course_title=f"Sovereign Lab: {component_type}",
-        track=track,
-        oas_standards=[],
-        activity_description=f"Completed interactive {component_type} widget",
-        credit_hours=credit_hours,
-        credit_type="SOVEREIGN_LAB",
-        agent_name="REGISTRAR",
-        researcher_activated=False,
-        completed_at=now_iso,
-        xapi_statement_id=statement_id,
-    ))
-
-    logger.info(f"[GENUI] Credit awarded: student={student_id}, track={track}, hours={credit_hours}")
+    logger.info("[GENUI] Completion evidence recorded: student=%s track=%s", student_id, track)
 
 
 # ── Bidirectional Remediation SSE Endpoint ────────────────────────────────────

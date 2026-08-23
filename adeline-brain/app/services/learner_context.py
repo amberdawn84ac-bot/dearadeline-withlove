@@ -5,6 +5,7 @@ import logging
 
 from app.agents.adapter import AdaptationRequest
 from app.algorithms.bkt_tracker import get_mastery_map
+from app.agents.cognitive_twin import get_twin, recommend_intervention
 from app.config import get_db_conn
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,10 @@ async def adaptation_for(student_id: str, grade_level: str, track: str) -> Adapt
 
     proficiency = await get_mastery_map(student_id, track)
     mastery = sum(proficiency.values()) / len(proficiency) if proficiency else 0.1
+    # Cheap bridge between the durable learner model and the live session. A
+    # missing/expired Twin simply returns its neutral default and adds no model
+    # call. The Twin remains ephemeral and is not copied into the database.
+    twin = await get_twin(student_id)
     return AdaptationRequest(
         grade_level=grade_level,
         track=track,
@@ -37,6 +42,10 @@ async def adaptation_for(student_id: str, grade_level: str, track: str) -> Adapt
         bkt_pL=mastery,
         decay_adjusted_mastery=mastery,
         proficiency_map=proficiency,
+        session_intervention=recommend_intervention(twin),
+        working_memory_load=twin.working_memory_load,
+        frustration_score=twin.frustration_score,
+        engagement_level=twin.engagement_level,
     )
 
 
@@ -77,4 +86,11 @@ def learner_contribution(contract: dict, adaptation: AdaptationRequest) -> dict:
         "mastery_snapshot": round(adaptation.bkt_pL, 3),
         "portfolio_destination": True,
         "credit_requires_demonstrated_understanding": True,
+        "session_support": (
+            "concrete_entry_and_lower_initial_load"
+            if adaptation.session_intervention in {"SCAFFOLD", "BREAK", "FOCUS_RESET"}
+            else "greater_independence"
+            if adaptation.session_intervention == "ELEVATE"
+            else "continue"
+        ),
     }

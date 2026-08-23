@@ -27,7 +27,7 @@ from typing import Optional
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from app.schemas.api_models import Track
@@ -1113,12 +1113,13 @@ async def pop_completed_lesson(student_id: str, lesson_title: str) -> None:
     """
     cache_key = _plan_cache_key(student_id)
     try:
-        # A completion changes mastery, pacing, evidence, and possibly credit gaps.
-        # The whole forecast must be rebuilt; mutating only today's queue leaves a
-        # stale month/year plan behind.
+        # Completion invalidates the short Redis projection, but the dated Today
+        # plan remains the source of truth. Remove only the completed card so
+        # ordinary navigation back to Today never triggers a full regeneration.
         await redis_client.delete(cache_key)
-        await daily_plan_store.invalidate(student_id)
-        logger.info(f"[LearningPlan] Invalidated adaptive roadmap after '{lesson_title}' for student={student_id}")
+        plan_date = datetime.now(ZoneInfo("America/Chicago")).date()
+        await daily_plan_store.remove_suggestion(student_id, plan_date, lesson_title)
+        logger.info(f"[LearningPlan] Preserved dated plan after completing '{lesson_title}' for student={student_id}")
     except Exception as e:
         logger.warning(f"[LearningPlan] Failed to pop completed lesson (non-fatal): {e}")
 
@@ -1580,3 +1581,19 @@ async def get_learning_plan(
         logger.warning("[LearningPlan] Persistent plan write failed (non-fatal): %s", e)
 
     return response
+
+
+@router.get("/{student_id}/today", response_model=LearningPlanResponse)
+async def get_saved_today_plan(
+    student_id: str,
+    response: Response,
+    _user_id: str = Depends(verify_student_access),
+):
+    """Read today's durable plan without invoking any planning/generation path."""
+    response.headers["Cache-Control"] = "private, no-store, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    plan_date = datetime.now(ZoneInfo("America/Chicago")).date()
+    persisted = await daily_plan_store.get(student_id, plan_date)
+    if not persisted:
+        raise HTTPException(status_code=404, detail="Today's plan has not been created yet")
+    return LearningPlanResponse(**persisted)

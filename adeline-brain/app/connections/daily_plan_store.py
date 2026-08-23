@@ -42,5 +42,30 @@ class DailyPlanStore:
         finally:
             await conn.close()
 
+    async def remove_suggestion(self, student_id: str, for_date: date, lesson_identifier: str) -> dict | None:
+        """Atomically remove completed work without discarding the dated plan."""
+        conn = await get_db_conn()
+        try:
+            row = await conn.fetchrow(
+                '''UPDATE "DailyPlan"
+                   SET "planJson" = jsonb_set(
+                         "planJson",
+                         '{suggestions}',
+                         COALESCE((
+                           SELECT jsonb_agg(item)
+                           FROM jsonb_array_elements(COALESCE("planJson"->'suggestions', '[]'::jsonb)) AS item
+                           WHERE item->>'title' <> $3 AND item->>'id' <> $3
+                         ), '[]'::jsonb),
+                         TRUE
+                       ),
+                       "updatedAt" = NOW()
+                   WHERE "studentId" = $1 AND "forDate" = $2
+                   RETURNING "planJson"''',
+                student_id, for_date, lesson_identifier,
+            )
+            return dict(row["planJson"]) if row else None
+        finally:
+            await conn.close()
+
 
 daily_plan_store = DailyPlanStore()

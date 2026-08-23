@@ -1,5 +1,5 @@
 """
-Reading credit service — awards transcript credit when a student finishes a book.
+Reading evidence service — preserves a finished book and learner reflection.
 
 Pure functions (calculate_reading_credit, get_reading_standards) have NO database
 calls.  award_reading_credit() is the async entry point that writes ledger rows.
@@ -53,13 +53,14 @@ def calculate_reading_credit(
     grade_level: int,
 ) -> float:
     """
-    Credit hours earned from a completed book.
+    Conventional Carnegie-time equivalency estimate for family records.
 
     Formula: (reading_minutes / 60) / 120 * lexile_multiplier
       - 120 is the Carnegie-unit hour target (one credit = 120 clock hours).
       - Multiplier rewards stretch reading and discounts below-grade books.
 
-    Returns 0.0 when reading_minutes is zero or negative.
+    This value is descriptive only. It must never establish mastery, standards
+    completion, course credit, or graduation progress.
     """
     if reading_minutes <= 0:
         return 0.0
@@ -108,12 +109,11 @@ async def award_reading_credit(
     completed_at: Optional[datetime] = None,
 ) -> dict:
     """
-    Idempotently award credit for a completed reading session.
+    Idempotently preserve evidence for a completed reading session.
 
-    Writes three ledger tables:
-      1. EvidenceLedgerEntry  — the reading artifact
-      2. CreditLedgerEntry    — hours in the graduation bucket
-      3. StandardsLedgerEntry — CCSS reading standards (K-8 only)
+    Reading time and book difficulty remain descriptive metadata. A finished
+    book plus an unreviewed reflection is not automatically 100% mastery, so
+    this path does not write credit or standards-mastery ledger rows.
 
     Returns a summary dict with IDs and hours.
     """
@@ -124,16 +124,17 @@ async def award_reading_credit(
 
     try:
         # ── Idempotency check ────────────────────────────────────────────
+        evidence_note = f"reading-session:{session_id}\n{student_reflection}"
         existing = await conn.fetchval(
-            'SELECT id FROM "CreditLedgerEntry" '
-            "WHERE source = 'reading' AND \"sourceId\" = $1",
-            session_id,
+            'SELECT id FROM "EvidenceLedgerEntry" WHERE "studentId" = $1 AND "evaluatorNotes" = $2',
+            student_id,
+            evidence_note,
         )
         if existing:
-            return {"already_awarded": True, "credit_id": existing}
+            return {"already_recorded": True, "evidence_id": existing, "credit_hours": 0.0}
 
         # ── Compute credit hours ─────────────────────────────────────────
-        hours = calculate_reading_credit(reading_minutes, book_lexile, grade_level)
+        conventional_equivalency = calculate_reading_credit(reading_minutes, book_lexile, grade_level)
         bucket = TRACK_TO_GRADUATION_BUCKET.get(book_track, "ELECTIVES")
 
         # ── Evidence ledger ──────────────────────────────────────────────
@@ -147,59 +148,22 @@ async def award_reading_credit(
             student_id,
             "reading",
             book_title,
-            1.0,           # mastery — completed book with reflection
-            hours,
+            0.0,           # pending review; completion is not mastery
+            conventional_equivalency,
             completed_at,
-            student_reflection,
+            evidence_note,
             bucket,
-            True,
+            False,
             datetime.now(timezone.utc),
         )
-
-        # ── Credit ledger ────────────────────────────────────────────────
-        credit_id = str(uuid.uuid4())
-        await conn.execute(
-            'INSERT INTO "CreditLedgerEntry" '
-            '(id, "studentId", bucket, "hoursEarned", source, "sourceId", "createdAt") '
-            "VALUES ($1,$2,$3,$4,$5,$6,$7)",
-            credit_id,
-            student_id,
-            bucket,
-            hours,
-            "reading",
-            session_id,
-            datetime.now(timezone.utc),
-        )
-
-        # ── Standards ledger (K-8 only) ──────────────────────────────────
-        standards = get_reading_standards(book_track, grade_level)
-        standard_ids = []
-        for code in standards:
-            sid = str(uuid.uuid4())
-            standard_ids.append(sid)
-            await conn.execute(
-                'INSERT INTO "StandardsLedgerEntry" '
-                '(id, "studentId", framework, subject, code, confidence, '
-                '"lessonId", "addressedAt", "createdAt") '
-                "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-                sid,
-                student_id,
-                "CCSS",
-                "ELA",
-                code,
-                0.8,        # default confidence for completed reading
-                None,       # no lesson — this is a reading session
-                completed_at,
-                datetime.now(timezone.utc),
-            )
 
         return {
-            "already_awarded": False,
+            "already_recorded": False,
             "evidence_id": evidence_id,
-            "credit_id": credit_id,
-            "standard_ids": standard_ids,
-            "hours": hours,
+            "credit_hours": 0.0,
+            "conventional_equivalency": conventional_equivalency,
             "bucket": bucket,
+            "mastery_status": "PENDING_REVIEW",
         }
     finally:
         await conn.close()

@@ -101,10 +101,10 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
     try {
       const result = await sealJournal({
         lesson_id: lesson.lesson_id,
+        plan_item_id: lesson.metadata?.printable_request?.plan_item_id,
         track: lesson.track,
         completed_blocks: visible.length,
         oas_standards: lesson.oas_standards.map(({ standard_id, text, grade }) => ({ standard_id, text, grade })),
-        credit_draft: lesson.credits_awarded[0],
         learner_reflection: reflection.trim(),
         quiz_results: quizResults,
         artifact_refs: artifact.trim() ? [`portfolio://investigation/${lesson.lesson_id}`] : [],

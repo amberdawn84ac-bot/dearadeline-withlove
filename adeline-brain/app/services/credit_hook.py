@@ -1,23 +1,12 @@
 """
-Post-lesson credit accumulation hook.
+Post-lesson evidence accumulation hook.
 Called after RegistrarAgent seals a lesson.
-Records standards, accumulates credit hours, proposes courses.
+Records standards and evidence. Course equivalency is proposed by reviewed
+mastery/standards coverage, not accumulated seat time.
 """
 from datetime import datetime
 from typing import Any
-from pathlib import Path
-import json
-
-from app.services.credit_engine import (
-    apply_profile_weighting,
-)
 from app.services.standards_mapper import map_lesson_to_oas
-
-
-def _load_profiles() -> dict:
-    profiles_path = Path(__file__).parent.parent / "data" / "oklahoma_profiles.json"
-    with open(profiles_path) as f:
-        return json.load(f)
 
 
 # Track → primary credit bucket mapping (mirrors adeline-core config/tracks.ts)
@@ -63,8 +52,8 @@ async def accumulate_credit_from_lesson(
 
     1. Records OAS standards addressed (StandardsLedgerEntry)
     2. Records evidence artifact (EvidenceLedgerEntry)
-    3. Accumulates credit hours (CreditLedgerEntry)
-    4. Proposes course when bucket threshold is met
+    Time is preserved only as descriptive artifact metadata. This hook never
+    writes CreditLedgerEntry rows or proposes courses from elapsed time.
 
     Args:
         student_id: Student UUID
@@ -79,11 +68,6 @@ async def accumulate_credit_from_lesson(
     bucket = TRACK_BUCKET_MAP.get(track)
     if not bucket:
         return
-
-    # Load profile (default to flexible homeschool)
-    profiles = _load_profiles()
-    profile_key = "oklahoma_flexible_homeschool"
-    profile_data = profiles[profile_key]
 
     # 1. Map lesson to OAS standards and record
     oas_standards = map_lesson_to_oas(track=track, content=lesson_title, grade_band="9-12")
@@ -101,7 +85,7 @@ async def accumulate_credit_from_lesson(
 
     # 2. Record evidence
     hours_engaged = estimated_minutes / 60.0
-    evidence_entry = await prisma.evidenceledgerentry.create(
+    await prisma.evidenceledgerentry.create(
         data={
             "studentId": student_id,
             "artifactType": "project",
@@ -114,47 +98,5 @@ async def accumulate_credit_from_lesson(
         }
     )
 
-    # 3. Accumulate credit hours
-    weighting = apply_profile_weighting(profile_key, profile_data)
-    mastery_factor = 0.5 + (mastery_score * 0.5)
-    weighted_hours = hours_engaged * weighting.project * mastery_factor
-
-    await prisma.creditledgerentry.create(
-        data={
-            "studentId": student_id,
-            "bucket": bucket,
-            "hoursEarned": weighted_hours,
-            "source": "lesson",
-            "sourceId": lesson_id,
-        }
-    )
-
-    # 4. Check threshold and propose course
-    all_credit_entries = await prisma.creditledgerentry.find_many(
-        where={"studentId": student_id, "bucket": bucket}
-    )
-    total_hours = sum(e.hoursEarned for e in all_credit_entries)
-
-    full_threshold = profile_data["creditThresholds"]["full_credit"]
-    half_threshold = profile_data["creditThresholds"]["half_credit"]
-
-    credit_earned = None
-    if total_hours >= full_threshold:
-        credit_earned = 1.0
-    elif total_hours >= half_threshold:
-        credit_earned = 0.5
-
-    if credit_earned:
-        existing_proposal = await prisma.evidenceledgerentry.find_first(
-            where={
-                "studentId": student_id,
-                "bucket": bucket,
-                "proposedCourse": {"not": None},
-            }
-        )
-        if not existing_proposal:
-            external_name = TRACK_EXTERNAL_NAME.get(track, track)
-            await prisma.evidenceledgerentry.update(
-                where={"id": evidence_entry.id},
-                data={"proposedCourse": external_name},
-            )
+    # The conventional ``hours`` field supports record-keeping only. Mastery
+    # reports decide academic progress from reviewed standards evidence.

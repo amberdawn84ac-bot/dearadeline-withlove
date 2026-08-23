@@ -362,12 +362,17 @@ class Project(BaseModel):
 class ProjectSealRequest(BaseModel):
     student_id: str
     project_id: str
-    reflection: str = ""
+    reflection: str = Field(
+        min_length=20,
+        max_length=12000,
+        description="Learner-authored portfolio evidence. Completion alone is not mastery.",
+    )
 
 class ProjectSealResponse(BaseModel):
     project_id:   str
     credit_type:  str
     credit_hours: float
+    learning_status: str = "EVIDENCE_RECORDED"
     message:      str
 
 class ProjectStartRequest(BaseModel):

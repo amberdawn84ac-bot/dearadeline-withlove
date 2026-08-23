@@ -23,12 +23,12 @@ def test_calculate_weighted_hours_perfect_essay(sample_weighting):
 
 def test_calculate_weighted_hours_half_mastery_essay(sample_weighting):
     evidence = Evidence(artifact_type=ArtifactType.ESSAY, mastery_score=0.5, hours=10.0, activity_date=datetime.utcnow())
-    assert calculate_weighted_hours(evidence, sample_weighting) == 7.5
+    assert calculate_weighted_hours(evidence, sample_weighting) == 0.0
 
 
 def test_calculate_weighted_hours_low_mastery_quiz(sample_weighting):
     evidence = Evidence(artifact_type=ArtifactType.QUIZ, mastery_score=0.2, hours=5.0, activity_date=datetime.utcnow())
-    assert calculate_weighted_hours(evidence, sample_weighting) == pytest.approx(1.5)
+    assert calculate_weighted_hours(evidence, sample_weighting) == 0.0
 
 
 def test_accumulate_evidence_updates_running_average(sample_weighting):
@@ -44,18 +44,23 @@ def test_accumulate_evidence_updates_running_average(sample_weighting):
 
 
 def test_check_credit_threshold_full_credit():
-    bucket = CreditBucketAccumulation(bucket_name="ENGLISH", hours_earned=125.0, evidence_count=1, mastery_average=0.85)
+    bucket = CreditBucketAccumulation(bucket_name="ENGLISH", hours_earned=1.0, evidence_count=8, mastery_average=0.85)
     assert check_credit_threshold(bucket, full_credit_hours=120.0) == 1.0
 
 
 def test_check_credit_threshold_half_credit():
-    bucket = CreditBucketAccumulation(bucket_name="ENGLISH", hours_earned=80.0, evidence_count=1, mastery_average=0.85)
+    bucket = CreditBucketAccumulation(bucket_name="ENGLISH", hours_earned=1.0, evidence_count=4, mastery_average=0.80)
     assert check_credit_threshold(bucket, full_credit_hours=120.0, half_credit_hours=60.0) == 0.5
 
 
-def test_check_credit_threshold_none_below_half():
-    bucket = CreditBucketAccumulation(bucket_name="ENGLISH", hours_earned=30.0, evidence_count=1, mastery_average=0.85)
+def test_check_credit_threshold_none_without_enough_evidence_despite_many_hours():
+    bucket = CreditBucketAccumulation(bucket_name="ENGLISH", hours_earned=500.0, evidence_count=1, mastery_average=0.99)
     assert check_credit_threshold(bucket, half_credit_hours=60.0) is None
+
+
+def test_check_credit_threshold_none_for_low_mastery_despite_many_artifacts():
+    bucket = CreditBucketAccumulation(bucket_name="ENGLISH", hours_earned=500.0, evidence_count=20, mastery_average=0.60)
+    assert check_credit_threshold(bucket) is None
 
 
 def test_propose_course():

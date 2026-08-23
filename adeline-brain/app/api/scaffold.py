@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from app.schemas.api_models import Track
-from app.api.middleware import get_current_user_id, verify_student_access
+from app.api.middleware import get_current_user_id, verify_student_access, verify_student_access_for_user
 from app.models.student import load_student_state
 from app.agents.pedagogy import scaffold, explain_snippet, ZPDZone
 from app.models.student import MasteryBand
@@ -167,7 +167,7 @@ class AskContextResponse(BaseModel):
     "/ask-context",
     response_model=AskContextResponse,
 )
-async def ask_context(body: AskContextRequest, _user_id: str = Depends(get_current_user_id)):
+async def ask_context(body: AskContextRequest, current_user_id: str = Depends(get_current_user_id)):
     """
     Explain a highlighted text snippet from a lesson.
     
@@ -187,6 +187,7 @@ async def ask_context(body: AskContextRequest, _user_id: str = Depends(get_curre
         f"[/lesson/ask-context] student={body.student_id} "
         f"topic='{body.lesson_topic}' snippet_len={len(body.snippet)}"
     )
+    await verify_student_access_for_user(current_user_id, body.student_id)
 
     # Validate snippet length
     if len(body.snippet.strip()) < 10:

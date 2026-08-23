@@ -60,7 +60,7 @@ export function CreditDashboardComponent({ studentId }: Props) {
       <div className="rounded-lg border border-gray-200 bg-white p-6">
         <h2 className="text-2xl font-bold text-gray-900">Academic Portfolio</h2>
         <p className="mt-2 text-sm text-gray-600">
-          Portfolio-first transcript. Credits are awarded for accomplishments: published work, projects completed, skills mastered.
+          Portfolio-first transcript. Progress comes from reviewed demonstrations and mastery evidence; time is shown only as conventional equivalency.
         </p>
         {currentProfile && (
           <div className="mt-4 flex items-center gap-2">
@@ -72,7 +72,7 @@ export function CreditDashboardComponent({ studentId }: Props) {
 
       {/* Credit Buckets section with progress bars */}
       <div className="rounded-lg border border-gray-200 bg-white p-6">
-        <h3 className="text-lg font-semibold text-gray-900">Credit Accumulation by Bucket</h3>
+        <h3 className="text-lg font-semibold text-gray-900">Mastery Evidence by Bucket</h3>
         <div className="mt-4 space-y-4">
           {dashboard.buckets.map((bucket) => {
             return (
@@ -80,7 +80,7 @@ export function CreditDashboardComponent({ studentId }: Props) {
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-gray-900">{bucket.bucket}</span>
                   <span className="text-sm text-gray-600">
-                    {bucket.hoursEarned !== undefined ? `${bucket.hoursEarned.toFixed(1)} hours` : '0 hours'}
+                    {bucket.hoursEarned !== undefined ? `${bucket.hoursEarned.toFixed(1)} conventional hours` : 'No equivalency yet'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -103,7 +103,7 @@ export function CreditDashboardComponent({ studentId }: Props) {
                 <div>
                   <p className="font-medium text-gray-900">{proposal.externalCourseName}</p>
                   <p className="text-sm text-gray-600">{proposal.bucket}</p>
-                  <p className="mt-1 text-xs text-gray-500">{proposal.hoursEarned} hours earned ({proposal.masteryGrade})</p>
+                  <p className="mt-1 text-xs text-gray-500">{proposal.masteryPercentage}% mastery · {proposal.hoursEarned} conventional hours</p>
                 </div>
                 <button
                   onClick={() => handleApproveProposal(proposal.proposalId)}
@@ -130,7 +130,7 @@ export function CreditDashboardComponent({ studentId }: Props) {
                   <p className="text-sm text-gray-600">{course.bucket}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-semibold text-green-900">{course.hoursEarned} hours</p>
+                  <p className="font-semibold text-green-900">{course.hoursEarned} conventional hours</p>
                   <p className="text-xs text-gray-500">Grade: {course.masteryGrade}</p>
                 </div>
               </div>
@@ -141,7 +141,7 @@ export function CreditDashboardComponent({ studentId }: Props) {
 
       {dashboard.pendingProposals.length === 0 && dashboard.approvedCourses.length === 0 && (
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-6 text-center">
-          <p className="text-gray-600">No courses yet. Complete learning activities to generate course proposals.</p>
+          <p className="text-gray-600">No courses yet. Reviewed mastery evidence will support course proposals.</p>
         </div>
       )}
     </div>

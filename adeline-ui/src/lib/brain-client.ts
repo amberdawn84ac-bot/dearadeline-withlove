@@ -11,6 +11,56 @@ import { supabase } from '@/lib/supabase';
  */
 const BRAIN_URL = "/brain";
 
+type DurableCacheEntry = { value: unknown; updatedAt: number };
+const durableReadCache = new Map<string, DurableCacheEntry>();
+const durableReadRequests = new Map<string, Promise<unknown>>();
+const savedExperienceMemory = new Map<string, SavedExperience>();
+const savedExperienceReads = new Map<string, Promise<SavedExperience | null>>();
+
+async function cachedDurableRead<T>(
+  key: string,
+  loader: () => Promise<T>,
+  revalidateAfterMs = 30_000,
+): Promise<T> {
+  const known = durableReadCache.get(key);
+  const refresh = () => {
+    const existing = durableReadRequests.get(key) as Promise<T> | undefined;
+    if (existing) return existing;
+    const request = loader().then((value) => {
+      durableReadCache.set(key, { value, updatedAt: Date.now() });
+      return value;
+    }).finally(() => durableReadRequests.delete(key));
+    durableReadRequests.set(key, request);
+    return request;
+  };
+  if (known) {
+    if (Date.now() - known.updatedAt >= revalidateAfterMs) void refresh().catch(() => undefined);
+    return known.value as T;
+  }
+  return refresh();
+}
+
+export function clearStudentDataCaches(studentId?: string): void {
+  if (!studentId) {
+    durableReadCache.clear();
+    durableReadRequests.clear();
+    learningPlanMemory.clear();
+    savedPlanReads.clear();
+    planGenerationRequests.clear();
+    savedExperienceMemory.clear();
+    savedExperienceReads.clear();
+    return;
+  }
+  for (const key of durableReadCache.keys()) {
+    if (key.includes(`:${studentId}:`) || key.endsWith(`:${studentId}`)) durableReadCache.delete(key);
+  }
+  for (const key of learningPlanMemory.keys()) if (key.startsWith(`${studentId}:`)) learningPlanMemory.delete(key);
+  for (const key of savedPlanReads.keys()) if (key.startsWith(`${studentId}:`)) savedPlanReads.delete(key);
+  for (const key of planGenerationRequests.keys()) if (key.startsWith(`${studentId}:`)) planGenerationRequests.delete(key);
+  for (const key of savedExperienceMemory.keys()) if (key.startsWith(`${studentId}:`)) savedExperienceMemory.delete(key);
+  for (const key of savedExperienceReads.keys()) if (key.startsWith(`${studentId}:`)) savedExperienceReads.delete(key);
+}
+
 /**
  * Get auth headers for brain API calls.
  * Fetches the live Supabase JWT and returns it as a Bearer token.
@@ -383,6 +433,43 @@ export async function* buildExperience(
   }
 }
 
+export interface SavedExperience {
+  id: string;
+  status: 'generating' | 'ready' | 'failed';
+  title: string | null;
+  track: Track | null;
+  blocks: LessonBlockResponse[];
+  metadata: NonNullable<LessonResponse['metadata']> & { required_standard_codes?: string[] };
+  error_message: string | null;
+  canonical_slug: string;
+}
+
+export async function getSavedExperience(
+  studentId: string,
+  planItemId: string,
+): Promise<SavedExperience | null> {
+  const key = `${studentId}:${planItemId}`;
+  const known = savedExperienceMemory.get(key);
+  if (known) return known;
+  const pending = savedExperienceReads.get(key);
+  if (pending) return pending;
+  const request = (async () => {
+    const res = await fetch(
+      `${BRAIN_URL}/experience/${encodeURIComponent(studentId)}/${encodeURIComponent(planItemId)}`,
+      { headers: await getBrainHeaders(), cache: 'no-store' },
+    );
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Could not retrieve the saved experience (${res.status})`);
+    const saved = await res.json() as SavedExperience;
+    // Only immutable, completed experiences are held in memory. Generating and
+    // failed records must remain observable so reconnect/retry can see changes.
+    if (saved.status === 'ready') savedExperienceMemory.set(key, saved);
+    return saved;
+  })().finally(() => savedExperienceReads.delete(key));
+  savedExperienceReads.set(key, request);
+  return request;
+}
+
 export async function downloadInvestigationPrintable(request: LessonRequest): Promise<void> {
   const response = await fetch(`${BRAIN_URL}/experience/printable`, {
     method: "POST",
@@ -410,6 +497,7 @@ export async function listTracks(): Promise<{ tracks: { id: Track; label: string
 
 export interface SealJournalRequest {
   lesson_id: string;
+  plan_item_id?: string;
   track: Track;
   completed_blocks: number;
   oas_standards?: Array<{ standard_id: string; text: string; grade: number }>;
@@ -418,7 +506,6 @@ export interface SealJournalRequest {
   learner_reflection?: string;
   artifact_refs?: string[];
   parent_attested?: boolean;
-  credit_draft?: CASECredit;
 }
 
 export interface SealJournalResponse {
@@ -444,20 +531,23 @@ export async function sealJournal(
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`seal failed: ${res.status} ${res.statusText}`);
-  return res.json() as Promise<SealJournalResponse>;
+  const result = await res.json() as SealJournalResponse;
+  clearStudentDataCaches();
+  return result;
 }
 
 export async function fetchTrackProgress(
   student_id: string,
   role: "STUDENT" | "ADMIN" = "STUDENT",
 ): Promise<Record<string, number>> {
-  const res = await fetch(`${BRAIN_URL}/journal/progress/${encodeURIComponent(student_id)}`, {
-    headers: await getBrainHeaders(),
-    cache: "no-store",
+  return cachedDurableRead(`progress:${student_id}`, async () => {
+    const res = await fetch(`${BRAIN_URL}/journal/progress/${encodeURIComponent(student_id)}`, {
+      headers: await getBrainHeaders(), cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`progress fetch failed: ${res.status}`);
+    const data = await res.json() as { student_id: string; track_progress: Record<string, number> };
+    return data.track_progress;
   });
-  if (!res.ok) throw new Error(`progress fetch failed: ${res.status}`);
-  const data = await res.json() as { student_id: string; track_progress: Record<string, number> };
-  return data.track_progress;
 }
 
 // ── Scaffold (ZPD Engine) ──────────────────────────────────────────────────────
@@ -554,22 +644,13 @@ export async function fetchStudentState(
   student_id: string,
   role: "STUDENT" | "PARENT" | "ADMIN" = "STUDENT",
 ): Promise<StudentState> {
-  const headers = await getBrainHeaders();
-  console.log('[brain-client] fetchStudentState:', { student_id, hasAuth: !!headers.Authorization });
-
-  const res = await fetch(
-    `${BRAIN_URL}/students/${encodeURIComponent(student_id)}/state`,
-    {
-      headers,
-      cache: "no-store",
-    },
-  );
-  if (!res.ok) {
-    const errorText = await res.text().catch(() => 'Unknown error');
-    console.error('[brain-client] fetchStudentState failed:', res.status, errorText);
-    throw new Error(`student state fetch failed: ${res.status} - ${errorText}`);
-  }
-  return res.json() as Promise<StudentState>;
+  return cachedDurableRead(`state:${student_id}`, async () => {
+    const res = await fetch(`${BRAIN_URL}/students/${encodeURIComponent(student_id)}/state`, {
+      headers: await getBrainHeaders(), cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`student state fetch failed: ${res.status}`);
+    return res.json() as Promise<StudentState>;
+  });
 }
 
 /**
@@ -612,7 +693,9 @@ export async function registerStudent(profile: {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`register failed: ${res.status}`);
-  return res.json() as Promise<StudentProfile>;
+  const result = await res.json() as StudentProfile;
+  clearStudentDataCaches();
+  return result;
 }
 
 // ── Journal Entries ────────────────────────────────────────────────────────────
@@ -643,7 +726,9 @@ export async function postJournalEntry(
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`journal entry failed: ${res.status} ${res.statusText}`);
-  return res.json() as Promise<JournalEntryResponse>;
+  const result = await res.json() as JournalEntryResponse;
+  clearStudentDataCaches(payload.student_id);
+  return result;
 }
 
 // ── Opportunities ──────────────────────────────────────────────────────────────
@@ -703,6 +788,7 @@ export interface ProjectSealResponse {
   project_id: string;
   credit_type: string;
   credit_hours: number;
+  learning_status: "EVIDENCE_RECORDED";
   message: string;
 }
 
@@ -718,39 +804,41 @@ export async function listProjects(filters: {
   if (filters.difficulty) params.set("difficulty", String(filters.difficulty));
   if (filters.grade_band) params.set("grade_band", filters.grade_band);
 
-  const res = await fetch(`${BRAIN_URL}/projects?${params}`, {
-    headers: await getBrainHeaders(),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`listProjects failed: ${res.status}`);
-  return res.json();
+  const cacheKey = `project-catalog:${params.toString()}`;
+  return cachedDurableRead(cacheKey, async () => {
+    const res = await fetch(`${BRAIN_URL}/projects?${params}`, { headers: await getBrainHeaders() });
+    if (!res.ok) throw new Error(`listProjects failed: ${res.status}`);
+    return res.json();
+  }, 5 * 60_000);
 }
 
 export async function getProject(
   projectId: string,
   role: "STUDENT" | "ADMIN" = "STUDENT",
 ): Promise<ProjectDetail> {
-  const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}`, {
-    headers: await getBrainHeaders(),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`getProject failed: ${res.status}`);
-  return res.json();
+  return cachedDurableRead(`project:${projectId}`, async () => {
+    const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}`, { headers: await getBrainHeaders() });
+    if (!res.ok) throw new Error(`getProject failed: ${res.status}`);
+    return res.json();
+  }, 5 * 60_000);
 }
 
 export async function sealProject(
   projectId: string,
   studentId: string,
+  reflection: string,
   role: "STUDENT" | "ADMIN" = "STUDENT",
 ): Promise<ProjectSealResponse> {
   const res = await fetch(`${BRAIN_URL}/projects/${encodeURIComponent(projectId)}/seal`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(await getBrainHeaders()) },
-    body: JSON.stringify({ student_id: studentId, project_id: projectId }),
+    body: JSON.stringify({ student_id: studentId, project_id: projectId, reflection }),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`sealProject failed: ${res.status}`);
-  return res.json();
+  const result = await res.json() as ProjectSealResponse;
+  clearStudentDataCaches(studentId);
+  return result;
 }
 
 /** Alias for getProject — used by ProjectGuide. */
@@ -842,7 +930,9 @@ export async function reportActivity(
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`reportActivity failed: ${res.status}`);
-  return res.json();
+  const result = await res.json() as ActivityReportResponse;
+  clearStudentDataCaches(payload.student_id);
+  return result;
 }
 
 export async function uploadActivityEvidence(activityId: string, file: File): Promise<{ file_url: string }> {
@@ -856,19 +946,22 @@ export async function uploadActivityEvidence(activityId: string, file: File): Pr
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Evidence upload failed: ${res.status}`);
-  return res.json();
+  const result = await res.json() as { file_url: string };
+  // The upload endpoint response does not expose the owning student id; clear
+  // durable summaries so portfolio/evidence counts cannot remain stale.
+  clearStudentDataCaches();
+  return result;
 }
 
 export async function listActivities(
   studentId: string,
   role: "STUDENT" | "ADMIN" = "STUDENT",
 ): Promise<ActivityListResponse> {
-  const res = await fetch(`${BRAIN_URL}/activities/${encodeURIComponent(studentId)}`, {
-    headers: await getBrainHeaders(),
-    cache: "no-store",
+  return cachedDurableRead(`activities:${studentId}`, async () => {
+    const res = await fetch(`${BRAIN_URL}/activities/${encodeURIComponent(studentId)}`, { headers: await getBrainHeaders() });
+    if (!res.ok) throw new Error(`listActivities failed: ${res.status}`);
+    return res.json();
   });
-  if (!res.ok) throw new Error(`listActivities failed: ${res.status}`);
-  return res.json();
 }
 
 // ── Credit Engine Types ───────────────────────────────────────────────────────
@@ -922,11 +1015,13 @@ export async function listAvailableProfiles(): Promise<OklahomaProfile[]> {
 export async function getStudentProfile(
   studentId: string,
 ): Promise<{ studentId: string; profileKey: string; profile: Record<string, unknown> }> {
-  const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}/profile`, {
-    headers: await getBrainHeaders(),
+  return cachedDurableRead(`credit-profile:${studentId}`, async () => {
+    const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}/profile`, {
+      headers: await getBrainHeaders(),
+    });
+    if (!res.ok) throw new Error(`Failed to fetch profile: ${res.status}`);
+    return res.json();
   });
-  if (!res.ok) throw new Error(`Failed to fetch profile: ${res.status}`);
-  return res.json();
 }
 
 export async function setStudentProfile(
@@ -938,17 +1033,19 @@ export async function setStudentProfile(
     headers: await getBrainHeaders(),
   });
   if (!res.ok) throw new Error(`Failed to set profile: ${res.status}`);
-  return res.json();
+  const result = await res.json();
+  clearStudentDataCaches(studentId);
+  return result;
 }
 
 export async function getCreditDashboard(
   studentId: string,
 ): Promise<CreditDashboard> {
-  const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}`, {
-    headers: await getBrainHeaders(),
+  return cachedDurableRead(`credits:${studentId}`, async () => {
+    const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}`, { headers: await getBrainHeaders() });
+    if (!res.ok) throw new Error(`Failed to fetch credit dashboard: ${res.status}`);
+    return res.json();
   });
-  if (!res.ok) throw new Error(`Failed to fetch credit dashboard: ${res.status}`);
-  return res.json();
 }
 
 export async function approveCourseProposal(
@@ -960,7 +1057,9 @@ export async function approveCourseProposal(
     { method: "POST", headers: await getBrainHeaders() },
   );
   if (!res.ok) throw new Error(`Failed to approve proposal: ${res.status}`);
-  return res.json();
+  const result = await res.json();
+  clearStudentDataCaches(studentId);
+  return result;
 }
 
 // ── OSRHE & Transcript Endpoints ──────────────────────────────────────────
@@ -983,12 +1082,14 @@ export interface OSRHEProgress {
 }
 
 export async function getOSRHEProgress(studentId: string): Promise<OSRHEProgress> {
-  const res = await fetch(
-    `${BRAIN_URL}/transcripts/${encodeURIComponent(studentId)}/osrhe-progress`,
-    { headers: await getBrainHeaders() },
-  );
-  if (!res.ok) throw new Error(`Failed to fetch OSRHE progress: ${res.status}`);
-  return res.json();
+  return cachedDurableRead(`osrhe:${studentId}`, async () => {
+    const res = await fetch(
+      `${BRAIN_URL}/transcripts/${encodeURIComponent(studentId)}/osrhe-progress`,
+      { headers: await getBrainHeaders() },
+    );
+    if (!res.ok) throw new Error(`Failed to fetch OSRHE progress: ${res.status}`);
+    return res.json();
+  });
 }
 
 export async function downloadOfficialTranscript(studentId: string): Promise<Blob> {
@@ -1175,16 +1276,71 @@ export interface LearningPlanResponse {
   generated_at: string;
 }
 
+const learningPlanMemory = new Map<string, LearningPlanResponse>();
+const savedPlanReads = new Map<string, Promise<LearningPlanResponse | null>>();
+const planGenerationRequests = new Map<string, Promise<LearningPlanResponse>>();
+
+function chicagoDayKey(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+}
+
+function todayPlanKey(studentId: string): string {
+  return `${studentId}:${chicagoDayKey()}`;
+}
+
+export function peekLearningPlan(studentId: string): LearningPlanResponse | null {
+  return learningPlanMemory.get(todayPlanKey(studentId)) ?? null;
+}
+
+export async function getSavedTodayPlan(studentId: string): Promise<LearningPlanResponse | null> {
+  const key = todayPlanKey(studentId);
+  const existingRead = savedPlanReads.get(key);
+  if (existingRead) return existingRead;
+
+  const read = (async () => {
+    const res = await fetch(`${BRAIN_URL}/learning-plan/${encodeURIComponent(studentId)}/today`, {
+      headers: await getBrainHeaders(),
+      cache: 'no-store',
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Failed to fetch today's saved plan: ${res.status}`);
+    const plan = await res.json() as LearningPlanResponse;
+    learningPlanMemory.set(key, plan);
+    return plan;
+  })();
+  savedPlanReads.set(key, read);
+  try {
+    return await read;
+  } finally {
+    savedPlanReads.delete(key);
+  }
+}
+
 export async function getLearningPlan(
   studentId: string,
   limit: number = 6,
 ): Promise<LearningPlanResponse> {
-  const res = await fetch(
-    `${BRAIN_URL}/learning-plan/${encodeURIComponent(studentId)}?limit=${limit}&include_all_tracks=true`,
-    { headers: await getBrainHeaders(), cache: "no-store" },
-  );
-  if (!res.ok) throw new Error(`Failed to fetch learning plan: ${res.status}`);
-  return res.json();
+  const key = todayPlanKey(studentId);
+  const existingRequest = planGenerationRequests.get(key);
+  if (existingRequest) return existingRequest;
+  const request = (async () => {
+    const res = await fetch(
+      `${BRAIN_URL}/learning-plan/${encodeURIComponent(studentId)}?limit=${limit}&include_all_tracks=true`,
+      { headers: await getBrainHeaders(), cache: "no-store" },
+    );
+    if (!res.ok) throw new Error(`Failed to fetch learning plan: ${res.status}`);
+    const plan = await res.json() as LearningPlanResponse;
+    learningPlanMemory.set(key, plan);
+    return plan;
+  })();
+  planGenerationRequests.set(key, request);
+  try {
+    return await request;
+  } finally {
+    planGenerationRequests.delete(key);
+  }
 }
 
 export interface TranscriptEntry {
@@ -1207,22 +1363,26 @@ export interface LessonPortfolioItem {
 }
 
 export async function getLessonPortfolio(studentId: string): Promise<LessonPortfolioItem[]> {
-  const res = await fetch(`${BRAIN_URL}/journal/portfolio/${encodeURIComponent(studentId)}`, {
-    headers: await getBrainHeaders(), cache: "no-store",
+  return cachedDurableRead(`portfolio:${studentId}`, async () => {
+    const res = await fetch(`${BRAIN_URL}/journal/portfolio/${encodeURIComponent(studentId)}`, {
+      headers: await getBrainHeaders(), cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`Could not load investigation portfolio (${res.status})`);
+    const payload = await res.json();
+    return payload.items ?? [];
   });
-  if (!res.ok) throw new Error(`Could not load investigation portfolio (${res.status})`);
-  const payload = await res.json();
-  return payload.items ?? [];
 }
 
 export async function getRecentTranscript(studentId: string, limit = 4): Promise<TranscriptEntry[]> {
-  const res = await fetch(
-    `${BRAIN_URL}/learning/transcript/${encodeURIComponent(studentId)}?limit=${limit}`,
-    { headers: await getBrainHeaders(), cache: "no-store" },
-  );
-  if (!res.ok) throw new Error(`Could not load finished work (${res.status})`);
-  const payload = await res.json();
-  return payload.entries ?? [];
+  return cachedDurableRead(`transcript:${studentId}:${limit}`, async () => {
+    const res = await fetch(
+      `${BRAIN_URL}/learning/transcript/${encodeURIComponent(studentId)}?limit=${limit}`,
+      { headers: await getBrainHeaders(), cache: "no-store" },
+    );
+    if (!res.ok) throw new Error(`Could not load finished work (${res.status})`);
+    const payload = await res.json();
+    return payload.entries ?? [];
+  });
 }
 
 // ── Real-time / Cognitive Twin ────────────────────────────────────────────────
@@ -1402,10 +1562,9 @@ export async function fetchLearningPath(
   );
   if (track) url.searchParams.set("track", track);
 
-  const res = await fetch(url.toString(), {
-    headers: await getBrainHeaders(),
-    cache: "no-store",
+  return cachedDurableRead(`learning-path:${studentId}:${track ?? "all"}`, async () => {
+    const res = await fetch(url.toString(), { headers: await getBrainHeaders() });
+    if (!res.ok) throw new Error(`Learning path fetch failed: ${res.status}`);
+    return res.json() as Promise<LearningPathResponse>;
   });
-  if (!res.ok) throw new Error(`Learning path fetch failed: ${res.status}`);
-  return res.json() as Promise<LearningPathResponse>;
 }

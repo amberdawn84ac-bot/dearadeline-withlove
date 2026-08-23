@@ -7,10 +7,11 @@ They are step-by-step real-world doing, not reading.
 
 GET  /projects                  — List all projects (filter by track, category, difficulty)
 GET  /projects/{project_id}     — Single project with full step guide
-POST /projects/{project_id}/seal — Student seals a completed project, grants credit
+POST /projects/{project_id}/seal — Student preserves project evidence in the portfolio
 
 Portfolio philosophy: a completed project is an accomplishment, not an assignment.
-The seal endpoint records it to the transcript as real credit.
+Completion preserves evidence. It never awards mastery or credit without a
+reviewable demonstration of the relevant concepts.
 """
 import logging
 from typing import Optional
@@ -682,20 +683,17 @@ async def seal_project(
     student_id: str = Depends(get_current_user_id),
 ):
     """
-    Student seals a completed project.
-    Records credit hours to the journal and official transcript.
+    Preserve a learner's project reflection as durable portfolio evidence.
 
-    Credit is calculated at 0.5 Carnegie units per estimated hour of project work,
-    rounded to one decimal place.
+    Curated instructions are not a separate credit system: finishing the steps
+    does not prove concept mastery, and estimated time is descriptive only.
+    A later reviewed demonstration may map this artifact into the same standards
+    mastery architecture used by canonical experiences.
     """
-    from uuid import uuid4
-    from app.api.learning_records import _seal_transcript_db, TranscriptEntryIn
-    
     project = PROJECTS.get(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=f"Project '{project_id}' not found.")
 
-    credit_hours = round(project.estimated_hours * 0.5, 1)
     credit_type  = "CREATIVE" if project.track == Track.CREATIVE_ECONOMY else "HOMESTEAD"
     lesson_id    = f"project-{project_id}"
 
@@ -704,38 +702,32 @@ async def seal_project(
             student_id=student_id,
             lesson_id=lesson_id,
             track=project.track.value,
-            completed_blocks=int(project.estimated_hours * 2),  # 30-min blocks
-            sources=[],
+            completed_blocks=0,
+            sources=[
+                {"type": "learner_reflection", "content": body.reflection.strip()},
+                {
+                    "type": "artifact",
+                    "url": f"portfolio://project/{project_id}",
+                    "title": project.title,
+                    "description": f"Curated project evidence: {project.tagline}",
+                },
+            ],
         )
         logger.info(
             f"[/projects/seal] student={student_id} project={project_id} "
-            f"credit={credit_hours}hr type={credit_type}"
+            "portfolio evidence recorded; no automatic mastery or credit"
         )
     except Exception as e:
-        logger.warning(f"[/projects/seal] Journal seal failed (non-fatal): {e}")
-
-    try:
-        await _seal_transcript_db(TranscriptEntryIn(
-            id=str(uuid4()),
-            student_id=student_id,
-            lesson_id=lesson_id,
-            course_title=project.title,
-            track=project.track.value,
-            oas_standards=[],
-            activity_description=f"Completed {project.title} project — {project.tagline}",
-            credit_hours=credit_hours,
-            credit_type=credit_type,
-            is_homestead_credit=(project.track == Track.HOMESTEADING),
-            agent_name="ProjectCatalog",
-            researcher_activated=False,
-        ))
-        logger.info(f"[/projects/seal] Transcript entry created for {project_id}")
-    except Exception as e:
-        logger.warning(f"[/projects/seal] Transcript seal failed (non-fatal): {e}")
+        logger.exception("[/projects/seal] Portfolio persistence failed")
+        raise HTTPException(status_code=500, detail="Project evidence could not be saved; retrying is safe.") from e
 
     return ProjectSealResponse(
         project_id=project_id,
         credit_type=credit_type,
-        credit_hours=credit_hours,
-        message=f"'{project.title}' sealed. {credit_hours} credit hours recorded to your transcript.",
+        credit_hours=0.0,
+        learning_status="EVIDENCE_RECORDED",
+        message=(
+            f"'{project.title}' was added to the portfolio. Completion did not automatically "
+            "award mastery or academic credit."
+        ),
     )

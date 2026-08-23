@@ -10,7 +10,7 @@ import logging
 import re
 import uuid
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Response
 from fastapi.responses import Response, StreamingResponse
 
 from app.api.middleware import verify_student_access
@@ -203,17 +203,11 @@ async def _emit_persisted(request: LessonRequest, record: dict):
     codes = list(metadata.get("required_standard_codes") or request.required_standard_codes)
     standards = [{"standard_id": code, "text": "Internal learning-plan target", "grade": 0, "source_type": "required_plan"} for code in codes]
     title = record.get("title") or request.topic
-    credit_draft = {
-        "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"credit:{request.student_id}:{lesson_id}")),
-        "lesson_id": lesson_id, "student_id": request.student_id, "course_title": title,
-        "track": record.get("track") or request.track.value, "oas_standards": codes,
-        "activity_description": f"Individual contribution to the family investigation: {title}",
-        "credit_hours": 0.02, "credit_type": "CORE", "is_homestead_credit": request.is_homestead,
-        "agent_name": "Canonical Experience Author", "researcher_activated": False,
-    }
     yield _sse({"type": "done", "lesson_id": lesson_id, "title": title,
                 "agent_name": "Canonical Experience Author", "oas_standards": standards,
-                "credits_awarded": [credit_draft], "researcher_activated": False,
+                # Experience construction never awards seat-time credit. The
+                # journal/standards path evaluates the learner's demonstration.
+                "credits_awarded": [], "researcher_activated": False,
                 "metadata": metadata})
 
 
@@ -222,6 +216,23 @@ async def build_experience(request: LessonRequest, authorization: str | None = H
     await verify_student_access(request.student_id, authorization)
     await enforce_rate_limit("experience-build", request.student_id, limit=8)
     return StreamingResponse(_stream(request), media_type="text/event-stream")
+
+
+@router.get("/{student_id}/{plan_item_id}")
+async def read_experience(
+    student_id: str,
+    plan_item_id: str,
+    response: Response,
+    authorization: str | None = Header(default=None),
+):
+    """Return the durable learner experience without entering the author path."""
+    await verify_student_access(student_id, authorization)
+    response.headers["Cache-Control"] = "private, no-store, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    record = await student_experience_store.get(student_id, plan_item_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Experience has not been created")
+    return record
 
 
 @router.post("/printable")

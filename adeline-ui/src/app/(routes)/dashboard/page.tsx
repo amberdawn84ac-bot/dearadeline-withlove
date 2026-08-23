@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useStudent } from '@/lib/useStudent';
-import { getLearningPlan, getRecentTranscript } from '@/lib/brain-client';
-import type { LessonSuggestion, TranscriptEntry } from '@/lib/brain-client';
+import { getLearningPlan, getRecentTranscript, getSavedTodayPlan, peekLearningPlan } from '@/lib/brain-client';
+import type { LearningPlanResponse, LessonSuggestion, TranscriptEntry } from '@/lib/brain-client';
 import styles from '@/components/nav/sites-dashboard.module.css';
 
 export default function TodayPage() {
@@ -20,27 +20,38 @@ export default function TodayPage() {
 
   const studentId = student?.id ?? '';
 
+  const applyPlan = useCallback((plan: LearningPlanResponse) => {
+    const lineup = plan.suggestions;
+    setToday(lineup[0] ?? null);
+    setWeekTheme(lineup[0]?.title ?? 'Family investigation');
+    setSharedWithSiblings(plan.family_context.shared_with_siblings);
+    setComingUp(lineup.slice(1, 4));
+    setIsNextSchoolDay(false);
+  }, []);
+
   const loadToday = useCallback(async () => {
     if (!studentId) return;
-    setPlanLoading(true);
+    const knownPlan = peekLearningPlan(studentId);
+    if (knownPlan) {
+      applyPlan(knownPlan);
+      setPlanLoading(false);
+    } else {
+      setPlanLoading(true);
+    }
+    setError('');
     try {
-      const [plan, recent] = await Promise.all([
-        getLearningPlan(studentId, 6),
-        getRecentTranscript(studentId, 4).catch(() => []),
-      ]);
-      const lineup = plan.suggestions;
-      setToday(lineup[0] ?? null);
-      setWeekTheme(lineup[0]?.title ?? 'Family investigation');
-      setSharedWithSiblings(plan.family_context.shared_with_siblings);
-      setComingUp(lineup.slice(1, 4));
-      setFinished(recent);
-      setIsNextSchoolDay(false);
+      // This endpoint is a pure durable read. Only a genuinely missing current-
+      // day record is allowed to enter the planner/generation path.
+      const saved = await getSavedTodayPlan(studentId);
+      const plan = saved ?? await getLearningPlan(studentId, 6);
+      applyPlan(plan);
+      void getRecentTranscript(studentId, 4).then(setFinished).catch(() => undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Adeline could not load today yet.');
     } finally {
       setPlanLoading(false);
     }
-  }, [studentId]);
+  }, [applyPlan, studentId]);
 
   useEffect(() => { void loadToday(); }, [loadToday]);
 

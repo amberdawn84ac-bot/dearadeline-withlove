@@ -6,7 +6,6 @@ GET  /journal/progress/{student_id} — Fetch track progress counts
 """
 import asyncio
 import logging
-import uuid
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import Any
@@ -24,6 +23,7 @@ router = APIRouter(prefix="/journal", tags=["journal"])
 
 class SealRequest(BaseModel):
     lesson_id:        str
+    plan_item_id:     str | None = None
     track:            Track
     completed_blocks: int = Field(default=0, ge=0)
     oas_standards:    list[dict[str, Any]] = Field(default_factory=list)
@@ -35,7 +35,6 @@ class SealRequest(BaseModel):
     learner_reflection: str | None = Field(default=None, max_length=4000)
     artifact_refs: list[str] = Field(default_factory=list, max_length=20)
     parent_attested: bool = False
-    credit_draft: dict[str, Any] | None = None
 
 
 class SealResponse(BaseModel):
@@ -101,7 +100,6 @@ async def seal_journal(
         )
 
     proficiency = _evidence_proficiency(body)
-    demonstrated = proficiency in {"UNDERSTANDING", "EXTENDING"}
 
     try:
         track_progress = await journal_store.seal(
@@ -142,38 +140,15 @@ async def seal_journal(
         _update_card_safe(student_id, body)
     )
 
-    # A generated lesson carries only proposed credit. Sealing is the learner's
-    # completion signal, so this is the one place that turns it into transcript
-    # credit. Never trust the student id embedded in the client payload.
+    # Learner-controlled payloads never set a transcript amount. Conventional
+    # course equivalency is derived from reviewed standards/mastery reports.
     credit_sealed = False
-    if body.credit_draft and demonstrated:
-        try:
-            from app.api.learning_records import _seal_transcript_db, TranscriptEntryIn
-            credit = body.credit_draft
-            await _seal_transcript_db(TranscriptEntryIn(
-                id=credit.get("id") or str(uuid.uuid4()),
-                student_id=student_id,
-                lesson_id=body.lesson_id,
-                course_title=credit.get("course_title") or body.lesson_id,
-                track=body.track.value,
-                oas_standards=credit.get("oas_standards", []),
-                activity_description=credit.get("activity_description", "Completed and sealed lesson"),
-                credit_hours=max(0.0, min(float(credit.get("credit_hours", 0)), 1.0)),
-                credit_type=credit.get("credit_type", "ELECTIVE"),
-                is_homestead_credit=bool(credit.get("is_homestead_credit", False)),
-                agent_name=credit.get("agent_name"),
-                researcher_activated=bool(credit.get("researcher_activated", False)),
-            ))
-            credit_sealed = True
-        except Exception as exc:
-            logger.exception("[/journal/seal] Transcript credit seal failed")
-            raise HTTPException(status_code=500, detail=f"Journal saved but transcript credit failed: {exc}")
 
     # Completion changes both mastery coverage and the next-best experience.
     # Invalidate the whole adaptive plan even when the lesson earns no credit.
     try:
         from app.api.learning_plan import pop_completed_lesson
-        await pop_completed_lesson(student_id, body.lesson_id)
+        await pop_completed_lesson(student_id, body.plan_item_id or body.lesson_id)
     except Exception as exc:
         logger.warning("Learning plan invalidation failed after journal seal: %s", exc)
 
@@ -188,9 +163,9 @@ async def seal_journal(
 
 
 def _quiz_quality(quiz_results: list[dict]) -> int:
-    """Map quiz results to SM-2 quality (0–5). Defaults to 3 (lesson-only experience)."""
+    """Map an actual scored demonstration to SM-2 quality (0–5)."""
     if not quiz_results:
-        return 3
+        return 0
     correct = sum(1 for q in quiz_results if q.get("correct"))
     ratio = correct / len(quiz_results)
     if ratio >= 0.9:
@@ -198,7 +173,7 @@ def _quiz_quality(quiz_results: list[dict]) -> int:
     if ratio >= 0.75:
         return 4
     if ratio >= 0.5:
-        return 3
+        return 2
     if ratio >= 0.25:
         return 2
     return 1
@@ -225,6 +200,9 @@ def _evidence_proficiency(body: SealRequest) -> str:
 
 async def _update_card_safe(student_id: str, body: SealRequest) -> None:
     """Fire-and-forget: update BKT pL + SM-2 schedule after lesson seal."""
+    if not body.quiz_results:
+        # Saving a reflection/artifact is not a correct BKT response.
+        return
     try:
         from app.algorithms.bkt_tracker import update_card_after_lesson
         from app.tools.graph_query import tool_get_zpd_candidates
@@ -319,10 +297,11 @@ async def get_portfolio_items(
             sources = []
         reflection = next((str(item.get("content")) for item in sources if item.get("type") == "learner_reflection" and item.get("content")), None)
         artifact = next((item for item in sources if item.get("type") == "artifact" or str(item.get("url") or "").startswith("portfolio://")), None)
+        title = str((artifact or {}).get("title") or row["title"])
         artifact_description = str(artifact.get("author") or artifact.get("description") or artifact.get("title") or "Portfolio artifact") if artifact else None
         refs = [str(item.get("url")) for item in sources if item.get("url")]
         items.append(PortfolioItem(
-            lesson_id=str(row["lesson_id"]), title=str(row["title"]), track=str(row["track"]),
+            lesson_id=str(row["lesson_id"]), title=title, track=str(row["track"]),
             sealed_at=row["sealed_at"].isoformat() if row["sealed_at"] else None,
             reflection=reflection, artifact_description=artifact_description, artifact_refs=refs,
         ))

@@ -60,6 +60,12 @@ class AdaptationRequest:
     decay_adjusted_mastery: float = 0.0
     cross_track_bias: float = 0.0
     proficiency_map: dict[str, float] = field(default_factory=dict)
+    # Ephemeral Cognitive Twin bridge. These values tune the entry/scaffold of
+    # a newly adapted experience; they are never persisted as learner identity.
+    session_intervention: str = "CONTINUE"
+    working_memory_load: float = 0.3
+    frustration_score: float = 0.0
+    engagement_level: float = 0.6
 
 
 async def _llm_call(system: str, user: str, max_tokens: int = 1400) -> str:
@@ -116,11 +122,25 @@ def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: st
     else:
         scaffolding = "Explain specialist vocabulary naturally and keep the learner's responsibility challenging but reachable."
 
+    if req.session_intervention in {"SCAFFOLD", "BREAK", "FOCUS_RESET"} or req.working_memory_load >= 0.72:
+        session_support = (
+            "Current-session support: keep the same conceptual level, facts, and outcome, but reduce "
+            "the initial working-memory load. Give one concrete entry point, make the first action "
+            "unmistakable, and avoid stacking several instructions in one sentence. Do not dumb down the ideas."
+        )
+    elif req.session_intervention == "ELEVATE":
+        session_support = (
+            "Current-session support: the learner is ready for independence. Preserve the shared task "
+            "and let the learner make or defend more of the relevant choices without adding busywork."
+        )
+    else:
+        session_support = "Current-session support: continue with the normal challenging, concrete entry point."
+
     return (
         f"Topic: {topic_hint or 'the current family lesson'}\n"
         f"Learner: {grade_desc}; track: {req.track.replace('_', ' ').title()}; "
         f"interests: {interests}; mastery: {req.bkt_pL:.2f}.\n"
-        f"Scaffolding: {scaffolding}\n\n"
+        f"Scaffolding: {scaffolding}\n{session_support}\n\n"
         "Revise the wording only. Preserve the complete lesson block and all shared-family roles.\n\n"
         f"ORIGINAL BLOCK:\n{content}"
     )

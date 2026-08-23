@@ -26,7 +26,7 @@ from app.agents.cognitive_twin import (
     get_twin,
     save_twin,
 )
-from app.api.middleware import get_current_user_id
+from app.api.middleware import get_current_user_id, verify_student_access_for_user
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,7 @@ async def block_enter(
     current_user_id: str = Depends(get_current_user_id),
 ):
     """Record that a student entered a block. Fire-and-forget."""
+    await verify_student_access_for_user(current_user_id, request.student_id)
     try:
         twin = await get_twin(request.student_id)
         twin.last_block_entered_iso = datetime.now(timezone.utc).isoformat()
@@ -96,6 +97,7 @@ async def block_exit(
     Updates response_latencies and rapid_exit_count on the CognitiveTwin.
     Persists a focus_gap_detected xAPI event if a gap is detected.
     """
+    await verify_student_access_for_user(current_user_id, request.student_id)
     try:
         twin = await get_twin(request.student_id)
 
@@ -141,6 +143,7 @@ async def get_focus_gap(
     current_user_id: str = Depends(get_current_user_id),
 ):
     """Return the current focus gap status for a student."""
+    await verify_student_access_for_user(current_user_id, student_id)
     try:
         twin = await get_twin(student_id)
         gap = twin.detect_focus_gap()
@@ -164,6 +167,7 @@ async def reset_complete(
     Clears focus gap flags on the CognitiveTwin and returns the first
     due SM-2 card as a soft re-entry block.
     """
+    await verify_student_access_for_user(current_user_id, request.student_id)
     try:
         twin = await get_twin(request.student_id)
         twin.focus_gap_detected = False

@@ -57,7 +57,7 @@ class StudentExperienceStore:
                      status = 'generating', "errorMessage" = NULL, "updatedAt" = NOW()
                    WHERE "StudentExperience".status = 'failed'
                       OR ("StudentExperience".status = 'generating'
-                          AND "StudentExperience"."updatedAt" < NOW() - INTERVAL '2 minutes')
+                          AND "StudentExperience"."updatedAt" < NOW() - INTERVAL '15 minutes')
                    RETURNING id, status, title, track, "blocksJson", "metadataJson",
                              "errorMessage", "canonicalSlug"''',
                 experience_id, student_id, plan_item_id, canonical_slug,

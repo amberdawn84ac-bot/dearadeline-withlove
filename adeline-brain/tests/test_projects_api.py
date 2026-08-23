@@ -91,6 +91,7 @@ def test_seal_project():
         payload = {
             "student_id": "test-student-123",
             "project_id": project_id,
+            "reflection": "I documented what I made, what changed, and the evidence I observed.",
         }
         
         response = client.post(f"/projects/{project_id}/seal", json=payload)
@@ -99,4 +100,5 @@ def test_seal_project():
         data = response.json()
         assert "credit_hours" in data
         assert "credit_type" in data
-        assert data["credit_hours"] > 0
+        assert data["credit_hours"] == 0
+        assert data["learning_status"] == "EVIDENCE_RECORDED"

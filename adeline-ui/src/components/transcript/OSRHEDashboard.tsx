@@ -145,7 +145,7 @@ export function OSRHEDashboard({ studentId }: Props) {
               </div>
 
               <div className="pt-3 border-t border-gray-100 flex justify-between text-xs text-gray-500">
-                <span>{bucket.hoursEarned} hours earned</span>
+                <span>{bucket.hoursEarned} conventional-equivalency hours</span>
                 <span>{bucket.evidenceCount} evidence items</span>
               </div>
             </div>

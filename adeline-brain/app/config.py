@@ -20,7 +20,7 @@ IS_PRODUCTION = ADELINE_ENV == "production"
 # ── Postgres DSN ─────────────────────────────────────────────────────────────
 # Priority: POSTGRES_DSN > DATABASE_URL > DIRECT_DATABASE_URL > dev fallback
 
-_DEV_FALLBACK_DSN = "postgresql://adeline:adeline_local_dev@postgres:5432/hippocampus"
+_DEV_FALLBACK_DSN = "postgresql://localhost:5432/adeline"
 
 POSTGRES_DSN = (
     os.getenv("POSTGRES_DSN")
@@ -170,9 +170,17 @@ STUDENT_JWT_SECRET = (
     ).hexdigest()
 )
 
+if IS_PRODUCTION and not _student_jwt_env:
+    raise RuntimeError(
+        "STUDENT_JWT_SECRET must be set explicitly in production; "
+        "student sessions must not share or derive another service credential."
+    )
+
 
 # ── Internal API Key (server-to-server calls from lesson pipeline) ──────────
-INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "dev-internal-key-not-for-production")
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
+if IS_PRODUCTION and not INTERNAL_API_KEY:
+    raise RuntimeError("INTERNAL_API_KEY must be set to a strong, unique production secret")
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
 
@@ -195,15 +203,10 @@ def _db_ssl_context():
     if root_cert:
         return _ssl.create_default_context(cafile=root_cert)
 
-    # Supabase's transaction-pooler endpoint used by the production service
-    # requires TLS but does not currently expose a CA bundle inside the image.
-    # Preserve encrypted transport; operators can enable full verification by
-    # mounting the provider CA and setting DB_SSL_ROOT_CERT.
-    ctx = _ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = _ssl.CERT_NONE
-    logger.warning("[Database] TLS certificate verification disabled; set DB_SSL_ROOT_CERT to enable it")
-    return ctx
+    # Use the operating system trust store and verify both the certificate and
+    # hostname.  Encryption without identity verification is not sufficient for
+    # student records in production.
+    return _ssl.create_default_context()
 
 
 class _PooledConnection:

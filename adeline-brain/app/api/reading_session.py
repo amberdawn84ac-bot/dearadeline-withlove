@@ -391,7 +391,7 @@ async def update_reading_session(
                     )
                     grade_level = int(student_row["gradeLevel"]) if student_row and student_row["gradeLevel"] else 8
 
-                    credit_result = await award_reading_credit(
+                    evidence_result = await award_reading_credit(
                         session_id=session_id,
                         student_id=student_id,
                         book_id=str(result["bookId"]),
@@ -403,9 +403,12 @@ async def update_reading_session(
                         grade_level=grade_level,
                         completed_at=result["completedAt"],
                     )
-                    logger.info(f"[ReadingSession] Credit awarded: {credit_result}")
+                    logger.info(
+                        "[ReadingSession] Reading evidence recorded: %s",
+                        evidence_result,
+                    )
             except Exception as e:
-                logger.error(f"[ReadingSession] Credit award failed: {e}")
+                logger.error(f"[ReadingSession] Reading evidence recording failed: {e}")
 
     logger.info(
         f"[ReadingSession] Updated session: "

@@ -324,6 +324,21 @@ async def _conversation_sse(
         zpd_zone       = detect_zpd_zone(message)
         zpd_directives = get_quick_directives(zpd_zone, mastery_band)
 
+        # Feed the cheap live-state layer from every learner conversation turn.
+        # This performs no model call and keeps the Twin separate from durable
+        # mastery/profile data.
+        try:
+            from app.agents.cognitive_twin import update_from_response
+            await update_from_response(
+                student_id=student_id,
+                response_text=message,
+                was_correct=None,
+                zpd_zone=zpd_zone.value,
+                track=tracks[0],
+            )
+        except Exception:
+            logger.warning("[/conversation/stream] Cognitive Twin update unavailable", exc_info=True)
+
         # Emit ZPD state immediately so the UI updates the badge
         yield _sse("zpd", {
             "zone":         zpd_zone.value,

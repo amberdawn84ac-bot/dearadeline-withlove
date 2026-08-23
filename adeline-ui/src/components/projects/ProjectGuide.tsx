@@ -59,6 +59,7 @@ export function ProjectGuide({ projectId, studentId, onSeal }: ProjectGuideProps
   const [checkedItems, setCheckedItems] = useState<Set<number>>(new Set());
   const [currentStep, setCurrentStep] = useState(0);
   const [sealing, setSealing]         = useState(false);
+  const [portfolioNotes, setPortfolioNotes] = useState<string[]>([]);
 
   // Fetch on mount
   useEffect(() => {
@@ -105,9 +106,13 @@ export function ProjectGuide({ projectId, studentId, onSeal }: ProjectGuideProps
   }
 
   async function handleSeal() {
+    if (!project) return;
     setSealing(true);
     try {
-      await sealProject(projectId, studentId);
+      const reflection = project.portfolio_prompts
+        .map((prompt, index) => `${prompt}\n${portfolioNotes[index]?.trim() ?? ""}`)
+        .join("\n\n");
+      await sealProject(projectId, studentId, reflection);
       onSeal(projectId);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Seal failed.";
@@ -378,11 +383,25 @@ export function ProjectGuide({ projectId, studentId, onSeal }: ProjectGuideProps
               <p className="text-xs font-black uppercase tracking-wider text-[#9A3F4A]">
                 Portfolio — Answer These
               </p>
-              <ol className="space-y-3 list-none">
+              <ol className="space-y-4 list-none">
                 {project.portfolio_prompts.map((prompt, i) => (
-                  <li key={i} className="flex items-start gap-3">
+                  <li key={i} className="grid gap-2">
+                    <div className="flex items-start gap-3">
                     <span className="text-xs font-black text-[#9A3F4A] shrink-0 mt-0.5">{i + 1}.</span>
                     <p className="text-sm text-[#2F4731]/80 leading-relaxed">{prompt}</p>
+                    </div>
+                    <textarea
+                      value={portfolioNotes[i] ?? ""}
+                      onChange={(event) => setPortfolioNotes((current) => {
+                        const next = [...current];
+                        next[i] = event.target.value;
+                        return next;
+                      })}
+                      rows={3}
+                      minLength={20}
+                      placeholder="Record what you made, observed, calculated, changed, or can explain…"
+                      className="ml-7 rounded-xl border border-[#9A3F4A]/20 bg-white p-3 text-sm text-[#2F4731]"
+                    />
                   </li>
                 ))}
               </ol>
@@ -392,11 +411,11 @@ export function ProjectGuide({ projectId, studentId, onSeal }: ProjectGuideProps
           {/* Seal CTA */}
           <button
             onClick={handleSeal}
-            disabled={sealing}
+            disabled={sealing || portfolioNotes.some((note) => note.trim().length > 0 && note.trim().length < 20) || !portfolioNotes.some((note) => note.trim().length >= 20)}
             className="w-full py-4 rounded-2xl text-sm font-black uppercase tracking-widest text-white transition-all hover:brightness-110 disabled:opacity-50"
             style={{ background: "#166534" }}
           >
-            {sealing ? "Recording..." : "Seal Credit & Add to Portfolio"}
+            {sealing ? "Recording..." : "Save Evidence to Portfolio"}
           </button>
         </div>
       )}
