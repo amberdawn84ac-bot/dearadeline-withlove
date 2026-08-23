@@ -29,6 +29,10 @@ function LoginContent() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [parentName, setParentName] = useState('');
+  const [learnerParentName, setLearnerParentName] = useState('');
+  const [learnerParentEmail, setLearnerParentEmail] = useState('');
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [invitePrivacyConsent, setInvitePrivacyConsent] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [pendingInvite, setPendingInvite] = useState(invitationCode);
@@ -83,10 +87,11 @@ function LoginContent() {
         const bootstrapBody = await bootstrap.json().catch(() => ({}));
         if (!bootstrap.ok) throw new Error(bootstrapBody.detail || 'Could not open the family account.');
         if (pendingInvite) {
+          if (!invitePrivacyConsent) throw new Error('Please review the Children’s Privacy Notice and confirm parental consent.');
           const claim = await fetch('/brain/students/claim', {
             method: 'POST',
             headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: pendingInvite }),
+            body: JSON.stringify({ code: pendingInvite, privacy_consent: true, privacy_notice_version: '2026-08-23' }),
           });
           const claimBody = await claim.json().catch(() => ({}));
           if (!claim.ok) throw new Error(claimBody.detail || 'Your parent account was created, but the learner invitation could not be linked.');
@@ -104,6 +109,8 @@ function LoginContent() {
       if (mode === 'register') {
         body.display_name = displayName.trim();
         body.grade_level = gradeLevel;
+        body.parent_name = learnerParentName.trim();
+        body.parent_email = learnerParentEmail.trim();
       }
 
       const response = await fetch('/api/student-auth', {
@@ -119,6 +126,11 @@ function LoginContent() {
         throw new Error(detail || 'Adeline could not sign you in.');
       }
 
+      if (data.requires_parent_verification) {
+        setVerificationSent(true);
+        return;
+      }
+
       router.push('/dashboard');
       router.refresh();
     } catch (reason) {
@@ -130,6 +142,7 @@ function LoginContent() {
 
   return (
     <main className="min-h-screen grid place-items-center px-4 py-8 bg-[radial-gradient(circle_at_20%_10%,rgba(214,166,75,.18),transparent_34%),radial-gradient(circle_at_85%_85%,rgba(51,99,71,.16),transparent_36%)] bg-[#f7f1e6] text-[#263b2d]">
+      {verificationSent ? <section className="w-full max-w-[520px] rounded-[30px] border border-[#374f3c2e] bg-[#fffdf7] p-8 text-center shadow-[0_24px_70px_rgba(57,48,34,.13)]"><p className="text-4xl">✉️</p><h1 className="mt-4 text-3xl font-bold text-[#294832]">A parent needs to approve this account</h1><p className="mt-3 text-sm leading-6 text-[#667064]">We sent the parent or guardian a private review link. Learning access stays closed until they approve it. The link expires in 72 hours.</p><Link href="/privacy" className="mt-5 inline-flex font-bold text-[#9A3F4A] underline">Read the Children&rsquo;s Privacy Notice</Link></section> :
       <section className="w-full max-w-[520px] rounded-[30px] border border-[#374f3c2e] bg-[#fffdf7f0] p-7 sm:p-9 shadow-[0_24px_70px_rgba(57,48,34,.13)]">
         <Link href="/" className="text-[13px] font-black text-[#49654e] no-underline">
           ← Dear Adeline
@@ -181,9 +194,7 @@ function LoginContent() {
 
         <form onSubmit={submit} className="grid gap-4">
           {audience === 'parent' && pendingInvite && (
-            <div className="rounded-xl border border-[#cbdcc7] bg-[#edf4ea] px-4 py-3 text-sm text-[#2F4731]">
-              <strong>Family invitation ready.</strong> {mode === 'register' ? 'Create your parent account' : 'Sign in'} and this learner will be connected automatically.
-            </div>
+            <div className="rounded-xl border border-[#cbdcc7] bg-[#edf4ea] px-4 py-3 text-sm text-[#2F4731]"><strong>Family invitation ready.</strong> {mode === 'register' ? 'Create your parent account' : 'Sign in'} and this learner can be connected after you confirm consent.<label className="mt-3 flex items-start gap-2 text-xs leading-5"><input type="checkbox" required checked={invitePrivacyConsent} onChange={(event) => setInvitePrivacyConsent(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[#BD6809]" /><span>I am this learner&rsquo;s parent or legal guardian and consent after reviewing the <Link href="/privacy" target="_blank" className="font-bold underline">Children&rsquo;s Privacy Notice</Link>.</span></label></div>
           )}
           {audience === 'parent' && mode === 'register' && (
             <label className="grid gap-2 text-xs font-black text-[#3c5140]">
@@ -228,6 +239,13 @@ function LoginContent() {
                   {Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={String(index + 1)}>Grade {index + 1}</option>)}
                 </select>
               </label>
+              <div className="rounded-xl border border-[#d7cdbb] bg-[#f7f1e6] p-4">
+                <p className="text-xs font-black text-[#3c5140]">Parent or guardian approval</p>
+                <p className="mt-1 text-[11px] leading-5 text-[#667064]">A learner account stays locked until a parent reviews the privacy notice and approves it by email.</p>
+                <label className="mt-3 grid gap-2 text-xs font-black text-[#3c5140]">Parent or guardian name<input required autoComplete="name" value={learnerParentName} onChange={(event) => setLearnerParentName(event.target.value)} className="min-h-[45px] rounded-[11px] border border-[#d7cdbb] bg-[#fffefa] px-3" /></label>
+                <label className="mt-3 grid gap-2 text-xs font-black text-[#3c5140]">Parent or guardian email<input required type="email" autoComplete="email" value={learnerParentEmail} onChange={(event) => setLearnerParentEmail(event.target.value)} className="min-h-[45px] rounded-[11px] border border-[#d7cdbb] bg-[#fffefa] px-3" /></label>
+                <Link href="/privacy" target="_blank" className="mt-3 inline-flex text-[11px] font-bold text-[#9A3F4A] underline">Children&rsquo;s Privacy Notice</Link>
+              </div>
             </>
           )}
 
@@ -273,7 +291,7 @@ function LoginContent() {
         <p className="mt-6 text-center text-[11px] leading-relaxed text-[#73786f]">
           {audience === 'parent' ? 'One family account securely connects siblings while preserving each learner’s own plan and evidence.' : 'One student identity keeps learning, projects, games, portfolio work, and graduation progress together.'}
         </p>
-      </section>
+      </section>}
     </main>
   );
 }

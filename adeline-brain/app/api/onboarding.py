@@ -336,10 +336,11 @@ async def post_onboarding(
                 if code_row["isUsed"]:
                     raise HTTPException(status_code=403, detail="This invite code has already been used.")
 
-            # Parent contact information is retained, but onboarding does not
-            # require an email-verification gate.
-            needs_coppa = False
-            coppa_verified = True
+            needs_coppa = request.gradeLevel in UNDER_13_GRADES
+            # A checkbox entered in the learner session is not verifiable
+            # parental consent. Under-13 learners remain gated until the parent
+            # completes the emailed verification flow.
+            coppa_verified = not needs_coppa
 
             row = await conn.fetchrow(
                 """

@@ -49,6 +49,20 @@ model User {
   @@index([role])
 }
 
+model ChildPrivacyConsent {
+  id                   String    @id @default(uuid())
+  studentId            String
+  parentId             String?
+  parentEmail          String
+  method               String
+  privacyNoticeVersion String
+  consentedAt          DateTime  @default(now())
+  revokedAt            DateTime?
+
+  @@index([studentId, consentedAt])
+  @@index([parentId, consentedAt])
+}
+
 model FamilyPost {
   id          String   @id @default(uuid())
   householdId String
@@ -519,6 +533,7 @@ model ReadingSession {
   
   @@unique([studentId, bookId])
   @@index([studentId])
+  @@index([studentId, status])
   @@index([bookId])
 }
 

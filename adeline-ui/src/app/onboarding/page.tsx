@@ -67,6 +67,11 @@ export default function OnboardingPage() {
         const data = await response.json();
         const userProfile = data.user;
 
+        if (userProfile.onboardingComplete && userProfile.requiresCoppaVerification) {
+          window.location.href = '/coppa-pending';
+          return;
+        }
+
         if (userProfile.onboardingComplete) {
           console.log('[OnboardingPage] Already complete, redirecting to dashboard');
           setStatus('redirecting');
@@ -135,10 +140,26 @@ export default function OnboardingPage() {
       }
 
       const responseData = await response.json() as {
-        user?: { onboardingComplete?: boolean };
+        user?: { id?: string; name?: string; onboardingComplete?: boolean; requiresCoppaVerification?: boolean };
       };
       if (!responseData?.user?.onboardingComplete) {
         throw new Error('Onboarding completed but response missing confirmation');
+      }
+
+      if (responseData.user.requiresCoppaVerification) {
+        const verification = await fetch('/api/coppa', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentId: responseData.user.id,
+            studentName: responseData.user.name || data.name,
+            parentName: data.parentName,
+            parentEmail: data.parentEmail,
+          }),
+        });
+        if (!verification.ok) throw new Error('Your profile was saved, but the parental verification email could not be sent.');
+        window.location.href = '/coppa-pending';
+        return;
       }
 
       console.log('[OnboardingPage] POST successful - now verifying DB propagation...');

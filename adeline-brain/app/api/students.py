@@ -303,6 +303,8 @@ class ClaimStudentRequest(BaseModel):
     # Six characters keeps existing accounts linkable; new invitations use a
     # random twelve-character credential.
     code: str = Field(..., min_length=6, max_length=32, pattern=r"^[A-Za-z0-9]+$")
+    privacy_consent: bool
+    privacy_notice_version: str = Field(default="2026-08-23", pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class ClaimStudentResponse(BaseModel):
@@ -453,9 +455,17 @@ async def claim_student(
     parent_id: str = Depends(get_current_user_id),
     _role: str = Depends(require_account_role(UserRole.PARENT, UserRole.ADMIN)),
 ):
+    if not body.privacy_consent:
+        raise HTTPException(status_code=422, detail="Parent privacy consent is required")
     code = body.code.strip().upper()
     conn = await _get_conn()
     try:
+        parent_email = await conn.fetchval(
+            'SELECT email FROM "User" WHERE id = $1 AND role = \'PARENT\'',
+            parent_id,
+        )
+        if not parent_email:
+            raise HTTPException(status_code=403, detail="Verified parent account required")
         student = await conn.fetchrow(
             'SELECT id, name, username, xp, "gradeLevel", "parentId" FROM "User" WHERE "linkCode" = $1',
             code,
@@ -463,12 +473,21 @@ async def claim_student(
         if not student:
             raise HTTPException(status_code=404, detail="Link code not found.")
 
-        result = await conn.fetchrow(
-            'UPDATE "User" SET "parentId" = $1, "updatedAt" = NOW() WHERE id = $2 AND role = \'STUDENT\' AND ("parentId" IS NULL OR "parentId" = $1) RETURNING id',
-            parent_id, student["id"],
-        )
-        if not result:
-            raise HTTPException(status_code=409, detail="This code is already claimed by another parent.")
+        async with conn.transaction():
+            result = await conn.fetchrow(
+                '''UPDATE "User" SET "parentId" = $1, "coppaVerified" = TRUE, "updatedAt" = NOW()
+                   WHERE id = $2 AND role = 'STUDENT' AND ("parentId" IS NULL OR "parentId" = $1)
+                   RETURNING id''',
+                parent_id, student["id"],
+            )
+            if not result:
+                raise HTTPException(status_code=409, detail="This code is already claimed by another parent.")
+            await conn.execute(
+                '''INSERT INTO "ChildPrivacyConsent"
+                     ("studentId", "parentId", "parentEmail", method, "privacyNoticeVersion", "consentedAt")
+                   VALUES ($1, $2, $3, 'authenticated_parent_claim', $4, NOW())''',
+                str(student["id"]), parent_id, str(parent_email).lower(), body.privacy_notice_version,
+            )
     except asyncpg.PostgresError:
         logger.exception("[/students/claim] DB error")
         raise HTTPException(status_code=500, detail="A database error occurred.")

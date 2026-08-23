@@ -1,4 +1,4 @@
-name: Adeline World checks
+name: Archived Adeline World guard
 
 on:
   pull_request:
@@ -36,5 +36,5 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Build and test rendered application
-        run: npm test
+      - name: Verify archived prototype explicitly
+        run: npm run test:legacy

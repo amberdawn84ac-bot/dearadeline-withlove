@@ -17,7 +17,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 logger = logging.getLogger(__name__)
 
-from app.config import ASYNC_POSTGRES_DSN as ASYNC_DSN  # noqa: E402
+from app.config import ASYNC_POSTGRES_DSN as ASYNC_DSN, _db_ssl_context  # noqa: E402
 
 
 class JournalBase(DeclarativeBase):
@@ -53,10 +53,7 @@ class JournalStore:
         last_exc: Exception = RuntimeError("never connected")
         for attempt in range(1, retries + 1):
             try:
-                import ssl as _ssl
-                ctx = _ssl.create_default_context()
-                ctx.check_hostname = False
-                ctx.verify_mode = _ssl.CERT_NONE
+                ctx = _db_ssl_context()
                 self._engine = create_async_engine(
                     ASYNC_DSN,
                     echo=False,

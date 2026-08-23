@@ -12,13 +12,14 @@ export function ClaimStudentDialog({ onClose, onClaimed }: Props) {
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [privacyConsent, setPrivacyConsent] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      await claimStudent(code.trim().toUpperCase());
+      await claimStudent(code.trim().toUpperCase(), privacyConsent);
       onClaimed();
       onClose();
     } catch (err) {
@@ -45,12 +46,16 @@ export function ClaimStudentDialog({ onClose, onClaimed }: Props) {
             placeholder="A3F9C2B7D4E1"
             className="w-full px-4 py-3 border border-[#2F4731]/20 rounded-xl text-center font-mono text-xl tracking-widest focus:outline-none focus:border-[#BD6809]"
           />
+          <label className="flex items-start gap-3 rounded-xl border border-[#D8C9B2] bg-[#FFFDF7] p-3 text-xs leading-5 text-[#2F4731]">
+            <input type="checkbox" required checked={privacyConsent} onChange={(event) => setPrivacyConsent(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[#BD6809]" />
+            <span>I am this learner&rsquo;s parent or legal guardian, consent to the account connection and educational data use, and have read the <a href="/privacy" target="_blank" rel="noreferrer" className="font-bold text-[#9A3F4A] underline">Children&rsquo;s Privacy Notice</a>.</span>
+          </label>
           {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
           <div className="flex gap-3">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl font-semibold text-[#2F4731]">
               Cancel
             </button>
-            <button type="submit" disabled={loading || code.length < 6} className="flex-1 py-2.5 bg-[#2F4731] hover:bg-[#BD6809] disabled:opacity-50 text-white rounded-xl font-semibold">
+            <button type="submit" disabled={loading || code.length < 6 || !privacyConsent} className="flex-1 py-2.5 bg-[#2F4731] hover:bg-[#BD6809] disabled:opacity-50 text-white rounded-xl font-semibold">
               {loading ? 'Linking...' : 'Link'}
             </button>
           </div>

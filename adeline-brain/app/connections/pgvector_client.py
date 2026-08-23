@@ -15,7 +15,7 @@ from pgvector.sqlalchemy import Vector
 
 logger = logging.getLogger(__name__)
 
-from app.config import ASYNC_POSTGRES_DSN as ASYNC_DSN  # noqa: E402
+from app.config import ASYNC_POSTGRES_DSN as ASYNC_DSN, _db_ssl_context  # noqa: E402
 
 EMBEDDING_DIM = 1536  # text-embedding-3-small
 
@@ -60,10 +60,7 @@ class HippocampusClient:
         self._session_factory: Optional[async_sessionmaker] = None
 
     async def connect(self):
-        import ssl as _ssl
-        ctx = _ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = _ssl.CERT_NONE
+        ctx = _db_ssl_context()
         self._engine = create_async_engine(
             ASYNC_DSN,
             echo=False,

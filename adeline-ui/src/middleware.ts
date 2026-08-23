@@ -10,7 +10,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const PUBLIC_PATHS = ['/', '/login', '/signup', '/pricing', '/style-guide'];
+const PUBLIC_PATHS = ['/', '/login', '/signup', '/pricing', '/style-guide', '/privacy', '/coppa-pending', '/coppa-verify'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -81,11 +81,11 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  // getSession() only reads cookie storage and is not an authorization check.
+  // getClaims() verifies the token signature before protected UI is rendered.
+  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
 
-  if (!session) {
+  if (claimsError || !claimsData?.claims?.sub) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('next', pathname);
     return NextResponse.redirect(loginUrl);

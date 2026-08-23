@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'node:crypto';
+import { coppaVerificationUrl, sendCoppaVerificationEmail } from '@/lib/server/coppa-email';
 
 const BRAIN_URL = (
   process.env.BRAIN_INTERNAL_URL ||
@@ -29,8 +31,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ detail: 'Invalid authentication mode.' }, { status: 400 });
   }
 
+  // Do not reserve a locked learner account when the consent message cannot
+  // be delivered. Parent-created and parent-claimed accounts do not use this
+  // self-registration path.
+  if (mode === 'register' && !process.env.RESEND_API_KEY) {
+    return NextResponse.json(
+      { detail: 'Learner self-registration is temporarily unavailable. A parent can create or connect the learner from the parent dashboard.' },
+      { status: 503 },
+    );
+  }
+
   const body = { ...payload };
   delete body.mode;
+  const consentToken = mode === 'register' ? crypto.randomBytes(32).toString('hex') : null;
+  if (consentToken) body.parent_verification_token = consentToken;
 
   let upstream: Response;
   try {
@@ -49,8 +63,32 @@ export async function POST(request: NextRequest) {
   }
 
   const data = await upstream.json().catch(() => ({ detail: 'Authentication failed.' }));
-  if (!upstream.ok || typeof data?.token !== 'string') {
+  if (!upstream.ok) {
     return NextResponse.json(data, { status: upstream.status });
+  }
+
+  if (mode === 'register' && data.requires_parent_verification) {
+    if (!consentToken) return NextResponse.json({ detail: 'Parental verification could not be started.' }, { status: 502 });
+    try {
+      await sendCoppaVerificationEmail({
+        parentEmail: String(body.parent_email),
+        parentName: String(body.parent_name),
+        studentName: String(body.display_name),
+        verifyUrl: coppaVerificationUrl(consentToken),
+      });
+    } catch (error) {
+      console.error('[student-auth] Parental verification email failed', error);
+      return NextResponse.json({ detail: 'The account was reserved, but the parental verification email could not be sent.' }, { status: 502 });
+    }
+    return NextResponse.json({
+      ok: true,
+      student_id: data.student_id,
+      requires_parent_verification: true,
+    });
+  }
+
+  if (typeof data?.token !== 'string') {
+    return NextResponse.json({ detail: 'Authentication service returned an invalid session.' }, { status: 502 });
   }
 
   const response = NextResponse.json({

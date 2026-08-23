@@ -32,6 +32,8 @@ export interface AddStudentRequest {
   pin: string;
   grade_level?: string;
   interests?: string[];
+  privacy_consent: boolean;
+  privacy_notice_version?: string;
 }
 
 export interface UpdateStudentRequest {
@@ -49,6 +51,39 @@ export interface StudentProgress {
   projects_sealed: number;
   last_activity: string | null;
   active_track: string | null;
+  grade_level: string;
+  interests: string[];
+  learning: {
+    current_learning: Array<{
+      id: string;
+      title: string;
+      description: string;
+      track: string;
+      canonical_slug?: string;
+      next_action?: string;
+      success_criteria?: string[];
+    }>;
+    coverage: {
+      mastered: number;
+      total_required: number;
+      remaining: number;
+      subjects: Array<{ subject: string; mastered: number; remaining: number; required: number; scheduled: number }>;
+    };
+    graduation_progress: {
+      total_required?: number;
+      total_earned?: number;
+      credits_remaining?: number;
+      is_high_school?: boolean;
+    };
+    credit_gaps: Array<{ bucket: string; required: number; earned: number; remaining: number; priority: number }>;
+    areas_to_explore: Array<{
+      standard_id: string;
+      subject: string;
+      description: string;
+      proficiency: 'NOT_STARTED' | 'DEVELOPING' | 'APPROACHING' | 'UNDERSTANDING' | 'EXTENDING';
+    }>;
+    placement: Record<string, unknown>;
+  } | null;
 }
 
 export interface FamilyDashboard {
@@ -61,8 +96,22 @@ export interface FamilyDashboard {
     student_name: string;
     lesson_id: string;
     track: string;
+    title: string;
     completed_at: string | null;
   }>;
+  family_investigation: ({
+    title: string;
+    description: string;
+    track?: string;
+    next_action?: string;
+    success_criteria?: string[];
+    participants: string[];
+  } & Record<string, unknown>) | null;
+}
+
+export interface ParentAdelineTurn {
+  role: 'parent' | 'adeline';
+  content: string;
 }
 
 // ── API Functions ─────────────────────────────────────────────────────────────
@@ -99,12 +148,12 @@ export interface ClaimStudentResponse {
   grade_level: string;
 }
 
-export async function claimStudent(code: string): Promise<ClaimStudentResponse> {
+export async function claimStudent(code: string, privacyConsent: boolean): Promise<ClaimStudentResponse> {
   const res = await fetch(`${BRAIN_URL}/students/claim`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
     credentials: 'include',
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code, privacy_consent: privacyConsent, privacy_notice_version: '2026-08-23' }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -121,6 +170,27 @@ export async function getFamilyDashboard(): Promise<FamilyDashboard> {
   });
   if (!res.ok) throw new Error(`getFamilyDashboard failed: ${res.status}`);
   return res.json();
+}
+
+export async function askParentAdeline(
+  message: string,
+  conversationHistory: ParentAdelineTurn[] = [],
+): Promise<string> {
+  const res = await fetch(`${BRAIN_URL}/api/parent/adeline`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+    credentials: 'include',
+    body: JSON.stringify({
+      message,
+      conversation_history: conversationHistory.slice(-10),
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Parent Adeline failed: ${res.status}`);
+  }
+  const body = await res.json();
+  return body.response;
 }
 
 export async function updateStudent(

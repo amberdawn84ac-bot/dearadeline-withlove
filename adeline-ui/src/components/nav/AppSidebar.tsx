@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useStudent } from '@/lib/useStudent';
 import { PersistentAdeline } from '@/components/PersistentAdeline';
 import { supabase } from '@/lib/supabase';
+import { clearStudentDataCaches } from '@/lib/brain-client';
 import styles from './sites-dashboard.module.css';
 
 const NAV_ITEMS = [
@@ -43,6 +44,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
   };
 
   async function signOut() {
+    clearStudentDataCaches();
     await Promise.allSettled([
       fetch('/api/student-auth', { method: 'DELETE' }),
       fetch('/brain/auth/session', { method: 'DELETE', credentials: 'include' }),

@@ -556,3 +556,55 @@ ALTER TYPE "BlockType" ADD VALUE IF NOT EXISTS 'CORRECTIVE_OVERLAY';
 ALTER TYPE "BlockType" ADD VALUE IF NOT EXISTS 'CONCEPT_MAP';
 
 ALTER TYPE "XAPIVerb" ADD VALUE IF NOT EXISTS 'focus_gap_detected';
+
+-- ── 2026-08-23: Parent privacy audit trail and family-dashboard indexes ───────
+
+CREATE TABLE IF NOT EXISTS student_profiles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL DEFAULT '',
+  email TEXT UNIQUE,
+  grade_level TEXT NOT NULL DEFAULT 'K',
+  is_homestead BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS "ChildPrivacyConsent" (
+  "id" TEXT NOT NULL DEFAULT gen_random_uuid()::text,
+  "studentId" TEXT NOT NULL,
+  "parentId" TEXT,
+  "parentEmail" TEXT NOT NULL,
+  "method" TEXT NOT NULL,
+  "privacyNoticeVersion" TEXT NOT NULL,
+  "consentedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "revokedAt" TIMESTAMPTZ,
+  CONSTRAINT "ChildPrivacyConsent_pkey" PRIMARY KEY ("id")
+);
+
+CREATE INDEX IF NOT EXISTS "ChildPrivacyConsent_studentId_consentedAt_idx"
+  ON "ChildPrivacyConsent"("studentId", "consentedAt" DESC);
+CREATE INDEX IF NOT EXISTS "ChildPrivacyConsent_parentId_consentedAt_idx"
+  ON "ChildPrivacyConsent"("parentId", "consentedAt" DESC);
+CREATE INDEX IF NOT EXISTS "User_parentId_role_idx" ON "User"("parentId", role);
+CREATE INDEX IF NOT EXISTS "ReadingSession_studentId_status_idx" ON "ReadingSession"("studentId", status);
+CREATE INDEX IF NOT EXISTS "User_coppaTokenExpiresAt_pending_idx"
+  ON "User"("coppaTokenExpiresAt") WHERE "coppaPendingToken" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "student_journal_student_sealed_idx" ON student_journal(student_id, sealed_at DESC);
+
+ALTER TABLE "ChildPrivacyConsent" ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE "ChildPrivacyConsent" FROM anon, authenticated;
+ALTER TABLE student_profiles ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE student_profiles FROM anon, authenticated;
+
+-- ── 2026-08-23: Lock archived adeline-world invite RPC ──────────────────────
+
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'redeem_invite_code'
+      AND pg_get_function_identity_arguments(p.oid) = 'p_code text, p_email text'
+  ) THEN
+    REVOKE EXECUTE ON FUNCTION public.redeem_invite_code(TEXT, TEXT) FROM PUBLIC;
+    REVOKE EXECUTE ON FUNCTION public.redeem_invite_code(TEXT, TEXT) FROM anon, authenticated;
+  END IF;
+END $$;

@@ -11,7 +11,7 @@ import asyncpg
 
 logger = logging.getLogger(__name__)
 
-from app.config import POSTGRES_DSN as DATABASE_URL  # noqa: E402
+from app.config import POSTGRES_DSN as DATABASE_URL, _db_ssl_context  # noqa: E402
 
 EMBEDDING_DIM = 1536  # text-embedding-3-small
 
@@ -25,10 +25,7 @@ class BookshelfSearch:
     async def connect(self):
         """Initialize asyncpg connection pool."""
         try:
-            import ssl as _ssl
-            ctx = _ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = _ssl.CERT_NONE
+            ctx = _db_ssl_context()
             self._pool = await asyncpg.create_pool(
                 DATABASE_URL,
                 min_size=2,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { Suspense } from 'react';
@@ -9,15 +9,13 @@ function CoppaVerifyContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
 
-  const [status, setStatus] = useState<'loading' | 'success' | 'expired' | 'error'>('loading');
+  const [status, setStatus] = useState<'review' | 'loading' | 'success' | 'expired' | 'error'>(token ? 'review' : 'error');
+  const [consent, setConsent] = useState(false);
 
-  useEffect(() => {
-    if (!token) {
-      setStatus('error');
-      return;
-    }
-
-    fetch(`/api/coppa?token=${encodeURIComponent(token)}`)
+  function approve() {
+    if (!token || !consent) return;
+    setStatus('loading');
+    fetch(`/api/coppa?token=${encodeURIComponent(token)}`, { cache: 'no-store' })
       .then(async (res) => {
         if (res.ok) {
           setStatus('success');
@@ -28,7 +26,19 @@ function CoppaVerifyContent() {
         }
       })
       .catch(() => setStatus('error'));
-  }, [token]);
+  }
+
+  if (status === 'review') {
+    return (
+      <div className="space-y-5 text-[#2F4731]">
+        <h1 className="text-3xl font-bold" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>Review the learner account</h1>
+        <p className="text-sm leading-6 text-[#2F4731]/70">Dear Adeline will collect learning conversations, investigations, submitted work, mastery and portfolio records, and limited account/security information to provide the educational service. Children&rsquo;s information is not used for targeted advertising or sold.</p>
+        <a href="/privacy" target="_blank" className="inline-flex text-sm font-bold text-[#9A3F4A] underline">Read the full Children&rsquo;s Privacy Notice</a>
+        <label className="flex items-start gap-3 rounded-xl border border-[#D8C9B2] bg-[#FFFDF7] p-4 text-sm leading-5"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-0.5 h-5 w-5 accent-[#BD6809]" /><span>I am the learner&rsquo;s parent or legal guardian. I consent to this collection and use to provide Dear Adeline.</span></label>
+        <button type="button" onClick={approve} disabled={!consent} className="w-full rounded-xl bg-[#2F4731] px-5 py-3 font-bold text-white disabled:opacity-40">Approve learner account</button>
+      </div>
+    );
+  }
 
   if (status === 'loading') {
     return (

@@ -70,6 +70,7 @@ from app.connections.conversation_store import conversation_store
 from app.connections.postgres import init_postgres
 from app.config import close_db_pool, db_pool_status, init_db_pool
 from app.jobs.seed_scheduler import startup_seed_scheduler, shutdown_seed_scheduler
+from app.jobs.privacy_cleanup import start_privacy_cleanup, stop_privacy_cleanup
 
 from pythonjsonlogger import jsonlogger
 
@@ -127,11 +128,13 @@ async def lifespan(app: FastAPI):
                 logger.warning(f"[adeline-brain] {name} unavailable: {e}")
 
     asyncio.create_task(_connect_services())
+    await start_privacy_cleanup()
     await startup_seed_scheduler()
     yield
     logger.info("[adeline-brain] Shutting down...")
     app.state.ready = False
     await shutdown_seed_scheduler()
+    await stop_privacy_cleanup()
     try:
         await bookshelf_search.disconnect()
     except Exception:
@@ -256,12 +259,14 @@ app.include_router(standards_router)
 app.include_router(agent_team_router)
 app.include_router(resources_router)
 app.include_router(family_router)
+app.include_router(coppa_router)
 # ── /brain/* prefix mounts (Vercel proxy: /brain/:path* → Railway /:path*) ──
 # Auth endpoints (for cookie-based auth)
 app.include_router(auth_router, prefix="/brain")
 # ── Other /brain/* routes ──
 app.include_router(onboarding_router, prefix="/brain")
 app.include_router(lessons_router, prefix="/brain")
+app.include_router(scaffold_router, prefix="/brain")
 app.include_router(experience_builder_router, prefix="/brain")
 app.include_router(journal_router, prefix="/brain")
 app.include_router(transcripts_router, prefix="/brain")

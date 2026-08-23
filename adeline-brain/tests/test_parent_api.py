@@ -67,7 +67,7 @@ def test_add_student_success(mock_parent_auth, mock_db_conn):
     """Test adding a new student."""
     mock_conn = AsyncMock()
     mock_conn.fetchrow.side_effect = [
-        {"role": "PARENT"},  # Parent role check
+        {"role": "PARENT", "email": "parent@example.com"},  # Parent role check
         None,  # Player identity doesn't exist
     ]
     mock_conn.execute.return_value = None
@@ -78,6 +78,8 @@ def test_add_student_success(mock_parent_auth, mock_db_conn):
         "username": "bob_smith",
         "pin": "1234",
         "grade_level": "6",
+        "privacy_consent": True,
+        "privacy_notice_version": "2026-08-23",
     }
     
     response = client.post("/api/parent/students", json=payload)
@@ -86,13 +88,33 @@ def test_add_student_success(mock_parent_auth, mock_db_conn):
     data = response.json()
     assert data["name"] == "Bob Smith"
     assert data["email"] == "bob_smith@mobile.adelineworld.local"
+    issued_sql = "\n".join(str(call.args[0]) for call in mock_conn.execute.await_args_list)
+    assert 'INSERT INTO "ChildPrivacyConsent"' in issued_sql
+    assert "CREATE TABLE" not in issued_sql
+
+
+def test_add_student_requires_explicit_privacy_consent(mock_parent_auth, mock_db_conn):
+    mock_conn = AsyncMock()
+    mock_conn.fetchrow.return_value = {"role": "PARENT", "email": "parent@example.com"}
+    mock_db_conn.return_value.__aenter__.return_value = mock_conn
+
+    response = client.post("/api/parent/students", json={
+        "name": "Bob Smith",
+        "username": "bob_smith",
+        "pin": "1234",
+        "grade_level": "6",
+        "privacy_consent": False,
+    })
+
+    assert response.status_code == 422
+    assert mock_conn.execute.await_count == 0
 
 
 def test_add_student_duplicate_player_name(mock_parent_auth, mock_db_conn):
     """Test that duplicate player identity is rejected."""
     mock_conn = AsyncMock()
     mock_conn.fetchrow.side_effect = [
-        {"role": "PARENT"},
+        {"role": "PARENT", "email": "parent@example.com"},
         {"id": "existing-student"},
     ]
     mock_db_conn.return_value.__aenter__.return_value = mock_conn
@@ -102,6 +124,7 @@ def test_add_student_duplicate_player_name(mock_parent_auth, mock_db_conn):
         "username": "existing_player",
         "pin": "1234",
         "grade_level": "6",
+        "privacy_consent": True,
     }
     
     response = client.post("/api/parent/students", json=payload)
@@ -109,29 +132,52 @@ def test_add_student_duplicate_player_name(mock_parent_auth, mock_db_conn):
     assert response.status_code == 409
 
 
-def test_get_family_dashboard(mock_parent_auth, mock_db_conn):
-    """Test family dashboard aggregation."""
+@patch('app.services.rate_limit.enforce_rate_limit', new_callable=AsyncMock)
+def test_get_family_dashboard_uses_bounded_batch_queries(mock_rate_limit, mock_parent_auth, mock_db_conn):
+    """A multi-child family uses a fixed number of queries and keeps data isolated."""
     mock_conn = AsyncMock()
-    mock_conn.fetchrow.side_effect = [
-        {"role": "PARENT"},
-        {"sealed_at": datetime(2024, 1, 2, tzinfo=timezone.utc), "track": "CREATION_SCIENCE"},
-    ]
+    mock_conn.fetchrow.return_value = {"role": "PARENT"}
     mock_conn.fetch.side_effect = [
-        [{"id": "student-1", "name": "Alice"}],  # Students
-        [{"creditHours": 2.5}],  # Transcript for student-1
-        [],  # Recent activity
+        [
+            {"id": "student-1", "name": "Alice", "gradeLevel": "8", "interests": ["science"]},
+            {"id": "student-2", "name": "Ben", "gradeLevel": "10", "interests": ["history"]},
+        ],
+        [
+            {"studentId": "student-1", "credits": 2.5},
+            {"studentId": "student-2", "credits": 1.0},
+        ],
+        [
+            {"student_id": "student-1", "lessons_completed": 5, "projects_sealed": 2,
+             "last_activity": datetime(2024, 1, 2, tzinfo=timezone.utc), "active_track": "CREATION_SCIENCE"},
+            {"student_id": "student-2", "lessons_completed": 3, "projects_sealed": 1,
+             "last_activity": datetime(2024, 1, 3, tzinfo=timezone.utc), "active_track": "TRUTH_HISTORY"},
+        ],
+        [
+            {"studentId": "student-1", "books_finished": 2},
+            {"studentId": "student-2", "books_finished": 1},
+        ],
+        [
+            {"studentId": "student-1", "planJson": {"suggestions": [{"title": "Water evidence", "canonical_slug": "water"}]}},
+            {"studentId": "student-2", "planJson": {"suggestions": [{"title": "Labor records", "canonical_slug": "labor"}]}},
+        ],
+        [{"student_id": "student-2", "student_name": "Ben", "lesson_id": "lesson-2",
+          "track": "TRUTH_HISTORY", "sealed_at": datetime(2024, 1, 3, tzinfo=timezone.utc),
+          "title": "Reading company files"}],
     ]
-    mock_conn.fetchval.side_effect = [5, 3, 2]  # lessons, books, projects
     mock_db_conn.return_value.__aenter__.return_value = mock_conn
     
     response = client.get("/api/parent/dashboard")
     
     assert response.status_code == 200
     data = response.json()
-    assert data["total_students"] == 1
-    assert data["family_total_credits"] == 2.5
-    assert len(data["students"]) == 1
+    assert data["total_students"] == 2
+    assert data["family_total_credits"] == 3.5
+    assert len(data["students"]) == 2
     assert data["students"][0]["lessons_completed"] == 5
+    assert data["students"][0]["learning"]["current_learning"][0]["title"] == "Water evidence"
+    assert data["students"][1]["learning"]["current_learning"][0]["title"] == "Labor records"
+    assert mock_conn.fetch.await_count == 6
+    assert mock_conn.fetchval.await_count == 0
     issued_sql = "\n".join(
         str(call.args[0])
         for method in (mock_conn.fetch, mock_conn.fetchrow, mock_conn.fetchval)
@@ -139,6 +185,7 @@ def test_get_family_dashboard(mock_parent_auth, mock_db_conn):
         if call.args
     )
     assert '"JournalEntry"' not in issued_sql
+    assert '"StudentBook"' not in issued_sql
     assert "student_journal" in issued_sql
 
 

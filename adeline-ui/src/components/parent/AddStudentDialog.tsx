@@ -5,7 +5,7 @@ import { X, Loader2 } from 'lucide-react';
 
 interface AddStudentDialogProps {
   onClose: () => void;
-  onAdd: (name: string, username: string, pin: string, gradeLevel: string) => Promise<void>;
+  onAdd: (name: string, username: string, pin: string, gradeLevel: string, privacyConsent: boolean) => Promise<void>;
 }
 
 export function AddStudentDialog({ onClose, onAdd }: AddStudentDialogProps) {
@@ -13,6 +13,7 @@ export function AddStudentDialog({ onClose, onAdd }: AddStudentDialogProps) {
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
   const [gradeLevel, setGradeLevel] = useState('8');
+  const [privacyConsent, setPrivacyConsent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,7 +23,7 @@ export function AddStudentDialog({ onClose, onAdd }: AddStudentDialogProps) {
     setError(null);
 
     try {
-      await onAdd(name, username.trim().toLowerCase(), pin, gradeLevel);
+      await onAdd(name, username.trim().toLowerCase(), pin, gradeLevel, privacyConsent);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add student');
       setLoading(false);
@@ -63,6 +64,21 @@ export function AddStudentDialog({ onClose, onAdd }: AddStudentDialogProps) {
               disabled={loading}
             />
           </div>
+
+          <label className="flex items-start gap-3 rounded-xl border border-[#D8C9B2] bg-[#FFFDF7] p-4 text-sm leading-5 text-[#2F4731]">
+            <input
+              type="checkbox"
+              checked={privacyConsent}
+              onChange={(event) => setPrivacyConsent(event.target.checked)}
+              className="mt-0.5 h-5 w-5 accent-[#BD6809]"
+              required
+              disabled={loading}
+            />
+            <span>
+              I am this learner&rsquo;s parent or legal guardian and consent to Dear Adeline collecting and using their information to provide the learning service. I have read the{' '}
+              <a href="/privacy" target="_blank" rel="noreferrer" className="font-bold text-[#9A3F4A] underline">Children&rsquo;s Privacy Notice</a>.
+            </span>
+          </label>
 
           <div>
             <label htmlFor="username" className="block text-sm font-semibold text-[#2F4731] mb-2">
@@ -132,7 +148,7 @@ export function AddStudentDialog({ onClose, onAdd }: AddStudentDialogProps) {
             </button>
             <button
               type="submit"
-              disabled={loading || !name || username.length < 3 || pin.length !== 4}
+              disabled={loading || !name || username.length < 3 || pin.length !== 4 || !privacyConsent}
               className="flex-1 px-4 py-3 bg-[#BD6809] text-white font-semibold rounded-lg hover:bg-[#2F4731] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}

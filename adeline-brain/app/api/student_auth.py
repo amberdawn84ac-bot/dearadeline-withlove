@@ -10,10 +10,12 @@ on get_current_user_id / verify_student_access therefore works unmodified
 for these tokens.
 """
 import json
+import hashlib
 import logging
 import secrets
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import asyncpg
 import bcrypt
@@ -39,6 +41,9 @@ class StudentRegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=20, pattern=r"^[a-z0-9_]+$")
     pin: str = Field(..., min_length=4, max_length=4, pattern=r"^[0-9]{4}$")
     grade_level: str = Field(default="K-2")
+    parent_name: str = Field(..., min_length=1, max_length=100)
+    parent_email: str = Field(..., min_length=5, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+    parent_verification_token: str = Field(min_length=64, max_length=64, pattern=r"^[a-f0-9]+$")
 
 
 class StudentLoginRequest(BaseModel):
@@ -62,9 +67,10 @@ class StudentUserOut(BaseModel):
 
 
 class StudentAuthResponse(BaseModel):
-    token: str
+    token: str | None = None
     student_id: str
     user: StudentUserOut
+    requires_parent_verification: bool = False
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -203,24 +209,11 @@ async def register_student_account(request: Request, body: StudentRegisterReques
     link_code = secrets.token_hex(6).upper()
     pin_hash = bcrypt.hashpw(body.pin.encode(), bcrypt.gensalt()).decode()
     placeholder_email = f"{body.username}@mobile.adelineworld.local"
+    consent_token_hash = hashlib.sha256(body.parent_verification_token.encode("utf-8")).hexdigest()
+    consent_expires = datetime.now(timezone.utc) + timedelta(hours=72)
 
     conn = await get_db_conn()
     try:
-        # Ensure table exists (outside transaction, idempotent DDL)
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS student_profiles (
-                id           TEXT PRIMARY KEY,
-                name         TEXT NOT NULL DEFAULT '',
-                email        TEXT UNIQUE,
-                grade_level  TEXT NOT NULL DEFAULT 'K',
-                is_homestead BOOLEAN NOT NULL DEFAULT FALSE,
-                created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-                updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-            """
-        )
-
         # Both INSERTs in a transaction for atomicity
         async with conn.transaction():
             try:
@@ -228,11 +221,14 @@ async def register_student_account(request: Request, body: StudentRegisterReques
                     """
                     INSERT INTO "User"
                         (id, name, email, role, "isHomestead", "gradeLevel",
-                         username, "pinHash", "linkCode", xp, "adeCoins")
-                    VALUES ($1, $2, $3, 'STUDENT', TRUE, $4, $5, $6, $7, 0, 0)
+                         username, "pinHash", "linkCode", xp, "adeCoins",
+                         "parentName", "parentEmail", "coppaVerified",
+                         "coppaPendingToken", "coppaTokenExpiresAt")
+                    VALUES ($1, $2, $3, 'STUDENT', TRUE, $4, $5, $6, $7, 0, 0, $8, $9, FALSE, $10, $11)
                     """,
                     user_id, body.display_name, placeholder_email, body.grade_level,
-                    body.username, pin_hash, link_code,
+                    body.username, pin_hash, link_code, body.parent_name.strip(), body.parent_email.strip().lower(),
+                    consent_token_hash, consent_expires,
                 )
             except asyncpg.UniqueViolationError as e:
                 # Both username and the derived placeholder email represent the
@@ -256,8 +252,9 @@ async def register_student_account(request: Request, body: StudentRegisterReques
 
     if not user:
         raise HTTPException(status_code=500, detail="Registration failed.")
-    token = mint_student_token(user_id)
-    return StudentAuthResponse(token=token, student_id=user_id, user=user)
+    # Do not mint a usable student session until guardian approval. The raw
+    # one-time token exists only in the Next.js server that delivers the email.
+    return StudentAuthResponse(student_id=user_id, user=user, requires_parent_verification=True)
 
 
 @router.post("/login")
@@ -267,11 +264,13 @@ async def login_student(request: Request, body: StudentLoginRequest):
     conn = await get_db_conn()
     try:
         row = await conn.fetchrow(
-            """SELECT id, "pinHash" FROM "User" WHERE username = $1 AND role = 'STUDENT'""",
+            """SELECT id, "pinHash", "parentId", "coppaVerified" FROM "User" WHERE username = $1 AND role = 'STUDENT'""",
             username,
         )
         if not row or not row["pinHash"] or not bcrypt.checkpw(body.pin.encode(), row["pinHash"].encode()):
             raise HTTPException(status_code=401, detail="Username or PIN is incorrect.")
+        if not row["parentId"] and not row["coppaVerified"]:
+            raise HTTPException(status_code=403, detail="A parent or guardian must approve this learner account before sign in.")
         student_id = str(row["id"])
         user = await load_student_user(conn, student_id)
     finally:
