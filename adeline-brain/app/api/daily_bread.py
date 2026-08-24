@@ -14,10 +14,14 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Response
-from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from app.config import create_llm, GOOGLE_API_KEY, GEMINI_MODEL
+from app.config import (
+    GEMINI_API_KEY,
+    GEMINI_BASE_URL,
+    GEMINI_MODEL,
+    GOOGLE_API_KEY,
+)
 from app.agents.persona import SCRIPTURE_TRANSLATION_POLICY
 
 logger = logging.getLogger(__name__)
@@ -88,6 +92,27 @@ def _json_object(content) -> dict:
     if not isinstance(parsed, dict):
         raise ValueError("Gemini response JSON was not an object")
     return parsed
+
+
+async def _gemini_json(system_prompt: str, user_prompt: str, *, max_tokens: int, temperature: float = 0.2) -> dict:
+    """Use the same explicit Gemini JSON path as canonical lesson authoring."""
+    import openai
+
+    key = GEMINI_API_KEY or GOOGLE_API_KEY
+    if not key:
+        raise RuntimeError("Gemini is not configured")
+    client = openai.AsyncOpenAI(api_key=key, base_url=GEMINI_BASE_URL)
+    completion = await client.chat.completions.create(
+        model=GEMINI_MODEL,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        response_format={"type": "json_object"},
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+    return _json_object(completion.choices[0].message.content or "")
 
 
 def _complete_lesson(data: dict) -> dict:
@@ -182,9 +207,8 @@ Surviving Masoretic Hebrew source text:
 Return JSON only: {{"rendering":"..."}}
 Translate closely into readable English. Preserve YHWH, Elohim, and source-language personal/place names rather than replacing them with LORD, God, Jesus, or Anglicized forms. Preserve repetition and concrete imagery. Do not add interpretation inside the rendering. Do not attribute this rendering to Everett Fox or any published translator."""
     try:
-        llm = create_llm(model=GEMINI_MODEL, temperature=0.1, max_tokens=500)
-        response = await llm.ainvoke([SystemMessage(content=_SYSTEM), HumanMessage(content=prompt)])
-        return str(_json_object(response.content)["rendering"]).strip() or None
+        response = await _gemini_json(_SYSTEM, prompt, max_tokens=500, temperature=0.1)
+        return str(response["rendering"]).strip() or None
     except Exception as exc:
         logger.warning("[DailyBread] grounded close rendering failed: %s", exc)
         return None
@@ -227,15 +251,15 @@ async def daily_bread(response: Response):
 
     # ── Generate with Gemini ───────────────────────────────────────────────────
     try:
-        llm = create_llm(model=GEMINI_MODEL, temperature=0.7, max_tokens=1200)
-        completion = await llm.ainvoke([
-            SystemMessage(content=_SYSTEM),
-            HumanMessage(content=_USER_TEMPLATE.format(
+        data = await _gemini_json(
+            _SYSTEM,
+            _USER_TEMPLATE.format(
                 today=today,
                 recent_references=", ".join(recent_references) or "none",
-            )),
-        ])
-        data = _json_object(completion.content)
+            ),
+            max_tokens=1200,
+            temperature=0.7,
+        )
         if data.get("reference") in recent_references:
             # The model may ignore exclusions. Enforce rotation rather than
             # presenting yesterday's study under today's date.
@@ -407,15 +431,10 @@ Return ONLY this JSON (no other text):
     if not hebrew_text or not GOOGLE_API_KEY:
         return None, fallback_sections
 
-    llm = create_llm(model=GEMINI_MODEL, max_tokens=1200)
-    lc_messages = [
-        SystemMessage(content=_DEEP_DIVE_SYSTEM),
-        HumanMessage(content=user_prompt),
-    ]
-
     try:
-        response = await llm.ainvoke(lc_messages)
-        raw = _json_object(response.content)
+        raw = await _gemini_json(
+            _DEEP_DIVE_SYSTEM, user_prompt, max_tokens=1200, temperature=0.2,
+        )
         return raw.get("direct_translation"), [DeepDiveSection(**s) for s in raw["sections"]]
     except Exception as e:
         logger.error(f"[DeepDive] LLM synthesis failed: {e}")
