@@ -95,7 +95,7 @@ Do NOT invent frontend behavior, CSS, page layouts, or PDF markup.
 Prefer concrete evidence and meaningful tasks over explanatory prose.
 
 RESPONSE BUDGET — CONCISE IS NOT SHALLOW:
-- Keep the complete JSON under roughly 28,000 characters. Spend the budget on
+- Keep the complete JSON under roughly 24,000 characters. Spend the budget on
   accurate evidence, the shared investigation, meaningful action, and observable
   demonstrations—not repeated instructions or administrative prose.
 - Use one precise sentence per ordinary string field whenever possible. Use 2–4
@@ -110,8 +110,10 @@ RESPONSE BUDGET — CONCISE IS NOT SHALLOW:
   or civic_action_project. For every other primary mode, retain its exact object
   shape but use empty strings/arrays, true for no_predetermined_verdict, and no
   invented civic action.
-- Keep visual_assets to 0–3 essential learning visuals. Never spend tokens on
-  decoration or layout prose.
+- Return exactly the fields in OUTPUT CONTRACT. Do not add worldview_lens,
+  reflection, adaptation_contract, visual_assets, or other unused top-level
+  fields. When a worldview connection belongs in the experience, teach it
+  naturally inside the relevant block.
 
 {FAMILY_CANONICAL_AUTHORING_RULES}
 
@@ -173,8 +175,14 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
     }}],
     "no_predetermined_verdict": true
   }},
-  "worldview_lens": "",
-  "blocks": [],
+  "blocks": [{{
+    "block_id": "",
+    "block_type": "",
+    "experience_stage": "INVITATION|DISCOVERY|ACTION|CREATION|DEMONSTRATION|REFLECTION|RESOURCE",
+    "title": "",
+    "content": "",
+    "evidence": []
+  }}],
   "real_world_task": {{
     "description": "",
     "deliverable": "",
@@ -207,14 +215,11 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
     "must_be_demonstrated_by_individual": true,
     "not_awarded_for_exposure_alone": true
   }}],
-  "reflection": [],
   "family_roles": {{
     "elementary": "",
     "middle": "",
     "high_school": ""
-  }},
-  "adaptation_contract": [],
-  "visual_assets": []
+  }}
 }}
 
 BLOCK CONTRACT:
@@ -223,21 +228,15 @@ BLOCK CONTRACT:
 - Every block MUST contain experience_stage: INVITATION, DISCOVERY, ACTION,
   CREATION, DEMONSTRATION, REFLECTION, or RESOURCE. This is the instructional
   purpose; block_type is only the rendering tool.
-- Each block should contain, when applicable: block_id, block_type,
-  experience_stage, title, content, purpose, evidence, visual_spec,
-  family_roles, adaptation_notes.
+- Each block contains only block_id, block_type, experience_stage, title,
+  content, and concise evidence. Do not repeat family roles inside every block;
+  the one top-level family_roles object owns them. Do not return purpose,
+  visual_spec, adaptation_notes, CSS, or layout prose.
 - When the track supports evidence, investigation, experimentation, or application,
   include at least one appropriate PRIMARY_SOURCE, LAB_MISSION, EXPERIMENT,
   REAL_WORLD_APP, or comparable substantive evidence/action block.
 - NARRATIVE is allowed only when narrative is genuinely the best instructional medium.
   It is never a fallback, placeholder, family-instructions block, or status message.
-
-ADAPTATION CONTRACT:
-- Return only 3–5 concise rules.
-- Rules may change vocabulary, scaffolding, independence, reasoning depth,
-  and responsibility for grade/mastery.
-- Rules may not change the central question, verified evidence, learning goal,
-  worldview lens, shared experience, or real-world outcome.
 
 PRINTABLE AND DEMONSTRATION CONTRACT:
 - printable_contract describes an open-and-go field dossier made from this same canonical; it is not a second lesson.
