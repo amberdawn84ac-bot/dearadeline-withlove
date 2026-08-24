@@ -4,8 +4,11 @@ Called after RegistrarAgent seals a lesson.
 Records standards and evidence. Course equivalency is proposed by reviewed
 mastery/standards coverage, not accumulated seat time.
 """
+import json
 from datetime import datetime
+from pathlib import Path
 from typing import Any
+
 from app.services.standards_mapper import map_lesson_to_oas
 
 
@@ -35,6 +38,22 @@ TRACK_EXTERNAL_NAME = {
     "APPLIED_MATHEMATICS": "Applied Mathematics",
     "CREATIVE_ECONOMY": "Art, Design & Entrepreneurship",
 }
+
+
+def _load_profiles() -> dict[str, Any]:
+    """Load the transcript-policy profiles retained for reporting compatibility.
+
+    Course credit is no longer awarded from these profiles' historical hour
+    thresholds. The registrar and transcript reports still need the named
+    Oklahoma profiles and their display settings, so keep one canonical loader
+    instead of making callers open the data file themselves.
+    """
+    path = Path(__file__).resolve().parent.parent / "data" / "oklahoma_profiles.json"
+    with path.open(encoding="utf-8") as source:
+        payload = json.load(source)
+    if not isinstance(payload, dict):
+        raise ValueError("Oklahoma profiles must be a JSON object")
+    return payload
 
 
 async def accumulate_credit_from_lesson(

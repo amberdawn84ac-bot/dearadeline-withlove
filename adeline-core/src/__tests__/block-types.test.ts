@@ -53,8 +53,9 @@ describe("BlockType enum — completeness", () => {
     expect(BlockType.EMBEDDED_INTERRUPT_INLINE).toBe("EMBEDDED_INTERRUPT_INLINE");
   });
 
-  it("includes all 22 block types", () => {
-    expect(Object.values(BlockType)).toHaveLength(22);
+  it("includes all 23 block types", () => {
+    expect(BlockType.GENUI_ASSEMBLY).toBe("GENUI_ASSEMBLY");
+    expect(Object.values(BlockType)).toHaveLength(23);
   });
 
   it("LessonBlockSchema accepts NARRATIVE blockType", () => {

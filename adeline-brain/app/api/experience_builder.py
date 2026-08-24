@@ -5,12 +5,16 @@ authors one semantic canonical experience, adapts it, and streams it. It does
 not route through the retired specialist/orchestrator lesson pipeline.
 """
 import asyncio
+import contextlib
 import json
 import logging
 import re
+import time
 import uuid
+from collections.abc import Awaitable, AsyncIterator, Sequence
+from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Response
+from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import Response, StreamingResponse
 
 from app.api.middleware import verify_student_access
@@ -28,6 +32,19 @@ from app.services.rate_limit import enforce_rate_limit
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/experience", tags=["canonical-experience"])
 
+PROGRESS_INTERVAL_SECONDS = 12.0
+AUTHOR_PROGRESS_MESSAGES = (
+    "Gathering the strongest records and real-world materials…",
+    "Designing one shared investigation for the whole family…",
+    "Building meaningful choices, action, and portfolio evidence…",
+    "Checking that every task demonstrates real understanding…",
+    "Protecting source accuracy and removing busywork…",
+)
+ADAPTER_PROGRESS_MESSAGES = (
+    "Preparing this learner's role in the shared experience…",
+    "Making the entry point clear without simplifying the ideas…",
+)
+
 
 def shared_family_canonical_slug(request: LessonRequest) -> str:
     return canonical_slug(request.topic, request.track.value)
@@ -43,12 +60,47 @@ def _json_object(raw: str) -> dict:
     return json.loads(text[start:end + 1]) if start >= 0 and end > start else {}
 
 
+async def _run_with_progress(
+    operation: Awaitable[Any],
+    messages: Sequence[str],
+    *,
+    interval_seconds: float | None = None,
+) -> AsyncIterator[tuple[str, Any]]:
+    """Keep an SSE request active while one durable generation step runs.
+
+    The operation remains a single high-effort model call. Progress frames make
+    that work visible and prevent proxies from treating a quiet connection as
+    abandoned; the final tuple carries the exact completed result.
+    """
+    interval = interval_seconds or PROGRESS_INTERVAL_SECONDS
+    task = asyncio.ensure_future(operation)
+    index = 0
+    try:
+        while True:
+            done, _ = await asyncio.wait({task}, timeout=interval)
+            if task in done:
+                yield "result", task.result()
+                return
+            message = messages[index % len(messages)] if messages else "Adeline is still preparing the experience…"
+            index += 1
+            yield "status", message
+    except BaseException:
+        if not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        raise
+
+
 async def _author(request: LessonRequest, resources: list[dict]) -> dict:
     import openai
     key = GEMINI_API_KEY or GOOGLE_API_KEY
     if not key:
         raise HTTPException(status_code=503, detail="The Canonical Experience Author is not configured.")
-    client = openai.AsyncOpenAI(api_key=key, base_url=GEMINI_BASE_URL)
+    # Disable SDK-level hidden retries. The explicit loop below records and
+    # repairs each attempt, so a provider retry can never silently double the
+    # longest step.
+    client = openai.AsyncOpenAI(api_key=key, base_url=GEMINI_BASE_URL, max_retries=0)
     prompt = (
         f"Author the canonical shared family experience. Topic: {request.topic}. Track: {request.track.value}. "
         "This is the actual lesson, not an outline, article, sequence of narrative boxes, worksheet, or sketchnote. "
@@ -59,6 +111,7 @@ async def _author(request: LessonRequest, resources: list[dict]) -> dict:
     last_error = None
     repair_instruction = ""
     for attempt in range(2):
+        started = time.perf_counter()
         try:
             attempt_prompt = prompt
             if repair_instruction:
@@ -76,23 +129,59 @@ async def _author(request: LessonRequest, resources: list[dict]) -> dict:
                 response_format={"type": "json_object"},
                 messages=[{"role": "system", "content": CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT}, {"role": "user", "content": attempt_prompt}],
             )
-            parsed = _json_object(response.choices[0].message.content or "")
+            raw = response.choices[0].message.content or ""
+            elapsed = time.perf_counter() - started
+            choice = response.choices[0]
+            usage = getattr(response, "usage", None)
+            logger.info(
+                "[ExperienceAuthor] model complete topic=%r attempt=%d elapsed=%.2fs "
+                "chars=%d finish_reason=%s prompt_tokens=%s completion_tokens=%s total_tokens=%s",
+                request.topic,
+                attempt + 1,
+                elapsed,
+                len(raw),
+                getattr(choice, "finish_reason", None),
+                getattr(usage, "prompt_tokens", None),
+                getattr(usage, "completion_tokens", None),
+                getattr(usage, "total_tokens", None),
+            )
+            parsed = _json_object(raw)
             contract_errors = validate_canonical_contract(parsed)
             if contract_errors:
+                logger.warning(
+                    "[ExperienceAuthor] contract repair topic=%r attempt=%d errors=%s",
+                    request.topic,
+                    attempt + 1,
+                    contract_errors,
+                )
                 last_error = ValueError("; ".join(contract_errors))
                 repair_instruction = "The draft failed these semantic requirements: " + "; ".join(contract_errors)
                 continue
             blocks = finalize_family_lesson(parsed.get("blocks") or [], request.topic, track=request.track.value)
             if blocks:
                 parsed["blocks"] = blocks
+                logger.info(
+                    "[ExperienceAuthor] accepted topic=%r attempt=%d blocks=%d elapsed=%.2fs",
+                    request.topic,
+                    attempt + 1,
+                    len(blocks),
+                    elapsed,
+                )
                 return parsed
             last_error = ValueError("author output failed semantic experience validation")
             repair_instruction = (
-                "The blocks failed the experience contract. Provide 6–10 concise substantive blocks "
+                "The blocks failed the experience contract. Provide 6–8 concise substantive blocks "
                 "with explicit stages, including a meaningful invitation, action or creation, and a "
                 "reviewable demonstration. Do not add filler."
             )
         except Exception as exc:
+            logger.warning(
+                "[ExperienceAuthor] attempt failed topic=%r attempt=%d elapsed=%.2fs error=%s",
+                request.topic,
+                attempt + 1,
+                time.perf_counter() - started,
+                type(exc).__name__,
+            )
             last_error = exc
             repair_instruction = (
                 f"The prior response could not be accepted ({type(exc).__name__}). Keep the complete "
@@ -105,6 +194,7 @@ async def _author(request: LessonRequest, resources: list[dict]) -> dict:
 
 
 async def _stream(request: LessonRequest):
+    stream_started = time.perf_counter()
     slug = shared_family_canonical_slug(request)
     plan_item_id = request.plan_item_id or f"canonical:{slug}"
     yield _sse({"type": "status", "message": "Opening today's planned experience…"})
@@ -117,8 +207,10 @@ async def _stream(request: LessonRequest):
     if not claim.claimed:
         # Another request or instance owns generation. Wait for the durable row;
         # a reconnect may also discover the completed record here.
-        for _ in range(240):
+        for attempt in range(240):
             await asyncio.sleep(0.25)
+            if attempt and attempt % 40 == 0:
+                yield _sse({"type": "status", "message": "The shared experience is still being prepared safely…"})
             record = await student_experience_store.get(request.student_id, plan_item_id)
             if record and record["status"] == "ready":
                 async for event in _emit_persisted(request, record):
@@ -131,8 +223,23 @@ async def _stream(request: LessonRequest):
         return
 
     try:
-        canonical = await canonical_store.get(slug)
-        packet = await resource_router.search(ResourceQuery(topic=request.topic, track=request.track.value, grade_level=request.grade_level))
+        lookup_started = time.perf_counter()
+        canonical, packet, adaptation = await asyncio.gather(
+            canonical_store.get(slug),
+            resource_router.search(ResourceQuery(
+                topic=request.topic,
+                track=request.track.value,
+                grade_level=request.grade_level,
+            )),
+            adaptation_for(request.student_id, request.grade_level, request.track.value),
+        )
+        logger.info(
+            "[ExperienceAuthor] context ready topic=%r canonical_hit=%s resources=%d elapsed=%.2fs",
+            request.topic,
+            bool(canonical),
+            len(packet.get("resources") or []),
+            time.perf_counter() - lookup_started,
+        )
         if canonical:
             stored_blocks = canonical.get("blocks") or []
             if isinstance(stored_blocks, str):
@@ -143,19 +250,38 @@ async def _stream(request: LessonRequest):
                 canonical = None
         if not canonical or canonical.get("pending_approval"):
             yield _sse({"type": "status", "message": "Adeline is authoring the experience from the living plan…"})
-            authored = await _author(request, packet["resources"])
+            authored = None
+            async for kind, value in _run_with_progress(
+                _author(request, packet["resources"]), AUTHOR_PROGRESS_MESSAGES,
+            ):
+                if kind == "status":
+                    yield _sse({"type": "status", "message": value})
+                else:
+                    authored = value
+            if authored is None:
+                raise RuntimeError("Canonical author completed without a result")
             blocks = authored["blocks"]
-        # Durable contracts live with the canonical blocks so the current DB schema
-        # can preserve one source of truth without introducing a parallel lesson table.
+            # Durable contracts live with the canonical blocks so the current DB schema
+            # can preserve one source of truth without introducing a parallel lesson table.
             blocks[0].setdefault("metadata", {})["canonical_contract"] = {
                 key: authored.get(key) for key in ("big_question", "learning_goal", "shared_experience", "experience_design", "investigation_scope_contract", "public_interest_contract", "real_world_task", "portfolio_task", "printable_contract", "demonstration_contract", "mastery_evidence_map", "family_roles")
             }
             canonical = {"id": str(uuid.uuid4()), "topic": request.topic, "track": request.track.value, "title": authored.get("title") or request.topic, "blocks": blocks, "oas_standards": [], "researcher_activated": False, "agent_name": "Canonical Experience Author"}
             await canonical_store.save(slug, canonical, pending=False)
-        adaptation = await adaptation_for(request.student_id, request.grade_level, request.track.value)
-        blocks = await adapt_canonical_for_student(
-            {"topic": request.topic, "blocks": canonical.get("blocks") or []}, adaptation,
-        )
+        yield _sse({"type": "status", "message": "The shared experience is ready. Preparing this learner's entry point…"})
+        blocks = None
+        async for kind, value in _run_with_progress(
+            adapt_canonical_for_student(
+                {"topic": request.topic, "blocks": canonical.get("blocks") or []}, adaptation,
+            ),
+            ADAPTER_PROGRESS_MESSAGES,
+        ):
+            if kind == "status":
+                yield _sse({"type": "status", "message": value})
+            else:
+                blocks = value
+        if blocks is None:
+            raise RuntimeError("Learner adaptation completed without a result")
         resource_block = resource_block_from_packet(packet)
         if resource_block:
             blocks.append(resource_block)
@@ -177,6 +303,13 @@ async def _stream(request: LessonRequest):
         record = await student_experience_store.save_ready(
             request.student_id, plan_item_id, title=canonical.get("title") or request.topic,
             track=request.track.value, blocks=blocks, metadata=metadata,
+        )
+        logger.info(
+            "[ExperienceAuthor] learner experience ready student=%s item=%s blocks=%d total_elapsed=%.2fs",
+            request.student_id,
+            plan_item_id,
+            len(blocks),
+            time.perf_counter() - stream_started,
         )
         async for event in _emit_persisted(request, record):
             yield event

@@ -61,6 +61,17 @@ def test_only_direct_experience_builder_is_mounted():
     assert "/brain/lesson/build" not in paths
 
 
+def test_author_contract_budgets_repetition_not_learning_quality():
+    from app.curriculum.canonical_author import CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT
+
+    prompt = CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT
+    assert "under roughly 28,000 characters" in prompt
+    assert "accurate evidence" in prompt
+    assert "meaningful action" in prompt
+    assert "observable" in prompt
+    assert "CONCISE IS NOT SHALLOW" in prompt
+
+
 def test_printable_is_same_experience_and_hides_internal_standards():
     pdf = build_investigation_pdf(
         title="Creek Detectives", topic="erosion", grade_level="Grade 3",

@@ -94,6 +94,25 @@ Do NOT create separate lessons for different grades.
 Do NOT invent frontend behavior, CSS, page layouts, or PDF markup.
 Prefer concrete evidence and meaningful tasks over explanatory prose.
 
+RESPONSE BUDGET — CONCISE IS NOT SHALLOW:
+- Keep the complete JSON under roughly 28,000 characters. Spend the budget on
+  accurate evidence, the shared investigation, meaningful action, and observable
+  demonstrations—not repeated instructions or administrative prose.
+- Use one precise sentence per ordinary string field whenever possible. Use 2–4
+  strong items in an array unless the contract genuinely requires more.
+- Return 6–8 substantive blocks. Keep most block content between 80 and 180 words;
+  a primary-source excerpt may be longer when necessary and lawful.
+- Do not repeat the big question, learning goal, shared task, success criteria,
+  family-wide directions, or source notes across several fields or blocks.
+- Keep each block's elementary, middle, and high-school role to one actionable
+  sentence. The family_roles object is a role, not a second set of lesson directions.
+- Fully populate public_interest_contract only for public_interest_investigation
+  or civic_action_project. For every other primary mode, retain its exact object
+  shape but use empty strings/arrays, true for no_predetermined_verdict, and no
+  invented civic action.
+- Keep visual_assets to 0–3 essential learning visuals. Never spend tokens on
+  decoration or layout prose.
+
 {FAMILY_CANONICAL_AUTHORING_RULES}
 
 OUTPUT CONTRACT:
@@ -199,7 +218,7 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
 }}
 
 BLOCK CONTRACT:
-- Return 6–10 substantive blocks. Never pad to reach six.
+- Return 6–8 substantive blocks. Never pad to reach six.
 - Preserve semantic block types rather than converting everything to NARRATIVE.
 - Every block MUST contain experience_stage: INVITATION, DISCOVERY, ACTION,
   CREATION, DEMONSTRATION, REFLECTION, or RESOURCE. This is the instructional

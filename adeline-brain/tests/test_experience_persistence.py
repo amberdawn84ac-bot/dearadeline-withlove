@@ -1,9 +1,10 @@
+import asyncio
 import json
 
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.api.experience_builder import _emit_persisted, _stream
+from app.api.experience_builder import _emit_persisted, _run_with_progress, _stream
 from app.connections.student_experience_store import GenerationClaim
 from app.schemas.api_models import LessonRequest, Track
 
@@ -85,3 +86,36 @@ async def test_reopening_ready_experience_makes_zero_author_or_resource_calls():
     assert first == second
     author.assert_not_awaited()
     resource_search.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_long_generation_emits_progress_before_exact_result():
+    async def slow_result():
+        await asyncio.sleep(0.025)
+        return {"blocks": ["exact"]}
+
+    events = [
+        event async for event in _run_with_progress(
+            slow_result(),
+            ("Working carefully…", "Still checking…"),
+            interval_seconds=0.005,
+        )
+    ]
+
+    assert events[0] == ("status", "Working carefully…")
+    assert any(event == ("status", "Still checking…") for event in events)
+    assert events[-1] == ("result", {"blocks": ["exact"]})
+
+
+@pytest.mark.asyncio
+async def test_fast_generation_returns_without_fake_progress():
+    async def immediate_result():
+        return "ready"
+
+    events = [
+        event async for event in _run_with_progress(
+            immediate_result(), ("Should not appear",), interval_seconds=0.1,
+        )
+    ]
+
+    assert events == [("result", "ready")]
