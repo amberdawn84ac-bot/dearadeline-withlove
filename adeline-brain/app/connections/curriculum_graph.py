@@ -297,7 +297,8 @@ class CurriculumGraph:
                 FROM s
                 LEFT JOIN "StandardMastery" m
                   ON m."standardId" = s.code AND m."studentId" = :student_id
-                WHERE (:per_subject_limit IS NULL OR s.subject_rank <= :per_subject_limit)
+                WHERE (CAST(:per_subject_limit AS INTEGER) IS NULL
+                       OR s.subject_rank <= CAST(:per_subject_limit AS INTEGER))
                 ORDER BY s.subject, s.code LIMIT :limit
             '''), {
                 "student_id": student_id, "grade": grade, "limit": limit,

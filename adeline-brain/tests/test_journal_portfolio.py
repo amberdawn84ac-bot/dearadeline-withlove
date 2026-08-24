@@ -17,7 +17,8 @@ async def test_portfolio_decodes_saved_reflection_and_artifact():
         "sources_json": (
             '[{"type":"learner_reflection","content":"Words should serve truth."},'
             '{"type":"artifact","url":"portfolio://investigation/lesson-1",'
-            '"title":"Persuasive letter","author":"Letter and annotated evidence"}]'
+            '"title":"Persuasive letter","author":"Letter and annotated evidence"},'
+            '{"type":"artifact","url":"portfolio://investigation/lesson-1"}]'
         ),
     }]
 

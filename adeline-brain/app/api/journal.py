@@ -300,7 +300,9 @@ async def get_portfolio_items(
         artifact = next((item for item in sources if item.get("type") == "artifact" or str(item.get("url") or "").startswith("portfolio://")), None)
         title = str((artifact or {}).get("title") or row["title"])
         artifact_description = str(artifact.get("author") or artifact.get("description") or artifact.get("title") or "Portfolio artifact") if artifact else None
-        refs = [str(item.get("url")) for item in sources if item.get("url")]
+        refs = list(dict.fromkeys(
+            str(item.get("url")) for item in sources if item.get("url")
+        ))
         items.append(PortfolioItem(
             lesson_id=str(row["lesson_id"]), title=title, track=str(row["track"]),
             sealed_at=row["sealed_at"].isoformat() if row["sealed_at"] else None,
