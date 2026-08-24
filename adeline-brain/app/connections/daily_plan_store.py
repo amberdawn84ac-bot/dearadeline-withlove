@@ -3,8 +3,31 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from typing import Any
 
 from app.config import get_db_conn
+
+
+def decode_plan_json(value: Any) -> dict:
+    """Normalize jsonb values across asyncpg codec configurations.
+
+    Railway's production connection currently returns jsonb as a JSON string,
+    while local/test connections may return an already-decoded mapping.
+    Keeping that difference at the persistence boundary makes every Today-plan
+    consumer operate on the same durable dictionary shape.
+    """
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except (TypeError, json.JSONDecodeError):
+            return {}
+        return dict(decoded) if isinstance(decoded, dict) else {}
+    try:
+        return dict(value or {})
+    except (TypeError, ValueError):
+        return {}
 
 
 class DailyPlanStore:
@@ -15,7 +38,7 @@ class DailyPlanStore:
                 'SELECT "planJson" FROM "DailyPlan" WHERE "studentId" = $1 AND "forDate" = $2',
                 student_id, for_date,
             )
-            return dict(row["planJson"]) if row else None
+            return decode_plan_json(row["planJson"]) if row else None
         finally:
             await conn.close()
 
@@ -63,7 +86,7 @@ class DailyPlanStore:
                    RETURNING "planJson"''',
                 student_id, for_date, lesson_identifier,
             )
-            return dict(row["planJson"]) if row else None
+            return decode_plan_json(row["planJson"]) if row else None
         finally:
             await conn.close()
 

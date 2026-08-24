@@ -354,7 +354,8 @@ async def get_family_dashboard(
         credits = {str(row["studentId"]): float(row["credits"] or 0) for row in credit_rows}
         journals = {str(row["student_id"]): row for row in journal_rows}
         books = {str(row["studentId"]): int(row["books_finished"] or 0) for row in book_rows}
-        plans = {str(row["studentId"]): dict(row["planJson"] or {}) for row in plan_rows}
+        from app.connections.daily_plan_store import decode_plan_json
+        plans = {str(row["studentId"]): decode_plan_json(row["planJson"]) for row in plan_rows}
 
         students_progress = []
         for student_row in students_rows:
@@ -510,7 +511,8 @@ async def parent_adeline(
                 student_ids,
             )
 
-    plans = {str(row["studentId"]): dict(row["planJson"] or {}) for row in plan_rows}
+    from app.connections.daily_plan_store import decode_plan_json
+    plans = {str(row["studentId"]): decode_plan_json(row["planJson"]) for row in plan_rows}
     credits = {str(row["studentId"]): float(row["credits"] or 0) for row in credit_rows}
     family_students = []
     for row in students:
