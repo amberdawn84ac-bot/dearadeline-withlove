@@ -182,7 +182,7 @@ async def _calculate_adaptive_reading_level(student_id: str, grade_level: str) -
         # Get completed books with their lexile levels
         completed_books = await conn.fetch(
             """
-            SELECT b.lexile_level, rs."pagesRead", rs."totalPages", rs."readingMinutes"
+            SELECT b.lexile_level, rs."pagesRead", rs."totalPages", rs."minutesRead"
             FROM "ReadingSession" rs
             JOIN "Book" b ON rs."bookId" = b.id
             WHERE rs."studentId" = $1 AND rs.status = 'finished'
@@ -206,7 +206,7 @@ async def _calculate_adaptive_reading_level(student_id: str, grade_level: str) -
             lexile = book["lexile_level"]
             pages_read = book["pagesRead"] or 0
             total_pages = book["totalPages"] or 1
-            reading_minutes = book["readingMinutes"] or 1
+            reading_minutes = book["minutesRead"] or 1
             
             # Weight by completion rate and reading engagement
             completion_rate = min(pages_read / total_pages, 1.0)

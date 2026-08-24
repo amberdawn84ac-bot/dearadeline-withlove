@@ -9,7 +9,7 @@ No auth required — public widget endpoints.
 """
 import json
 import logging
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -62,6 +62,32 @@ _FALLBACKS = [
 ]
 
 _FALLBACK_INDEX = 0  # rotates by day-of-year
+
+
+def _json_object(content) -> dict:
+    """Decode Gemini/LangChain text whether returned as text or content blocks."""
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                value = item.get("text") or item.get("content")
+                if value:
+                    parts.append(str(value))
+        text = "\n".join(parts)
+    else:
+        text = str(content or "")
+    text = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("Gemini response did not contain a JSON object")
+    parsed = json.loads(text[start:end + 1])
+    if not isinstance(parsed, dict):
+        raise ValueError("Gemini response JSON was not an object")
+    return parsed
 
 
 def _complete_lesson(data: dict) -> dict:
@@ -158,7 +184,7 @@ Translate closely into readable English. Preserve YHWH, Elohim, and source-langu
     try:
         llm = create_llm(model=GEMINI_MODEL, temperature=0.1, max_tokens=500)
         response = await llm.ainvoke([SystemMessage(content=_SYSTEM), HumanMessage(content=prompt)])
-        return str(json.loads(str(response.content))["rendering"]).strip() or None
+        return str(_json_object(response.content)["rendering"]).strip() or None
     except Exception as exc:
         logger.warning("[DailyBread] grounded close rendering failed: %s", exc)
         return None
@@ -209,8 +235,7 @@ async def daily_bread(response: Response):
                 recent_references=", ".join(recent_references) or "none",
             )),
         ])
-        raw = str(completion.content).strip()
-        data = json.loads(raw)
+        data = _json_object(completion.content)
         if data.get("reference") in recent_references:
             # The model may ignore exclusions. Enforce rotation rather than
             # presenting yesterday's study under today's date.
@@ -390,7 +415,7 @@ Return ONLY this JSON (no other text):
 
     try:
         response = await llm.ainvoke(lc_messages)
-        raw = json.loads(response.content)
+        raw = _json_object(response.content)
         return raw.get("direct_translation"), [DeepDiveSection(**s) for s in raw["sections"]]
     except Exception as e:
         logger.error(f"[DeepDive] LLM synthesis failed: {e}")
