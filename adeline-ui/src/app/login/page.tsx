@@ -26,6 +26,7 @@ function LoginContent() {
   const [pin, setPin] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [gradeLevel, setGradeLevel] = useState('PLACEMENT');
+  const [ageBand, setAgeBand] = useState<'UNDER_13' | '13_OR_OLDER' | ''>('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [parentName, setParentName] = useState('');
@@ -108,9 +109,12 @@ function LoginContent() {
       };
       if (mode === 'register') {
         body.display_name = displayName.trim();
-        body.grade_level = gradeLevel;
-        body.parent_name = learnerParentName.trim();
-        body.parent_email = learnerParentEmail.trim();
+        body.age_band = ageBand;
+        body.grade_level = ageBand === 'UNDER_13' ? 'PLACEMENT' : gradeLevel;
+        if (ageBand === 'UNDER_13') {
+          body.parent_name = learnerParentName.trim();
+          body.parent_email = learnerParentEmail.trim();
+        }
       }
 
       const response = await fetch('/api/student-auth', {
@@ -227,6 +231,20 @@ function LoginContent() {
                   className="min-h-[49px] rounded-[13px] border border-[#d7cdbb] bg-[#fffefa] px-3 text-[#243429] outline-none focus:border-[#6e8a68] focus:ring-4 focus:ring-[#6e8a6826]"
                 />
               </label>
+              <fieldset className="rounded-xl border border-[#d7cdbb] bg-[#f7f1e6] p-4">
+                <legend className="px-1 text-xs font-black text-[#3c5140]">Which is true for you?</legend>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <label className={`flex min-h-[48px] items-center gap-2 rounded-[11px] border px-3 text-xs font-bold ${ageBand === 'UNDER_13' ? 'border-[#66845e] bg-[#edf4ea]' : 'border-[#d7cdbb] bg-[#fffefa]'}`}>
+                    <input required type="radio" name="age-band" value="UNDER_13" checked={ageBand === 'UNDER_13'} onChange={() => setAgeBand('UNDER_13')} className="h-4 w-4 accent-[#66845e]" />
+                    I am under 13
+                  </label>
+                  <label className={`flex min-h-[48px] items-center gap-2 rounded-[11px] border px-3 text-xs font-bold ${ageBand === '13_OR_OLDER' ? 'border-[#66845e] bg-[#edf4ea]' : 'border-[#d7cdbb] bg-[#fffefa]'}`}>
+                    <input required type="radio" name="age-band" value="13_OR_OLDER" checked={ageBand === '13_OR_OLDER'} onChange={() => setAgeBand('13_OR_OLDER')} className="h-4 w-4 accent-[#66845e]" />
+                    I am 13 or older
+                  </label>
+                </div>
+              </fieldset>
+              {ageBand !== 'UNDER_13' && <>
               <label className="grid gap-2 text-xs font-black text-[#3c5140]">
                 Learning level
                 <select
@@ -239,13 +257,16 @@ function LoginContent() {
                   {Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={String(index + 1)}>Grade {index + 1}</option>)}
                 </select>
               </label>
+              {ageBand === '13_OR_OLDER' && <p className="rounded-xl border border-[#cbdcc7] bg-[#edf4ea] px-4 py-3 text-[11px] leading-5 text-[#49654e]">You can begin now. A parent or guardian can connect later using your private family link code.</p>}
+              </>}
+              {ageBand === 'UNDER_13' &&
               <div className="rounded-xl border border-[#d7cdbb] bg-[#f7f1e6] p-4">
                 <p className="text-xs font-black text-[#3c5140]">Parent or guardian approval</p>
-                <p className="mt-1 text-[11px] leading-5 text-[#667064]">A learner account stays locked until a parent reviews the privacy notice and approves it by email.</p>
+                <p className="mt-1 text-[11px] leading-5 text-[#667064]">We will save only the pending account details needed to ask a parent for approval. Learning records and personalized features begin after approval.</p>
                 <label className="mt-3 grid gap-2 text-xs font-black text-[#3c5140]">Parent or guardian name<input required autoComplete="name" value={learnerParentName} onChange={(event) => setLearnerParentName(event.target.value)} className="min-h-[45px] rounded-[11px] border border-[#d7cdbb] bg-[#fffefa] px-3" /></label>
                 <label className="mt-3 grid gap-2 text-xs font-black text-[#3c5140]">Parent or guardian email<input required type="email" autoComplete="email" value={learnerParentEmail} onChange={(event) => setLearnerParentEmail(event.target.value)} className="min-h-[45px] rounded-[11px] border border-[#d7cdbb] bg-[#fffefa] px-3" /></label>
                 <Link href="/privacy" target="_blank" className="mt-3 inline-flex text-[11px] font-bold text-[#9A3F4A] underline">Children&rsquo;s Privacy Notice</Link>
-              </div>
+              </div>}
             </>
           )}
 

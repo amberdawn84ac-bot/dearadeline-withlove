@@ -88,7 +88,7 @@ async def verify_token(request: VerifyRequest):
         token_hash = hashlib.sha256(request.token.encode("utf-8")).hexdigest()
         row = await conn.fetchrow(
             """
-            SELECT "id", "parentEmail", "coppaTokenExpiresAt", "coppaVerified"
+            SELECT "id", name, "gradeLevel", "parentEmail", "coppaTokenExpiresAt", "coppaVerified"
             FROM "User"
             WHERE "coppaPendingToken" = $1 OR "coppaPendingToken" = $2
             """,
@@ -122,6 +122,13 @@ async def verify_token(request: VerifyRequest):
                      ("studentId", "parentEmail", method, "privacyNoticeVersion", "consentedAt")
                    VALUES ($1, $2, 'verified_parent_email', '2026-08-23', NOW())''',
                 str(row["id"]), str(row["parentEmail"] or "").lower(),
+            )
+            await conn.execute(
+                '''INSERT INTO student_profiles (id, name, grade_level, is_homestead)
+                   VALUES ($1, $2, $3, TRUE)
+                   ON CONFLICT (id) DO UPDATE
+                   SET name = EXCLUDED.name, grade_level = EXCLUDED.grade_level''',
+                str(row["id"]), str(row["name"] or "Learner"), str(row["gradeLevel"] or "PLACEMENT"),
             )
         logger.info(f"[COPPA] Student {row['id']} verified by parent")
         return {"ok": True, "studentId": str(row["id"])}

@@ -21,7 +21,7 @@ import asyncpg
 import bcrypt
 import jwt
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -41,9 +41,22 @@ class StudentRegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=20, pattern=r"^[a-z0-9_]+$")
     pin: str = Field(..., min_length=4, max_length=4, pattern=r"^[0-9]{4}$")
     grade_level: str = Field(default="K-2")
-    parent_name: str = Field(..., min_length=1, max_length=100)
-    parent_email: str = Field(..., min_length=5, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
-    parent_verification_token: str = Field(min_length=64, max_length=64, pattern=r"^[a-f0-9]+$")
+    age_band: str = Field(pattern=r"^(UNDER_13|13_OR_OLDER)$")
+    parent_name: str | None = Field(default=None, max_length=100)
+    parent_email: str | None = Field(default=None, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+    parent_verification_token: str | None = Field(default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]+$")
+
+    @model_validator(mode="after")
+    def require_parent_contact_for_under_13(self):
+        if self.age_band != "UNDER_13":
+            return self
+        if not self.parent_name or not self.parent_name.strip():
+            raise ValueError("A parent or guardian name is required for learners under 13")
+        if not self.parent_email:
+            raise ValueError("A parent or guardian email is required for learners under 13")
+        if not self.parent_verification_token:
+            raise ValueError("Parental verification is required for learners under 13")
+        return self
 
 
 class StudentLoginRequest(BaseModel):
@@ -209,8 +222,18 @@ async def register_student_account(request: Request, body: StudentRegisterReques
     link_code = secrets.token_hex(6).upper()
     pin_hash = bcrypt.hashpw(body.pin.encode(), bcrypt.gensalt()).decode()
     placeholder_email = f"{body.username}@mobile.adelineworld.local"
-    consent_token_hash = hashlib.sha256(body.parent_verification_token.encode("utf-8")).hexdigest()
-    consent_expires = datetime.now(timezone.utc) + timedelta(hours=72)
+    requires_parent_verification = body.age_band == "UNDER_13"
+    # Learning level is collected only after consent for under-13 learners.
+    # The pending record exists solely to complete guardian verification.
+    stored_grade_level = "PLACEMENT" if requires_parent_verification else body.grade_level
+    consent_token_hash = (
+        hashlib.sha256(body.parent_verification_token.encode("utf-8")).hexdigest()
+        if requires_parent_verification and body.parent_verification_token
+        else None
+    )
+    consent_expires = datetime.now(timezone.utc) + timedelta(hours=72) if requires_parent_verification else None
+    parent_name = body.parent_name.strip() if body.parent_name else None
+    parent_email = body.parent_email.strip().lower() if body.parent_email else None
 
     conn = await get_db_conn()
     try:
@@ -224,11 +247,11 @@ async def register_student_account(request: Request, body: StudentRegisterReques
                          username, "pinHash", "linkCode", xp, "adeCoins",
                          "parentName", "parentEmail", "coppaVerified",
                          "coppaPendingToken", "coppaTokenExpiresAt")
-                    VALUES ($1, $2, $3, 'STUDENT', TRUE, $4, $5, $6, $7, 0, 0, $8, $9, FALSE, $10, $11)
+                    VALUES ($1, $2, $3, 'STUDENT', TRUE, $4, $5, $6, $7, 0, 0, $8, $9, $10, $11, $12)
                     """,
-                    user_id, body.display_name, placeholder_email, body.grade_level,
-                    body.username, pin_hash, link_code, body.parent_name.strip(), body.parent_email.strip().lower(),
-                    consent_token_hash, consent_expires,
+                    user_id, body.display_name, placeholder_email, stored_grade_level,
+                    body.username, pin_hash, link_code, parent_name, parent_email,
+                    not requires_parent_verification, consent_token_hash, consent_expires,
                 )
             except asyncpg.UniqueViolationError as e:
                 # Both username and the derived placeholder email represent the
@@ -244,7 +267,8 @@ async def register_student_account(request: Request, body: StudentRegisterReques
                 logger.exception("Database error during student registration")
                 raise HTTPException(status_code=500, detail="Registration failed.")
 
-            await _ensure_student_profiles_row(conn, user_id, body.display_name, body.grade_level)
+            if not requires_parent_verification:
+                await _ensure_student_profiles_row(conn, user_id, body.display_name, stored_grade_level)
 
         user = await load_student_user(conn, user_id)
     finally:
@@ -252,9 +276,16 @@ async def register_student_account(request: Request, body: StudentRegisterReques
 
     if not user:
         raise HTTPException(status_code=500, detail="Registration failed.")
-    # Do not mint a usable student session until guardian approval. The raw
-    # one-time token exists only in the Next.js server that delivers the email.
-    return StudentAuthResponse(student_id=user_id, user=user, requires_parent_verification=True)
+    if requires_parent_verification:
+        # Do not mint a usable under-13 session until guardian approval. The raw
+        # one-time token exists only in the Next.js server that delivers the email.
+        return StudentAuthResponse(student_id=user_id, user=user, requires_parent_verification=True)
+
+    return StudentAuthResponse(
+        token=mint_student_token(user_id),
+        student_id=user_id,
+        user=user,
+    )
 
 
 @router.post("/login")

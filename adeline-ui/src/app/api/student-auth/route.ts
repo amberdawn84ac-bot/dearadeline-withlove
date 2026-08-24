@@ -31,10 +31,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ detail: 'Invalid authentication mode.' }, { status: 400 });
   }
 
+  const requiresParentVerification = mode === 'register' && payload?.age_band === 'UNDER_13';
+
   // Do not reserve a locked learner account when the consent message cannot
   // be delivered. Parent-created and parent-claimed accounts do not use this
   // self-registration path.
-  if (mode === 'register' && !process.env.RESEND_API_KEY) {
+  if (requiresParentVerification && !process.env.RESEND_API_KEY) {
     return NextResponse.json(
       { detail: 'Learner self-registration is temporarily unavailable. A parent can create or connect the learner from the parent dashboard.' },
       { status: 503 },
@@ -43,7 +45,7 @@ export async function POST(request: NextRequest) {
 
   const body = { ...payload };
   delete body.mode;
-  const consentToken = mode === 'register' ? crypto.randomBytes(32).toString('hex') : null;
+  const consentToken = requiresParentVerification ? crypto.randomBytes(32).toString('hex') : null;
   if (consentToken) body.parent_verification_token = consentToken;
 
   let upstream: Response;

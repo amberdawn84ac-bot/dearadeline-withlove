@@ -1,7 +1,7 @@
 """Child-consent security boundaries."""
 import hashlib
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -43,8 +43,11 @@ def test_pending_consent_token_is_hashed_at_rest():
 
 def test_guardian_approval_is_audited_and_token_is_single_use():
     conn = AsyncMock()
+    conn.transaction = MagicMock()
     conn.fetchrow.return_value = {
         "id": "student-1",
+        "name": "Learner",
+        "gradeLevel": "PLACEMENT",
         "parentEmail": "Parent@Example.com",
         "coppaTokenExpiresAt": datetime.now(timezone.utc) + timedelta(hours=1),
         "coppaVerified": False,
@@ -57,3 +60,4 @@ def test_guardian_approval_is_audited_and_token_is_single_use():
     assert '"coppaPendingToken" = NULL' in issued_sql
     assert 'INSERT INTO "ChildPrivacyConsent"' in issued_sql
     assert "verified_parent_email" in issued_sql
+    assert "INSERT INTO student_profiles" in issued_sql
