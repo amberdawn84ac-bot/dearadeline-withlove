@@ -207,7 +207,7 @@ Surviving Masoretic Hebrew source text:
 Return JSON only: {{"rendering":"..."}}
 Translate closely into readable English. Preserve YHWH, Elohim, and source-language personal/place names rather than replacing them with LORD, God, Jesus, or Anglicized forms. Preserve repetition and concrete imagery. Do not add interpretation inside the rendering. Do not attribute this rendering to Everett Fox or any published translator."""
     try:
-        response = await _gemini_json(_SYSTEM, prompt, max_tokens=500, temperature=0.1)
+        response = await _gemini_json(_SYSTEM, prompt, max_tokens=2048, temperature=0.1)
         return str(response["rendering"]).strip() or None
     except Exception as exc:
         logger.warning("[DailyBread] grounded close rendering failed: %s", exc)
@@ -257,7 +257,7 @@ async def daily_bread(response: Response):
                 today=today,
                 recent_references=", ".join(recent_references) or "none",
             ),
-            max_tokens=1200,
+            max_tokens=4096,
             temperature=0.7,
         )
         if data.get("reference") in recent_references:
@@ -433,7 +433,7 @@ Return ONLY this JSON (no other text):
 
     try:
         raw = await _gemini_json(
-            _DEEP_DIVE_SYSTEM, user_prompt, max_tokens=1200, temperature=0.2,
+            _DEEP_DIVE_SYSTEM, user_prompt, max_tokens=4096, temperature=0.2,
         )
         return raw.get("direct_translation"), [DeepDiveSection(**s) for s in raw["sections"]]
     except Exception as e:
