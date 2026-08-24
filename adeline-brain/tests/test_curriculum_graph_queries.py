@@ -74,3 +74,21 @@ def test_shared_hook_still_produces_distinct_canonical_topics():
     })
 
     assert _standard_suggestion(first).title != _standard_suggestion(second).title
+
+
+def test_standard_topic_is_concise_and_uses_an_action_verb():
+    standard = GradeLevelStandard(
+        standard_id="BIBLIC_G9_D.9.1", subject="Biblical Worldview & Ethics", grade=9,
+        description=(
+            "The student outlines and defends the major loci of Christian systematic "
+            "theology — Scripture, God, humanity, salvation, Church, and eschatology."
+        ),
+        mastered=False, priority=1, track="DISCIPLESHIP",
+        lesson_hook="How does Scripture speak to this?",
+    )
+
+    title = _standard_suggestion(standard).title
+
+    assert " — Outline and defend " in title
+    assert title.endswith("…")
+    assert len(title) < 110

@@ -20,6 +20,7 @@ This is the heart of Adeline's adaptive curriculum — connecting:
   - DiscipleshipAgent (all other tracks)
   - RegistrarAgent (credits, xAPI, transcript)
 """
+import asyncio
 import json
 import logging
 from typing import Optional
@@ -757,7 +758,31 @@ def _standard_suggestion(standard: GradeLevelStandard) -> LessonSuggestion:
         if scope.startswith(schoolish_prefix):
             scope = scope[len(schoolish_prefix):]
             break
-    scope = scope[:118].rstrip(" ,.;:-")
+    if scope.lower().startswith("will "):
+        scope = scope[5:]
+    imperative_phrases = {
+        "outlines and defends ": "Outline and defend ",
+        "analyzes and evaluates ": "Analyze and evaluate ",
+        "identifies and explains ": "Identify and explain ",
+        "compares and contrasts ": "Compare and contrast ",
+    }
+    for source_phrase, action_phrase in imperative_phrases.items():
+        if scope.lower().startswith(source_phrase):
+            scope = action_phrase + scope[len(source_phrase):]
+            break
+    imperative_starts = {
+        "outlines": "Outline", "evaluates": "Evaluate", "analyzes": "Analyze",
+        "summarizes": "Summarize", "identifies": "Identify", "explains": "Explain",
+        "demonstrates": "Demonstrate", "uses": "Use", "applies": "Apply",
+        "compares": "Compare", "creates": "Create", "conducts": "Conduct",
+    }
+    first_word, separator, remainder = scope.partition(" ")
+    if first_word.lower() in imperative_starts:
+        scope = imperative_starts[first_word.lower()] + (separator + remainder if separator else "")
+    if len(scope) > 68:
+        scope = scope[:69].rsplit(" ", 1)[0].rstrip(" ,.;:-") + "…"
+    else:
+        scope = scope.rstrip(" ,.;:-")
     if scope:
         scope = scope[0].upper() + scope[1:]
     title = f"{hook.rstrip('?')} — {scope}" if hook else scope
@@ -1512,14 +1537,17 @@ async def get_learning_plan(
     try:
         from app.api.books import get_gap_weighted_recommendations
         gap_dicts = [{"bucket": g.bucket, "remaining": g.remaining} for g in credit_gaps]
-        raw_books = await get_gap_weighted_recommendations(
-            student_id=student_id,
-            grade_level=grade_level,
-            interests=interests,
-            credit_gaps=gap_dicts,
-            weakest_track=weakest_track,
-            is_high_school=graduation_progress.is_high_school,
-            limit=4,
+        raw_books = await asyncio.wait_for(
+            get_gap_weighted_recommendations(
+                student_id=student_id,
+                grade_level=grade_level,
+                interests=interests,
+                credit_gaps=gap_dicts,
+                weakest_track=weakest_track,
+                is_high_school=graduation_progress.is_high_school,
+                limit=4,
+            ),
+            timeout=3.0,
         )
         recommended_books = [
             BookRecommendation(
