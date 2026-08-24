@@ -5,6 +5,7 @@ POST /journal/seal      — Seal a completed lesson into the student's journal
 GET  /journal/progress/{student_id} — Fetch track progress counts
 """
 import asyncio
+import json
 import logging
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
