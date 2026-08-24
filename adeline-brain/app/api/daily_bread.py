@@ -225,6 +225,18 @@ async def daily_bread(response: Response):
     response.headers["Cache-Control"] = "no-store, max-age=0"
     response.headers["Vary"] = "Accept-Encoding"
 
+    # The current day is the hot path. Return it before reading 14 historical
+    # keys; history is needed only when a new study must be generated.
+    try:
+        from app.connections.redis_client import redis_client
+        cached = await redis_client.get(cache_key)
+        if cached:
+            cached_data = json.loads(cached)
+            cached_data["forDate"] = today
+            return DailyBreadResponse(**cached_data)
+    except Exception as e:
+        logger.warning(f"[DailyBread] Redis unavailable: {e}")
+
     recent_references: list[str] = []
     try:
         from app.connections.redis_client import redis_client
@@ -237,17 +249,6 @@ async def daily_bread(response: Response):
                     recent_references.append(reference)
     except Exception as exc:
         logger.warning("[DailyBread] recent-reference history unavailable: %s", exc)
-
-    # ── Try Redis cache ────────────────────────────────────────────────────────
-    try:
-        from app.connections.redis_client import redis_client
-        cached = await redis_client.get(cache_key)
-        if cached:
-            cached_data = json.loads(cached)
-            cached_data["forDate"] = today
-            return DailyBreadResponse(**cached_data)
-    except Exception as e:
-        logger.warning(f"[DailyBread] Redis unavailable: {e}")
 
     # ── Generate with Gemini ───────────────────────────────────────────────────
     try:
