@@ -56,16 +56,21 @@ class MissionArchitectAgent:
         self.resource_intelligence = ResourceIntelligenceAgent()
 
     def select_balanced(self, candidates: list[Any], limit: int) -> list[Any]:
-        """Own final mission choice: priority first, with cross-track variety."""
+        """Own final mission choice: priority first, with true cross-track variety."""
         ranked = sorted(candidates, key=lambda item: item.priority, reverse=True)
         chosen: list[Any] = []
-        track_counts: dict[str, int] = {}
+        seen_tracks: set[str] = set()
+        # First give the learner the strongest mission from each available
+        # track. This prevents the first alphabetic subject from occupying most
+        # of Today when hundreds of unfinished standards share a priority.
         for item in ranked:
-            if track_counts.get(item.track, 0) < 2:
+            if item.track not in seen_tracks:
                 chosen.append(item)
-                track_counts[item.track] = track_counts.get(item.track, 0) + 1
+                seen_tracks.add(item.track)
             if len(chosen) >= limit:
                 return chosen
+        # Only after every available track is represented may a track receive a
+        # second mission, still preserving the original priority order.
         for item in ranked:
             if item not in chosen:
                 chosen.append(item)

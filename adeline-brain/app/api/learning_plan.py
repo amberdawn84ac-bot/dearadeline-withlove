@@ -752,7 +752,16 @@ def _standard_suggestion(standard: GradeLevelStandard) -> LessonSuggestion:
     valid_tracks = {track.value for track in Track}
     track = standard.track if standard.track in valid_tracks else fallback_track
     hook = (standard.lesson_hook or "").strip()
-    title = hook if hook else f"Discover: {standard.description[:72].rstrip('.')}"
+    scope = standard.description.strip()
+    for schoolish_prefix in ("The student ", "Students will ", "Student will "):
+        if scope.startswith(schoolish_prefix):
+            scope = scope[len(schoolish_prefix):]
+            break
+    scope = scope[:118].rstrip(" ,.;:-")
+    if scope:
+        scope = scope[0].upper() + scope[1:]
+    title = f"{hook.rstrip('?')} — {scope}" if hook else scope
+    title = title or f"Explore {standard.subject}"
     return LessonSuggestion(
         id=f"standard-{standard.standard_id}", title=title, track=track,
         description=standard.description, emoji=TRACK_EMOJI.get(track, "✦"),

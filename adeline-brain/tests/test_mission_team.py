@@ -55,7 +55,7 @@ def test_mission_architect_owns_priority_and_track_variety():
         suggestion(id="history", track="TRUTH_HISTORY", priority=.90),
     ]
     chosen = agent.select_balanced(candidates, 3)
-    assert [item.id for item in chosen] == ["math-1", "math-2", "history"]
+    assert [item.id for item in chosen] == ["math-1", "history", "math-2"]
 
 
 @pytest.mark.asyncio

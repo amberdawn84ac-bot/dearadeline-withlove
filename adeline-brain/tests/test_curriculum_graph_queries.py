@@ -54,5 +54,23 @@ def test_unfinished_standard_becomes_a_real_mission_target():
 
     assert suggestion.id == "standard-9.ELA.1"
     assert suggestion.standard_code == "9.ELA.1"
-    assert suggestion.title == "Investigate a claim affecting your community"
+    assert suggestion.title == (
+        "Investigate a claim affecting your community — "
+        "Evaluate how evidence supports an argument"
+    )
     assert suggestion.track == "ENGLISH_LITERATURE"
+
+
+def test_shared_hook_still_produces_distinct_canonical_topics():
+    first = GradeLevelStandard(
+        standard_id="9.ELA.1", subject="English Language Arts", grade=9,
+        description="Students will evaluate evidence supporting an argument.",
+        mastered=False, priority=1, track="ENGLISH_LITERATURE",
+        lesson_hook="What does this text say?",
+    )
+    second = first.model_copy(update={
+        "standard_id": "9.ELA.2",
+        "description": "Students will evaluate a speaker's purpose and perspective.",
+    })
+
+    assert _standard_suggestion(first).title != _standard_suggestion(second).title
