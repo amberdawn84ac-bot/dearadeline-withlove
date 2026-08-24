@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.connections.curriculum_graph import CurriculumGraph
+from app.api.learning_plan import GradeLevelStandard, _standard_suggestion
 
 
 class _SessionContext:
@@ -35,3 +36,23 @@ async def test_grade_standards_types_nullable_subject_limit_for_postgres():
     assert "CAST(:per_subject_limit AS INTEGER)" in str(query)
     assert params["per_subject_limit"] is None
     assert rows == []
+
+
+def test_unfinished_standard_becomes_a_real_mission_target():
+    standard = GradeLevelStandard(
+        standard_id="9.ELA.1",
+        subject="English Language Arts",
+        grade=9,
+        description="Evaluate how evidence supports an argument.",
+        mastered=False,
+        priority=1,
+        track="ENGLISH_LITERATURE",
+        lesson_hook="Investigate a claim affecting your community",
+    )
+
+    suggestion = _standard_suggestion(standard)
+
+    assert suggestion.id == "standard-9.ELA.1"
+    assert suggestion.standard_code == "9.ELA.1"
+    assert suggestion.title == "Investigate a claim affecting your community"
+    assert suggestion.track == "ENGLISH_LITERATURE"

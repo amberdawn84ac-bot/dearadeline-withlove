@@ -22,7 +22,6 @@ This is the heart of Adeline's adaptive curriculum — connecting:
 """
 import json
 import logging
-import re
 from typing import Optional
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -750,6 +749,17 @@ def _standard_suggestion(standard: GradeLevelStandard) -> LessonSuggestion:
         "TRUTH_HISTORY" if any(word in subject for word in ("social", "history", "civic")) else
         "ENGLISH_LITERATURE"
     )
+    valid_tracks = {track.value for track in Track}
+    track = standard.track if standard.track in valid_tracks else fallback_track
+    hook = (standard.lesson_hook or "").strip()
+    title = hook if hook else f"Discover: {standard.description[:72].rstrip('.')}"
+    return LessonSuggestion(
+        id=f"standard-{standard.standard_id}", title=title, track=track,
+        description=standard.description, emoji=TRACK_EMOJI.get(track, "✦"),
+        priority=0.93, source="standard", standard_code=standard.standard_id,
+        grade_band=str(standard.grade), agent=TRACK_AGENT_MAP.get(track),
+        personalization_reason=f"This is an unfinished grade-{standard.grade} concept, connected to the student's interests and demonstrated through real evidence.",
+    )
 
 
 def _standard_subject_key(subject: str) -> str:
@@ -763,17 +773,6 @@ def _standard_subject_key(subject: str) -> str:
     if any(word in normalized for word in ("english", "language arts", "ela")):
         return "ela"
     return "other"
-    valid_tracks = {track.value for track in Track}
-    track = standard.track if standard.track in valid_tracks else fallback_track
-    hook = (standard.lesson_hook or "").strip()
-    title = hook if hook else f"Discover: {standard.description[:72].rstrip('.')}"
-    return LessonSuggestion(
-        id=f"standard-{standard.standard_id}", title=title, track=track,
-        description=standard.description, emoji=TRACK_EMOJI.get(track, "✦"),
-        priority=0.93, source="standard", standard_code=standard.standard_id,
-        grade_band=str(standard.grade), agent=TRACK_AGENT_MAP.get(track),
-        personalization_reason=f"This is an unfinished grade-{standard.grade} concept, connected to the student's interests and demonstrated through real evidence.",
-    )
 
 
 def _starter_suggestion(track: str, topic: tuple[str, str], idx: int) -> LessonSuggestion:
