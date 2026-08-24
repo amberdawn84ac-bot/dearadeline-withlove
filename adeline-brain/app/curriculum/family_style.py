@@ -11,7 +11,7 @@ from typing import Any
 
 from app.curriculum.experience_contract import ExperienceStage, annotate_experience, validate_experience
 
-CANONICAL_FORMAT_VERSION = 9
+CANONICAL_FORMAT_VERSION = 10
 
 _OBSOLETE_FORMATS = {
     "ANIMATED_SKETCHNOTE_LESSON",
@@ -133,6 +133,13 @@ REAL PUBLIC-INTEREST AND CIVIC WORK:
   correspondence, testimony, publishing, or solving a defined need for a real person.
 - A real action must have a named audience or beneficiary, a deliverable they can actually use, a
   way to learn whether it helped, and preserved evidence of the learner's contribution and reasoning.
+- When safe and practical, begin with a consequential observation, object, record, experiment,
+  attempted build, site walk, or stakeholder question before a long explanation. Let the first
+  encounter surface what learners need to know. "Do first, ask after" does not mean act without
+  evidence; it means inquiry and action create the need for teaching.
+- Confirm a community need with the person or organization affected before designing help for them.
+  Do not assume what a pantry, farmer, neighbor, prisoner-support group, or community needs. Define
+  how the recipient can respond and how learners will tell whether their contribution was useful.
 """.strip()
 
 

@@ -6,7 +6,7 @@ from app.services.learner_context import learner_contribution
 
 def test_one_generator_owns_interdisciplinary_modes():
     prompt = CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT.lower()
-    assert CANONICAL_FORMAT_VERSION == 9
+    assert CANONICAL_FORMAT_VERSION == 10
     for mode in ("stem", "steam", "arts_integrated", "maker_build", "design_challenge"):
         assert mode in prompt
     assert "not separate subjects, generators, portals" in FAMILY_CANONICAL_AUTHORING_RULES.lower()
@@ -18,6 +18,7 @@ def test_learner_contribution_preserves_process_product_and_cross_track_evidence
     contract = {
         "experience_design": {
             "primary_mode": "design_challenge",
+            "entry_move": "Inspect two failed bridge models and test their load limits.",
             "learner_facing_choices": ["build and test", "model and explain"],
         },
         "portfolio_task": {
@@ -48,6 +49,7 @@ def test_contract_rejects_decorative_steam_and_exposure_credit():
     payload = {
         "experience_design": {
             "primary_mode": "steam",
+            "entry_move": "Listen to and visualize two wave frequencies.",
             "disciplines_integrated": ["science", "art"],
             "integration_rationale": "",
             "constraints": [],
@@ -73,6 +75,7 @@ def test_public_interest_work_requires_records_claim_discipline_and_real_agency(
     payload = {
         "experience_design": {
             "primary_mode": "public_interest_investigation",
+            "entry_move": "Compare a company advertisement with a regulatory filing.",
             "disciplines_integrated": ["public health", "government", "justice"],
             "integration_rationale": "The policy outcome depends on all three.",
         },
@@ -98,7 +101,7 @@ def test_public_interest_work_requires_records_claim_discipline_and_real_agency(
     assert any("profit and incentives" in error for error in errors)
     assert any("institutions and decision-makers" in error for error in errors)
     assert any("distinguish facts" in error for error in errors)
-    assert any("real recipient" in error for error in errors)
+    assert any("validated need" in error for error in errors)
 
 
 def test_prompt_rejects_project_theater_and_maps_food_industries_as_systems():
@@ -108,3 +111,40 @@ def test_prompt_rejects_project_theater_and_maps_food_industries_as_systems():
     assert "ownership, supply chains, revenue" in prompt
     assert "verify health and toxicity claims" in prompt
     assert "industry_system_map" in prompt
+
+
+def test_public_action_requires_stakeholder_validation_and_impact_feedback():
+    payload = {
+        "experience_design": {
+            "primary_mode": "civic_action_project",
+            "entry_move": "Ask a local pantry what information or service would actually help.",
+            "disciplines_integrated": ["food systems", "civics"],
+            "integration_rationale": "The pantry need is shaped by both supply and policy.",
+        },
+        "public_interest_contract": {
+            "power_and_accountability_question": "Who controls access and funding?",
+            "primary_record_types": ["public budgets"],
+            "claim_distinctions": ["verified_fact", "allegation", "legal_finding", "unanswered_question"],
+            "industry_system_map": {
+                "profit_and_incentive_question": "Who benefits from the current allocation?",
+                "institutions_and_decision_makers_to_trace": ["county board", "supplier"],
+            },
+            "live_action_options": [{
+                "action": "Create a requested resource",
+                "real_recipient": "local pantry",
+                "intended_change": "reduce a documented information gap",
+                "stakeholder_need_validation": "",
+                "feedback_or_impact_signal": "",
+            }],
+        },
+        "portfolio_task": {"process_evidence": ["stakeholder notes"]},
+        "mastery_evidence_map": [{
+            "concept": "public resource allocation",
+            "acceptable_evidence": ["budget-supported explanation"],
+            "not_awarded_for_exposure_alone": True,
+        }],
+    }
+
+    errors = validate_canonical_contract(payload)
+
+    assert any("validated need" in error and "impact signal" in error for error in errors)

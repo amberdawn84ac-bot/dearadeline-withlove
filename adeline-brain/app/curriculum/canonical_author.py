@@ -22,6 +22,8 @@ def validate_canonical_contract(payload: dict) -> list[str]:
     primary_mode = str(design.get("primary_mode") or "").strip().lower()
     if primary_mode not in EXPERIENCE_MODES:
         errors.append("experience_design.primary_mode must be a supported canonical mode")
+    if not str(design.get("entry_move") or "").strip():
+        errors.append("experience_design must begin with a consequential learner encounter or action")
     disciplines = [str(item).strip() for item in design.get("disciplines_integrated") or [] if str(item).strip()]
     if not disciplines:
         errors.append("experience_design must name the disciplines genuinely involved")
@@ -49,9 +51,11 @@ def validate_canonical_contract(payload: dict) -> list[str]:
             isinstance(action, dict)
             and str(action.get("real_recipient") or "").strip()
             and str(action.get("intended_change") or "").strip()
+            and str(action.get("stakeholder_need_validation") or "").strip()
+            and str(action.get("feedback_or_impact_signal") or "").strip()
             for action in actions
         ):
-            errors.append("civic agency requires a feasible action with a real recipient and intended change")
+            errors.append("civic agency requires a real recipient, validated need, intended change, and impact signal")
 
     portfolio = payload.get("portfolio_task") or {}
     preserved = (
@@ -95,7 +99,7 @@ Prefer concrete evidence and meaningful tasks over explanatory prose.
 OUTPUT CONTRACT:
 Return ONLY valid JSON for exactly one CanonicalLesson object:
 {{
-  "canonical_format_version": 9,
+  "canonical_format_version": 10,
   "title": "",
   "track": "",
   "big_question": "",
@@ -103,6 +107,7 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
   "shared_experience": "",
   "experience_design": {{
     "primary_mode": "investigation|stem|steam|arts_integrated|maker_build|design_challenge|creative_demonstration|family_project|public_interest_investigation|civic_action_project",
+    "entry_move": "The consequential observation, record, experiment, attempted build, site walk, object, or stakeholder question learners encounter before lengthy explanation.",
     "supporting_modes": [],
     "why_this_fits": "",
     "learner_facing_choices": [],
@@ -141,6 +146,8 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
       "action": "",
       "real_recipient": "",
       "intended_change": "",
+      "stakeholder_need_validation": "How learners confirm this is actually useful or wanted before acting.",
+      "feedback_or_impact_signal": "What response, use, decision, measurement, or outcome will show whether it helped.",
       "evidence_needed": [],
       "adult_support_required": false,
       "safety_and_privacy_limits": []
@@ -236,6 +243,8 @@ QUALITY CHECK BEFORE OUTPUT:
   affected people; it culminates in lawful present-day agency with a real recipient, not simulated busywork.
 - Food and industry investigations trace the whole system and verify harm claims. Learners do the
   real investigation or project; they do not complete a generic lesson explaining why projects matter.
+- Begin with meaningful encounter or action when appropriate, validate community needs with affected
+  people, and define how the learner will receive feedback or observe impact.
 - No filler, generic narrative, fake sources, invented quotations, or placeholder text.
 - JSON only; no markdown fences and no commentary.
 """.strip()
