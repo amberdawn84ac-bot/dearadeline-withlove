@@ -148,3 +148,15 @@ def test_public_action_requires_stakeholder_validation_and_impact_feedback():
     errors = validate_canonical_contract(payload)
 
     assert any("validated need" in error and "impact signal" in error for error in errors)
+
+
+def test_truth_history_builds_an_evidence_led_living_wall_timeline():
+    prompt = CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT.lower()
+    assert "living wall timeline" in prompt
+    assert "printable and cut-out friendly" in prompt
+    assert "common story / what the record supports" in prompt
+    assert "propaganda" in prompt
+    assert "people or perspectives commonly left out" in prompt
+    assert "disputed dates" in prompt
+    assert "unsupported counter-myth" in prompt
+    assert "not a decoration or memorization strip" in prompt

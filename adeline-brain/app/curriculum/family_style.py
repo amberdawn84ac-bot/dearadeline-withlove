@@ -140,6 +140,23 @@ REAL PUBLIC-INTEREST AND CIVIC WORK:
 - Confirm a community need with the person or organization affected before designing help for them.
   Do not assume what a pantry, farmer, neighbor, prisoner-support group, or community needs. Define
   how the recipient can respond and how learners will tell whether their contribution was useful.
+
+TRUTH HISTORY — LIVING WALL TIMELINE:
+- Every TRUTH_HISTORY investigation should contribute one useful piece to the family's cumulative
+  physical wall timeline. Use a TIMELINE block unless another block type is materially better.
+- Make the contribution printable and cut-out friendly in the field dossier: include a defensible
+  date or date span, concise event or development claim, geographic context, 2–4 verified facts,
+  at least one traceable source, and the people or perspectives commonly left out.
+- Include a concise "common story / what the record supports" comparison when a nation-building,
+  corporate, textbook, wartime, or political narrative needs testing. Distinguish propaganda,
+  contemporary belief, later interpretation, allegation, and established fact.
+- Invite learners to place the piece, connect it to earlier events with cause/consequence or
+  continuity/change threads, and defend or revise the placement from evidence. The timeline is a
+  living historical model, not a decoration or memorization strip.
+- Honest history remains revisable. Mark disputed dates, incomplete archives, conflicting primary
+  accounts, and uncertainty visibly. Never replace a familiar myth with an unsupported counter-myth.
+- A timeline contribution supports the investigation; it must not replace source analysis,
+  meaningful action, creation, discussion, or an individual demonstration of understanding.
 """.strip()
 
 
