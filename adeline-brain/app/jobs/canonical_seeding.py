@@ -58,6 +58,11 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
         "GOVERNMENT_ECONOMICS",
         True,
     ),
+    CanonicalSeed(
+        "Railroads, Oil, and the Robber Barons: Building America or Consolidating Power?",
+        "TRUTH_HISTORY",
+        True,
+    ),
     CanonicalSeed("The Oklahoma Land Run: Multiple Perspectives", "TRUTH_HISTORY"),
     CanonicalSeed("Oral Tradition and Family History", "TRUTH_HISTORY"),
     CanonicalSeed("The Boston Tea Party: Primary Accounts", "TRUTH_HISTORY"),

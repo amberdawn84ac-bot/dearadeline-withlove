@@ -4,6 +4,7 @@ import pytest
 
 from app.agents.adapter import AdaptationRequest, adapt_canonical_for_student
 from app.jobs.canonical_seeding import (
+    CANONICAL_SEED_CATALOG,
     CanonicalSeed,
     canonical_seeding_enabled,
     configured_batch_size,
@@ -39,6 +40,16 @@ def test_batch_size_is_bounded(monkeypatch):
     assert configured_batch_size() == 50
     monkeypatch.setenv("CANONICAL_SEED_BATCH_SIZE", "not-a-number")
     assert configured_batch_size() == 6
+
+
+def test_launch_catalog_includes_power_and_nation_building_investigation():
+    topic = next(
+        seed for seed in CANONICAL_SEED_CATALOG
+        if "Railroads, Oil, and the Robber Barons" in seed.topic
+    )
+    assert topic.track == "TRUTH_HISTORY"
+    assert topic.cross_track is True
+    assert "Building America or Consolidating Power?" in topic.topic
 
 
 @pytest.mark.asyncio
