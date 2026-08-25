@@ -62,6 +62,7 @@ def test_truth_history_requests_and_requires_item_level_primary_sources():
         grade_level="9",
     )
     query = canonical_resource_query(request)
+    assert query.topic == "Railroads and Power"
     assert query.resource_types == ("PRIMARY_SOURCE",)
     assert query.interactive_preferred is False
     assert query.limit == 8
@@ -75,6 +76,17 @@ def test_truth_history_requests_and_requires_item_level_primary_sources():
     actual_item = [{**search_page[0], "availability": "VERIFIED_API_ITEM"}]
     assert has_verified_history_source(search_page) is False
     assert has_verified_history_source(actual_item) is True
+
+
+def test_truth_history_archive_query_removes_framing_question():
+    request = LessonRequest(
+        student_id="historian",
+        track=Track.TRUTH_HISTORY,
+        topic="Railroads, Oil, and the Robber Barons: Building America or Consolidating Power?",
+        grade_level="9",
+    )
+
+    assert canonical_resource_query(request).topic == "Railroads, Oil, and the Robber Barons"
 
 
 def test_only_direct_experience_builder_is_mounted():

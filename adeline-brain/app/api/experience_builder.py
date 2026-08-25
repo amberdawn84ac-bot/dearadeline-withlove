@@ -53,8 +53,12 @@ def shared_family_canonical_slug(request: LessonRequest) -> str:
 def canonical_resource_query(request: LessonRequest) -> ResourceQuery:
     """Ask for item-level primary evidence first when authoring true history."""
     is_history = request.track.value == "TRUTH_HISTORY"
+    # Archive APIs search literal metadata. Keep the historical subjects while
+    # removing Dear Adeline's framing question, which can otherwise turn a
+    # strong topic into a zero-result exact-ish query.
+    archive_topic = re.split(r"[:?]", request.topic, maxsplit=1)[0].strip()
     return ResourceQuery(
-        topic=request.topic,
+        topic=archive_topic if is_history and archive_topic else request.topic,
         track=request.track.value,
         grade_level=request.grade_level,
         resource_types=("PRIMARY_SOURCE",) if is_history else (),

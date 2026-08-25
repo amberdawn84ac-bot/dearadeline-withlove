@@ -10,7 +10,7 @@ import asyncio
 import logging
 import os
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterable
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,7 @@ class CanonicalSeed:
     topic: str
     track: str
     cross_track: bool = False
+    archive_query: str = ""
 
 
 # Ordered deliberately: launch-critical public-interest and practical family
@@ -62,6 +63,7 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
         "Railroads, Oil, and the Robber Barons: Building America or Consolidating Power?",
         "TRUTH_HISTORY",
         True,
+        "railroads monopoly Standard Oil",
     ),
     CanonicalSeed("The Oklahoma Land Run: Multiple Perspectives", "TRUTH_HISTORY"),
     CanonicalSeed("Oral Tradition and Family History", "TRUTH_HISTORY"),
@@ -138,7 +140,23 @@ async def seed_one_canonical(seed: CanonicalSeed) -> str:
             is_homestead=seed.track == "HOMESTEADING",
             grade_level="9",
         )
-        packet = await resource_router.search(canonical_resource_query(request))
+        resource_query = canonical_resource_query(request)
+        if seed.archive_query:
+            resource_query = replace(resource_query, topic=seed.archive_query)
+        packet = await resource_router.search(resource_query)
+        routed = packet.get("resources") or []
+        verified_primary = sum(
+            1 for item in routed
+            if str(item.get("resource_type") or "").upper() == "PRIMARY_SOURCE"
+            and str(item.get("availability") or "").upper() == "VERIFIED_API_ITEM"
+        )
+        logger.info(
+            "[CanonicalSeed] Sources — topic=%s routed=%d verified_primary=%d provider_failures=%s",
+            seed.topic,
+            len(routed),
+            verified_primary,
+            packet.get("provider_failures") or [],
+        )
         authored = await _author(request, packet.get("resources") or [])
         blocks = finalize_family_lesson(
             authored.get("blocks") or [], seed.topic, track=seed.track
