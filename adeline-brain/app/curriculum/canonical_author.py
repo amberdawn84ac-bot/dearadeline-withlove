@@ -232,6 +232,10 @@ BLOCK CONTRACT:
   content, and concise evidence. Do not repeat family roles inside every block;
   the one top-level family_roles object owns them. Do not return purpose,
   visual_spec, adaptation_notes, CSS, or layout prose.
+- A PRIMARY_SOURCE block's evidence array uses traceable objects with source_title,
+  creator_or_issuer, date, holding_institution, source_url, item_identifier,
+  excerpt_or_observable_feature, and claim_supported. Use only actual routed items;
+  never turn an archive search page or model-written paraphrase into primary evidence.
 - When the track supports evidence, investigation, experimentation, or application,
   include at least one appropriate PRIMARY_SOURCE, LAB_MISSION, EXPERIMENT,
   REAL_WORLD_APP, or comparable substantive evidence/action block.

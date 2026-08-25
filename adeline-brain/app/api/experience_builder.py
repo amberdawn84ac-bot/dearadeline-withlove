@@ -50,6 +50,30 @@ def shared_family_canonical_slug(request: LessonRequest) -> str:
     return canonical_slug(request.topic, request.track.value)
 
 
+def canonical_resource_query(request: LessonRequest) -> ResourceQuery:
+    """Ask for item-level primary evidence first when authoring true history."""
+    is_history = request.track.value == "TRUTH_HISTORY"
+    return ResourceQuery(
+        topic=request.topic,
+        track=request.track.value,
+        grade_level=request.grade_level,
+        resource_types=("PRIMARY_SOURCE",) if is_history else (),
+        interactive_preferred=not is_history,
+        limit=8 if is_history else 5,
+    )
+
+
+def has_verified_history_source(resources: list[dict]) -> bool:
+    return any(
+        str(item.get("resource_type") or "").upper() == "PRIMARY_SOURCE"
+        and str(item.get("availability") or "").upper() == "VERIFIED_API_ITEM"
+        and str(item.get("source_url") or "").startswith(("https://", "http://"))
+        and str(item.get("provider") or "").strip()
+        for item in resources
+        if isinstance(item, dict)
+    )
+
+
 def _sse(payload: dict) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
@@ -97,6 +121,11 @@ async def _author(request: LessonRequest, resources: list[dict]) -> dict:
     key = GEMINI_API_KEY or GOOGLE_API_KEY
     if not key:
         raise HTTPException(status_code=503, detail="The Canonical Experience Author is not configured.")
+    if request.track.value == "TRUTH_HISTORY" and not has_verified_history_source(resources):
+        raise HTTPException(
+            status_code=503,
+            detail="Adeline could not verify an item-level primary source for this history investigation yet.",
+        )
     # Disable SDK-level hidden retries. The explicit loop below records and
     # repairs each attempt, so a provider retry can never silently double the
     # longest step.
@@ -246,11 +275,7 @@ async def _stream(request: LessonRequest):
                 canonical = None
         if not canonical or canonical.get("pending_approval"):
             yield _sse({"type": "status", "message": "Adeline is authoring the experience from the living plan…"})
-            packet = await resource_router.search(ResourceQuery(
-                topic=request.topic,
-                track=request.track.value,
-                grade_level=request.grade_level,
-            ))
+            packet = await resource_router.search(canonical_resource_query(request))
             authored = None
             async for kind, value in _run_with_progress(
                 _author(request, packet["resources"]), AUTHOR_PROGRESS_MESSAGES,

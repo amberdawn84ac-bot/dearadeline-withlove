@@ -116,11 +116,11 @@ def configured_batch_size() -> int:
 
 async def seed_one_canonical(seed: CanonicalSeed) -> str:
     """Create one missing/outdated canonical through the production author."""
-    from app.api.experience_builder import _author
+    from app.api.experience_builder import _author, canonical_resource_query
     from app.connections.canonical_store import canonical_slug, canonical_store
     from app.curriculum.family_style import finalize_family_lesson, is_current_family_canonical
     from app.schemas.api_models import LessonRequest, Track
-    from app.services.resource_router import ResourceQuery, resource_router
+    from app.services.resource_router import resource_router
 
     slug = canonical_slug(seed.topic, seed.track)
     existing = await canonical_store.get(slug)
@@ -138,9 +138,7 @@ async def seed_one_canonical(seed: CanonicalSeed) -> str:
             is_homestead=seed.track == "HOMESTEADING",
             grade_level="9",
         )
-        packet = await resource_router.search(
-            ResourceQuery(topic=seed.topic, track=seed.track, grade_level="9")
-        )
+        packet = await resource_router.search(canonical_resource_query(request))
         authored = await _author(request, packet.get("resources") or [])
         blocks = finalize_family_lesson(
             authored.get("blocks") or [], seed.topic, track=seed.track

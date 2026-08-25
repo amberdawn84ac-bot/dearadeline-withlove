@@ -1,7 +1,11 @@
 from app.api.journal import SealRequest, _evidence_proficiency
 from app.curriculum.experience_contract import annotate_experience, validate_experience
 from app.schemas.api_models import LessonRequest, Track
-from app.api.experience_builder import shared_family_canonical_slug
+from app.api.experience_builder import (
+    canonical_resource_query,
+    has_verified_history_source,
+    shared_family_canonical_slug,
+)
 from app.services.investigation_printable import build_investigation_pdf
 
 
@@ -50,6 +54,29 @@ def test_siblings_share_canonical_but_keep_individual_standards():
     assert first.required_standard_codes != older.required_standard_codes
 
 
+def test_truth_history_requests_and_requires_item_level_primary_sources():
+    request = LessonRequest(
+        student_id="historian",
+        track=Track.TRUTH_HISTORY,
+        topic="Railroads and Power",
+        grade_level="9",
+    )
+    query = canonical_resource_query(request)
+    assert query.resource_types == ("PRIMARY_SOURCE",)
+    assert query.interactive_preferred is False
+    assert query.limit == 8
+
+    search_page = [{
+        "resource_type": "PRIMARY_SOURCE",
+        "availability": "COLLECTION_SEARCH",
+        "source_url": "https://example.org/search",
+        "provider": "Example Archive",
+    }]
+    actual_item = [{**search_page[0], "availability": "VERIFIED_API_ITEM"}]
+    assert has_verified_history_source(search_page) is False
+    assert has_verified_history_source(actual_item) is True
+
+
 def test_only_direct_experience_builder_is_mounted():
     from app.main import app
     paths = {route.path for route in app.routes}
@@ -72,6 +99,8 @@ def test_author_contract_budgets_repetition_not_learning_quality():
     assert "CONCISE IS NOT SHALLOW" in prompt
     assert '  "visual_assets": []' not in prompt
     assert "Do not repeat family roles inside every block" in prompt
+    assert "actual routed items" in prompt
+    assert "archive search page" in prompt
 
 
 def test_printable_is_same_experience_and_hides_internal_standards():

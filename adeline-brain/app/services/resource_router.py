@@ -153,8 +153,6 @@ async def _smithsonian(query: ResourceQuery, client: httpx.AsyncClient) -> list[
             description="Search museum objects, specimens, images, records, and selected manipulable 3D models.",
             license="ITEM_LEVEL_CC0", commercial_use="ONLY_WHEN_CC0",
             skills_practiced=["artifact analysis", "observation"],
-            source_item_id=str(row.get("id", url)), availability="VERIFIED_API_ITEM",
-            verified_at=datetime.now(timezone.utc).isoformat(),
             discovery_prompt="What do the object's materials, shape, wear, or construction reveal?",
             portfolio_output="Save an object study with the Smithsonian record and its rights statement.",
         )]
@@ -171,6 +169,8 @@ async def _smithsonian(query: ResourceQuery, client: httpx.AsyncClient) -> list[
             description="Smithsonian collection object. Verify the item-level CC0 mark before importing media.",
             license="ITEM_LEVEL_CC0", commercial_use="ONLY_WHEN_CC0",
             skills_practiced=["artifact analysis", "observation"],
+            source_item_id=str(row.get("id") or url), availability="VERIFIED_API_ITEM",
+            verified_at=datetime.now(timezone.utc).isoformat(),
         ))
     return output
 
@@ -293,7 +293,7 @@ async def _curated(query: ResourceQuery, _client: httpx.AsyncClient) -> list[Rou
         ))
     if query.track in {"GOVERNMENT_ECONOMICS", "JUSTICE_CHANGEMAKING", "TRUTH_HISTORY"}:
         output.append(RoutedResource(
-            id="icivics:games", title=f"Test a government system in an iCivics game", provider="iCivics",
+            id="icivics:games", title="Test a government system in an iCivics game", provider="iCivics",
             resource_type="GAME", source_url="https://www.icivics.org/games",
             description="Play the system, then compare the game's model with an actual law or primary historical source.",
             license="LINK_ONLY", commercial_use="LINK_ONLY", game_mode="PLAY", estimated_minutes=35,

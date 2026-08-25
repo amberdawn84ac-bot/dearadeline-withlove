@@ -157,6 +157,14 @@ TRUTH HISTORY — LIVING WALL TIMELINE:
   accounts, and uncertainty visibly. Never replace a familiar myth with an unsupported counter-myth.
 - A timeline contribution supports the investigation; it must not replace source analysis,
   meaningful action, creation, discussion, or an individual demonstration of understanding.
+- Put an actual primary record in the learner's hands. Every TRUTH_HISTORY lesson must contain a
+  PRIMARY_SOURCE block built from a verified outside archive item supplied in the routed resources,
+  not merely a search-page suggestion, textbook summary, model paraphrase, or invented quotation.
+- Its evidence entry must name the item, creator or issuer when known, date, holding institution,
+  permanent source URL, item identifier when available, and the exact excerpt or observable feature
+  learners will examine. Keep fact, inference, context, and unanswered questions visibly separate.
+- If no primary item can be retrieved and verified, fail closed and research again; never fabricate
+  a document, citation, quotation, image description, provenance, or archival identifier.
 """.strip()
 
 
@@ -191,6 +199,29 @@ def _family_role_metadata(block: dict) -> dict:
     }
 
 
+def _has_traceable_primary_source(blocks: list[dict]) -> bool:
+    """A model-authored paraphrase is not primary evidence."""
+    for block in blocks:
+        if str(block.get("block_type") or "").upper() != "PRIMARY_SOURCE":
+            continue
+        for item in block.get("evidence") or []:
+            if isinstance(item, dict):
+                url = str(item.get("source_url") or item.get("url") or "").strip()
+                title = str(item.get("source_title") or item.get("title") or "").strip()
+                holder = str(
+                    item.get("holding_institution")
+                    or item.get("archive")
+                    or item.get("provider")
+                    or ""
+                ).strip()
+                if url.startswith(("https://", "http://")) and title and holder:
+                    return True
+            elif isinstance(item, str):
+                if len(item.strip()) >= 20 and re.search(r"https?://\S+", item):
+                    return True
+    return False
+
+
 def validate_canonical_lesson(
     blocks: list[dict],
     *,
@@ -207,6 +238,14 @@ def validate_canonical_lesson(
     if track in _TRACKS_EXPECTING_SUBSTANTIVE_BLOCKS:
         if not any(str(block.get("block_type", "")).upper() in _SUBSTANTIVE_BLOCK_TYPES for block in blocks):
             errors.append(f"track {track} requires at least one evidence/action-oriented block")
+
+    if track == "TRUTH_HISTORY":
+        if not any(str(block.get("block_type") or "").upper() == "TIMELINE" for block in blocks):
+            errors.append("TRUTH_HISTORY requires a living wall TIMELINE contribution")
+        if not _has_traceable_primary_source(blocks):
+            errors.append(
+                "TRUTH_HISTORY requires a PRIMARY_SOURCE block with a traceable outside item, URL, and holding institution"
+            )
 
     for index, block in enumerate(blocks):
         if str(block.get("experience_stage") or "").upper() not in ExperienceStage._value2member_map_:

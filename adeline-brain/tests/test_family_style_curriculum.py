@@ -63,3 +63,43 @@ def test_learner_text_removes_internal_notes_and_identity_errors():
     cleaned = sanitize_learner_text(content)
 
     assert cleaned == "Your job is to explain what HaShem says."
+
+
+def _truth_history_blocks(evidence: list[dict]) -> list[dict]:
+    return [
+        {"block_type": "TEXT", "experience_stage": "INVITATION", "content": "Which story does the record support?"},
+        {
+            "block_type": "PRIMARY_SOURCE",
+            "experience_stage": "DISCOVERY",
+            "content": "Examine the original record before reading later interpretations.",
+            "evidence": evidence,
+        },
+        {"block_type": "TIMELINE", "experience_stage": "CREATION", "content": "Place and source the event on the living wall timeline."},
+        {"block_type": "RESEARCH_MISSION", "experience_stage": "ACTION", "content": "Corroborate the record with an independent source."},
+        {"block_type": "QUIZ", "experience_stage": "DEMONSTRATION", "content": "Defend what the evidence establishes and what remains uncertain."},
+    ]
+
+
+def test_truth_history_requires_traceable_outside_primary_evidence_and_timeline():
+    evidence = [{
+        "source_title": "Interstate Commerce Commission report",
+        "holding_institution": "U.S. National Archives",
+        "source_url": "https://catalog.archives.gov/id/123",
+    }]
+
+    finalized = finalize_family_lesson(
+        _truth_history_blocks(evidence), "Railroads and Power", track="TRUTH_HISTORY"
+    )
+
+    assert any(block["block_type"] == "PRIMARY_SOURCE" for block in finalized)
+    assert any(block["block_type"] == "TIMELINE" for block in finalized)
+
+
+def test_truth_history_rejects_model_paraphrase_as_primary_evidence():
+    finalized = finalize_family_lesson(
+        _truth_history_blocks([{"source_title": "A source-like summary"}]),
+        "Railroads and Power",
+        track="TRUTH_HISTORY",
+    )
+
+    assert finalized == []
