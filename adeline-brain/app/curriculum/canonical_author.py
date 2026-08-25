@@ -13,6 +13,22 @@ EXPERIENCE_MODES = frozenset({
 })
 
 
+def enforce_non_exposure_mastery(payload: dict) -> dict:
+    """Apply the platform's non-negotiable mastery safety rule.
+
+    This boolean is policy, not authored curriculum. Normalizing it to true
+    prevents an otherwise strong lesson from failing because a model omitted
+    or flipped one mechanical flag; observable evidence is still validated
+    separately and cannot be synthesized here.
+    """
+    evidence_map = payload.get("mastery_evidence_map")
+    if isinstance(evidence_map, list):
+        for entry in evidence_map:
+            if isinstance(entry, dict):
+                entry["not_awarded_for_exposure_alone"] = True
+    return payload
+
+
 def validate_canonical_contract(payload: dict) -> list[str]:
     """Reject attractive-but-empty projects before they become durable canonicals."""
     errors: list[str] = []

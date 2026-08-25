@@ -1,5 +1,9 @@
 from app.agents.adapter import AdaptationRequest
-from app.curriculum.canonical_author import CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT, validate_canonical_contract
+from app.curriculum.canonical_author import (
+    CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT,
+    enforce_non_exposure_mastery,
+    validate_canonical_contract,
+)
 from app.curriculum.family_style import CANONICAL_FORMAT_VERSION, FAMILY_CANONICAL_AUTHORING_RULES
 from app.services.learner_context import learner_contribution
 
@@ -69,6 +73,23 @@ def test_contract_rejects_decorative_steam_and_exposure_credit():
     assert any("observable process or product" in error for error in errors)
     assert any("observable evidence" in error for error in errors)
     assert any("exposure alone" in error for error in errors)
+
+
+def test_author_normalization_enforces_non_exposure_policy_only():
+    payload = {
+        "mastery_evidence_map": [{
+            "concept": "Federal subsidy and corporate power",
+            "acceptable_evidence": ["A claim tied to two primary records"],
+            "not_awarded_for_exposure_alone": False,
+        }],
+    }
+
+    normalized = enforce_non_exposure_mastery(payload)
+
+    assert normalized["mastery_evidence_map"][0]["not_awarded_for_exposure_alone"] is True
+    assert normalized["mastery_evidence_map"][0]["acceptable_evidence"] == [
+        "A claim tied to two primary records"
+    ]
 
 
 def test_public_interest_work_requires_records_claim_discipline_and_real_agency():

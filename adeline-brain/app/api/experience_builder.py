@@ -20,7 +20,11 @@ from fastapi.responses import Response, StreamingResponse
 from app.api.middleware import verify_student_access
 from app.config import GEMINI_API_KEY, GOOGLE_API_KEY, GEMINI_BASE_URL, GEMINI_MODEL
 from app.schemas.api_models import LessonRequest
-from app.curriculum.canonical_author import CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT, validate_canonical_contract
+from app.curriculum.canonical_author import (
+    CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT,
+    enforce_non_exposure_mastery,
+    validate_canonical_contract,
+)
 from app.curriculum.family_style import finalize_family_lesson, is_current_family_canonical
 from app.connections.canonical_store import canonical_store, canonical_slug
 from app.connections.student_experience_store import student_experience_store
@@ -179,7 +183,7 @@ async def _author(request: LessonRequest, resources: list[dict]) -> dict:
                 getattr(usage, "completion_tokens", None),
                 getattr(usage, "total_tokens", None),
             )
-            parsed = _json_object(raw)
+            parsed = enforce_non_exposure_mastery(_json_object(raw))
             contract_errors = validate_canonical_contract(parsed)
             if contract_errors:
                 logger.warning(

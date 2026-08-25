@@ -85,6 +85,11 @@ def _score(item: RoutedResource, query: ResourceQuery) -> float:
     score = 55 * len(wanted & found) / max(1, len(wanted))
     if item.resource_type in query.resource_types:
         score += 25
+    # A real item page outranks a generated archive-search link. This keeps the
+    # records the author can actually inspect inside the bounded prompt even
+    # when a search-page title happens to repeat every query word.
+    if item.availability in {"VERIFIED_API_ITEM", "VERIFIED_ARCHIVE_ITEM"}:
+        score += 50
     if query.interactive_preferred and item.resource_type in {"GAME", "GAME_BUILDER", "SIMULATION", "ARTIFACT_3D"}:
         score += 18
     if item.license in {"CC0", "PUBLIC_DOMAIN"}:
@@ -571,7 +576,12 @@ class ResourceRouter:
             if query.commercial_context and item.license == "CC BY-NC 4.0":
                 item.use_mode = "LINK"
             item.score = _score(item, query)
-        resources.sort(key=lambda item: (-item.score, item.provider, item.title))
+        resources.sort(key=lambda item: (
+            item.availability not in {"VERIFIED_API_ITEM", "VERIFIED_ARCHIVE_ITEM"},
+            -item.score,
+            item.provider,
+            item.title,
+        ))
         packet = {"query": asdict(query), "resources": [asdict(item) for item in resources[:query.limit]], "rules": self.rules, "provider_failures": failures}
         try:
             from app.connections.redis_client import redis_client

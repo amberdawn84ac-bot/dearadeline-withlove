@@ -24,6 +24,7 @@ class CanonicalSeed:
     track: str
     cross_track: bool = False
     archive_query: str = ""
+    evidence_revision: str = ""
 
 
 # Ordered deliberately: launch-critical public-interest and practical family
@@ -64,6 +65,7 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
         "TRUTH_HISTORY",
         True,
         "railroads monopoly Standard Oil",
+        "robber-baron-primary-pack-v1",
     ),
     CanonicalSeed("The Oklahoma Land Run: Multiple Perspectives", "TRUTH_HISTORY"),
     CanonicalSeed("Oral Tradition and Family History", "TRUTH_HISTORY"),
@@ -127,10 +129,20 @@ async def seed_one_canonical(seed: CanonicalSeed) -> str:
     slug = canonical_slug(seed.topic, seed.track)
     existing = await canonical_store.get(slug)
     if existing and is_current_family_canonical(existing.get("blocks") or []):
-        logger.info("[CanonicalSeed] SKIP current — %s / %s", seed.topic, seed.track)
-        return "skipped"
+        blocks = existing.get("blocks") or []
+        stored_revision = str(
+            ((blocks[0].get("metadata") or {}).get("evidence_revision") if blocks else "")
+            or ""
+        )
+        if not seed.evidence_revision or stored_revision == seed.evidence_revision:
+            logger.info("[CanonicalSeed] SKIP current — %s / %s", seed.topic, seed.track)
+            return "skipped"
     if existing:
-        await canonical_store.archive(slug, reason="canonical_format_upgrade")
+        reason = (
+            "canonical_evidence_upgrade"
+            if seed.evidence_revision else "canonical_format_upgrade"
+        )
+        await canonical_store.archive(slug, reason=reason)
 
     try:
         request = LessonRequest(
@@ -181,6 +193,8 @@ async def seed_one_canonical(seed: CanonicalSeed) -> str:
                 "family_roles",
             )
         }
+        if seed.evidence_revision:
+            blocks[0]["metadata"]["evidence_revision"] = seed.evidence_revision
         record = {
             "id": str(uuid.uuid4()),
             "topic": seed.topic,

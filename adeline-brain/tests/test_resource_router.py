@@ -147,3 +147,24 @@ async def test_router_keeps_verified_archive_items_when_live_loc_api_fails(monke
         item["availability"] == "VERIFIED_ARCHIVE_ITEM"
         for item in packet["resources"]
     )
+
+
+@pytest.mark.asyncio
+async def test_verified_items_outrank_archive_search_pages(monkeypatch):
+    async def empty(*_args, **_kwargs):
+        return []
+
+    for provider in ("_loc", "_smithsonian", "_nasa", "_inaturalist"):
+        monkeypatch.setattr(f"app.services.resource_router.{provider}", empty)
+
+    packet = await ResourceRouter().search(ResourceQuery(
+        topic="railroads monopoly Standard Oil corporate power",
+        track="TRUTH_HISTORY",
+        resource_types=("PRIMARY_SOURCE",),
+        interactive_preferred=False,
+        limit=8,
+    ))
+
+    assert [
+        item["availability"] for item in packet["resources"][:4]
+    ] == ["VERIFIED_ARCHIVE_ITEM"] * 4
