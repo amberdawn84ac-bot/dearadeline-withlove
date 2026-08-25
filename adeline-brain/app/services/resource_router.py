@@ -55,6 +55,11 @@ class RoutedResource:
     portfolio_output: str = "Save an observation or creation that demonstrates what you learned."
     score: float = 0.0
     source_item_id: str | None = None
+    creator_or_issuer: str | None = None
+    source_date: str | None = None
+    holding_institution: str | None = None
+    source_identifier: str | None = None
+    evidence_scope: str | None = None
     rights_url: str | None = None
     availability: str = "COLLECTION_SEARCH"
     verified_at: str | None = None
@@ -406,6 +411,131 @@ async def _curated(query: ResourceQuery, _client: httpx.AsyncClient) -> list[Rou
     return output
 
 
+def _curated_archive_evidence(query: ResourceQuery) -> list[RoutedResource]:
+    """Return verified item pages for a narrowly matched history investigation.
+
+    These records are deliberately item-level, not archive search pages. They
+    keep history authoring evidence-grounded when a live collection API is
+    temporarily unreachable, while their evidence_scope prevents a political
+    cartoon from being treated as proof of every claim drawn in it.
+    """
+    words = _terms(query.topic)
+    robber_baron_topic = (
+        query.track == "TRUTH_HISTORY"
+        and bool(words & {"railroad", "railroads"})
+        and bool(words & {"oil", "standard", "monopoly"})
+    )
+    if not robber_baron_topic:
+        return []
+
+    verified_at = datetime.now(timezone.utc).isoformat()
+    shared = {
+        "resource_type": "PRIMARY_SOURCE",
+        "use_mode": "LINK",
+        "skills_practiced": ["source analysis", "corroboration", "claim boundaries"],
+        "availability": "VERIFIED_ARCHIVE_ITEM",
+        "verified_at": verified_at,
+    }
+    return [
+        RoutedResource(
+            id="archives:pacific-railway-act-1862",
+            title="Pacific Railway Act (1862)",
+            provider="U.S. National Archives",
+            source_url="https://www.archives.gov/milestone-documents/pacific-railway-act",
+            description=(
+                "Digitized enrolled federal law chartering the Union Pacific Railroad and granting "
+                "rights-of-way, alternate public-land sections, and government bonds for construction."
+            ),
+            creator_or_issuer="United States Congress",
+            source_date="1862-07-01",
+            holding_institution="U.S. National Archives",
+            source_identifier="12 Stat. 489; Record Group 11",
+            source_item_id="12-stat-489",
+            evidence_scope=(
+                "Establishes what federal law authorized and subsidized. It does not by itself prove "
+                "how every railroad used that power or how affected communities experienced it."
+            ),
+            license="PUBLIC_DOMAIN_US_GOVERNMENT",
+            commercial_use="LINK_OR_PUBLIC_DOMAIN_TEXT",
+            discovery_prompt="Mark every corporate power, public subsidy, condition, and reference to Indigenous land title in the act.",
+            portfolio_output="Cite section numbers in a public-subsidy versus public-obligation evidence table.",
+            **shared,
+        ),
+        RoutedResource(
+            id="archives:interstate-commerce-act-1887",
+            title="Interstate Commerce Act (1887)",
+            provider="U.S. National Archives",
+            source_url="https://www.archives.gov/milestone-documents/interstate-commerce-act",
+            description=(
+                "Digitized enrolled federal law making railroads the first U.S. industry subject to "
+                "federal regulation and creating the Interstate Commerce Commission."
+            ),
+            creator_or_issuer="United States Congress",
+            source_date="1887-02-04",
+            holding_institution="U.S. National Archives",
+            source_identifier="Public Law 49-41; Record Group 11",
+            source_item_id="public-law-49-41",
+            evidence_scope=(
+                "Establishes the regulation Congress enacted. Compare its prohibitions and enforcement "
+                "powers with other records before judging whether regulation worked."
+            ),
+            license="PUBLIC_DOMAIN_US_GOVERNMENT",
+            commercial_use="LINK_OR_PUBLIC_DOMAIN_TEXT",
+            discovery_prompt="Identify the railroad practices Congress prohibited and the enforcement power it actually created.",
+            portfolio_output="Add a law-and-enforcement timeline card that distinguishes the rule on paper from evidence of implementation.",
+            **shared,
+        ),
+        RoutedResource(
+            id="loc:2001695241",
+            title="Next!",
+            provider="Library of Congress",
+            source_url="https://www.loc.gov/pictures/item/2001695241/",
+            description=(
+                "Udo J. Keppler's 1904 Puck cartoon depicts Standard Oil as an octopus reaching into "
+                "shipping, railroads, industry, government, and public institutions."
+            ),
+            creator_or_issuer="Udo J. Keppler; published by Puck",
+            source_date="1904-09-07",
+            holding_institution="Library of Congress Prints and Photographs Division",
+            source_identifier="Library of Congress Control Number 2001695241",
+            source_item_id="2001695241",
+            evidence_scope=(
+                "Primary evidence of a contemporary anti-monopoly argument and its visual rhetoric; "
+                "the cartoon's accusations require corroboration with laws, testimony, and company records."
+            ),
+            license="ITEM_LEVEL_RIGHTS",
+            commercial_use="CHECK_ITEM",
+            discovery_prompt="Inventory every tentacle, label, scale choice, and institution before interpreting the cartoon's argument.",
+            portfolio_output="Annotate the cartoon and test two depicted claims against documentary records.",
+            **shared,
+        ),
+        RoutedResource(
+            id="loc:2007675471",
+            title="The Trust Giant's Point of View",
+            provider="Library of Congress",
+            source_url="https://www.loc.gov/pictures/item/2007675471/",
+            description=(
+                "A 1900 caricature portrays John D. Rockefeller holding the White House and President "
+                "McKinley in his hand, with the Capitol and Treasury behind him."
+            ),
+            creator_or_issuer="Unknown cartoonist; contemporary caricature",
+            source_date="1900",
+            holding_institution="Library of Congress Prints and Photographs Division",
+            source_identifier="Library of Congress Control Number 2007675471",
+            source_item_id="2007675471",
+            evidence_scope=(
+                "Primary evidence of a contemporary claim about corporate influence over government; "
+                "it is not proof of a specific corrupt transaction without corroborating records."
+            ),
+            license="ITEM_LEVEL_RIGHTS",
+            commercial_use="CHECK_ITEM",
+            discovery_prompt="Separate what the image literally shows from the political claim its symbols ask viewers to accept.",
+            portfolio_output="Compare its power claim with the Pacific Railway and Interstate Commerce Acts and record agreements and limits.",
+            **shared,
+        ),
+    ]
+
+
 class ResourceRouter:
     rules = [
         "Adeline teaches; outside resources provide evidence, experience, simulation, creation, or practice.",
@@ -415,7 +545,7 @@ class ResourceRouter:
     ]
 
     async def search(self, query: ResourceQuery) -> dict[str, Any]:
-        cache_key = "resource-router:v2:" + hashlib.sha256(
+        cache_key = "resource-router:v3:" + hashlib.sha256(
             json.dumps(asdict(query), sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
         try:
@@ -436,6 +566,7 @@ class ResourceRouter:
                 failures.append(name)
                 continue
             resources.extend(result)
+        resources.extend(_curated_archive_evidence(query))
         for item in resources:
             if query.commercial_context and item.license == "CC BY-NC 4.0":
                 item.use_mode = "LINK"

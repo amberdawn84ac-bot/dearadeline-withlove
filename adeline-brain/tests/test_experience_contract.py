@@ -74,8 +74,10 @@ def test_truth_history_requests_and_requires_item_level_primary_sources():
         "provider": "Example Archive",
     }]
     actual_item = [{**search_page[0], "availability": "VERIFIED_API_ITEM"}]
+    curated_item = [{**search_page[0], "availability": "VERIFIED_ARCHIVE_ITEM"}]
     assert has_verified_history_source(search_page) is False
     assert has_verified_history_source(actual_item) is True
+    assert has_verified_history_source(curated_item) is True
 
 
 def test_truth_history_archive_query_removes_framing_question():

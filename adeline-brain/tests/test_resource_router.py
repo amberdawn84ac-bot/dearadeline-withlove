@@ -1,7 +1,14 @@
 import pytest
 
 from app.curriculum.family_style import CANONICAL_FORMAT_VERSION
-from app.services.resource_router import ResourceQuery, ResourceRouter, _curated, _youtube_resources, resource_block_for_lesson
+from app.services.resource_router import (
+    ResourceQuery,
+    ResourceRouter,
+    _curated,
+    _curated_archive_evidence,
+    _youtube_resources,
+    resource_block_for_lesson,
+)
 
 
 class DummyClient:
@@ -86,3 +93,57 @@ async def test_curated_history_sources_include_docsteach_and_dpla():
     results = await _curated(ResourceQuery(topic="Great Depression", track="TRUTH_HISTORY"), DummyClient())
     ids = {item.id for item in results}
     assert {"docsteach:primary", "dpla:search"} <= ids
+
+
+def test_robber_baron_evidence_pack_uses_item_pages_and_claim_boundaries():
+    results = _curated_archive_evidence(ResourceQuery(
+        topic="railroads monopoly Standard Oil",
+        track="TRUTH_HISTORY",
+        resource_types=("PRIMARY_SOURCE",),
+    ))
+
+    assert {item.id for item in results} == {
+        "archives:pacific-railway-act-1862",
+        "archives:interstate-commerce-act-1887",
+        "loc:2001695241",
+        "loc:2007675471",
+    }
+    assert all(item.availability == "VERIFIED_ARCHIVE_ITEM" for item in results)
+    assert all(item.source_item_id and item.holding_institution for item in results)
+    assert all("search?" not in item.source_url for item in results)
+    assert all(item.evidence_scope for item in results)
+
+
+def test_archive_evidence_pack_does_not_leak_into_unrelated_history():
+    assert _curated_archive_evidence(ResourceQuery(
+        topic="The Boston Tea Party",
+        track="TRUTH_HISTORY",
+    )) == []
+
+
+@pytest.mark.asyncio
+async def test_router_keeps_verified_archive_items_when_live_loc_api_fails(monkeypatch):
+    async def broken(*_args, **_kwargs):
+        raise RuntimeError("provider unavailable")
+
+    async def empty(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr("app.services.resource_router._loc", broken)
+    for provider in ("_smithsonian", "_nasa", "_inaturalist", "_curated"):
+        monkeypatch.setattr(f"app.services.resource_router.{provider}", empty)
+
+    packet = await ResourceRouter().search(ResourceQuery(
+        topic="railroads monopoly Standard Oil",
+        track="TRUTH_HISTORY",
+        resource_types=("PRIMARY_SOURCE",),
+        interactive_preferred=False,
+        limit=8,
+    ))
+
+    assert packet["provider_failures"] == ["loc"]
+    assert len(packet["resources"]) == 4
+    assert all(
+        item["availability"] == "VERIFIED_ARCHIVE_ITEM"
+        for item in packet["resources"]
+    )

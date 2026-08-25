@@ -148,7 +148,8 @@ async def seed_one_canonical(seed: CanonicalSeed) -> str:
         verified_primary = sum(
             1 for item in routed
             if str(item.get("resource_type") or "").upper() == "PRIMARY_SOURCE"
-            and str(item.get("availability") or "").upper() == "VERIFIED_API_ITEM"
+            and str(item.get("availability") or "").upper()
+            in {"VERIFIED_API_ITEM", "VERIFIED_ARCHIVE_ITEM"}
         )
         logger.info(
             "[CanonicalSeed] Sources — topic=%s routed=%d verified_primary=%d provider_failures=%s",

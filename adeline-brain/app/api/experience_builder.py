@@ -70,7 +70,8 @@ def canonical_resource_query(request: LessonRequest) -> ResourceQuery:
 def has_verified_history_source(resources: list[dict]) -> bool:
     return any(
         str(item.get("resource_type") or "").upper() == "PRIMARY_SOURCE"
-        and str(item.get("availability") or "").upper() == "VERIFIED_API_ITEM"
+        and str(item.get("availability") or "").upper()
+        in {"VERIFIED_API_ITEM", "VERIFIED_ARCHIVE_ITEM"}
         and str(item.get("source_url") or "").startswith(("https://", "http://"))
         and str(item.get("provider") or "").strip()
         for item in resources
