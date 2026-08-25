@@ -1,9 +1,14 @@
-"""Scheduled jobs for Hippocampus seeding."""
+"""Scheduled corpus collection and canonical-library replenishment."""
 import logging
+import os
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.scripts.seed_declassified_documents import seed_all_declassified_documents
 from app.scripts.seed_justice_changemaking import main as seed_justice_changemaking
 from app.jobs.seed_thin_tracks import seed_thin_tracks
+from app.jobs.canonical_seeding import (
+    canonical_seeding_enabled,
+    scheduled_canonical_replenishment,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +52,25 @@ async def startup_seed_scheduler():
             max_instances=1,
         )
 
+        if canonical_seeding_enabled():
+            day = os.getenv("CANONICAL_SEED_DAY_OF_WEEK", "sun").strip().lower()
+            hour = int(os.getenv("CANONICAL_SEED_HOUR", "2"))
+            minute = int(os.getenv("CANONICAL_SEED_MINUTE", "0"))
+            timezone = os.getenv("CANONICAL_SEED_TIMEZONE", "America/Chicago").strip()
+            _scheduler.add_job(
+                scheduled_canonical_replenishment,
+                "cron",
+                day_of_week=day,
+                hour=hour,
+                minute=minute,
+                timezone=timezone,
+                id="replenish_canonical_library_weekly",
+                name="Pre-author Canonical Lessons (Weekly)",
+                max_instances=1,
+                coalesce=True,
+                misfire_grace_time=60 * 60 * 6,
+            )
+
         # Thin tracks (Gov/Math/Creative): 3:00 AM UTC every day
         _scheduler.add_job(
             seed_thin_tracks,
@@ -64,6 +88,17 @@ async def startup_seed_scheduler():
         logger.info("  - Declassified Documents: 02:00 UTC")
         logger.info("  - Justice Track: 02:30 UTC")
         logger.info("  - Thin Tracks (Gov/Math/Creative): 03:00 UTC")
+        if canonical_seeding_enabled():
+            logger.info(
+                "  - Canonical lessons: %s %02d:%02d %s (batch=%s)",
+                os.getenv("CANONICAL_SEED_DAY_OF_WEEK", "sun"),
+                int(os.getenv("CANONICAL_SEED_HOUR", "2")),
+                int(os.getenv("CANONICAL_SEED_MINUTE", "0")),
+                os.getenv("CANONICAL_SEED_TIMEZONE", "America/Chicago"),
+                os.getenv("CANONICAL_SEED_BATCH_SIZE", "6"),
+            )
+        else:
+            logger.info("  - Canonical lessons: disabled (CANONICAL_SEEDING_ENABLED=false)")
 
 
 async def shutdown_seed_scheduler():

@@ -5,6 +5,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from app.api.experience_builder import _emit_persisted, _run_with_progress, _stream
+from app.agents.adapter import AdaptationRequest
 from app.connections.student_experience_store import GenerationClaim
 from app.schemas.api_models import LessonRequest, Track
 
@@ -86,6 +87,56 @@ async def test_reopening_ready_experience_makes_zero_author_or_resource_calls():
     assert first == second
     author.assert_not_awaited()
     resource_search.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_preseeded_canonical_opens_without_author_or_resource_search():
+    canonical = {
+        "id": "canonical-1",
+        "title": "Kitchen Chemistry",
+        "blocks": [{
+            "block_id": "canonical-block-1",
+            "block_type": "EXPERIMENT",
+            "experience_stage": "ACTION",
+            "content": "Compare how two dough samples rise.",
+            "family_style": True,
+            "canonical_format_version": 10,
+            "family_roles": {
+                "elementary": "Notice and draw.",
+                "middle": "Measure and compare.",
+                "high_school": "Control variables and explain.",
+            },
+            "metadata": {"canonical_contract": {"family_roles": {}}},
+        }],
+    }
+    saved = {
+        "id": "experience-new",
+        "status": "ready",
+        "title": "Kitchen Chemistry",
+        "track": "CREATION_SCIENCE",
+        "blocks": canonical["blocks"],
+        "metadata": {"required_standard_codes": ["OAS.SCI.8.1"]},
+    }
+    author = AsyncMock()
+    resource_search = AsyncMock()
+    with (
+        patch("app.api.experience_builder.student_experience_store.claim", new=AsyncMock(
+            return_value=GenerationClaim("generating", True, {"id": "experience-new"})
+        )),
+        patch("app.api.experience_builder.canonical_store.get", new=AsyncMock(return_value=canonical)),
+        patch("app.api.experience_builder.is_current_family_canonical", return_value=True),
+        patch("app.api.experience_builder.adaptation_for", new=AsyncMock(return_value=AdaptationRequest(
+            grade_level="8", track="CREATION_SCIENCE"
+        ))),
+        patch("app.api.experience_builder.student_experience_store.save_ready", new=AsyncMock(return_value=saved)),
+        patch("app.api.experience_builder._author", new=author),
+        patch("app.api.experience_builder.resource_router.search", new=resource_search),
+    ):
+        events = [frame async for frame in _stream(_request())]
+
+    author.assert_not_awaited()
+    resource_search.assert_not_awaited()
+    assert any('"type": "done"' in frame for frame in events)
 
 
 @pytest.mark.asyncio

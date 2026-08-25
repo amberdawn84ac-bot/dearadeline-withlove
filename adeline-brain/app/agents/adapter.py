@@ -1,4 +1,4 @@
-"""Personalize canonical lesson wording without changing lesson structure.
+"""Prepare one shared canonical lesson for a learner without regenerating it.
 
 There is deliberately no format selector here. The Canonical Experience Author
 authors the shared investigation once; this adapter may adjust vocabulary and scaffolding for a
@@ -7,6 +7,7 @@ generic widgets.
 """
 
 import asyncio
+from copy import deepcopy
 import logging
 import re
 from dataclasses import dataclass, field
@@ -167,17 +168,44 @@ async def _adapt_block(block: dict, req: AdaptationRequest, topic_hint: str) -> 
 
 
 async def adapt_canonical_for_student(canonical: dict, req: AdaptationRequest) -> list[dict]:
-    """Adapt wording in parallel while preserving block count, order, and types."""
+    """Select learner-facing metadata while preserving the authored lesson exactly.
+
+    Canonical lessons are deliberately full-depth family experiences. Rewriting
+    each block with another model on first open made a pre-authored lesson slow
+    and could turn coherent work back into unrelated cards. Vocabulary support,
+    role selection, and session scaffolding now live in deterministic metadata;
+    Adeline can still explain a difficult passage conversationally when asked.
+    """
     blocks = list(canonical.get("blocks") or [])
     if not blocks:
         return []
 
-    topic_hint = str(canonical.get("topic") or "")
-    adapted = await asyncio.gather(*(
-        _adapt_block(block, req, topic_hint) for block in blocks
-    ))
+    try:
+        grade = 0 if req.grade_level.upper() == "K" else int(req.grade_level)
+    except (AttributeError, TypeError, ValueError):
+        grade = 0
+    band = "elementary" if grade <= 5 else "middle" if grade <= 8 else "high_school"
+    adapted = deepcopy(blocks)
+    for block in adapted:
+        block["block_type"] = str(block.get("block_type") or "TEXT").upper()
+        if isinstance(block.get("content"), str):
+            block["content"] = sanitize_learner_text(block["content"])
+        roles = block.get("family_roles") or {}
+        metadata = block.setdefault("metadata", {})
+        metadata["learner_entry"] = {
+            "role_band": band,
+            "role": roles.get(band) if isinstance(roles, dict) else None,
+            "session_support": (
+                "concrete_entry_and_lower_initial_load"
+                if req.session_intervention in {"SCAFFOLD", "BREAK", "FOCUS_RESET"}
+                else "greater_independence"
+                if req.session_intervention == "ELEVATE"
+                else "continue"
+            ),
+            "preferred_modality": req.preferred_modality,
+        }
     logger.info(
-        "[Adapter] Adapted wording for %d canonical blocks (grade=%s track=%s); structure unchanged",
+        "[Adapter] Prepared %d canonical blocks without model generation (grade=%s track=%s)",
         len(adapted), req.grade_level, req.track,
     )
     return list(adapted)

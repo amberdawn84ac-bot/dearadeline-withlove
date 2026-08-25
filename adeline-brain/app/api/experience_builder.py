@@ -224,15 +224,11 @@ async def _stream(request: LessonRequest):
 
     try:
         lookup_started = time.perf_counter()
-        canonical, packet, adaptation = await asyncio.gather(
+        canonical, adaptation = await asyncio.gather(
             canonical_store.get(slug),
-            resource_router.search(ResourceQuery(
-                topic=request.topic,
-                track=request.track.value,
-                grade_level=request.grade_level,
-            )),
             adaptation_for(request.student_id, request.grade_level, request.track.value),
         )
+        packet = {"resources": []}
         logger.info(
             "[ExperienceAuthor] context ready topic=%r canonical_hit=%s resources=%d elapsed=%.2fs",
             request.topic,
@@ -250,6 +246,11 @@ async def _stream(request: LessonRequest):
                 canonical = None
         if not canonical or canonical.get("pending_approval"):
             yield _sse({"type": "status", "message": "Adeline is authoring the experience from the living plan…"})
+            packet = await resource_router.search(ResourceQuery(
+                topic=request.topic,
+                track=request.track.value,
+                grade_level=request.grade_level,
+            ))
             authored = None
             async for kind, value in _run_with_progress(
                 _author(request, packet["resources"]), AUTHOR_PROGRESS_MESSAGES,
