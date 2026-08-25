@@ -550,7 +550,7 @@ class ResourceRouter:
     ]
 
     async def search(self, query: ResourceQuery) -> dict[str, Any]:
-        cache_key = "resource-router:v3:" + hashlib.sha256(
+        cache_key = "resource-router:v4:" + hashlib.sha256(
             json.dumps(asdict(query), sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
         try:

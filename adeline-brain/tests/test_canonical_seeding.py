@@ -50,7 +50,7 @@ def test_launch_catalog_includes_power_and_nation_building_investigation():
     assert topic.track == "TRUTH_HISTORY"
     assert topic.cross_track is True
     assert topic.archive_query == "railroads monopoly Standard Oil"
-    assert topic.evidence_revision == "robber-baron-primary-pack-v1"
+    assert topic.evidence_revision == "robber-baron-primary-pack-v2"
     assert "Building America or Consolidating Power?" in topic.topic
 
 

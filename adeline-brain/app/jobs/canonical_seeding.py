@@ -65,7 +65,7 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
         "TRUTH_HISTORY",
         True,
         "railroads monopoly Standard Oil",
-        "robber-baron-primary-pack-v1",
+        "robber-baron-primary-pack-v2",
     ),
     CanonicalSeed("The Oklahoma Land Run: Multiple Perspectives", "TRUTH_HISTORY"),
     CanonicalSeed("Oral Tradition and Family History", "TRUTH_HISTORY"),
