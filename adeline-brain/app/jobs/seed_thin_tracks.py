@@ -1,9 +1,18 @@
 """
-Nightly self-seeding for tracks with thin Hippocampus coverage.
+Nightly self-seeding for tracks with thin Hippocampus coverage, plus ongoing
+primary-source acquisition for TRUTH_HISTORY and JUSTICE_CHANGEMAKING.
 
-Runs targeted queries against the Researcher tool for GOVERNMENT_ECONOMICS,
-APPLIED_MATHEMATICS, and CREATIVE_ECONOMY. When Hippocampus returns nothing,
-the Researcher auto-acquires from Tavily and persists to pgvector.
+Runs targeted queries against the Researcher tool (`search_witnesses`), which
+searches Hippocampus first, then falls back to a free DuckDuckGo site-scoped
+search of each track's approved primary-source domains (NARA, Library of
+Congress, CourtListener, etc. — see `TRACK_DOMAINS` in researcher.py) when
+nothing is already indexed. No external API key required. Results are
+embedded and persisted to pgvector automatically, gated by the same
+track-aware Witness Protocol threshold used at request time.
+
+This replaces the old Tavily-only seed_declassified_documents.py /
+seed_justice_changemaking.py scripts, which called the Tavily API directly
+and had been silently failing since no TAVILY_API_KEY was ever set.
 
 This grows the corpus ~5-10 documents per track per night.
 """
@@ -12,7 +21,7 @@ import random
 
 logger = logging.getLogger(__name__)
 
-# Seed queries — each triggers a Tavily search + embed + persist cycle
+# Seed queries — each triggers a web search + embed + persist cycle
 SEED_QUERIES = {
     "GOVERNMENT_ECONOMICS": [
         "how does the Federal Reserve control money supply",
@@ -65,11 +74,45 @@ SEED_QUERIES = {
         "woodworking as a trade history and economics",
         "how to calculate cost of goods sold for handmade items",
     ],
+    "TRUTH_HISTORY": [
+        "declassified CIA documents Cold War overview",
+        "FBI COINTELPRO surveillance of civil rights movement",
+        "Pentagon Papers Vietnam War decision making",
+        "National Archives records of the Civil War",
+        "declassified Cuban Missile Crisis documents",
+        "presidential decision records Eisenhower Cold War",
+        "primary source documents the Great Depression",
+        "National Archives immigration records Ellis Island",
+        "declassified records Manhattan Project",
+        "Congressional Record debates over the New Deal",
+        "primary sources Reconstruction era after the Civil War",
+        "National Archives Homestead Act records",
+        "declassified State Department cables historical",
+        "primary source letters and diaries World War II homefront",
+        "Library of Congress civil rights era oral histories",
+    ],
+    "JUSTICE_CHANGEMAKING": [
+        "lobbying disclosure records how influence is tracked",
+        "campaign finance history and reform legislation",
+        "landmark Supreme Court civil rights opinions",
+        "legislative history of the Civil Rights Act",
+        "corporate accountability investigative journalism history",
+        "whistleblower protections history and law",
+        "history of labor union organizing and legislation",
+        "voting rights legislation history United States",
+        "history of antitrust law and monopoly regulation",
+        "court opinions on freedom of the press",
+        "history of the Freedom of Information Act",
+        "investigative reporting that changed public policy",
+        "history of consumer protection regulation",
+        "legislative history of environmental protection law",
+        "how congressional oversight hearings work",
+    ],
 }
 
 
 async def seed_thin_tracks():
-    """Run 3 random queries per thin track through the Researcher."""
+    """Run 3 random queries per seeded track through the Researcher."""
     try:
         from app.tools.researcher import search_witnesses
     except ImportError:

@@ -149,7 +149,6 @@ The following environment variables must be set in production. See `.env.example
 | `SUPABASE_JWT_SECRET` | Supabase JWT signing secret for auth verification | adeline-brain |
 | `OPENAI_API_KEY` | OpenAI API key for embeddings and LLM calls | adeline-brain |
 | `ANTHROPIC_API_KEY` | Anthropic API key for Claude LLM calls | adeline-brain |
-| `TAVILY_API_KEY` | Tavily API key for deep web search | adeline-brain |
 | `NEO4J_URI` | Neo4j connection URI (e.g., `bolt://localhost:7687`) | adeline-brain |
 | `NEO4J_USER` | Neo4j username | adeline-brain |
 | `NEO4J_PASSWORD` | Neo4j password | adeline-brain |
@@ -205,11 +204,10 @@ Redis is used for canonical lesson caching (fast retrieval, reduced DB load):
 
 The system uses token bucket rate limiting for external APIs:
 
-- **Tavily API**: 10 tokens max, 0.5 tokens/second refill (~10 API calls with gradual recovery). Concurrent calls capped at 5 via `asyncio.Semaphore`.
+- **Researcher web search (DuckDuckGo)**: free, no API key. Retried with exponential backoff per archive domain.
 - **Lesson generation**: 20 lessons/hour per IP via slowapi middleware.
 
 **Scaling guidance:**
-- Monitor Tavily rate limit errors. If hitting 429s frequently, increase token bucket size or reduce concurrent semaphore.
 - For production with high student volume, consider a queue system (e.g., Celery + Redis) for lesson generation to smooth burst loads.
 
 ---

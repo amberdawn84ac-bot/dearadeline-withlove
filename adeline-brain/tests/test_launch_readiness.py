@@ -31,7 +31,6 @@ ENV_VARS: Dict[str, Tuple[EnvVarTier, str]] = {
     "POSTGRES_DSN": (EnvVarTier.ALWAYS_REQUIRED, "PostgreSQL connection for Hippocampus"),
     "OPENAI_API_KEY": (EnvVarTier.ALWAYS_REQUIRED, "OpenAI embeddings (text-embedding-3-small)"),
     "GEMINI_API_KEY": (EnvVarTier.ALWAYS_REQUIRED, "Gemini lesson generation"),
-    "TAVILY_API_KEY": (EnvVarTier.ALWAYS_REQUIRED, "Tavily web search for deep archive access"),
 
     # Production required
     "UPSTASH_REDIS_REST_URL": (EnvVarTier.PRODUCTION_REQUIRED, "Upstash Redis REST for session cache"),

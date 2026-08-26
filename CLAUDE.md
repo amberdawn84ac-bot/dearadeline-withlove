@@ -58,7 +58,7 @@ Two large, deliberate migrations happened in mid/late August 2026 (both by the r
 
 Everything the old orchestrator was responsible for still exists and is arguably more developed now: the Witness Protocol, BKT/ZPD mastery tracking, SM-2 spaced repetition, and xAPI/CASE credit recording are all present in current code (see below) — this was a replacement, not a regression.
 
-**Tavily** is not a live dependency. It only appears in two standalone seed scripts (`app/scripts/seed_declassified_documents.py`, `seed_justice_changemaking.py`) that aren't called from any request path. Root-level docs referencing it as "critical" are stale.
+**Tavily was removed entirely on 2026-08-26.** It had actually been live — wired into a nightly APScheduler cron job in `app/jobs/seed_scheduler.py` that had almost certainly been silently failing every night since no `TAVILY_API_KEY` was ever set in Railway (one script even had a leftover `if not os.getenv("TAVILY_API_KEY"): skip` guard despite calling an already-DDG-backed search function underneath). The live per-request researcher fallback (`app/tools/researcher.py::search_witnesses`) had already been migrated to a free DuckDuckGo site-scoped search with no API key needed. The two Tavily-only nightly jobs were deleted and their intent (growing TRUTH_HISTORY/JUSTICE_CHANGEMAKING primary-source coverage) was folded into the existing `app/jobs/seed_thin_tracks.py` nightly job, which now covers 5 tracks through the same DDG-backed `search_witnesses()` path. No Tavily key is required anywhere in this app.
 
 ---
 
@@ -97,9 +97,9 @@ dearadeline-withlove/
 │   │   │                        # daily_plan_store, student_experience_store, bookshelf_search
 │   │   ├── protocols/
 │   │   │   ├── witness.py             # Track-aware truth thresholds (see below)
-│   │   │   └── content_filter.py      # ⚠ see "Known Issues" — duplicated in app/safety/ too
+│   │   │   └── content_filter.py      # LIVE — should_return_document(), used by tools/researcher.py
 │   │   ├── safety/
-│   │   │   └── content_filter.py      # Age-gated filter for declassified/sensitive documents
+│   │   │   └── content_filter.py      # ⚠ NOT imported anywhere — see "Known Issues"
 │   │   ├── services/            # credit_engine, credit_hook, gpa_calculator, learner_context,
 │   │   │                        # portfolio_generator, synthesis, reality_layer, resource_router,
 │   │   │                        # sefaria, standards_mapper, transcript_pdf, memory, storage
@@ -194,9 +194,8 @@ Row-Level Security is enabled on at least `User` and `StandardMastery` (checked 
 
 ## Known Issues (found 2026-08-26, unverified beyond static inspection — confirm before assuming either is fixed)
 
-1. **Duplicate content filter**: `app/protocols/content_filter.py` and `app/safety/content_filter.py` both define age-gated sensitive-content filtering with different keyword sets. Only `app/safety/content_filter.py` matches what `adeline-brain/docs/DECLASSIFIED_DEPLOYMENT.md` describes as current; `app/protocols/content_filter.py` is only imported by `tools/researcher.py`. Needs reconciling — right now it's ambiguous which one actually gates content a student sees.
+1. **Two content filters exist, and only one is wired in.** `app/protocols/content_filter.py` (`should_return_document()`) is genuinely live — imported by `tools/researcher.py`, gates *retrieved archive documents* by keyword+age (COINTELPRO, assassination, torture, etc.) before they're returned from a Witness Protocol search. `app/safety/content_filter.py` (`ContentFilter.check()` / `check_block()`) is a much broader, more thorough "Kid-Safe Quality Gate" — grade-band reading-level ceiling, violence/fear vocabulary, biblical worldview consistency, cognitive-load limits, PII stripping — but it is **not imported anywhere** in the app. It runs on nothing a student actually sees. This is not cosmetic duplication; it's a real, more comprehensive safety check sitting inert. Wiring `ContentFilter.check_block()` into the canonical lesson finalization path (`app/curriculum/family_style.py::finalize_family_lesson`, called from `app/api/experience_builder.py`) is the natural integration point, but it touches every generated lesson block and deserves its own tested pass, not a blind bolt-on.
 2. **CI skips 21 test files/patterns** via `--ignore=`/`--deselect=` in `.github/workflows/ci.yml`, including `test_launch_readiness.py` and `test_e2e_production_ready.py` — the two most relevantly-named tests for a launch. A green CI badge does not currently mean launch-readiness has been verified.
-3. **Root-level docs are stale snapshots, not current state**: `PRODUCTION_READY_CHECKLIST.md`, `PRODUCTION_DEPLOYMENT_SUMMARY.md`, `SYSTEM_INTEGRATION_AUDIT.md`, `PORTFOLIO_TRANSCRIPT_MEMORY_AUDIT.md` are all dated April 2026 and describe the pre-migration (Neo4j/orchestrator.py) architecture as current and "production ready." They also contain a live-looking `TAVILY_API_KEY` value in plain text — rotate it in Tavily's dashboard regardless of whether it's still in use.
 
 ---
 
@@ -241,8 +240,8 @@ SUPABASE_JWT_SECRET=...               # HS256 fallback path only; JWKS ES256 is 
 CORS_ORIGINS=https://dearadeline.co
 SENTRY_DSN=...
 
-# NOT required despite older docs claiming otherwise:
-# TAVILY_API_KEY   — only used by two standalone seed scripts, not the live request path
+# NOT required, and not present anywhere in the codebase:
+# TAVILY_API_KEY   — removed entirely on 2026-08-26; the Researcher uses free DuckDuckGo search
 # NEO4J_*          — Neo4j was removed entirely on 2026-08-17
 ```
 

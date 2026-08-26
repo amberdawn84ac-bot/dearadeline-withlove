@@ -95,7 +95,6 @@ jobs:
             --ignore=tests/test_pgvector_duplicate_detection.py \
             --ignore=tests/test_projects_api.py \
             --ignore=tests/test_search_witnesses_deep_web.py \
-            --ignore=tests/test_seed_declassified_documents.py \
             --ignore=tests/test_spaced_repetition.py \
             --ignore=tests/test_witness_declassified_integration.py \
             --ignore=tests/services/test_sefaria.py \

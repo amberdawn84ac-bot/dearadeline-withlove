@@ -2,8 +2,6 @@
 import logging
 import os
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from app.scripts.seed_declassified_documents import seed_all_declassified_documents
-from app.scripts.seed_justice_changemaking import main as seed_justice_changemaking
 from app.jobs.seed_thin_tracks import seed_thin_tracks
 from app.jobs.canonical_seeding import (
     canonical_seeding_enabled,
@@ -20,37 +18,16 @@ async def startup_seed_scheduler():
     """
     Initialize and start the seed scheduler.
 
-    Runs nightly at 2 AM UTC to seed Hippocampus with declassified documents.
+    Runs nightly at 3 AM UTC to grow Hippocampus coverage across
+    GOVERNMENT_ECONOMICS, APPLIED_MATHEMATICS, CREATIVE_ECONOMY,
+    TRUTH_HISTORY, and JUSTICE_CHANGEMAKING via the free DuckDuckGo-backed
+    Researcher fallback (see app/jobs/seed_thin_tracks.py).
     Called on FastAPI startup event.
     """
     global _scheduler
 
     if _scheduler is None:
         _scheduler = AsyncIOScheduler()
-
-        # Register nightly seeding jobs: 2 AM UTC every day
-        _scheduler.add_job(
-            seed_all_declassified_documents,
-            'cron',
-            hour=2,
-            minute=0,
-            timezone='UTC',
-            id='seed_declassified_documents_nightly',
-            name='Seed Declassified Documents (Nightly)',
-            max_instances=1,  # Prevent concurrent execution
-        )
-        
-        # Justice track seeding: 2:30 AM UTC every day (offset to avoid conflicts)
-        _scheduler.add_job(
-            seed_justice_changemaking,
-            'cron',
-            hour=2,
-            minute=30,
-            timezone='UTC',
-            id='seed_justice_changemaking_nightly',
-            name='Seed Justice Track (Nightly)',
-            max_instances=1,
-        )
 
         if canonical_seeding_enabled():
             day = os.getenv("CANONICAL_SEED_DAY_OF_WEEK", "sun").strip().lower()
@@ -71,7 +48,7 @@ async def startup_seed_scheduler():
                 misfire_grace_time=60 * 60 * 6,
             )
 
-        # Thin tracks (Gov/Math/Creative): 3:00 AM UTC every day
+        # Gov/Math/Creative + History/Justice primary sources: 3:00 AM UTC every day
         _scheduler.add_job(
             seed_thin_tracks,
             'cron',
@@ -79,15 +56,13 @@ async def startup_seed_scheduler():
             minute=0,
             timezone='UTC',
             id='seed_thin_tracks_nightly',
-            name='Seed Thin Tracks (Nightly)',
+            name='Seed Thin Tracks + History/Justice Primary Sources (Nightly)',
             max_instances=1,
         )
 
         _scheduler.start()
         logger.info("[Scheduler] Started APScheduler with nightly seeding jobs:")
-        logger.info("  - Declassified Documents: 02:00 UTC")
-        logger.info("  - Justice Track: 02:30 UTC")
-        logger.info("  - Thin Tracks (Gov/Math/Creative): 03:00 UTC")
+        logger.info("  - Gov/Math/Creative + History/Justice primary sources: 03:00 UTC")
         if canonical_seeding_enabled():
             logger.info(
                 "  - Canonical lessons: %s %02d:%02d %s (batch=%s)",

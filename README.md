@@ -174,6 +174,5 @@ See `adeline-brain/.env.example` for all required keys:
 - `INTERNAL_API_KEY` — server-to-server auth for internal endpoints
 - `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` — session cache (or `REDIS_URL` for local)
 - `CORS_ORIGINS` — comma-separated allowed origins (default: `http://localhost:3000`)
-- `TAVILY_API_KEY` — Researcher tool (web archive search)
 - `STRIPE_SECRET_KEY` + price IDs — subscription billing
 - `HYGRAPH_ENDPOINT` / `HYGRAPH_TOKEN` — headless CMS
