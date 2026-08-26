@@ -81,19 +81,14 @@ async def scaffold_response(body: ScaffoldRequest, student_id: str = Depends(get
             logger.warning(f"[/lesson/scaffold] Memory save failed (non-fatal): {mem_err}")
 
         # Fire BKT update — feed ZPD zone back into per-concept mastery model (non-blocking)
-        # concept_id is optional: provided when UI passes it from a ZPD suggestion card.
-        # When absent, we look up the top ZPD candidate for the track as a best-effort proxy.
+        # concept_id is optional, but mastery is updated only when the persisted
+        # plan supplied the exact curriculum target. Never credit the top ZPD
+        # candidate merely because it happens to be next in the same track.
         import asyncio as _asyncio
 
         async def _fire_bkt():
             try:
                 concept_id = body.concept_id
-                if not concept_id:
-                    from app.tools.graph_query import tool_get_zpd_candidates
-                    candidates = await tool_get_zpd_candidates(student_id, body.track.value, limit=1)
-                    if candidates:
-                        concept_id = candidates[0].concept_id
-
                 if concept_id:
                     correct = zpd_zone_to_correctness(result.zpd_zone.value)
                     if correct is not None:

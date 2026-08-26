@@ -40,6 +40,7 @@ from app.connections.daily_plan_store import daily_plan_store
 from app.services.rate_limit import enforce_rate_limit
 from app.tools.graph_query import tool_get_zpd_candidates, ZPDCandidate
 from app.agents.curriculum_planner import personalized_curriculum_planner
+from app.algorithms.sequence_policy import build_sequence_contract
 
 # Graduation requirements (Oklahoma public school standards - 23 credits)
 GRADUATION_REQUIREMENTS = {
@@ -95,6 +96,14 @@ class LessonSuggestion(BaseModel):
     portfolio_prompt: Optional[str] = None
     next_action: Optional[str] = None
     personalization_reason: Optional[str] = None
+    sequence_policy: str = "OPEN"
+    sequence_state: str = "OPEN"
+    sequence_target_id: Optional[str] = None
+    prerequisite_readiness: float = 1.0
+    prerequisite_concept_ids: list[str] = Field(default_factory=list)
+    prerequisite_standard_ids: list[str] = Field(default_factory=list)
+    bridge_required: bool = False
+    sequence_rationale: Optional[str] = None
 
 
 class ProjectSuggestion(BaseModel):
@@ -137,6 +146,9 @@ class GradeLevelStandard(BaseModel):
     track: Optional[str] = None
     strand: Optional[str] = None
     lesson_hook: Optional[str] = None
+    difficulty: str = "EMERGING"
+    prerequisite_standard_ids: list[str] = Field(default_factory=list)
+    prerequisites_met: bool = True
 
 
 class PlacementProfile(BaseModel):
@@ -168,6 +180,12 @@ class RoadmapDay(BaseModel):
     daily_rhythm: list[str] = Field(default_factory=list)
     # Planning handoff metadata. Student views deliberately never render these codes.
     standard_codes: list[str] = Field(default_factory=list)
+    # A standards-coverage slot may begin, but it must diagnose and bridge
+    # foundations until that standard has a verified prerequisite mapping.
+    sequence_policy: str = "SUPPORTED"
+    sequence_state: str = "BRIDGE_REQUIRED"
+    bridge_required: bool = True
+    prerequisite_standard_ids: list[str] = Field(default_factory=list)
 
 
 class RoadmapWeek(BaseModel):
@@ -637,6 +655,24 @@ def _build_academic_roadmap(
             lesson_date = week_start + timedelta(days=day_index)
             standard_codes = assignments[week_index * 4 + day_index]
             target = next((standards_by_code[code] for code in standard_codes if code in standards_by_code), None)
+            scheduled_standards = [standards_by_code[code] for code in standard_codes if code in standards_by_code]
+            prerequisite_standard_ids = list(dict.fromkeys(
+                prerequisite
+                for standard in scheduled_standards
+                for prerequisite in standard.prerequisite_standard_ids
+            ))
+            if prerequisite_standard_ids:
+                sequence_policy = "HARD"
+                sequence_state = "READY" if all(standard.prerequisites_met for standard in scheduled_standards) else "LOCKED"
+                bridge_required = False
+            elif scheduled_standards:
+                sequence_policy = "SUPPORTED"
+                sequence_state = "BRIDGE_REQUIRED"
+                bridge_required = True
+            else:
+                sequence_policy = "OPEN"
+                sequence_state = "OPEN"
+                bridge_required = False
             learner_hook = (
                 (target.lesson_hook or "").strip()
                 if target else ""
@@ -653,6 +689,10 @@ def _build_academic_roadmap(
                 activity_kind=activity_title,
                 daily_rhythm=list(personalized_curriculum_planner.DAILY_RHYTHM),
                 standard_codes=standard_codes,
+                sequence_policy=sequence_policy,
+                sequence_state=sequence_state,
+                bridge_required=bridge_required,
+                prerequisite_standard_ids=prerequisite_standard_ids,
             ))
         weeks.append(RoadmapWeek(
             week=week_index + 1,
@@ -703,7 +743,7 @@ def _zpd_to_suggestion(candidate: ZPDCandidate, priority_boost: float = 0.0) -> 
     """
     Convert a ZPD candidate to a lesson suggestion.
 
-    Uses the candidate's compute_priority() score (prereq_readiness × mastery_gap × leverage)
+    Uses the candidate's readiness-gated compute_priority() score
     when available (BKT-aware path). Falls back to 0.7 for graph-only candidates.
     Priority is clamped to [0, 1].
     """
@@ -712,6 +752,11 @@ def _zpd_to_suggestion(candidate: ZPDCandidate, priority_boost: float = 0.0) -> 
     base_priority = candidate.priority if candidate.priority > 0 else 0.7
     final_priority = min(1.0, base_priority + priority_boost)
 
+    sequence = build_sequence_contract(
+        source="zpd",
+        concept_id=candidate.concept_id,
+        prerequisite_readiness=candidate.prereq_readiness,
+    )
     return LessonSuggestion(
         id=f"zpd-{candidate.concept_id}",
         title=candidate.title,
@@ -724,12 +769,20 @@ def _zpd_to_suggestion(candidate: ZPDCandidate, priority_boost: float = 0.0) -> 
         standard_code=candidate.standard_code,
         grade_band=candidate.grade_band,
         agent=TRACK_AGENT_MAP.get(candidate.track),
+        sequence_policy=sequence.policy.value,
+        sequence_state=sequence.state.value,
+        sequence_target_id=candidate.concept_id,
+        prerequisite_readiness=candidate.prereq_readiness,
+        prerequisite_concept_ids=list(candidate.prerequisite_ids),
+        bridge_required=sequence.bridge_required,
+        sequence_rationale=sequence.rationale,
     )
 
 
 def _interest_suggestion(interest: str, topic: tuple[str, str], track: str, idx: int) -> LessonSuggestion:
     """Create a suggestion based on student interests from onboarding."""
     title, description = topic
+    sequence = build_sequence_contract(source="interest")
     return LessonSuggestion(
         id=f"interest-{interest.lower()}-{idx}",
         title=title,
@@ -739,6 +792,10 @@ def _interest_suggestion(interest: str, topic: tuple[str, str], track: str, idx:
         priority=0.85 - (idx * 0.02),  # High priority for interest-based
         source="interest",
         agent=TRACK_AGENT_MAP.get(track),
+        sequence_policy=sequence.policy.value,
+        sequence_state=sequence.state.value,
+        bridge_required=sequence.bridge_required,
+        sequence_rationale=sequence.rationale,
     )
 
 
@@ -787,12 +844,27 @@ def _standard_suggestion(standard: GradeLevelStandard) -> LessonSuggestion:
         scope = scope[0].upper() + scope[1:]
     title = f"{hook.rstrip('?')} — {scope}" if hook else scope
     title = title or f"Explore {standard.subject}"
+    if standard.prerequisite_standard_ids:
+        sequence = build_sequence_contract(
+            source="zpd",
+            concept_id=standard.standard_id,
+            prerequisite_readiness=1.0 if standard.prerequisites_met else 0.0,
+        )
+    else:
+        sequence = build_sequence_contract(source="standard")
     return LessonSuggestion(
         id=f"standard-{standard.standard_id}", title=title, track=track,
         description=standard.description, emoji=TRACK_EMOJI.get(track, "✦"),
         priority=0.93, source="standard", standard_code=standard.standard_id,
         grade_band=str(standard.grade), agent=TRACK_AGENT_MAP.get(track),
         personalization_reason=f"This is an unfinished grade-{standard.grade} concept, connected to the student's interests and demonstrated through real evidence.",
+        sequence_policy=sequence.policy.value,
+        sequence_state=sequence.state.value,
+        sequence_target_id=standard.standard_id,
+        prerequisite_readiness=1.0 if standard.prerequisites_met else 0.0,
+        prerequisite_standard_ids=list(standard.prerequisite_standard_ids),
+        bridge_required=sequence.bridge_required,
+        sequence_rationale=sequence.rationale,
     )
 
 
@@ -812,6 +884,7 @@ def _standard_subject_key(subject: str) -> str:
 def _starter_suggestion(track: str, topic: tuple[str, str], idx: int) -> LessonSuggestion:
     """Create a starter suggestion for a track with no ZPD data."""
     title, description = topic
+    sequence = build_sequence_contract(source="explore")
     return LessonSuggestion(
         id=f"starter-{track.lower()}-{idx}",
         title=title,
@@ -821,6 +894,10 @@ def _starter_suggestion(track: str, topic: tuple[str, str], idx: int) -> LessonS
         priority=0.5 - (idx * 0.05),  # Decrease priority for later suggestions
         source="explore",
         agent=TRACK_AGENT_MAP.get(track),
+        sequence_policy=sequence.policy.value,
+        sequence_state=sequence.state.value,
+        bridge_required=sequence.bridge_required,
+        sequence_rationale=sequence.rationale,
     )
 
 
@@ -1102,6 +1179,9 @@ async def _get_grade_level_standards(student_id: str, grade_level: str) -> list[
                 track=r.get("track"),
                 strand=r.get("strand"),
                 lesson_hook=r.get("lesson_hook"),
+                difficulty=str(r.get("difficulty") or "EMERGING"),
+                prerequisite_standard_ids=list(r.get("prerequisite_standard_ids") or []),
+                prerequisites_met=bool(r.get("prerequisites_met", True)),
             )
             for i, r in enumerate(rows)
         ]

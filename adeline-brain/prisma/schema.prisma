@@ -452,6 +452,12 @@ model CurriculumConceptPrerequisite {
   conceptId     String
   prerequisiteId String
   weight        Float @default(1.0)
+  sourceTitle   String   @default("Dear Adeline foundational concept graph")
+  sourceUrl     String   @default("")
+  sourceVersion String   @default("2026-08-26")
+  evidenceNote  String   @default("Internally curated foundational concept relationship.")
+  reviewStatus  String   @default("INTERNAL_CURATED")
+  reviewedAt    DateTime?
 
   @@id([conceptId, prerequisiteId])
   @@index([prerequisiteId])
@@ -479,9 +485,16 @@ model OASStandardRelation {
   relationType   String
   toStandardId   String
   weight         Float  @default(1.0)
+  sourceTitle    String   @default("")
+  sourceUrl      String   @default("")
+  sourceVersion  String   @default("")
+  evidenceNote   String   @default("")
+  reviewStatus   String   @default("PENDING")
+  reviewedAt     DateTime?
 
   @@id([fromStandardId, relationType, toStandardId])
   @@index([toStandardId, relationType])
+  @@index([relationType, reviewStatus])
 }
 
 model StudentConceptMastery {

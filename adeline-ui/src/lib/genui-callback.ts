@@ -17,6 +17,7 @@ export async function fireGenUICallback(params: {
   event: string;
   state: Record<string, unknown>;
   blockId?: string;
+  conceptId?: string;
   track?: string;
 }): Promise<GenUICallbackResult | null> {
   if (!params.studentId || !params.lessonId) return null;
@@ -32,6 +33,7 @@ export async function fireGenUICallback(params: {
         event: params.event,
         state: params.state,
         block_id: params.blockId ?? null,
+        concept_id: params.conceptId ?? null,
         track: params.track ?? null,
       }),
     });

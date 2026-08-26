@@ -4,7 +4,7 @@ import json
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.api.experience_builder import _emit_persisted, _run_with_progress, _stream
+from app.api.experience_builder import _emit_persisted, _run_with_progress, _stream, sequence_bridge_block
 from app.agents.adapter import AdaptationRequest
 from app.connections.student_experience_store import GenerationClaim
 from app.schemas.api_models import LessonRequest, Track
@@ -19,6 +19,29 @@ def _request() -> LessonRequest:
         grade_level="8",
         required_standard_codes=["OAS.SCI.8.1"],
     )
+
+
+def test_supported_mission_gets_a_real_readiness_bridge():
+    request = _request().model_copy(update={
+        "sequence_policy": "SUPPORTED",
+        "sequence_state": "BRIDGE_REQUIRED",
+        "bridge_required": True,
+    })
+    bridge = sequence_bridge_block(request)
+    assert bridge is not None
+    assert bridge["metadata"]["sequence_bridge"] is True
+    assert bridge["metadata"]["not_mastery_evidence"] is True
+    assert "not a separate worksheet" in bridge["content"]
+
+
+def test_ready_hard_concept_does_not_get_redundant_bridge():
+    request = _request().model_copy(update={
+        "concept_id": "cs-001",
+        "sequence_policy": "HARD",
+        "sequence_state": "READY",
+        "bridge_required": False,
+    })
+    assert sequence_bridge_block(request) is None
 
 
 async def _events(record: dict) -> list[dict]:

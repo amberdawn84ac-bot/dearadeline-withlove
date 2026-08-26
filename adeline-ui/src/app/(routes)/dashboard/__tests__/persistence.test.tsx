@@ -34,6 +34,8 @@ const plan = {
     id: 'today-1', title: 'Creek evidence', track: 'CREATION_SCIENCE',
     description: 'Compare the records.', emoji: '🔬', priority: 1,
     source: 'zpd', mission_kind: 'learning_mission', success_criteria: [],
+    sequence_policy: 'HARD', sequence_state: 'READY', prerequisite_readiness: 1,
+    prerequisite_concept_ids: [], prerequisite_standard_ids: [], bridge_required: false,
   }],
   family_context: { household_id: 'family-1', shared_with_siblings: false, sibling_count: 0 },
   placement: { declared_level: '8', working_grade: '8', placement_required: false, subject_levels: {} },

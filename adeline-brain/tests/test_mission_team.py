@@ -17,6 +17,9 @@ def suggestion(**updates):
         "emoji": "📐",
         "priority": 0.9,
         "source": "interest",
+        "sequence_policy": "SUPPORTED",
+        "sequence_state": "BRIDGE_REQUIRED",
+        "bridge_required": True,
     }
     values.update(updates)
     return LessonSuggestion(**values)
@@ -42,7 +45,8 @@ def test_mission_contract_has_a_finish_line_and_reuses_canonical():
     )
     assert update["canonical_ready"] is True
     assert update["next_action"] == "Open the saved lesson"
-    assert len(update["success_criteria"]) == 2
+    assert len(update["success_criteria"]) == 3
+    assert update["mission_kind"] == "supported_mission"
     assert "portfolio" in update["portfolio_prompt"]
 
 
@@ -56,6 +60,27 @@ def test_mission_architect_owns_priority_and_track_variety():
     ]
     chosen = agent.select_balanced(candidates, 3)
     assert [item.id for item in chosen] == ["math-1", "history", "math-2"]
+
+
+def test_mission_architect_never_selects_a_locked_hard_concept():
+    agent = MissionArchitectAgent()
+    locked = suggestion(
+        id="locked",
+        source="zpd",
+        concept_id="fractions",
+        sequence_policy="HARD",
+        sequence_state="LOCKED",
+        prerequisite_readiness=.4,
+    )
+    ready = suggestion(
+        id="ready",
+        source="zpd",
+        concept_id="addition",
+        sequence_policy="HARD",
+        sequence_state="READY",
+        prerequisite_readiness=1,
+    )
+    assert [item.id for item in agent.select_balanced([locked, ready], 2)] == ["ready"]
 
 
 @pytest.mark.asyncio

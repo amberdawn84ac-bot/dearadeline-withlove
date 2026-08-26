@@ -29,6 +29,7 @@ class GenuiCallbackRequest(BaseModel):
     event: str  # "onAnswer", "onComplete", "onHint", etc.
     state: dict  # Component state (e.g., isCorrect, currentStep, hintsUsed)
     block_id: Optional[str] = None
+    concept_id: Optional[str] = None  # Exact curriculum target; block IDs are not concepts
     track: Optional[str] = None  # Track for BKT lookup on onAnswer events
 
 
@@ -137,6 +138,7 @@ async def genui_callback(
                 mastery_score=updated_mastery,
                 component_type=request.component_type,
                 block_id=request.block_id,
+                concept_id=request.concept_id,
                 is_correct=is_correct,
             )
         except Exception as e:
@@ -472,6 +474,7 @@ async def _persist_mastery_update(
     mastery_score: float,
     component_type: str,
     block_id: Optional[str] = None,
+    concept_id: Optional[str] = None,
     is_correct: Optional[bool] = None,
 ) -> None:
     """
@@ -523,8 +526,12 @@ async def _persist_mastery_update(
         # correctness from mastery_score misclassifies early/low-mastery learners
         # (a first correct answer can yield a posterior < 0.5).
         observed_correct = is_correct if is_correct is not None else mastery_score >= 0.5
-        concept_id = block_id or f"{track}-{component_type}"
-        await update_bkt(student_id, concept_id, track, observed_correct)
+        if concept_id:
+            await update_bkt(student_id, concept_id, track, observed_correct)
+        else:
+            logger.info(
+                "[GENUI] Assessment recorded without concept mastery: no exact concept_id"
+            )
 
         # The same assessed interaction also updates the ephemeral live-state
         # layer. No lesson generation or additional model call is involved.

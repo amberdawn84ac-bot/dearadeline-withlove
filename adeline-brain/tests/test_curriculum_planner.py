@@ -9,6 +9,8 @@ class Standard:
     subject: str
     strand: str
     mastered: bool = False
+    difficulty: str = "EMERGING"
+    prerequisite_standard_ids: tuple[str, ...] = ()
 
 
 def test_planner_owns_all_ten_tracks():
@@ -66,3 +68,27 @@ def test_households_get_distinct_stable_investigation_orders():
 
     assert planner.family_investigation_cycle("family-a") == planner.family_investigation_cycle("family-a")
     assert planner.family_investigation_cycle("family-a") != planner.family_investigation_cycle("family-b")
+
+
+def test_verified_dependencies_override_code_order():
+    planner = PersonalizedCurriculumPlannerAgent()
+    standards = [
+        Standard("3.M.1", "Mathematics", "Numbers", prerequisite_standard_ids=("3.M.9",)),
+        Standard("3.M.9", "Mathematics", "Numbers"),
+    ]
+    sequence = planner.assign_sequence(standards)
+    first_foundation = next(i for i, day in enumerate(sequence) if "3.M.9" in day)
+    first_dependent = next(i for i, day in enumerate(sequence) if "3.M.1" in day)
+    assert first_foundation < first_dependent
+
+
+def test_difficulty_orders_foundations_before_advanced_unmapped_standards():
+    planner = PersonalizedCurriculumPlannerAgent()
+    standards = [
+        Standard("3.M.1", "Mathematics", "Numbers", difficulty="MASTERING"),
+        Standard("3.M.9", "Mathematics", "Numbers", difficulty="EMERGING"),
+    ]
+    sequence = planner.assign_sequence(standards)
+    first_foundation = next(i for i, day in enumerate(sequence) if "3.M.9" in day)
+    first_advanced = next(i for i, day in enumerate(sequence) if "3.M.1" in day)
+    assert first_foundation < first_advanced

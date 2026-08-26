@@ -66,9 +66,13 @@ def apply_decay(mastery: float, last_practiced: datetime) -> float:
 
 
 def compute_priority(prereq: float, mastery: float, deps: int, max_deps: int) -> float:
-    """ZPD priority: 0.6*readiness + 0.3*gap + 0.1*leverage."""
+    """ZPD priority with readiness as the gate on gap and leverage.
+
+    A large mastery gap must not make an unready concept look urgent.  Once a
+    concept is ready, gap and downstream leverage break ties naturally.
+    """
     leverage = (deps / max_deps) if max_deps > 0 else 0
-    return 0.6 * prereq + 0.3 * (1 - mastery) + 0.1 * leverage
+    return prereq * (0.6 + 0.3 * (1 - mastery) + 0.1 * leverage)
 
 
 def blend_mastery(bkt: float, delta: float, interaction_count: int = 10) -> float:
@@ -129,6 +133,7 @@ class ZPDConcept:
     current_mastery:        float
     prerequisite_readiness: float
     priority:               float
+    prerequisite_ids:       list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -184,6 +189,7 @@ def compute_zpd_from_snapshots(snapshots: dict, concept_graph: list) -> list:
             grade_band=c.get("grade_band"), current_mastery=mastery,
             prerequisite_readiness=readiness,
             priority=compute_priority(readiness, mastery, c["dependent_count"], max_deps),
+            prerequisite_ids=list(prereq_ids),
         ))
 
     result.sort(key=lambda x: x.priority, reverse=True)

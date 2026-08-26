@@ -170,17 +170,32 @@ class CurriculumGraph:
             await session.commit()
 
     async def add_standard_relation(
-        self, from_id: str, relation_type: str, to_id: str, weight: float = 1.0
+        self, from_id: str, relation_type: str, to_id: str, weight: float = 1.0,
+        *, source_title: str = "", source_url: str = "", source_version: str = "",
+        evidence_note: str = "", review_status: str = "PENDING",
     ) -> None:
         async with _get_session_factory()() as session:
             await session.execute(text('''
                 INSERT INTO "OASStandardRelation"
-                    ("fromStandardId", "relationType", "toStandardId", weight)
-                VALUES (:from_id, :relation_type, :to_id, :weight)
+                    ("fromStandardId", "relationType", "toStandardId", weight,
+                     "sourceTitle", "sourceUrl", "sourceVersion", "evidenceNote",
+                     "reviewStatus", "reviewedAt")
+                VALUES (:from_id, :relation_type, :to_id, :weight,
+                        :source_title, :source_url, :source_version, :evidence_note,
+                        :review_status,
+                        CASE WHEN :review_status = 'VERIFIED' THEN NOW() ELSE NULL END)
                 ON CONFLICT ("fromStandardId", "relationType", "toStandardId")
-                DO UPDATE SET weight = EXCLUDED.weight
+                DO UPDATE SET weight = EXCLUDED.weight,
+                    "sourceTitle" = EXCLUDED."sourceTitle",
+                    "sourceUrl" = EXCLUDED."sourceUrl",
+                    "sourceVersion" = EXCLUDED."sourceVersion",
+                    "evidenceNote" = EXCLUDED."evidenceNote",
+                    "reviewStatus" = EXCLUDED."reviewStatus",
+                    "reviewedAt" = EXCLUDED."reviewedAt"
             '''), {"from_id": from_id, "relation_type": relation_type,
-                    "to_id": to_id, "weight": weight})
+                    "to_id": to_id, "weight": weight, "source_title": source_title,
+                    "source_url": source_url, "source_version": source_version,
+                    "evidence_note": evidence_note, "review_status": review_status})
             await session.commit()
 
     async def record_concept_mastery(
@@ -291,6 +306,28 @@ class CurriculumGraph:
                 )
                 SELECT s.code AS id, s.description, s.grade, s.subject,
                        s.track::text AS track, s.strand, s."lessonHook" AS lesson_hook,
+                       s.difficulty,
+                       COALESCE(ARRAY(
+                           SELECT relation."fromStandardId"
+                           FROM "OASStandardRelation" relation
+                           WHERE relation."toStandardId" = s.code
+                             AND relation."relationType" = 'PREREQUISITE_FOR'
+                             AND relation."reviewStatus" = 'VERIFIED'
+                           ORDER BY relation."fromStandardId"
+                       ), ARRAY[]::text[]) AS prerequisite_standard_ids,
+                       NOT EXISTS (
+                           SELECT 1
+                           FROM "OASStandardRelation" relation
+                           WHERE relation."toStandardId" = s.code
+                             AND relation."relationType" = 'PREREQUISITE_FOR'
+                             AND relation."reviewStatus" = 'VERIFIED'
+                             AND NOT EXISTS (
+                                 SELECT 1 FROM "StandardMastery" prerequisite_mastery
+                                 WHERE prerequisite_mastery."studentId" = :student_id
+                                   AND prerequisite_mastery."standardId" = relation."fromStandardId"
+                                   AND prerequisite_mastery.proficiency IN ('UNDERSTANDING', 'EXTENDING')
+                             )
+                       ) AS prerequisites_met,
                        COALESCE(m.proficiency::text, 'NOT_STARTED') AS proficiency,
                        CASE WHEN m.proficiency IN ('UNDERSTANDING', 'EXTENDING')
                             THEN true ELSE false END AS mastered
@@ -331,11 +368,13 @@ class CurriculumGraph:
                   ON own."standardId" = s.code AND own."studentId" = :student_id
                 WHERE r."fromStandardId" = :standard_id
                   AND r."relationType" = 'FEEDS_INTO'
+                  AND r."reviewStatus" = 'VERIFIED'
                   AND COALESCE(own.proficiency::text, '') NOT IN ('UNDERSTANDING', 'EXTENDING')
                   AND NOT EXISTS (
                     SELECT 1 FROM "OASStandardRelation" prereq
                     WHERE prereq."toStandardId" = s.code
                       AND prereq."relationType" = 'PREREQUISITE_FOR'
+                      AND prereq."reviewStatus" = 'VERIFIED'
                       AND prereq."fromStandardId" <> :standard_id
                       AND NOT EXISTS (
                         SELECT 1 FROM "StandardMastery" mastered
@@ -360,6 +399,7 @@ class CurriculumGraph:
                   ON m."standardId" = s.code AND m."studentId" = :student_id
                 WHERE r."toStandardId" = :standard_id
                   AND r."relationType" = 'PREREQUISITE_FOR'
+                  AND r."reviewStatus" = 'VERIFIED'
                 ORDER BY s.grade, s.code
             '''), {"standard_id": standard_id, "student_id": student_id})
             return [dict(row) for row in result.mappings().all()]
@@ -371,7 +411,9 @@ class CurriculumGraph:
                        c.difficulty, c."standardCode" AS standard_code,
                        c."gradeBand" AS grade_band,
                        COUNT(DISTINCT dep."conceptId") AS dependent_count,
-                       COUNT(DISTINCT prereq."prerequisiteId") AS prereq_count
+                       COUNT(DISTINCT prereq."prerequisiteId") AS prereq_count,
+                       COALESCE(array_agg(DISTINCT prereq."prerequisiteId")
+                           FILTER (WHERE prereq."prerequisiteId" IS NOT NULL), ARRAY[]::text[]) AS prerequisite_ids
                 FROM "CurriculumConcept" c
                 LEFT JOIN "StudentConceptMastery" own
                   ON own."conceptId" = c.id AND own."studentId" = :student_id

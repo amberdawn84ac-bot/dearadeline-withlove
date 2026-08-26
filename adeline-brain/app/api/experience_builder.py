@@ -93,6 +93,43 @@ def _json_object(raw: str) -> dict:
     return json.loads(text[start:end + 1]) if start >= 0 and end > start else {}
 
 
+def sequence_bridge_block(request: LessonRequest) -> dict | None:
+    """Create a deterministic just-in-time bridge for non-graph-verified work.
+
+    This is part of the real investigation, not a prerequisite worksheet.  It
+    keeps curiosity available while preventing the lesson from assuming that
+    an unverified foundation is already mastered.
+    """
+    if request.sequence_policy != "SUPPORTED" or not request.bridge_required:
+        return None
+    return {
+        "block_id": "sequence-readiness-bridge",
+        "block_type": "TEXT",
+        "title": "Connect before you build",
+        "content": (
+            f"Begin by explaining, showing, or drawing what you already understand about {request.topic}. "
+            "Use the first concrete example or source in this investigation to identify the foundation the "
+            "larger work depends on. If that foundation is shaky, ask Adeline to teach it, then try one fresh "
+            "example before using it in the real investigation. This is part of the work—not a separate worksheet."
+        ),
+        "experience_stage": "INVITATION",
+        "evidence": [],
+        "is_silenced": False,
+        "family_roles": {
+            "elementary": "Show the idea with objects, a picture, or your own words.",
+            "middle": "Explain the foundation and test it with one concrete example.",
+            "high_school": "State the foundation, identify uncertainty, and verify it before dependent analysis.",
+        },
+        "metadata": {
+            "sequence_bridge": True,
+            "sequence_policy": request.sequence_policy,
+            "prerequisite_concept_ids": request.prerequisite_concept_ids,
+            "prerequisite_standard_ids": request.prerequisite_standard_ids,
+            "not_mastery_evidence": True,
+        },
+    }
+
+
 async def _run_with_progress(
     operation: Awaitable[Any],
     messages: Sequence[str],
@@ -317,6 +354,9 @@ async def _stream(request: LessonRequest):
                 blocks = value
         if blocks is None:
             raise RuntimeError("Learner adaptation completed without a result")
+        bridge = sequence_bridge_block(request)
+        if bridge:
+            blocks.insert(0, bridge)
         resource_block = resource_block_from_packet(packet)
         if resource_block:
             blocks.append(resource_block)
@@ -332,6 +372,14 @@ async def _stream(request: LessonRequest):
             "experience_design": contract.get("experience_design") or {},
             "public_interest_contract": contract.get("public_interest_contract") or {},
             "mastery_evidence_map": contract.get("mastery_evidence_map") or [],
+            "concept_id": request.concept_id,
+            "concept_name": request.concept_name or request.topic,
+            "sequence_target_id": request.sequence_target_id,
+            "sequence_policy": request.sequence_policy,
+            "sequence_state": request.sequence_state,
+            "prerequisite_concept_ids": request.prerequisite_concept_ids,
+            "prerequisite_standard_ids": request.prerequisite_standard_ids,
+            "bridge_required": request.bridge_required,
             "learner_contribution": learner_contribution(contract, adaptation),
             "portfolio_task": contract.get("portfolio_task") or {},
         }
@@ -382,6 +430,11 @@ async def _emit_persisted(request: LessonRequest, record: dict):
 @router.post("/build")
 async def build_experience(request: LessonRequest, authorization: str | None = Header(default=None)):
     await verify_student_access(request.student_id, authorization)
+    if request.sequence_policy == "HARD" and request.sequence_state != "READY":
+        raise HTTPException(
+            status_code=409,
+            detail="This planned skill is still locked by an unmastered prerequisite. Open the prerequisite mission first.",
+        )
     await enforce_rate_limit("experience-build", request.student_id, limit=8)
     return StreamingResponse(_stream(request), media_type="text/event-stream")
 
@@ -426,6 +479,9 @@ async def printable_experience(request: LessonRequest, authorization: str | None
         {"topic": request.topic, "blocks": canonical.get("blocks") or []},
         adaptation,
     )
+    bridge = sequence_bridge_block(request)
+    if bridge:
+        blocks.insert(0, bridge)
     contract = ((canonical.get("blocks") or [{}])[0].get("metadata") or {}).get("canonical_contract") or {}
     if blocks:
         blocks[0].setdefault("metadata", {})["learner_contribution"] = learner_contribution(

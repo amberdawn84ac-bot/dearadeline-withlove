@@ -216,6 +216,16 @@ class LessonRequest(BaseModel):
     grade_level: str
     force_regenerate: bool = False  # Bypass canonical cache and regenerate fresh lesson content
     required_standard_codes: list[str] = Field(default_factory=list)
+    # Passed from the persisted plan so opening a mission preserves the
+    # planner's readiness decision and exact mastery target.
+    concept_id: Optional[str] = Field(default=None, max_length=160)
+    concept_name: Optional[str] = Field(default=None, max_length=240)
+    sequence_target_id: Optional[str] = Field(default=None, max_length=200)
+    sequence_policy: str = Field(default="OPEN", pattern="^(HARD|SUPPORTED|OPEN)$")
+    sequence_state: str = Field(default="OPEN", pattern="^(READY|BRIDGE_REQUIRED|OPEN|LOCKED)$")
+    prerequisite_concept_ids: list[str] = Field(default_factory=list, max_length=40)
+    prerequisite_standard_ids: list[str] = Field(default_factory=list, max_length=80)
+    bridge_required: bool = False
     # Hydrated server-side by the planner/router before specialist generation.
     required_standard_context: list[dict] = Field(default_factory=list)
     routed_resource_context: list[dict] = Field(default_factory=list)

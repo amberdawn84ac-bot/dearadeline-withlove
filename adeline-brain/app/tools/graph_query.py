@@ -15,7 +15,7 @@ ZPD selection hierarchy:
 """
 from __future__ import annotations
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.connections.knowledge_graph import (
     get_zpd_candidates,
@@ -42,6 +42,7 @@ class ZPDCandidate:
     priority:        float = 0.0
     current_mastery: float = 0.0
     prereq_readiness: float = 1.0
+    prerequisite_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -72,7 +73,8 @@ async def tool_get_zpd_candidates(
     when data is available, falling back to graph-only selection when not.
 
     BKT path returns candidates with real priority scores from:
-      compute_priority(prereq_readiness, mastery_gap, leverage)
+      compute_priority(prereq_readiness, mastery_gap, leverage), with readiness
+      gating the gap and leverage terms
     so the highest-leverage, most-ready concepts surface first.
     """
     from app.algorithms.bkt_tracker import get_mastery_map_with_timestamps, build_mastery_snapshots
@@ -104,6 +106,7 @@ async def tool_get_zpd_candidates(
                         priority=z.priority,
                         current_mastery=z.current_mastery,
                         prereq_readiness=z.prerequisite_readiness,
+                        prerequisite_ids=list(z.prerequisite_ids),
                     )
                     for z in zpd_concepts
                 ]
@@ -130,6 +133,7 @@ async def tool_get_zpd_candidates(
             dependent_count=r.get("dependent_count", 0),
             prereq_count=r.get("prereq_count", 0),
             priority=0.5,  # Neutral priority — no BKT data available
+            prerequisite_ids=list(r.get("prerequisite_ids") or []),
         )
         for r in raw
     ]

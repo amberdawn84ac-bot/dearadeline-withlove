@@ -100,6 +100,14 @@ export interface LessonRequest {
   grade_level: string;
   force_regenerate?: boolean;
   required_standard_codes?: string[];
+  concept_id?: string;
+  concept_name?: string;
+  sequence_target_id?: string;
+  sequence_policy?: "HARD" | "SUPPORTED" | "OPEN";
+  sequence_state?: "READY" | "BRIDGE_REQUIRED" | "OPEN" | "LOCKED";
+  prerequisite_concept_ids?: string[];
+  prerequisite_standard_ids?: string[];
+  bridge_required?: boolean;
 }
 
 /**
@@ -108,7 +116,7 @@ export interface LessonRequest {
  * planned title, description, track, grade adaptation, or homestead handling.
  */
 export function lessonRequestFromSuggestion(
-  suggestion: Pick<LessonSuggestion, "id" | "title" | "description" | "track">,
+  suggestion: Pick<LessonSuggestion, "id" | "title" | "description" | "track" | "concept_id" | "sequence_target_id" | "sequence_policy" | "sequence_state" | "prerequisite_concept_ids" | "prerequisite_standard_ids" | "bridge_required">,
   studentId: string,
   gradeLevel: string,
   requiredStandardCodes: string[] = [],
@@ -124,6 +132,14 @@ export function lessonRequestFromSuggestion(
     grade_level: gradeLevel,
     is_homestead: suggestion.track === "HOMESTEADING",
     required_standard_codes: requiredStandardCodes,
+    concept_id: suggestion.concept_id,
+    concept_name: suggestion.title,
+    sequence_target_id: suggestion.sequence_target_id,
+    sequence_policy: suggestion.sequence_policy,
+    sequence_state: suggestion.sequence_state,
+    prerequisite_concept_ids: suggestion.prerequisite_concept_ids,
+    prerequisite_standard_ids: suggestion.prerequisite_standard_ids,
+    bridge_required: suggestion.bridge_required,
   };
 }
 
@@ -315,6 +331,14 @@ export interface LessonResponse {
       credit_requires_demonstrated_understanding?: boolean;
     };
     portfolio_task?: { description?: string; evidence_to_preserve?: string };
+    concept_id?: string;
+    concept_name?: string;
+    sequence_target_id?: string;
+    sequence_policy?: "HARD" | "SUPPORTED" | "OPEN";
+    sequence_state?: "READY" | "BRIDGE_REQUIRED" | "OPEN" | "LOCKED";
+    prerequisite_concept_ids?: string[];
+    prerequisite_standard_ids?: string[];
+    bridge_required?: boolean;
     printable_request?: LessonRequest;
   };
 }
@@ -502,7 +526,9 @@ export interface SealJournalRequest {
   completed_blocks: number;
   oas_standards?: Array<{ standard_id: string; text: string; grade: number }>;
   evidence_sources?: Array<{ title: string; url: string; author: string; year: number | null }>;
-  quiz_results?: Array<{ correct: boolean; concept_id?: string }>;
+  concept_id?: string;
+  concept_name?: string;
+  quiz_results?: Array<{ correct: boolean; block_id?: string }>;
   learner_reflection?: string;
   artifact_refs?: string[];
   parent_attested?: boolean;
@@ -1189,6 +1215,14 @@ export interface LessonSuggestion {
   portfolio_prompt?: string;
   next_action?: string;
   personalization_reason?: string;
+  sequence_policy: "HARD" | "SUPPORTED" | "OPEN";
+  sequence_state: "READY" | "BRIDGE_REQUIRED" | "OPEN" | "LOCKED";
+  sequence_target_id?: string;
+  prerequisite_readiness: number;
+  prerequisite_concept_ids: string[];
+  prerequisite_standard_ids: string[];
+  bridge_required: boolean;
+  sequence_rationale?: string;
 }
 
 export interface ProjectSuggestion {
@@ -1248,7 +1282,7 @@ export interface LearningPlanResponse {
         week: number;
         starts_on: string;
         theme: string;
-        days: Array<{ date: string; day: string; lesson_id: string; title: string; track: Track; description: string; emoji: string; planning_status: 'ready' | 'forecast'; activity_kind: string; daily_rhythm: string[]; standard_codes?: string[] }>;
+        days: Array<{ date: string; day: string; lesson_id: string; title: string; track: Track; description: string; emoji: string; planning_status: 'ready' | 'forecast'; activity_kind: string; daily_rhythm: string[]; standard_codes?: string[]; sequence_policy?: "HARD" | "SUPPORTED" | "OPEN"; sequence_state?: "READY" | "BRIDGE_REQUIRED" | "OPEN" | "LOCKED"; bridge_required?: boolean; prerequisite_standard_ids?: string[] }>;
       }>;
     }>;
     adaptive: boolean;

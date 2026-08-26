@@ -53,8 +53,15 @@ function selectPlannedTask(plan: Awaited<ReturnType<typeof getLearningPlan>>, re
       selected = {
         id: roadmapDay.lesson_id, title: roadmapDay.title, track: roadmapDay.track,
         description: roadmapDay.description, emoji: roadmapDay.emoji,
-        priority: 0.5, source: 'explore', canonical_ready: false,
+        priority: 0.5, source: 'standard', canonical_ready: false,
         mission_kind: 'learning_mission', success_criteria: [],
+        sequence_policy: roadmapDay.sequence_policy ?? 'SUPPORTED',
+        sequence_state: roadmapDay.sequence_state ?? 'BRIDGE_REQUIRED',
+        sequence_target_id: requiredStandardCodes[0],
+        prerequisite_readiness: 0,
+        prerequisite_concept_ids: [],
+        prerequisite_standard_ids: roadmapDay.prerequisite_standard_ids ?? [],
+        bridge_required: roadmapDay.bridge_required ?? true,
       };
     }
   }
@@ -93,6 +100,9 @@ export default function CanonicalLessonPage() {
         const requestedId = decodeURIComponent(params.taskId);
         const { selected, requiredStandardCodes } = selectPlannedTask(plan, requestedId);
         if (!selected) throw new Error('That experience is no longer in the current learning plan.');
+        if (selected.sequence_policy === 'HARD' && selected.sequence_state !== 'READY') {
+          throw new Error('This skill is waiting on a prerequisite. Open the prerequisite mission from Today first.');
+        }
         if (cancelled) return;
         setTask(selected);
 

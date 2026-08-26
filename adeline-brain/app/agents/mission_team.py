@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.agents.resource_intelligence import ResourceIntelligenceAgent
+from app.algorithms.sequence_policy import suggestion_is_assignable
 
 
 @dataclass(frozen=True)
@@ -56,8 +57,12 @@ class MissionArchitectAgent:
         self.resource_intelligence = ResourceIntelligenceAgent()
 
     def select_balanced(self, candidates: list[Any], limit: int) -> list[Any]:
-        """Own final mission choice: priority first, with true cross-track variety."""
-        ranked = sorted(candidates, key=lambda item: item.priority, reverse=True)
+        """Own final mission choice and enforce sequencing at the last possible gate."""
+        ranked = sorted(
+            (item for item in candidates if suggestion_is_assignable(item)),
+            key=lambda item: item.priority,
+            reverse=True,
+        )
         chosen: list[Any] = []
         seen_tracks: set[str] = set()
         # First give the learner the strongest mission from each available
@@ -99,11 +104,20 @@ class MissionArchitectAgent:
         resource_packet: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         source = item.source
-        if source == "zpd":
+        sequence_policy = getattr(item, "sequence_policy", "OPEN")
+        bridge_required = bool(getattr(item, "bridge_required", False))
+        if sequence_policy == "HARD":
             kind = "skill_mission"
             criteria = [
                 "Use the central idea correctly in a new example.",
                 "Explain why the example works in your own words.",
+            ]
+        elif bridge_required:
+            kind = "supported_mission"
+            criteria = [
+                "Begin by showing what you already understand about the foundation.",
+                "Use the built-in bridge before dependent work if that foundation is not secure yet.",
+                "Demonstrate the investigation's central idea through the real outcome.",
             ]
         elif source == "interest":
             kind = "interest_mission"

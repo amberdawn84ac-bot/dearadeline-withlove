@@ -206,21 +206,18 @@ async def _update_card_safe(student_id: str, body: SealRequest) -> None:
         return
     try:
         from app.algorithms.bkt_tracker import update_card_after_lesson
-        from app.tools.graph_query import tool_get_zpd_candidates
 
         quality = _quiz_quality(body.quiz_results)
 
         concept_id   = body.concept_id
         concept_name = body.concept_name or ""
 
-        # If no concept_id was sent, resolve from ZPD candidates
+        # Never guess a mastery target. A quiz may count as lesson evidence,
+        # but it cannot unlock a curriculum dependency without the exact
+        # concept selected by the persisted plan.
         if not concept_id:
-            zpd = await tool_get_zpd_candidates(student_id, body.track.value, limit=1)
-            if zpd:
-                concept_id   = zpd[0].concept_id
-                concept_name = concept_name or zpd[0].title
-            else:
-                concept_id = f"{body.track.value.lower()}-seal"
+            logger.info("[Journal] Skipping concept mastery update: no exact concept_id")
+            return
 
         await update_card_after_lesson(
             student_id=student_id,

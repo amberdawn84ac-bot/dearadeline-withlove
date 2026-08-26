@@ -75,6 +75,7 @@ export default function TodayPage() {
             <small>{today.track.replace(/_/g, ' ')}</small>
             <h3>{today.emoji} {today.title}</h3>
             <p>{today.description}</p>
+            <small>{today.sequence_policy === 'HARD' ? 'Prerequisites demonstrated' : today.bridge_required ? 'Foundation bridge included' : 'Open exploration'}</small>
             <Link href={`/dashboard/lesson/${encodeURIComponent(today.id)}`}>Begin →</Link>
           </article> : <EmptyCard text="The next plan is being arranged." />}
         </div>
@@ -84,6 +85,7 @@ export default function TodayPage() {
           {comingUp.map((mission) => <article key={mission.id} className={styles.kanbanCard}>
             <small>{mission.track.replace(/_/g, ' ')}</small><h3>{mission.emoji} {mission.title}</h3>
             <p>{mission.description}</p>
+            <small>{mission.sequence_policy === 'HARD' ? 'Prerequisites demonstrated' : mission.bridge_required ? 'Foundation bridge included' : 'Open exploration'}</small>
           </article>)}
           {!comingUp.length && <EmptyCard text="Nothing else is queued for this week." />}
         </div>

@@ -61,7 +61,7 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
   const [reflection, setReflection] = useState("");
   const [learningStatus, setLearningStatus] = useState("");
   const [creditSealed, setCreditSealed] = useState(false);
-  const [quizResults, setQuizResults] = useState<Array<{ correct: boolean; concept_id?: string }>>([]);
+  const [quizResults, setQuizResults] = useState<Array<{ correct: boolean; block_id?: string }>>([]);
   const [artifact, setArtifact] = useState("");
   const [printing, setPrinting] = useState(false);
   const [printError, setPrintError] = useState("");
@@ -86,8 +86,8 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
       if (detail?.lessonId !== lesson.lesson_id || typeof detail.correct !== 'boolean') return;
       const correct = detail.correct;
       setQuizResults((current) => [
-        ...current.filter((result) => result.concept_id !== detail.blockId),
-        { correct, concept_id: detail.blockId },
+        ...current.filter((result) => result.block_id !== detail.blockId),
+        { correct, block_id: detail.blockId },
       ]);
     };
     window.addEventListener('adeline:learning-evidence', collect);
@@ -106,6 +106,8 @@ export default function FamilyCanonicalLesson({ lesson, studentId }: { lesson: L
         completed_blocks: visible.length,
         oas_standards: lesson.oas_standards.map(({ standard_id, text, grade }) => ({ standard_id, text, grade })),
         learner_reflection: reflection.trim(),
+        concept_id: lesson.metadata?.concept_id,
+        concept_name: lesson.metadata?.concept_name ?? lesson.title,
         quiz_results: quizResults,
         artifact_refs: artifact.trim() ? [`portfolio://investigation/${lesson.lesson_id}`] : [],
         evidence_sources: artifact.trim() ? [{ title: "Learner investigation artifact", url: `portfolio://investigation/${lesson.lesson_id}`, author: artifact.trim(), year: new Date().getFullYear() }] : [],

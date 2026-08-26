@@ -81,12 +81,37 @@ class PersonalizedCurriculumPlannerAgent:
 
     @staticmethod
     def _natural_key(standard: Any) -> tuple:
+        difficulty_rank = {
+            "EMERGING": 0, "DEVELOPING": 1, "EXPANDING": 2, "MASTERING": 3,
+        }.get(str(getattr(standard, "difficulty", "EMERGING")).upper(), 4)
         parts = tuple(
             int(part) if part.isdigit() else part.lower()
             for part in re.split(r"(\d+)", standard.standard_id)
             if part
         )
-        return ((standard.strand or "").lower(), parts)
+        return (difficulty_rank, (standard.strand or "").lower(), parts)
+
+    def _dependency_order(self, standards: list[Any]) -> list[Any]:
+        """Topologically order verified prerequisites, then stable difficulty/code."""
+        by_id = {standard.standard_id: standard for standard in standards}
+        prerequisites = {
+            standard.standard_id: {
+                item for item in getattr(standard, "prerequisite_standard_ids", []) if item in by_id
+            }
+            for standard in standards
+        }
+        ordered: list[Any] = []
+        remaining = set(by_id)
+        while remaining:
+            ready = [by_id[item] for item in remaining if not (prerequisites[item] & remaining)]
+            if not ready:
+                # Invalid/cyclic imported data cannot erase required coverage.
+                ready = [by_id[item] for item in remaining]
+            ready.sort(key=self._natural_key)
+            chosen = ready[0]
+            ordered.append(chosen)
+            remaining.remove(chosen.standard_id)
+        return ordered
 
     def assign_sequence(self, standards: list[Any], total_weeks: int = 36) -> list[list[str]]:
         """Order foundations, rotate other disciplines, and schedule retrieval."""
@@ -96,8 +121,8 @@ class PersonalizedCurriculumPlannerAgent:
         for standard in standards:
             if not standard.mastered:
                 families[self.standard_family(standard.subject)].append(standard)
-        for items in families.values():
-            items.sort(key=self._natural_key)
+        for family, items in list(families.items()):
+            families[family] = self._dependency_order(items)
 
         for family in ("literacy", "math"):
             for index, standard in enumerate(families.pop(family, [])):
