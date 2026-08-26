@@ -10,7 +10,7 @@ from app.services.learner_context import learner_contribution
 
 def test_one_generator_owns_interdisciplinary_modes():
     prompt = CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT.lower()
-    assert CANONICAL_FORMAT_VERSION == 10
+    assert CANONICAL_FORMAT_VERSION == 11
     for mode in ("stem", "steam", "arts_integrated", "maker_build", "design_challenge"):
         assert mode in prompt
     assert "not separate subjects, generators, portals" in FAMILY_CANONICAL_AUTHORING_RULES.lower()

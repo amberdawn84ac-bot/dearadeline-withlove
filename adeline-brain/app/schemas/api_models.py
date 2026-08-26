@@ -98,6 +98,52 @@ class BlockType(str, Enum):
     CONCEPT_MAP        = "CONCEPT_MAP"
 
 
+# ── v11 Experience-First Authoring (canonical_author.py) ──────────────────────
+# blocks[] remains the reusable content/component pool (BlockType above,
+# unchanged). experience_design.flow is the new authority over learner-facing
+# sequence and grouping — see app/curriculum/canonical_author.py.
+
+class ExperienceType(str, Enum):
+    INVESTIGATION                  = "investigation"
+    STEM                           = "stem"
+    STEAM                          = "steam"
+    ARTS_INTEGRATED                = "arts_integrated"
+    MAKER_BUILD                    = "maker_build"
+    DESIGN_CHALLENGE               = "design_challenge"
+    CREATIVE_DEMONSTRATION         = "creative_demonstration"
+    FAMILY_PROJECT                 = "family_project"
+    PUBLIC_INTEREST_INVESTIGATION  = "public_interest_investigation"
+    CIVIC_ACTION_PROJECT           = "civic_action_project"
+    SKILL_PRACTICE                 = "skill_practice"
+
+
+class ExperienceLayout(str, Enum):
+    """Advisory visual treatment only. Never determines what content exists
+    or its order — that authority belongs entirely to a flow node's ordered
+    position and its block_ids. NARRATIVE_SEQUENCE is reserved for the
+    legacy read-path (pre-v11 canonicals) and must never be produced by a
+    fresh authoring attempt."""
+    DOSSIER                 = "dossier"
+    LAB_NOTEBOOK             = "lab_notebook"
+    FIELD_GUIDE              = "field_guide"
+    BUILD_LOG                = "build_log"
+    THEOLOGY_MAP             = "theology_map"
+    TIMELINE_INVESTIGATION   = "timeline_investigation"
+    SOURCE_COMPARISON        = "source_comparison"
+    SKILL_LADDER             = "skill_ladder"
+    NARRATIVE_SEQUENCE       = "narrative_sequence"  # legacy read-path only
+
+
+class FlowNode(BaseModel):
+    """One authored step. The renderer walks flow in array order — this is
+    the only thing that determines sequence and grouping. A block's
+    experience_stage remains educational/mastery metadata; it is not
+    consulted for page composition."""
+    node_id:   str
+    label:     str
+    block_ids: list[str] = Field(min_length=1)
+
+
 # ── Multimodal Data Models ────────────────────────────────────────────────────
 
 class MindMapNode(BaseModel):

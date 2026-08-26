@@ -340,6 +340,26 @@ export interface LessonResponse {
     prerequisite_standard_ids?: string[];
     bridge_required?: boolean;
     printable_request?: LessonRequest;
+    /**
+     * v11 experience-first authoring. experience_design.flow is the
+     * authority over learner-facing sequence and grouping; layout is
+     * presentation guidance only. Absent/empty on pre-v11 canonicals —
+     * those render via the existing stage-bucketed path unchanged. Not yet
+     * consumed by the renderer (Phase 2); typed here so the data round-trips.
+     */
+    experience_design?: {
+      primary_mode?: string;
+      central_question?: string;
+      entry_move?: string;
+      layout?: "dossier" | "lab_notebook" | "field_guide" | "build_log" | "theology_map" |
+        "timeline_investigation" | "source_comparison" | "skill_ladder" | "narrative_sequence";
+      flow?: Array<{ node_id: string; label: string; block_ids: string[] }>;
+      constraints?: string[];
+      disciplines_integrated?: string[];
+      integration_rationale?: string;
+    };
+    contract_version?: string;
+    prompt_version?: string;
   };
 }
 

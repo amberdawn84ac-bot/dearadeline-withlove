@@ -22,8 +22,12 @@ from app.config import GEMINI_API_KEY, GOOGLE_API_KEY, GEMINI_BASE_URL, GEMINI_M
 from app.schemas.api_models import LessonRequest
 from app.curriculum.canonical_author import (
     CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT,
+    CONTRACT_VERSION,
+    PROMPT_VERSION,
     enforce_non_exposure_mastery,
     validate_canonical_contract,
+    validate_experience_substance,
+    validate_flow_composition,
 )
 from app.curriculum.family_style import finalize_family_lesson, is_current_family_canonical
 from app.connections.canonical_store import canonical_store, canonical_slug
@@ -221,7 +225,11 @@ async def _author(request: LessonRequest, resources: list[dict]) -> dict:
                 getattr(usage, "total_tokens", None),
             )
             parsed = enforce_non_exposure_mastery(_json_object(raw))
-            contract_errors = validate_canonical_contract(parsed)
+            contract_errors = (
+                validate_canonical_contract(parsed)
+                + validate_flow_composition(parsed)
+                + validate_experience_substance(parsed)
+            )
             if contract_errors:
                 logger.warning(
                     "[ExperienceAuthor] contract repair topic=%r attempt=%d errors=%s",
@@ -235,6 +243,25 @@ async def _author(request: LessonRequest, resources: list[dict]) -> dict:
             blocks = finalize_family_lesson(parsed.get("blocks") or [], request.topic, track=request.track.value)
             if blocks:
                 parsed["blocks"] = blocks
+                # finalize_family_lesson can drop blocks (dedup, obsolete formats,
+                # unusable content) after flow composition was already validated
+                # against the raw model output — re-check the flow still resolves
+                # against what actually survived finalization.
+                post_finalize_errors = validate_flow_composition(parsed)
+                if post_finalize_errors:
+                    logger.warning(
+                        "[ExperienceAuthor] flow broke during finalization topic=%r attempt=%d errors=%s",
+                        request.topic, attempt + 1, post_finalize_errors,
+                    )
+                    last_error = ValueError("; ".join(post_finalize_errors))
+                    repair_instruction = (
+                        "Finalization removed content your flow still references: "
+                        + "; ".join(post_finalize_errors)
+                        + ". Keep every block used and referenced consistently."
+                    )
+                    continue
+                parsed["contract_version"] = CONTRACT_VERSION
+                parsed["prompt_version"] = PROMPT_VERSION
                 logger.info(
                     "[ExperienceAuthor] accepted topic=%r attempt=%d blocks=%d elapsed=%.2fs",
                     request.topic,
@@ -336,7 +363,7 @@ async def _stream(request: LessonRequest):
             # Durable contracts live with the canonical blocks so the current DB schema
             # can preserve one source of truth without introducing a parallel lesson table.
             blocks[0].setdefault("metadata", {})["canonical_contract"] = {
-                key: authored.get(key) for key in ("big_question", "learning_goal", "shared_experience", "experience_design", "investigation_scope_contract", "public_interest_contract", "real_world_task", "portfolio_task", "printable_contract", "demonstration_contract", "mastery_evidence_map", "family_roles")
+                key: authored.get(key) for key in ("big_question", "learning_goal", "shared_experience", "experience_design", "investigation_scope_contract", "public_interest_contract", "real_world_task", "portfolio_task", "printable_contract", "demonstration_contract", "mastery_evidence_map", "family_roles", "contract_version", "prompt_version")
             }
             canonical = {"id": str(uuid.uuid4()), "topic": request.topic, "track": request.track.value, "title": authored.get("title") or request.topic, "blocks": blocks, "oas_standards": [], "researcher_activated": False, "agent_name": "Canonical Experience Author"}
             await canonical_store.save(slug, canonical, pending=False)
@@ -372,6 +399,8 @@ async def _stream(request: LessonRequest):
             "experience_design": contract.get("experience_design") or {},
             "public_interest_contract": contract.get("public_interest_contract") or {},
             "mastery_evidence_map": contract.get("mastery_evidence_map") or [],
+            "contract_version": contract.get("contract_version"),
+            "prompt_version": contract.get("prompt_version"),
             "concept_id": request.concept_id,
             "concept_name": request.concept_name or request.topic,
             "sequence_target_id": request.sequence_target_id,

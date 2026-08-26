@@ -4,13 +4,47 @@ This prompt defines the semantic source-of-truth lesson. Grade/mastery adaptatio
 and workbook/digital rendering happen downstream.
 """
 
+from app.curriculum.experience_contract import ACTION_TYPES, DEMONSTRATION_TYPES
 from app.curriculum.family_style import FAMILY_CANONICAL_AUTHORING_RULES
 
 EXPERIENCE_MODES = frozenset({
     "investigation", "stem", "steam", "arts_integrated", "maker_build",
     "design_challenge", "creative_demonstration", "family_project",
-    "public_interest_investigation", "civic_action_project",
+    "public_interest_investigation", "civic_action_project", "skill_practice",
 })
+
+EXPERIENCE_LAYOUTS = frozenset({
+    "dossier", "lab_notebook", "field_guide", "build_log", "theology_map",
+    "timeline_investigation", "source_comparison", "skill_ladder",
+    # "narrative_sequence" intentionally excluded — legacy read-path only,
+    # never a valid choice for fresh authoring. See validate_flow_composition().
+})
+
+# Two independent version axes, distinct from CANONICAL_FORMAT_VERSION (the
+# storage/schema shape, in family_style.py). CONTRACT_VERSION tracks which
+# validation rules a canonical satisfied; PROMPT_VERSION tracks which exact
+# system prompt produced it. Bump CONTRACT_VERSION when validate_canonical_
+# contract/validate_flow_composition/validate_experience_substance rules
+# change; bump PROMPT_VERSION when CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT's
+# text changes materially. Neither bump forces regeneration by itself today
+# — is_current_family_canonical() still only gates on the format floor — but
+# both are persisted so a future targeted re-authoring pass (see
+# app/scripts/audit_canonical_quality.py) can identify exactly which
+# canonicals predate a given rule or prompt change.
+CONTRACT_VERSION = "2026-08-26.1"
+PROMPT_VERSION = "v11-flow-2026-08-26"
+
+# A block only counts as "genuine evidence" — as opposed to prose describing
+# or asserting evidence exists — if it's one of these types.
+EVIDENCE_CAPABLE_TYPES = frozenset({"PRIMARY_SOURCE", "RESEARCH_MISSION"})
+
+_INVESTIGATION_FAMILY_TYPES = frozenset({
+    "investigation", "stem", "steam", "public_interest_investigation",
+    "civic_action_project", "family_project",
+})
+_EVIDENCE_ORIENTED_TRACKS = frozenset({"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING", "DISCIPLESHIP"})
+_STEM_TYPES = frozenset({"stem", "steam"})
+_MAKER_TYPES = frozenset({"maker_build", "design_challenge"})
 
 
 def enforce_non_exposure_mastery(payload: dict) -> dict:
@@ -96,6 +130,141 @@ def validate_canonical_contract(payload: dict) -> list[str]:
                 errors.append(f"mastery_evidence_map[{index}] may not award exposure alone")
     return errors
 
+
+def validate_flow_composition(payload: dict) -> list[str]:
+    """Composition validity: is there a real authored flow, do all block
+    references resolve, and is every block accounted for.
+
+    This says nothing about whether the flow is any good — that is
+    validate_experience_substance()'s job. A flow where every node points at
+    a TEXT block passes this function cleanly; it is meant to.
+    """
+    errors: list[str] = []
+    design = payload.get("experience_design")
+    if not isinstance(design, dict):
+        return ["experience_design is required"]
+
+    layout = str(design.get("layout") or "").strip().lower()
+    if layout == "narrative_sequence":
+        errors.append("narrative_sequence is a legacy read-only layout and may not be freshly authored")
+    elif layout not in EXPERIENCE_LAYOUTS:
+        errors.append("experience_design.layout must be a supported composition layout")
+
+    flow = design.get("flow")
+    if not isinstance(flow, list) or not flow:
+        errors.append("experience_design.flow must be a non-empty list of flow nodes")
+        return errors
+
+    block_ids = {
+        str(block.get("block_id")) for block in payload.get("blocks") or [] if isinstance(block, dict)
+    }
+    referenced: set[str] = set()
+    for index, node in enumerate(flow):
+        if not isinstance(node, dict):
+            errors.append(f"experience_design.flow[{index}] must be an object")
+            continue
+        node_block_ids = node.get("block_ids")
+        if not isinstance(node_block_ids, list) or not node_block_ids:
+            errors.append(f"experience_design.flow[{index}] must reference at least one block_id")
+            continue
+        referenced.update(str(block_id) for block_id in node_block_ids)
+
+    if missing := sorted(referenced - block_ids):
+        errors.append(f"experience_design.flow references unknown block_ids: {missing}")
+    if orphaned := sorted(block_ids - referenced):
+        errors.append(f"blocks not referenced by any flow node: {orphaned}")
+
+    return errors
+
+
+def validate_experience_substance(payload: dict) -> list[str]:
+    """Pedagogical validity: does the flow actually contain the substance the
+    experience claims to be — not just a structurally valid flow.
+
+    Deliberately does not prescribe an exact block sequence or count per
+    layout or experience type — only minimum semantic invariants. A flow
+    whose "experiment" node points at a TEXT block, or whose investigation
+    has no PRIMARY_SOURCE anywhere, fails here even though it would pass
+    validate_flow_composition() cleanly.
+    """
+    errors: list[str] = []
+    design = payload.get("experience_design") or {}
+    exp_type = str(design.get("primary_mode") or "").strip().lower()
+    flow = design.get("flow")
+    if not isinstance(flow, list):
+        return errors  # validate_flow_composition() already reports this
+
+    blocks_by_id = {
+        str(block.get("block_id")): block
+        for block in payload.get("blocks") or []
+        if isinstance(block, dict)
+    }
+    present_types: set[str] = set()
+    for node in flow:
+        if not isinstance(node, dict):
+            continue
+        for block_id in node.get("block_ids") or []:
+            block = blocks_by_id.get(str(block_id))
+            if block:
+                present_types.add(str(block.get("block_type") or "").upper())
+    non_text_types = present_types - {"TEXT", "NARRATIVE"}
+
+    if not str(design.get("central_question") or payload.get("big_question") or "").strip():
+        errors.append("experience must have a real central question or skill target")
+    if not non_text_types:
+        errors.append(
+            "experience contains no component beyond TEXT/NARRATIVE — at least one "
+            "genuine action, evidence, or demonstration component is required, not prose alone"
+        )
+    if not (present_types & ACTION_TYPES):
+        errors.append(
+            "experience has no genuine learner-action component; an experience_stage "
+            "label alone cannot satisfy this"
+        )
+    if not (present_types & DEMONSTRATION_TYPES):
+        errors.append(
+            "experience has no genuine demonstration/mastery component requiring learner output"
+        )
+
+    if exp_type in _INVESTIGATION_FAMILY_TYPES:
+        if not (present_types & (ACTION_TYPES | EVIDENCE_CAPABLE_TYPES)):
+            errors.append(
+                f"{exp_type} experiences require substantive investigation or action "
+                "components appropriate to the claim, not prescribed order but real substance"
+            )
+
+    track = str(payload.get("track") or "").upper()
+    if track in _EVIDENCE_ORIENTED_TRACKS or exp_type == "public_interest_investigation":
+        if not (present_types & EVIDENCE_CAPABLE_TYPES):
+            errors.append(
+                f"{track or exp_type} experiences must contain an actual PRIMARY_SOURCE "
+                "or RESEARCH_MISSION component, not prose describing or asserting sources"
+            )
+
+    if exp_type in _STEM_TYPES:
+        if not ({"EXPERIMENT", "LAB_MISSION"} & present_types):
+            errors.append(f"{exp_type} experiences require a genuine EXPERIMENT or LAB_MISSION component")
+        elif not any(
+            block.get("evidence")
+            for block in blocks_by_id.values()
+            if str(block.get("block_type") or "").upper() in {"EXPERIMENT", "LAB_MISSION", "DATA_TRACKING"}
+        ):
+            errors.append(f"{exp_type} experiences require an evidence/observation opportunity, not just a procedure")
+
+    if exp_type in _MAKER_TYPES:
+        if not ({"REAL_WORLD_APP", "EXPERIMENT", "LAB_MISSION", "GENUI_ASSEMBLY"} & present_types):
+            errors.append(f"{exp_type} experiences require a genuine creation/build/design action component")
+
+    if exp_type == "skill_practice":
+        if not ({"PROBLEM", "QUIZ", "GENUI_ASSEMBLY", "FLASHCARD"} & present_types):
+            errors.append(
+                "skill_practice experiences require genuine learner problems/tasks/practice, "
+                "not explanation alone"
+            )
+
+    return errors
+
+
 CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT = f"""
 You are the Canonical Lesson Author for Dear Adeline, an adaptive Christian homeschool learning system.
 
@@ -109,6 +278,38 @@ Do NOT append a generic family activity or status message.
 Do NOT create separate lessons for different grades.
 Do NOT invent frontend behavior, CSS, page layouts, or PDF markup.
 Prefer concrete evidence and meaningful tasks over explanatory prose.
+
+EXPERIENCE FLOW — YOU AUTHOR ONE SEQUENCE, NOT A BAG OF BLOCKS:
+- experience_design.flow is the actual order the family experiences this in.
+  Each flow node names one step and lists the block_id(s) rendered together
+  at that step. Every block you write must appear in exactly one flow node;
+  every block_id a flow node lists must be a real block you wrote.
+- experience_design.layout is presentation guidance only (how a step looks) —
+  it never determines what content exists or its order. Do not "fill a
+  template" for the layout you chose; author the real investigation, then
+  name the layout that fits what you actually built.
+- TEXT and NARRATIVE blocks are connective and supporting material — an
+  opening question, a short explanation, a transition, a caption. They are
+  never sufficient by themselves to BE the investigation, the action, or the
+  demonstration. A flow made of TEXT blocks with the right labels is not
+  meaningfully different from a lesson with no flow at all, and is rejected.
+- An investigation-shaped experience (investigation/stem/steam/public_interest_
+  investigation/civic_action_project/family_project) needs a real block the
+  learner actually investigates or acts with — PRIMARY_SOURCE, RESEARCH_MISSION,
+  EXPERIMENT, LAB_MISSION, REAL_WORLD_APP, DISCUSSION_FORUM, GENUI_ASSEMBLY —
+  not prose describing what an investigation would contain.
+- If you claim TRUTH_HISTORY, JUSTICE_CHANGEMAKING, DISCIPLESHIP, or
+  public_interest_investigation, you must include an actual PRIMARY_SOURCE or
+  RESEARCH_MISSION block — a real cited source, not a paragraph asserting one
+  exists.
+- If you claim stem or steam, you must include a real EXPERIMENT or
+  LAB_MISSION block with an evidence/observation opportunity, not a
+  description of an experiment.
+- If you claim maker_build or design_challenge, you must include a real
+  creation/build action block, not an essay about building something.
+- If you claim skill_practice, you must include real problems/tasks the
+  learner solves (PROBLEM, QUIZ, GENUI_ASSEMBLY, FLASHCARD) — explanation may
+  support the practice but cannot constitute it.
 
 RESPONSE BUDGET — CONCISE IS NOT SHALLOW:
 - Keep the complete JSON under roughly 24,000 characters. Spend the budget on
@@ -143,7 +344,8 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
   "learning_goal": "",
   "shared_experience": "",
   "experience_design": {{
-    "primary_mode": "investigation|stem|steam|arts_integrated|maker_build|design_challenge|creative_demonstration|family_project|public_interest_investigation|civic_action_project",
+    "primary_mode": "investigation|stem|steam|arts_integrated|maker_build|design_challenge|creative_demonstration|family_project|public_interest_investigation|civic_action_project|skill_practice",
+    "central_question": "The real question or skill target this experience exists to answer — not administrative framing.",
     "entry_move": "The consequential observation, record, experiment, attempted build, site walk, object, or stakeholder question learners encounter before lengthy explanation.",
     "supporting_modes": [],
     "why_this_fits": "",
@@ -151,7 +353,9 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
     "constraints": [],
     "materials": [{{"item": "", "substitutions": [], "unusual_or_costly": false}}],
     "disciplines_integrated": [],
-    "integration_rationale": ""
+    "integration_rationale": "",
+    "layout": "dossier|lab_notebook|field_guide|build_log|theology_map|timeline_investigation|source_comparison|skill_ladder",
+    "flow": [{{"node_id": "", "label": "one short phrase naming what happens at this step", "block_ids": ["the block_id(s) this step renders together"]}}]
   }},
   "investigation_scope_contract": {{
     "completion_basis": "demonstrated understanding and a meaningful shared outcome—not elapsed days",

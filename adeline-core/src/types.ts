@@ -257,6 +257,47 @@ export enum BlockType {
   EMBEDDED_INTERRUPT_INLINE   = "EMBEDDED_INTERRUPT_INLINE",   // Inline interrupt with reflection prompts
 }
 
+// ── v11 Experience-First Authoring (mirrors app/schemas/api_models.py) ────────
+// blocks[] remains the reusable content/component pool (BlockType above,
+// unchanged). experience_design.flow is the authority over learner-facing
+// sequence and grouping — see adeline-brain/app/curriculum/canonical_author.py.
+
+export enum ExperienceType {
+  INVESTIGATION                 = "investigation",
+  STEM                          = "stem",
+  STEAM                         = "steam",
+  ARTS_INTEGRATED               = "arts_integrated",
+  MAKER_BUILD                   = "maker_build",
+  DESIGN_CHALLENGE              = "design_challenge",
+  CREATIVE_DEMONSTRATION        = "creative_demonstration",
+  FAMILY_PROJECT                = "family_project",
+  PUBLIC_INTEREST_INVESTIGATION = "public_interest_investigation",
+  CIVIC_ACTION_PROJECT          = "civic_action_project",
+  SKILL_PRACTICE                = "skill_practice",
+}
+
+// Advisory visual treatment only — never determines what content exists or
+// its order; that authority belongs entirely to a flow node's position and
+// block_ids. NARRATIVE_SEQUENCE is reserved for the legacy read-path
+// (pre-v11 canonicals) and is never valid on freshly authored content.
+export enum ExperienceLayout {
+  DOSSIER                = "dossier",
+  LAB_NOTEBOOK            = "lab_notebook",
+  FIELD_GUIDE             = "field_guide",
+  BUILD_LOG               = "build_log",
+  THEOLOGY_MAP            = "theology_map",
+  TIMELINE_INVESTIGATION  = "timeline_investigation",
+  SOURCE_COMPARISON       = "source_comparison",
+  SKILL_LADDER            = "skill_ladder",
+  NARRATIVE_SEQUENCE      = "narrative_sequence", // legacy read-path only
+}
+
+export interface FlowNode {
+  node_id: string;
+  label: string;
+  block_ids: string[];
+}
+
 export enum DifficultyLevel {
   EMERGING   = "EMERGING",    // K–2
   DEVELOPING = "DEVELOPING",  // 3–5

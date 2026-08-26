@@ -11,7 +11,15 @@ from typing import Any
 
 from app.curriculum.experience_contract import ExperienceStage, annotate_experience, validate_experience
 
-CANONICAL_FORMAT_VERSION = 10
+CANONICAL_FORMAT_VERSION = 11
+# The floor below which a cached canonical is no longer safe to serve at all
+# (pre-family-style formats). Content stamped between this floor and the
+# current CANONICAL_FORMAT_VERSION remains servable from cache without
+# forced regeneration — e.g. version-10 (pre-experience.flow) canonicals
+# keep rendering through the legacy stage-bucketed path; only a version-11+
+# canonical carries a fresh-authoring experience.flow. See
+# is_current_family_canonical() below for the actual gate.
+MIN_SERVEABLE_FORMAT_VERSION = 10
 
 _OBSOLETE_FORMATS = {
     "ANIMATED_SKETCHNOTE_LESSON",
@@ -310,10 +318,19 @@ def finalize_family_lesson(blocks: list[dict], topic: str, *, track: str | None 
 
 
 def is_current_family_canonical(blocks: list[dict]) -> bool:
-    """Only reuse lessons authored and saved by the current family format."""
+    """True if this cached record is safe to reuse without regenerating.
+
+    Deliberately a floor (>=), not equality with CANONICAL_FORMAT_VERSION —
+    a version-10 canonical (pre experience.flow) is still safely servable
+    from cache via the legacy renderer; it is not "stale" in the sense that
+    forces regeneration. Whether a served canonical actually carries a
+    fresh-authoring experience.flow (and can therefore use the new
+    flow-aware renderer once that exists) is a separate, later decision —
+    not what this function answers.
+    """
     return bool(blocks) and all(
         block.get("family_style")
-        and block.get("canonical_format_version") == CANONICAL_FORMAT_VERSION
+        and (block.get("canonical_format_version") or 0) >= MIN_SERVEABLE_FORMAT_VERSION
         and not block.get("deprecated")
         for block in blocks
     )

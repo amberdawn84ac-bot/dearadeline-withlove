@@ -22,11 +22,15 @@ class ExperienceStage(StrEnum):
 
 ACTION_TYPES = frozenset({
     "LAB_MISSION", "EXPERIMENT", "REAL_WORLD_APP", "SIMULATION",
-    "RESEARCH_MISSION", "DISCUSSION_FORUM",
+    "RESEARCH_MISSION", "DISCUSSION_FORUM", "GENUI_ASSEMBLY", "PROBLEM",
 })
-CREATION_TYPES = frozenset({"PROJECT_BUILDER", "TIMELINE", "MIND_MAP", "CONCEPT_MAP"})
+CREATION_TYPES = frozenset({"PROJECT_BUILDER", "TIMELINE", "MIND_MAP", "CONCEPT_MAP", "GENUI_ASSEMBLY"})
 DEMONSTRATION_TYPES = frozenset({"QUIZ", "FLASHCARD", "SCAFFOLDED_PROBLEM", "GENUI_ASSEMBLY"})
 DISCOVERY_TYPES = frozenset({"PRIMARY_SOURCE", "DATA_EXPLORER", "COMPARISON", "TEXT", "NARRATIVE"})
+# GENUI_ASSEMBLY is a dynamic-component wrapper (component_type/props chosen at
+# authoring time) capable of representing an action, a creation, or a
+# demonstration depending on what it wraps — deliberately in all three sets
+# rather than forced into one, unlike every other type here.
 
 
 def infer_stage(block: dict[str, Any], index: int, total: int) -> ExperienceStage:
@@ -66,8 +70,22 @@ def annotate_experience(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return blocks
 
 
+_STAGE_REQUIRES_CAPABLE_TYPE = {
+    ExperienceStage.ACTION: ACTION_TYPES,
+    ExperienceStage.CREATION: CREATION_TYPES,
+    ExperienceStage.DEMONSTRATION: DEMONSTRATION_TYPES,
+}
+
+
 def validate_experience(blocks: list[dict[str, Any]]) -> list[str]:
-    """Enforce experience shape without prescribing a visual template."""
+    """Enforce experience shape without prescribing a visual template.
+
+    A block may only satisfy ACTION/CREATION/DEMONSTRATION by actually being
+    a type capable of that stage — an explicit experience_stage label alone
+    is not enough. Without this, a plain TEXT block could self-label
+    "experience_stage": "ACTION" and satisfy the requirement below without
+    the learner ever encountering a genuine action-capable component.
+    """
     stages = {infer_stage(block, index, len(blocks)) for index, block in enumerate(blocks)}
     errors: list[str] = []
     if ExperienceStage.INVITATION not in stages:
@@ -76,4 +94,18 @@ def validate_experience(blocks: list[dict[str, Any]]) -> list[str]:
         errors.append("experience requires meaningful learner action or creation")
     if ExperienceStage.DEMONSTRATION not in stages:
         errors.append("experience requires a reviewable demonstration of understanding")
+
+    for index, block in enumerate(blocks):
+        stage = infer_stage(block, index, len(blocks))
+        capable_types = _STAGE_REQUIRES_CAPABLE_TYPE.get(stage)
+        if capable_types is None:
+            continue
+        block_type = str(block.get("block_type") or "").upper()
+        if block_type not in capable_types:
+            errors.append(
+                f"block {index} declares experience_stage={stage.value} but "
+                f"block_type={block_type or '(missing)'} cannot satisfy that stage — "
+                f"a label alone does not make it {stage.value.lower()}"
+            )
+
     return errors
