@@ -134,6 +134,74 @@ def sequence_bridge_block(request: LessonRequest) -> dict | None:
     }
 
 
+_INTEGRATION_TERMS = {
+    "math": frozenset({
+        "math", "arithmetic", "algebra", "geometry", "statistics", "measurement",
+        "measure", "data", "ratio", "percentage", "graph", "budget", "economic",
+    }),
+    "literacy": frozenset({
+        "literacy", "language arts", "reading", "writing", "literature", "rhetoric",
+        "communication", "source analysis", "research", "argument", "debate", "journalism",
+    }),
+}
+
+
+def skill_connections_for_contract(contract: dict, targets: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Separate genuine cross-disciplinary fits from unrelated skill practice.
+
+    The canonical author must already have named and justified a discipline in
+    the shared experience. Topic similarity alone cannot turn a math or literacy
+    target into themed work.
+    """
+    design = contract.get("experience_design") or {}
+    integration_text = " ".join([
+        *(str(item) for item in design.get("disciplines_integrated") or []),
+        str(design.get("integration_rationale") or ""),
+    ]).lower()
+    integrated: list[dict] = []
+    separate: list[dict] = []
+    for raw in targets:
+        target = dict(raw)
+        domain = str(target.get("domain") or "").lower()
+        terms = _INTEGRATION_TERMS.get(domain, frozenset())
+        fits = bool(terms and any(term in integration_text for term in terms))
+        if fits:
+            target["integration_status"] = "INTEGRATED"
+            target["integration_reason"] = str(design.get("integration_rationale") or "").strip() or (
+                f"The authored investigation explicitly includes {domain}."
+            )
+            target["contribution_prompt"] = (
+                f"Use {target.get('title') or f'this {domain} target'} only where the shared evidence or outcome "
+                f"actually calls for {domain}; preserve the work so understanding can be reviewed."
+            )
+            integrated.append(target)
+        else:
+            target["integration_status"] = "SEPARATE"
+            target["integration_reason"] = (
+                "The authored investigation does not justify this connection, so it remains in the learner's separate skill path."
+            )
+            separate.append(target)
+    return integrated, separate
+
+
+def learner_contribution_for_request(contract: dict, adaptation: Any, request: LessonRequest) -> dict:
+    """Join the shared theme to this learner's real, current skill path."""
+    contribution = learner_contribution(contract, adaptation)
+    integrated, separate = skill_connections_for_contract(
+        contract, list(request.individual_skill_targets),
+    )
+    contribution["delivery_mode"] = request.delivery_mode
+    contribution["shared_investigation_id"] = request.shared_investigation_id
+    contribution["skill_connections"] = integrated
+    contribution["separate_skill_targets"] = separate
+    contribution["integration_rule"] = (
+        "Use a math or literacy target inside this investigation only when the sources, quantities, "
+        "communication, or real outcome genuinely require it. Otherwise preserve it as brief individual practice; "
+        "never manufacture themed busywork."
+    )
+    return contribution
+
+
 async def _run_with_progress(
     operation: Awaitable[Any],
     messages: Sequence[str],
@@ -409,8 +477,11 @@ async def _stream(request: LessonRequest):
             "prerequisite_concept_ids": request.prerequisite_concept_ids,
             "prerequisite_standard_ids": request.prerequisite_standard_ids,
             "bridge_required": request.bridge_required,
-            "learner_contribution": learner_contribution(contract, adaptation),
+            "learner_contribution": learner_contribution_for_request(contract, adaptation, request),
             "portfolio_task": contract.get("portfolio_task") or {},
+            "delivery_mode": request.delivery_mode,
+            "shared_investigation_id": request.shared_investigation_id,
+            "individual_skill_targets": request.individual_skill_targets,
         }
         record = await student_experience_store.save_ready(
             request.student_id, plan_item_id, title=canonical.get("title") or request.topic,
@@ -513,8 +584,8 @@ async def printable_experience(request: LessonRequest, authorization: str | None
         blocks.insert(0, bridge)
     contract = ((canonical.get("blocks") or [{}])[0].get("metadata") or {}).get("canonical_contract") or {}
     if blocks:
-        blocks[0].setdefault("metadata", {})["learner_contribution"] = learner_contribution(
-            contract, adaptation
+        blocks[0].setdefault("metadata", {})["learner_contribution"] = learner_contribution_for_request(
+            contract, adaptation, request
         )
     from app.services.investigation_printable import build_investigation_pdf
     pdf = build_investigation_pdf(title=canonical.get("title") or request.topic, topic=request.topic,

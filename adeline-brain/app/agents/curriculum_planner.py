@@ -19,7 +19,29 @@ class PersonalizedCurriculumPlannerAgent:
         "TRUTH_HISTORY", "ENGLISH_LITERATURE", "APPLIED_MATHEMATICS",
         "CREATIVE_ECONOMY",
     )
-    DAILY_RHYTHM = ("Read together", "Write or tell", "Math through the mission")
+    # History/social studies and science are the shared household spine. Math
+    # and literacy keep learner-specific prerequisite paths and may support the
+    # shared investigation only where the connection is genuine. The remaining
+    # tracks are valuable extensions, but they do not silently become the
+    # family's school-day theme.
+    INDIVIDUAL_SKILL_TRACKS = frozenset({"ENGLISH_LITERATURE", "APPLIED_MATHEMATICS"})
+    FAMILY_INVESTIGATION_TRACKS = (
+        "CREATION_SCIENCE",
+        "HEALTH_NATUROPATHY",
+        "HOMESTEADING",
+        "GOVERNMENT_ECONOMICS",
+        "JUSTICE_CHANGEMAKING",
+        "TRUTH_HISTORY",
+    )
+    FAMILY_STANDARD_FAMILIES = {
+        "CREATION_SCIENCE": frozenset({"science", "technology"}),
+        "HEALTH_NATUROPATHY": frozenset({"science", "health_movement"}),
+        "HOMESTEADING": frozenset({"science", "technology"}),
+        "GOVERNMENT_ECONOMICS": frozenset({"social_studies"}),
+        "JUSTICE_CHANGEMAKING": frozenset({"social_studies"}),
+        "TRUTH_HISTORY": frozenset({"social_studies"}),
+    }
+    DAILY_RHYTHM = ("Gather around the question", "Investigate together", "Make an individual contribution")
     ACTIVITY_STAGES = (
         ("Question Hunt", "Read, notice, ask questions, and collect the clues that launch this week's investigation."),
         ("Experiment or Game", "Test the week's ideas through a hands-on experiment, simulation, movement challenge, or real game."),
@@ -39,26 +61,50 @@ class PersonalizedCurriculumPlannerAgent:
         "CREATIVE_ECONOMY": "Creative economy",
     }
 
-    def family_investigation_cycle(self, household_id: str, total_weeks: int = 36) -> list[tuple]:
+    def family_investigation_cycle(
+        self,
+        household_id: str,
+        total_weeks: int = 36,
+        seed_catalog: list[tuple] | tuple[tuple, ...] | None = None,
+    ) -> list[tuple]:
         """Return stable household slots; the adaptive planner supplies their content.
 
-        There is deliberately no canned topic catalog here. A slot coordinates siblings
-        around one track and week while standards, gaps, interests, local context, and
-        routed resources determine the actual experience at generation time.
+        Math and literacy never become the household theme. When an approved
+        canonical catalog is supplied, its real investigation titles are used;
+        otherwise stable track slots remain available for planning forecasts.
         """
-        offset = int(hashlib.sha256(household_id.encode("utf-8")).hexdigest()[:8], 16) % len(self.TRACKS)
-        tracks = list(self.TRACKS[offset:] + self.TRACKS[:offset])
+        catalog = [
+            seed for seed in list(seed_catalog or [])
+            if len(seed) >= 4 and seed[2] in self.FAMILY_INVESTIGATION_TRACKS
+        ]
+        if not catalog:
+            catalog = [
+                (
+                    f"family-{track.lower()}",
+                    self.TRACK_LABELS[track],
+                    track,
+                    f"A shared {self.TRACK_LABELS[track].lower()} investigation.",
+                )
+                for track in self.FAMILY_INVESTIGATION_TRACKS
+            ]
+        offset = int(hashlib.sha256(household_id.encode("utf-8")).hexdigest()[:8], 16) % len(catalog)
+        ordered = list(catalog[offset:] + catalog[:offset])
         seeds: list[tuple] = []
         for week in range(total_weeks):
-            track = tracks[week % len(tracks)]
-            label = self.TRACK_LABELS[track]
-            seeds.append((
-                f"family-{track.lower()}-week-{week + 1}",
-                f"Family investigation {week + 1}",
-                track,
-                f"Adeline will shape this {label.lower()} experience from the household's current concepts, interests, gaps, and available real-world resources.",
-            ))
+            seed = ordered[week % len(ordered)]
+            seeds.append((f"{seed[0]}-week-{week + 1}", seed[1], seed[2], seed[3]))
         return seeds
+
+    def delivery_mode(self, track: str) -> str:
+        if track in self.INDIVIDUAL_SKILL_TRACKS:
+            return "INDIVIDUAL_SKILL"
+        if track in self.FAMILY_INVESTIGATION_TRACKS:
+            return "FAMILY_INVESTIGATION"
+        return "INDIVIDUAL_EXTENSION"
+
+    def standard_fits_family_track(self, track: str, subject: str) -> bool:
+        """Require a real disciplinary fit before attaching coverage to a theme."""
+        return self.standard_family(subject) in self.FAMILY_STANDARD_FAMILIES.get(track, frozenset())
 
     @staticmethod
     def standard_family(subject: str) -> str:

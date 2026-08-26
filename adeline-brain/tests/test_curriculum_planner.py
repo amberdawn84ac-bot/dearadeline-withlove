@@ -60,7 +60,28 @@ def test_siblings_receive_the_same_family_investigation_cycle():
 
     assert older_sibling_cycle == younger_sibling_cycle
     assert len(older_sibling_cycle) == 36
-    assert len({seed[2] for seed in older_sibling_cycle}) == 10
+    assert len({seed[2] for seed in older_sibling_cycle}) == len(planner.FAMILY_INVESTIGATION_TRACKS)
+    assert not ({"ENGLISH_LITERATURE", "APPLIED_MATHEMATICS"} & {seed[2] for seed in older_sibling_cycle})
+
+
+def test_delivery_modes_keep_the_shared_spine_to_history_and_science():
+    planner = PersonalizedCurriculumPlannerAgent()
+
+    assert planner.delivery_mode("TRUTH_HISTORY") == "FAMILY_INVESTIGATION"
+    assert planner.delivery_mode("CREATION_SCIENCE") == "FAMILY_INVESTIGATION"
+    assert planner.delivery_mode("APPLIED_MATHEMATICS") == "INDIVIDUAL_SKILL"
+    assert planner.delivery_mode("ENGLISH_LITERATURE") == "INDIVIDUAL_SKILL"
+    assert planner.delivery_mode("DISCIPLESHIP") == "INDIVIDUAL_EXTENSION"
+    assert planner.delivery_mode("CREATIVE_ECONOMY") == "INDIVIDUAL_EXTENSION"
+
+
+def test_standards_attach_to_a_family_theme_only_when_the_discipline_fits():
+    planner = PersonalizedCurriculumPlannerAgent()
+
+    assert planner.standard_fits_family_track("CREATION_SCIENCE", "Science") is True
+    assert planner.standard_fits_family_track("TRUTH_HISTORY", "Social Studies") is True
+    assert planner.standard_fits_family_track("TRUTH_HISTORY", "Mathematics") is False
+    assert planner.standard_fits_family_track("CREATION_SCIENCE", "English Language Arts") is False
 
 
 def test_households_get_distinct_stable_investigation_orders():

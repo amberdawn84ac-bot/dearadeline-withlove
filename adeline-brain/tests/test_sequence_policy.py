@@ -42,6 +42,14 @@ def test_interest_and_standard_work_require_a_bridge_instead_of_claiming_readine
         assert contract.bridge_required is True
 
 
+def test_family_history_and_science_topics_do_not_receive_a_generic_bridge():
+    contract = build_sequence_contract(source="family")
+
+    assert contract.policy is SequencePolicy.OPEN
+    assert contract.state is SequenceState.OPEN
+    assert contract.bridge_required is False
+
+
 def test_final_gate_fails_closed_for_locked_or_unidentified_hard_work():
     assert suggestion_is_assignable(PlannedMission("HARD", "LOCKED", "fractions")) is False
     assert suggestion_is_assignable(PlannedMission("HARD", "READY", None)) is False

@@ -108,6 +108,9 @@ export interface LessonRequest {
   prerequisite_concept_ids?: string[];
   prerequisite_standard_ids?: string[];
   bridge_required?: boolean;
+  delivery_mode?: "FAMILY_INVESTIGATION" | "INDIVIDUAL_SKILL" | "INDIVIDUAL_EXTENSION";
+  shared_investigation_id?: string;
+  individual_skill_targets?: IndividualSkillTarget[];
 }
 
 /**
@@ -116,7 +119,7 @@ export interface LessonRequest {
  * planned title, description, track, grade adaptation, or homestead handling.
  */
 export function lessonRequestFromSuggestion(
-  suggestion: Pick<LessonSuggestion, "id" | "title" | "description" | "track" | "concept_id" | "sequence_target_id" | "sequence_policy" | "sequence_state" | "prerequisite_concept_ids" | "prerequisite_standard_ids" | "bridge_required">,
+  suggestion: Pick<LessonSuggestion, "id" | "title" | "description" | "track" | "concept_id" | "sequence_target_id" | "sequence_policy" | "sequence_state" | "prerequisite_concept_ids" | "prerequisite_standard_ids" | "bridge_required" | "delivery_mode" | "shared_investigation_id" | "individual_skill_targets">,
   studentId: string,
   gradeLevel: string,
   requiredStandardCodes: string[] = [],
@@ -140,6 +143,9 @@ export function lessonRequestFromSuggestion(
     prerequisite_concept_ids: suggestion.prerequisite_concept_ids,
     prerequisite_standard_ids: suggestion.prerequisite_standard_ids,
     bridge_required: suggestion.bridge_required,
+    delivery_mode: suggestion.delivery_mode,
+    shared_investigation_id: suggestion.shared_investigation_id,
+    individual_skill_targets: suggestion.individual_skill_targets,
   };
 }
 
@@ -333,6 +339,11 @@ export interface LessonResponse {
       mastery_snapshot?: number;
       portfolio_destination?: boolean;
       credit_requires_demonstrated_understanding?: boolean;
+      delivery_mode?: "FAMILY_INVESTIGATION" | "INDIVIDUAL_SKILL" | "INDIVIDUAL_EXTENSION";
+      shared_investigation_id?: string;
+      skill_connections?: IndividualSkillTarget[];
+      separate_skill_targets?: IndividualSkillTarget[];
+      integration_rule?: string;
     };
     portfolio_task?: { description?: string; evidence_to_preserve?: string };
     concept_id?: string;
@@ -343,6 +354,9 @@ export interface LessonResponse {
     prerequisite_concept_ids?: string[];
     prerequisite_standard_ids?: string[];
     bridge_required?: boolean;
+    delivery_mode?: "FAMILY_INVESTIGATION" | "INDIVIDUAL_SKILL" | "INDIVIDUAL_EXTENSION";
+    shared_investigation_id?: string;
+    individual_skill_targets?: IndividualSkillTarget[];
     printable_request?: LessonRequest;
     /**
      * v11 experience-first authoring. experience_design.flow is the
@@ -1236,7 +1250,7 @@ export interface LessonSuggestion {
   description: string;
   emoji: string;
   priority: number;
-  source: "zpd" | "cross_track" | "continue" | "explore" | "interest" | "standard";
+  source: "zpd" | "cross_track" | "continue" | "explore" | "interest" | "standard" | "family";
   concept_id?: string;
   standard_code?: string;
   grade_band?: string;
@@ -1256,6 +1270,25 @@ export interface LessonSuggestion {
   prerequisite_standard_ids: string[];
   bridge_required: boolean;
   sequence_rationale?: string;
+  delivery_mode: "FAMILY_INVESTIGATION" | "INDIVIDUAL_SKILL" | "INDIVIDUAL_EXTENSION";
+  shared_investigation_id?: string;
+  individual_skill_targets: IndividualSkillTarget[];
+}
+
+export interface IndividualSkillTarget {
+  suggestion_id: string;
+  domain: "math" | "literacy" | string;
+  title: string;
+  track: Track;
+  concept_id?: string;
+  standard_code?: string;
+  working_level?: string;
+  sequence_state: "READY" | "BRIDGE_REQUIRED" | "OPEN" | "LOCKED";
+  integration_status: "PENDING_FIT_CHECK" | "INTEGRATED" | "SEPARATE";
+  integration_reason?: string;
+  contribution_prompt?: string;
+  integration_rule: string;
+  mastery_eligible: boolean;
 }
 
 export interface ProjectSuggestion {
@@ -1281,8 +1314,11 @@ export interface BookRecommendation {
 }
 
 export interface LearningPlanResponse {
+  plan_version: number;
   student_id: string;
   suggestions: LessonSuggestion[];
+  family_investigation?: LessonSuggestion;
+  individual_skills: LessonSuggestion[];
   projects: ProjectSuggestion[];  // Portfolio projects ready to start
   recommended_books: BookRecommendation[];
   total_tracks_active: number;
@@ -1315,7 +1351,7 @@ export interface LearningPlanResponse {
         week: number;
         starts_on: string;
         theme: string;
-        days: Array<{ date: string; day: string; lesson_id: string; title: string; track: Track; description: string; emoji: string; planning_status: 'ready' | 'forecast'; activity_kind: string; daily_rhythm: string[]; standard_codes?: string[]; sequence_policy?: "HARD" | "SUPPORTED" | "OPEN"; sequence_state?: "READY" | "BRIDGE_REQUIRED" | "OPEN" | "LOCKED"; bridge_required?: boolean; prerequisite_standard_ids?: string[] }>;
+        days: Array<{ date: string; day: string; lesson_id: string; title: string; track: Track; description: string; emoji: string; planning_status: 'ready' | 'forecast'; activity_kind: string; daily_rhythm: string[]; standard_codes?: string[]; individual_skill_codes?: string[]; individual_extension_codes?: string[]; sequence_policy?: "HARD" | "SUPPORTED" | "OPEN"; sequence_state?: "READY" | "BRIDGE_REQUIRED" | "OPEN" | "LOCKED"; bridge_required?: boolean; prerequisite_standard_ids?: string[] }>;
       }>;
     }>;
     adaptive: boolean;

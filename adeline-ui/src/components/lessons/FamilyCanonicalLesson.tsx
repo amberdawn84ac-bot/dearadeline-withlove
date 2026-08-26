@@ -217,6 +217,30 @@ function FlowStep({
   );
 }
 
+type LearnerContribution = NonNullable<NonNullable<LessonResponse["metadata"]>["learner_contribution"]>;
+
+function SkillConnectionSummary({
+  contribution,
+  isIndividualSkill,
+}: {
+  contribution?: LearnerContribution;
+  isIndividualSkill: boolean;
+}) {
+  return <>
+    {!!contribution?.skill_connections?.length && <div className="mt-5 rounded-2xl border border-[#D9CFBC] bg-white p-4">
+      <p className="text-xs font-black uppercase tracking-[.14em] text-[#BD6809]">{isIndividualSkill ? "Your current skill target" : "Woven into this shared question"}</p>
+      <ul className="mt-3 grid gap-2 text-sm">
+        {contribution.skill_connections.map((target) => <li key={`${target.domain}-${target.concept_id ?? target.standard_code ?? target.title}`}><b className="capitalize">{target.domain}:</b> {target.title} <span className="text-[#2F4731]/55">· working level {target.working_level ?? "current"}</span>{target.contribution_prompt && <span className="mt-1 block text-xs leading-5 text-[#2F4731]/65">{target.contribution_prompt}</span>}</li>)}
+      </ul>
+      {contribution.integration_rule && <p className="mt-3 text-xs leading-5 text-[#2F4731]/60">{contribution.integration_rule}</p>}
+    </div>}
+    {!!contribution?.separate_skill_targets?.length && <div className="mt-4 rounded-2xl border border-[#D9CFBC] bg-white/70 p-4">
+      <p className="text-xs font-black uppercase tracking-[.14em] text-[#2F4731]/60">Kept in your separate skill path</p>
+      <ul className="mt-2 grid gap-1 text-sm text-[#2F4731]/70">{contribution.separate_skill_targets.map((target) => <li key={`${target.domain}-${target.suggestion_id}`}><b className="capitalize">{target.domain}:</b> {target.title}—not forced into this theme.</li>)}</ul>
+    </div>}
+  </>;
+}
+
 function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; studentId: string }) {
   const seal = useLessonSeal(lesson);
   const print = useDossierPrint(lesson);
@@ -229,6 +253,7 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
   const demonstrationContract = lesson.metadata?.demonstration_contract;
   const portfolioTask = lesson.metadata?.portfolio_task;
   const learnerContribution = lesson.metadata?.learner_contribution;
+  const isIndividualSkill = lesson.metadata?.delivery_mode === "INDIVIDUAL_SKILL";
 
   const centralQuestion = design.central_question?.trim() || questionFrom(visible, lesson.title);
   const entryMove = design.entry_move?.trim();
@@ -247,10 +272,10 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
     <header className="overflow-hidden rounded-[30px] border border-[#D9CFBC] bg-[linear-gradient(135deg,#F5E6C8,#E3ECDD)] shadow-sm">
       <div className="grid gap-8 p-7 md:grid-cols-[1.2fr_.8fr] md:p-11">
         <div>
-          <p className="text-xs font-black uppercase tracking-[.2em] text-[#A95322]">Today&apos;s experience</p>
+          <p className="text-xs font-black uppercase tracking-[.2em] text-[#A95322]">{isIndividualSkill ? "Your skill practice" : "Today’s family investigation"}</p>
           <h1 className="mt-3 text-5xl leading-[.95] md:text-6xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{lesson.title}</h1>
-          <p className="mt-5 max-w-2xl text-base leading-7 text-[#2F4731]/75">{entryMove || "Follow the question. Use what helps. Make, test, examine, or decide something real."}</p>
-          {lesson.metadata?.printable_request && <button type="button" onClick={() => void print.printDossier()} disabled={print.printing} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#2F4731] bg-white/70 px-4 py-2 text-sm font-bold disabled:opacity-50"><Download className="h-4 w-4" />{print.printing ? "Preparing dossier…" : "Print field dossier"}</button>}
+          <p className="mt-5 max-w-2xl text-base leading-7 text-[#2F4731]/75">{entryMove || (isIndividualSkill ? "Work at your current level. Practice the skill, show your reasoning, and leave evidence of what you can do." : "Follow the shared question. Use what helps. Make, test, examine, or decide something real.")}</p>
+          {lesson.metadata?.printable_request && <button type="button" onClick={() => void print.printDossier()} disabled={print.printing} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#2F4731] bg-white/70 px-4 py-2 text-sm font-bold disabled:opacity-50"><Download className="h-4 w-4" />{print.printing ? "Preparing dossier…" : isIndividualSkill ? "Print skill practice" : "Print field dossier"}</button>}
           {print.printError && <p className="mt-2 text-sm font-semibold text-red-700">{print.printError}</p>}
         </div>
         <div className="self-center border-l-4 border-[#BD6809] pl-6">
@@ -290,6 +315,7 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
           <p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">Preserve what you found</p>
           <h2 className="mt-2 text-3xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{demonstrationPrompt}</h2>
           {learnerContribution?.role && <p className="mt-3 max-w-3xl text-base font-bold leading-7">{learnerContribution.role}</p>}
+          <SkillConnectionSummary contribution={learnerContribution} isIndividualSkill={isIndividualSkill} />
           {(learnerContribution?.success_criteria?.length || demonstrationContract?.success_criteria?.length) ? (
             <ul className="mt-4 grid gap-2 text-sm">
               {(learnerContribution?.success_criteria || demonstrationContract?.success_criteria || []).map((criterion) => (
@@ -299,7 +325,7 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
           ) : null}
           <label className="mt-5 grid gap-2 text-sm font-bold">
             <span>{artifactPrompt}</span>
-            <textarea value={seal.artifact} onChange={(event) => seal.setArtifact(event.target.value)} rows={4} placeholder="I made… My evidence shows… The link or file is… My part of the family investigation was…" className="rounded-xl border border-[#BFB39E] bg-white p-3 font-normal" />
+            <textarea value={seal.artifact} onChange={(event) => seal.setArtifact(event.target.value)} rows={4} placeholder={isIndividualSkill ? "I solved… My reasoning was… The part I can now do is…" : "I made… My evidence shows… The link or file is… My part of the family investigation was…"} className="rounded-xl border border-[#BFB39E] bg-white p-3 font-normal" />
           </label>
           <label className="mt-4 grid gap-2 text-sm font-bold">
             <span>{demonstrationContract?.learner_prompt || "Explain what the evidence shows and how you know."}</span>
@@ -337,11 +363,12 @@ function LegacyStageExperience({ lesson, studentId }: { lesson: LessonResponse; 
 
   const demonstrationContract = lesson.metadata?.demonstration_contract;
   const learnerContribution = lesson.metadata?.learner_contribution;
+  const isIndividualSkill = lesson.metadata?.delivery_mode === "INDIVIDUAL_SKILL";
 
   return <article className="space-y-6 pb-20 text-[#2F4731]">
     <header className="overflow-hidden rounded-[30px] border border-[#D9CFBC] bg-[linear-gradient(135deg,#F5E6C8,#E3ECDD)] shadow-sm">
       <div className="grid gap-8 p-7 md:grid-cols-[1.2fr_.8fr] md:p-11">
-        <div><p className="text-xs font-black uppercase tracking-[.2em] text-[#A95322]">Today&apos;s experience</p><h1 className="mt-3 text-5xl leading-[.95] md:text-6xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{lesson.title}</h1><p className="mt-5 max-w-2xl text-base leading-7 text-[#2F4731]/75">Follow the question. Use what helps. Make, test, examine, or decide something real.</p>{lesson.metadata?.printable_request && <button type="button" onClick={() => void print.printDossier()} disabled={print.printing} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#2F4731] bg-white/70 px-4 py-2 text-sm font-bold disabled:opacity-50"><Download className="h-4 w-4" />{print.printing ? "Preparing dossier…" : "Print field dossier"}</button>}{print.printError && <p className="mt-2 text-sm font-semibold text-red-700">{print.printError}</p>}</div>
+        <div><p className="text-xs font-black uppercase tracking-[.2em] text-[#A95322]">{isIndividualSkill ? "Your skill practice" : "Today’s family investigation"}</p><h1 className="mt-3 text-5xl leading-[.95] md:text-6xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{lesson.title}</h1><p className="mt-5 max-w-2xl text-base leading-7 text-[#2F4731]/75">{isIndividualSkill ? "Work at your current level. Practice the skill, show your reasoning, and leave evidence of what you can do." : "Follow the shared question. Use what helps. Make, test, examine, or decide something real."}</p>{lesson.metadata?.printable_request && <button type="button" onClick={() => void print.printDossier()} disabled={print.printing} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#2F4731] bg-white/70 px-4 py-2 text-sm font-bold disabled:opacity-50"><Download className="h-4 w-4" />{print.printing ? "Preparing dossier…" : isIndividualSkill ? "Print skill practice" : "Print field dossier"}</button>}{print.printError && <p className="mt-2 text-sm font-semibold text-red-700">{print.printError}</p>}</div>
         <div className="self-center border-l-4 border-[#BD6809] pl-6"><p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">The question worth following</p><p className="mt-3 text-2xl leading-snug" style={{ fontFamily: "var(--font-kalam), cursive" }}>{questionFrom(teaching, lesson.title)}</p></div>
       </div>
     </header>
@@ -356,9 +383,10 @@ function LegacyStageExperience({ lesson, studentId }: { lesson: LessonResponse; 
       <h2 className="mt-2 text-3xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{demonstrationContract?.invitation || "Leave evidence of what you discovered"}</h2>
       {learnerContribution?.role && <p className="mt-3 max-w-3xl text-base font-bold leading-7">{learnerContribution.role}</p>}
       {learnerContribution?.prompt && learnerContribution.prompt !== learnerContribution.role && <p className="mt-2 max-w-3xl text-sm leading-6">{learnerContribution.prompt}</p>}
+      <SkillConnectionSummary contribution={learnerContribution} isIndividualSkill={isIndividualSkill} />
       <p className="mt-3 max-w-3xl text-sm leading-6 text-[#2F4731]/70">{learnerContribution?.artifact_prompt || demonstrationContract?.artifact_prompt || lesson.metadata?.portfolio_task?.evidence_to_preserve || "Describe, link, or identify the drawing, build, calculation, photo, recording, source analysis, or other work you want preserved."}</p>
       {(learnerContribution?.success_criteria?.length || demonstrationContract?.success_criteria?.length) ? <ul className="mt-4 grid gap-2 text-sm">{(learnerContribution?.success_criteria || demonstrationContract?.success_criteria || []).map((criterion) => <li key={criterion} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#4F7A58]" />{criterion}</li>)}</ul> : null}
-      <label className="mt-5 grid gap-2 text-sm font-bold"><span>What should Adeline preserve in your portfolio?</span><textarea value={seal.artifact} onChange={(event) => seal.setArtifact(event.target.value)} rows={4} placeholder="I made… My evidence shows… The link or file is… My part of the family investigation was…" className="rounded-xl border border-[#BFB39E] bg-white p-3 font-normal" /></label>
+      <label className="mt-5 grid gap-2 text-sm font-bold"><span>What should Adeline preserve in your portfolio?</span><textarea value={seal.artifact} onChange={(event) => seal.setArtifact(event.target.value)} rows={4} placeholder={isIndividualSkill ? "I solved… My reasoning was… The part I can now do is…" : "I made… My evidence shows… The link or file is… My part of the family investigation was…"} className="rounded-xl border border-[#BFB39E] bg-white p-3 font-normal" /></label>
     </section>
     {reflectionBlocks.length > 0 && <section>{render(reflectionBlocks)}</section>}
     {unstaged.length > 0 && <section>{render(unstaged)}</section>}

@@ -272,6 +272,12 @@ class LessonRequest(BaseModel):
     prerequisite_concept_ids: list[str] = Field(default_factory=list, max_length=40)
     prerequisite_standard_ids: list[str] = Field(default_factory=list, max_length=80)
     bridge_required: bool = False
+    delivery_mode: str = Field(
+        default="INDIVIDUAL_EXTENSION",
+        pattern="^(FAMILY_INVESTIGATION|INDIVIDUAL_SKILL|INDIVIDUAL_EXTENSION)$",
+    )
+    shared_investigation_id: Optional[str] = Field(default=None, max_length=200)
+    individual_skill_targets: list[dict] = Field(default_factory=list, max_length=8)
     # Hydrated server-side by the planner/router before specialist generation.
     required_standard_context: list[dict] = Field(default_factory=list)
     routed_resource_context: list[dict] = Field(default_factory=list)

@@ -9,12 +9,15 @@ from app.api.learning_plan import get_saved_today_plan, pop_completed_lesson
 
 def _saved_plan() -> dict:
     return {
+        "plan_version": 7,
         "student_id": "student-1",
         "suggestions": [{
             "id": "today-1", "title": "Creek evidence", "track": "CREATION_SCIENCE",
             "description": "Compare the records.", "emoji": "🔬", "priority": 1.0,
             "source": "zpd", "mission_kind": "learning_mission", "success_criteria": [],
         }],
+        "family_investigation": None,
+        "individual_skills": [],
         "projects": [],
         "recommended_books": [],
         "total_tracks_active": 1,

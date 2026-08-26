@@ -29,6 +29,7 @@ vi.mock('@/lib/brain-client', async () => {
 });
 
 const plan = {
+  plan_version: 7,
   student_id: 'student-1',
   suggestions: [{
     id: 'today-1', title: 'Creek evidence', track: 'CREATION_SCIENCE',
@@ -36,7 +37,18 @@ const plan = {
     source: 'zpd', mission_kind: 'learning_mission', success_criteria: [],
     sequence_policy: 'HARD', sequence_state: 'READY', prerequisite_readiness: 1,
     prerequisite_concept_ids: [], prerequisite_standard_ids: [], bridge_required: false,
+    delivery_mode: 'FAMILY_INVESTIGATION', shared_investigation_id: 'family-1-week-1',
+    individual_skill_targets: [],
+  }, {
+    id: 'math-1', title: 'Compare ratios', track: 'APPLIED_MATHEMATICS',
+    description: 'Use ratios in a new example.', emoji: '📐', priority: 0.9,
+    source: 'zpd', mission_kind: 'skill_mission', success_criteria: [],
+    sequence_policy: 'HARD', sequence_state: 'READY', prerequisite_readiness: 1,
+    prerequisite_concept_ids: [], prerequisite_standard_ids: [], bridge_required: false,
+    delivery_mode: 'INDIVIDUAL_SKILL', individual_skill_targets: [],
   }],
+  family_investigation: undefined,
+  individual_skills: [],
   family_context: { household_id: 'family-1', shared_with_siblings: false, sibling_count: 0 },
   placement: { declared_level: '8', working_grade: '8', placement_required: false, subject_levels: {} },
   roadmap: { months: [] },
@@ -68,6 +80,16 @@ describe('durable Today and experience reopening', () => {
 
     expect(brain.getSavedTodayPlan).toHaveBeenCalledTimes(2);
     expect(brain.getLearningPlan).not.toHaveBeenCalled();
+  });
+
+  it('keeps the learner skill path separate and openable', async () => {
+    render(<TodayPage />);
+
+    await screen.findByText('🔬 Creek evidence');
+    expect(screen.getByRole('heading', { name: 'Individual Skill Path' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Practice →' })).toHaveAttribute(
+      'href', '/dashboard/lesson/math-1',
+    );
   });
 
   it('reopens a ready experience with zero build/author requests', async () => {

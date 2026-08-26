@@ -62,6 +62,9 @@ function selectPlannedTask(plan: Awaited<ReturnType<typeof getLearningPlan>>, re
         prerequisite_concept_ids: [],
         prerequisite_standard_ids: roadmapDay.prerequisite_standard_ids ?? [],
         bridge_required: roadmapDay.bridge_required ?? true,
+        delivery_mode: 'FAMILY_INVESTIGATION',
+        shared_investigation_id: roadmapDay.lesson_id,
+        individual_skill_targets: [],
       };
     }
   }
@@ -73,7 +76,7 @@ export default function CanonicalLessonPage() {
   const { student, loading: studentLoading } = useStudent();
   const [task, setTask] = useState<LessonSuggestion | null>(null);
   const [lesson, setLesson] = useState<LessonResponse | null>(null);
-  const [status, setStatus] = useState('Opening the saved family experience…');
+  const [status, setStatus] = useState('Opening the saved learning experience…');
   const [error, setError] = useState('');
   const [canRetry, setCanRetry] = useState(false);
   const [retryVersion, setRetryVersion] = useState(0);
@@ -94,7 +97,7 @@ export default function CanonicalLessonPage() {
     void (async () => {
       setError('');
       setCanRetry(false);
-      setStatus('Opening the saved family experience…');
+      setStatus('Opening the saved learning experience…');
       try {
         const plan = await getSavedTodayPlan(student.id) ?? await getLearningPlan(student.id, 12);
         const requestedId = decodeURIComponent(params.taskId);
@@ -166,7 +169,7 @@ export default function CanonicalLessonPage() {
         }
       } catch (reason) {
         if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : 'Adeline could not open this family experience.');
+          setError(reason instanceof Error ? reason.message : 'Adeline could not open this learning experience.');
           setCanRetry(true);
           setStatus('');
         }
@@ -176,7 +179,7 @@ export default function CanonicalLessonPage() {
     return () => { cancelled = true; };
   }, [params.taskId, retryVersion, student?.gradeLevel, student?.id]);
 
-  if (studentLoading) return <div className="p-10 text-center text-[#2F4731]/60">Opening the family experience…</div>;
+  if (studentLoading) return <div className="p-10 text-center text-[#2F4731]/60">Opening the learning experience…</div>;
   if (!student) return <div className="p-10 text-center text-[#2F4731]/60">Your session has ended. Please sign in again.</div>;
 
   return (
@@ -187,7 +190,7 @@ export default function CanonicalLessonPage() {
 
       {task && !lesson && (
         <header className="mb-5 rounded-[24px] border border-[#E7DAC3] bg-white/80 p-6">
-          <p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">One shared family experience</p>
+          <p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">{task.delivery_mode === 'INDIVIDUAL_SKILL' ? 'This learner’s skill path' : 'One shared family experience'}</p>
           <h1 className="mt-2 text-3xl text-[#2F4731]" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>{task.title}</h1>
           <p className="mt-2 text-sm leading-6 text-[#2F4731]/65">{task.description}</p>
         </header>

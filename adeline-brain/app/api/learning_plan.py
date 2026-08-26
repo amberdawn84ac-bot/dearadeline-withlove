@@ -23,7 +23,7 @@ This is the heart of Adeline's adaptive curriculum — connecting:
 import asyncio
 import json
 import logging
-from typing import Optional
+from typing import Literal, Optional
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -77,6 +77,24 @@ router = APIRouter(prefix="/learning-plan", tags=["learning-plan"])
 
 # ── Response Models ──────────────────────────────────────────────────────────────────────────────
 
+class IndividualSkillTarget(BaseModel):
+    suggestion_id: str
+    domain: Literal["math", "literacy"]
+    title: str
+    track: str
+    concept_id: Optional[str] = None
+    standard_code: Optional[str] = None
+    working_level: Optional[str] = None
+    sequence_state: Literal["READY", "BRIDGE_REQUIRED", "OPEN", "LOCKED"] = "OPEN"
+    integration_status: Literal["PENDING_FIT_CHECK", "INTEGRATED", "SEPARATE"] = "PENDING_FIT_CHECK"
+    integration_reason: Optional[str] = None
+    integration_rule: str = (
+        "Use this skill in the family investigation only when the evidence or real task naturally calls for it; "
+        "otherwise keep practicing it in the learner's individual path."
+    )
+    mastery_eligible: bool = False
+
+
 class LessonSuggestion(BaseModel):
     id: str
     title: str
@@ -104,6 +122,9 @@ class LessonSuggestion(BaseModel):
     prerequisite_standard_ids: list[str] = Field(default_factory=list)
     bridge_required: bool = False
     sequence_rationale: Optional[str] = None
+    delivery_mode: str = "INDIVIDUAL_EXTENSION"
+    shared_investigation_id: Optional[str] = None
+    individual_skill_targets: list[IndividualSkillTarget] = Field(default_factory=list)
 
 
 class ProjectSuggestion(BaseModel):
@@ -180,6 +201,11 @@ class RoadmapDay(BaseModel):
     daily_rhythm: list[str] = Field(default_factory=list)
     # Planning handoff metadata. Student views deliberately never render these codes.
     standard_codes: list[str] = Field(default_factory=list)
+    # Math/literacy stay on this learner's own sequence. They are available to
+    # support the shared investigation but are never silently turned into its
+    # household-level content target.
+    individual_skill_codes: list[str] = Field(default_factory=list)
+    individual_extension_codes: list[str] = Field(default_factory=list)
     # A standards-coverage slot may begin, but it must diagnose and bridge
     # foundations until that standard has a verified prerequisite mapping.
     sequence_policy: str = "SUPPORTED"
@@ -236,8 +262,11 @@ class CurriculumCoverage(BaseModel):
     subjects: list[SubjectCoverage]
 
 class LearningPlanResponse(BaseModel):
+    plan_version: int = 7
     student_id: str
     suggestions: list[LessonSuggestion]
+    family_investigation: Optional[LessonSuggestion] = None
+    individual_skills: list[LessonSuggestion] = Field(default_factory=list)
     projects: list[ProjectSuggestion]  # Portfolio projects ready to start
     recommended_books: list[BookRecommendation] = []
     total_tracks_active: int
@@ -622,12 +651,142 @@ def _get_grade_appropriate_starters(track: str, grade_level: str) -> list[tuple[
     return STARTER_TOPICS_BY_GRADE.get(band, {}).get(track, [])
 
 
+def _approved_family_seed_catalog(ready_slugs: set[str] | None = None) -> tuple[tuple, ...]:
+    """Map approved history/science seeds, optionally limited to ready inventory."""
+    from app.connections.canonical_store import canonical_slug
+    from app.jobs.canonical_seeding import CANONICAL_SEED_CATALOG
+
+    catalog = []
+    for seed in CANONICAL_SEED_CATALOG:
+        if seed.track not in personalized_curriculum_planner.FAMILY_INVESTIGATION_TRACKS:
+            continue
+        slug = canonical_slug(seed.topic, seed.track)
+        if ready_slugs is not None and slug not in ready_slugs:
+            continue
+        catalog.append((
+            slug,
+            seed.topic,
+            seed.track,
+            f"Investigate {seed.topic.rstrip('.')} together, then let each learner contribute at their own level.",
+        ))
+    return tuple(catalog)
+
+
+async def _ready_family_seed_catalog() -> tuple[tuple, ...]:
+    """Return only canonicals that can open from storage without authoring."""
+    from app.connections.canonical_store import canonical_store
+
+    approved = _approved_family_seed_catalog()
+    try:
+        ready = await canonical_store.ready_slugs(tuple(seed[0] for seed in approved))
+    except Exception as exc:
+        logger.warning("[LearningPlan] Ready family inventory unavailable: %s", exc)
+        return ()
+    return tuple(seed for seed in approved if seed[0] in ready)
+
+
+def _individual_skill_targets(
+    suggestions: list[LessonSuggestion], working_grade: str,
+) -> list[IndividualSkillTarget]:
+    """Keep at most one ready target per individual skill domain."""
+    targets: list[IndividualSkillTarget] = []
+    for track, domain in (
+        ("ENGLISH_LITERATURE", "literacy"),
+        ("APPLIED_MATHEMATICS", "math"),
+    ):
+        candidate = next(
+            (
+                item for item in suggestions
+                if item.track == track
+                and not (item.sequence_policy == "HARD" and item.sequence_state != "READY")
+            ),
+            None,
+        )
+        if not candidate:
+            continue
+        targets.append(IndividualSkillTarget(
+            suggestion_id=candidate.id,
+            domain=domain,
+            title=candidate.title,
+            track=track,
+            concept_id=candidate.concept_id,
+            standard_code=candidate.standard_code,
+            working_level=candidate.grade_band or working_grade,
+            sequence_state=candidate.sequence_state,
+            mastery_eligible=bool(
+                (candidate.concept_id or candidate.standard_code)
+                and candidate.sequence_state == "READY"
+            ),
+        ))
+    return targets
+
+
+def _family_investigation_suggestion(
+    household_id: str,
+    plan_date: date,
+    skill_suggestions: list[LessonSuggestion],
+    working_grade: str,
+    seed_catalog: tuple[tuple, ...],
+) -> LessonSuggestion | None:
+    """Choose one stable household experience and attach learner-specific supports."""
+    import hashlib
+
+    if not seed_catalog:
+        return None
+    cycle = personalized_curriculum_planner.family_investigation_cycle(
+        household_id, total_weeks=36, seed_catalog=seed_catalog,
+    )
+    iso = plan_date.isocalendar()
+    cycle_index = (iso.week - 1) % len(cycle)
+    seed_id, title, track, description = cycle[cycle_index]
+    household_key = hashlib.sha256(household_id.encode("utf-8")).hexdigest()[:12]
+    shared_id = f"family-{household_key}-{iso.year}-w{iso.week:02d}"
+    sequence = build_sequence_contract(source="family")
+    return LessonSuggestion(
+        id=shared_id,
+        title=title,
+        track=track,
+        description=description,
+        emoji=TRACK_EMOJI.get(track, "✦"),
+        priority=1.0,
+        source="family",
+        agent=TRACK_AGENT_MAP.get(track),
+        canonical_ready=True,
+        canonical_slug=seed_id.rsplit("-week-", 1)[0],
+        mission_kind="family_investigation",
+        success_criteria=[
+            "Work from real observations, records, sources, measurements, or results.",
+            "Let each learner make one meaningful contribution without dividing the family into separate lessons.",
+        ],
+        personalization_reason="The household shares the investigation; this learner's math and literacy supports remain level-specific.",
+        sequence_policy=sequence.policy.value,
+        sequence_state=sequence.state.value,
+        bridge_required=sequence.bridge_required,
+        sequence_rationale=sequence.rationale,
+        delivery_mode="FAMILY_INVESTIGATION",
+        shared_investigation_id=shared_id,
+        individual_skill_targets=_individual_skill_targets(skill_suggestions, working_grade),
+    )
+
+
+def _family_investigation_for_learner(
+    shared: LessonSuggestion,
+    skill_suggestions: list[LessonSuggestion],
+    working_grade: str,
+) -> LessonSuggestion:
+    """Reuse household content while replacing all learner-private attachments."""
+    return shared.model_copy(update={
+        "individual_skill_targets": _individual_skill_targets(skill_suggestions, working_grade),
+    })
+
+
 def _build_academic_roadmap(
     grade_level: str,
     suggestions: list[LessonSuggestion],
     active_tracks: list[str],
     standards: list[GradeLevelStandard],
     household_id: str,
+    family_seed_catalog: tuple[tuple, ...] | None = None,
 ) -> tuple[AcademicRoadmap, CurriculumCoverage]:
     """Build a stable rolling 36-week, four-day academic roadmap.
 
@@ -636,7 +795,9 @@ def _build_academic_roadmap(
     """
     today = date.today()
     start = today - timedelta(days=today.weekday())
-    seeds = personalized_curriculum_planner.family_investigation_cycle(household_id)
+    seeds = personalized_curriculum_planner.family_investigation_cycle(
+        household_id, seed_catalog=family_seed_catalog or _approved_family_seed_catalog(),
+    )
 
     remaining = [standard for standard in standards if not standard.mastered]
     assignments = personalized_curriculum_planner.assign_sequence(standards)
@@ -648,12 +809,29 @@ def _build_academic_roadmap(
         week_start = start + timedelta(weeks=week_index)
         days: list[RoadmapDay] = []
         seed_index = week_index % len(seeds)
-        lesson_id, _title, track, description = seeds[seed_index]
+        lesson_id, investigation_title, track, description = seeds[seed_index]
         emoji = TRACK_EMOJI.get(track, "✦")
         for day_index, day_name in enumerate(day_names):
             activity_title, activity_description = activity_stages[day_index]
             lesson_date = week_start + timedelta(days=day_index)
-            standard_codes = assignments[week_index * 4 + day_index]
+            assigned_codes = assignments[week_index * 4 + day_index]
+            individual_skill_codes = [
+                code for code in assigned_codes
+                if code in standards_by_code
+                and personalized_curriculum_planner.standard_family(standards_by_code[code].subject) in {"math", "literacy"}
+            ]
+            standard_codes = [
+                code for code in assigned_codes
+                if code not in individual_skill_codes
+                and code in standards_by_code
+                and personalized_curriculum_planner.standard_fits_family_track(
+                    track, standards_by_code[code].subject,
+                )
+            ]
+            individual_extension_codes = [
+                code for code in assigned_codes
+                if code not in individual_skill_codes and code not in standard_codes
+            ]
             target = next((standards_by_code[code] for code in standard_codes if code in standards_by_code), None)
             scheduled_standards = [standards_by_code[code] for code in standard_codes if code in standards_by_code]
             prerequisite_standard_ids = list(dict.fromkeys(
@@ -683,12 +861,14 @@ def _build_academic_roadmap(
             days.append(RoadmapDay(
                 date=lesson_date.isoformat(), day=day_name,
                 lesson_id=f"{lesson_id}-w{week_index + 1}-d{day_index + 1}",
-                title=f"{personalized_curriculum_planner.TRACK_LABELS[track]} — {activity_title}", track=track,
+                title=f"{investigation_title} — {activity_title}", track=track,
                 description=f"{activity_description} {learner_hook}", emoji=emoji,
                 planning_status="ready" if week_index < 4 else "forecast",
                 activity_kind=activity_title,
                 daily_rhythm=list(personalized_curriculum_planner.DAILY_RHYTHM),
                 standard_codes=standard_codes,
+                individual_skill_codes=individual_skill_codes,
+                individual_extension_codes=individual_extension_codes,
                 sequence_policy=sequence_policy,
                 sequence_state=sequence_state,
                 bridge_required=bridge_required,
@@ -776,6 +956,7 @@ def _zpd_to_suggestion(candidate: ZPDCandidate, priority_boost: float = 0.0) -> 
         prerequisite_concept_ids=list(candidate.prerequisite_ids),
         bridge_required=sequence.bridge_required,
         sequence_rationale=sequence.rationale,
+        delivery_mode=personalized_curriculum_planner.delivery_mode(candidate.track),
     )
 
 
@@ -796,6 +977,7 @@ def _interest_suggestion(interest: str, topic: tuple[str, str], track: str, idx:
         sequence_state=sequence.state.value,
         bridge_required=sequence.bridge_required,
         sequence_rationale=sequence.rationale,
+        delivery_mode=personalized_curriculum_planner.delivery_mode(track),
     )
 
 
@@ -865,6 +1047,7 @@ def _standard_suggestion(standard: GradeLevelStandard) -> LessonSuggestion:
         prerequisite_standard_ids=list(standard.prerequisite_standard_ids),
         bridge_required=sequence.bridge_required,
         sequence_rationale=sequence.rationale,
+        delivery_mode=personalized_curriculum_planner.delivery_mode(track),
     )
 
 
@@ -898,6 +1081,7 @@ def _starter_suggestion(track: str, topic: tuple[str, str], idx: int) -> LessonS
         sequence_state=sequence.state.value,
         bridge_required=sequence.bridge_required,
         sequence_rationale=sequence.rationale,
+        delivery_mode=personalized_curriculum_planner.delivery_mode(track),
     )
 
 
@@ -1216,7 +1400,7 @@ async def _get_available_projects(track: str = None, limit: int = 3) -> list[Pro
 # ── Redis sliding-window helpers ──────────────────────────────────────────────
 
 def _plan_cache_key(student_id: str) -> str:
-    return f"learning_plan:v6:{student_id}"
+    return f"learning_plan:v7:{student_id}"
 
 
 async def pop_completed_lesson(student_id: str, lesson_title: str) -> None:
@@ -1381,7 +1565,7 @@ async def get_learning_plan(
     if not refresh:
         try:
             persisted = await daily_plan_store.get(student_id, plan_date)
-            if persisted:
+            if persisted and persisted.get("plan_version") == 7:
                 logger.info("[LearningPlan] Persistent HIT for student=%s date=%s", student_id, plan_date)
                 return LearningPlanResponse(**persisted)
         except Exception as e:
@@ -1581,16 +1765,49 @@ async def get_learning_plan(
     except Exception as e:
         logger.warning(f"[LearningPlan] Failed to get grade standards: {e}")
 
-    # Mission Architect owns final selection and handoff: priority, variety,
-    # canonical reuse, finish line, portfolio contribution, and rationale.
+    # Mission Architect owns the learner-specific math/literacy path. Content
+    # tracks do not compete with those skills for card priority: one stable
+    # household investigation anchors the day, and ready individual targets
+    # become that child's possible contributions to it.
     try:
         from app.agents.mission_team import mission_architect
-        final_suggestions = mission_architect.select_balanced(suggestions, limit)
-        final_suggestions = await mission_architect.compose(final_suggestions, grade_level, interests)
+        individual_candidates = [
+            item for item in suggestions
+            if item.track in personalized_curriculum_planner.INDIVIDUAL_SKILL_TRACKS
+        ]
+        individual_skills = mission_architect.select_balanced(individual_candidates, max(2, limit - 1))
+        individual_skills = await mission_architect.compose(individual_skills, grade_level, interests)
     except Exception as e:
         logger.warning(f"[LearningPlan] Mission Architect enrichment failed (non-fatal): {e}")
-        suggestions.sort(key=lambda s: s.priority, reverse=True)
-        final_suggestions = suggestions[:limit]
+        individual_skills = sorted(
+            (item for item in suggestions if item.track in personalized_curriculum_planner.INDIVIDUAL_SKILL_TRACKS),
+            key=lambda item: item.priority,
+            reverse=True,
+        )[:max(2, limit - 1)]
+
+    shared_family_data = None
+    if family_context.shared_with_siblings:
+        try:
+            shared_family_data = await daily_plan_store.get_household_family_investigation(
+                family_context.household_id, plan_date,
+            )
+        except Exception as exc:
+            logger.warning("[LearningPlan] Household family plan reuse unavailable: %s", exc)
+    ready_family_catalog = await _ready_family_seed_catalog()
+    if shared_family_data:
+        family_investigation = _family_investigation_for_learner(
+            LessonSuggestion(**shared_family_data), individual_skills, grade_level,
+        )
+    else:
+        family_investigation = _family_investigation_suggestion(
+            family_context.household_id, plan_date, individual_skills, grade_level,
+            ready_family_catalog,
+        )
+    family_cards = [family_investigation] if family_investigation else []
+    final_suggestions = [
+        *family_cards,
+        *individual_skills[:max(0, limit - len(family_cards))],
+    ]
 
     # 12. Fetch available portfolio projects — prefer tracks matching interests or weakest track
     try:
@@ -1653,6 +1870,7 @@ async def get_learning_plan(
 
     roadmap, coverage = _build_academic_roadmap(
         grade_level, final_suggestions, active_tracks, grade_standards, family_context.household_id,
+        ready_family_catalog,
     )
     if grade_standards and not coverage.all_required_accounted_for:
         logger.error("[LearningPlan] Coverage invariant failed for student=%s", student_id)
@@ -1660,6 +1878,8 @@ async def get_learning_plan(
     response = LearningPlanResponse(
         student_id=student_id,
         suggestions=final_suggestions,
+        family_investigation=family_investigation,
+        individual_skills=individual_skills,
         projects=projects,
         recommended_books=recommended_books,
         total_tracks_active=len(active_tracks),
@@ -1710,6 +1930,6 @@ async def get_saved_today_plan(
     response.headers["Pragma"] = "no-cache"
     plan_date = datetime.now(ZoneInfo("America/Chicago")).date()
     persisted = await daily_plan_store.get(student_id, plan_date)
-    if not persisted:
+    if not persisted or persisted.get("plan_version") != 7:
         raise HTTPException(status_code=404, detail="Today's plan has not been created yet")
     return LearningPlanResponse(**persisted)

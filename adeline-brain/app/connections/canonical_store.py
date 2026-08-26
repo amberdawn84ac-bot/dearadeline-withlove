@@ -28,6 +28,31 @@ def canonical_slug(topic: str, track: str) -> str:
 
 
 class CanonicalStore:
+    async def ready_slugs(self, slugs: list[str] | tuple[str, ...]) -> set[str]:
+        """Return approved, materialized canonicals in one database read.
+
+        The daily planner uses this instead of treating the seeding wish list as
+        ready inventory. A missing database result therefore withholds the
+        family card rather than sending a learner into foreground generation.
+        """
+        requested = list(dict.fromkeys(slug for slug in slugs if slug))
+        if not requested:
+            return set()
+        from app.config import get_db_conn
+
+        conn = await get_db_conn()
+        try:
+            rows = await conn.fetch(
+                'SELECT "topicSlug" FROM "CanonicalLesson" '
+                'WHERE "topicSlug" = ANY($1::text[]) '
+                'AND ("pendingApproval" IS FALSE OR "pendingApproval" IS NULL) '
+                'AND "blocksJson" IS NOT NULL',
+                requested,
+            )
+            return {str(row["topicSlug"]) for row in rows}
+        finally:
+            await conn.close()
+
     async def _redis_get(self, slug: str) -> Optional[str]:
         try:
             return await redis_client.get(f"{REDIS_PREFIX}{slug}")

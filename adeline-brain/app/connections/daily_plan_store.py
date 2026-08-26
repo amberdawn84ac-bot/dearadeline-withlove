@@ -55,6 +55,29 @@ class DailyPlanStore:
         finally:
             await conn.close()
 
+    async def get_household_family_investigation(
+        self, parent_id: str, for_date: date,
+    ) -> dict | None:
+        """Reuse the first durable household choice for every linked sibling."""
+        conn = await get_db_conn()
+        try:
+            rows = await conn.fetch(
+                '''SELECT p."planJson"
+                   FROM "DailyPlan" p
+                   JOIN "User" u ON u.id = p."studentId"
+                   WHERE u."parentId" = $1 AND u.role = 'STUDENT' AND p."forDate" = $2
+                   ORDER BY p."createdAt" ASC''',
+                parent_id, for_date,
+            )
+            for row in rows:
+                plan = decode_plan_json(row["planJson"])
+                family = plan.get("family_investigation")
+                if isinstance(family, dict) and family.get("delivery_mode") == "FAMILY_INVESTIGATION":
+                    return dict(family)
+            return None
+        finally:
+            await conn.close()
+
     async def invalidate(self, student_id: str, for_date: date | None = None) -> None:
         conn = await get_db_conn()
         try:
@@ -72,13 +95,32 @@ class DailyPlanStore:
             row = await conn.fetchrow(
                 '''UPDATE "DailyPlan"
                    SET "planJson" = jsonb_set(
-                         "planJson",
-                         '{suggestions}',
-                         COALESCE((
-                           SELECT jsonb_agg(item)
-                           FROM jsonb_array_elements(COALESCE("planJson"->'suggestions', '[]'::jsonb)) AS item
-                           WHERE item->>'title' <> $3 AND item->>'id' <> $3
-                         ), '[]'::jsonb),
+                         jsonb_set(
+                           jsonb_set(
+                             "planJson",
+                             '{suggestions}',
+                             COALESCE((
+                               SELECT jsonb_agg(item)
+                               FROM jsonb_array_elements(COALESCE("planJson"->'suggestions', '[]'::jsonb)) AS item
+                               WHERE item->>'title' <> $3 AND item->>'id' <> $3
+                             ), '[]'::jsonb),
+                             TRUE
+                           ),
+                           '{individual_skills}',
+                           COALESCE((
+                             SELECT jsonb_agg(item)
+                             FROM jsonb_array_elements(COALESCE("planJson"->'individual_skills', '[]'::jsonb)) AS item
+                             WHERE item->>'title' <> $3 AND item->>'id' <> $3
+                           ), '[]'::jsonb),
+                           TRUE
+                         ),
+                         '{family_investigation}',
+                         CASE
+                           WHEN "planJson"->'family_investigation'->>'title' = $3
+                             OR "planJson"->'family_investigation'->>'id' = $3
+                           THEN 'null'::jsonb
+                           ELSE COALESCE("planJson"->'family_investigation', 'null'::jsonb)
+                         END,
                          TRUE
                        ),
                        "updatedAt" = NOW()
