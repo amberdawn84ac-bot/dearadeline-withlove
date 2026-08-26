@@ -375,8 +375,8 @@ function EvidenceFooter({ evidence }: { evidence: Evidence[] }) {
           ) : (
             ev.source_title
           )}
-          {ev.witness_citation.author && ` · ${ev.witness_citation.author}`}
-          {ev.witness_citation.year && ` (${ev.witness_citation.year})`}
+          {ev.witness_citation?.author && ` · ${ev.witness_citation.author}`}
+          {ev.witness_citation?.year && ` (${ev.witness_citation.year})`}
         </span>
         <span className="text-[10px] text-[#2F4731]/40 ml-auto shrink-0">
           {(ev.similarity_score * 100).toFixed(0)}% match
