@@ -221,6 +221,10 @@ export interface LessonBlockResponse {
   block_type: string;
   content: string;
   title?: string;
+  /** Stamped by finalize_family_lesson() on every block; the v11 renderer
+   * dispatch check reads this off blocks[0] rather than a separate metadata
+   * field, since that's where the backend already keeps it. */
+  canonical_format_version?: number;
   experience_stage?: 'INVITATION' | 'DISCOVERY' | 'ACTION' | 'CREATION' | 'DEMONSTRATION' | 'REFLECTION' | 'RESOURCE';
   metadata?: Record<string, unknown>;
   family_roles?: {
@@ -351,8 +355,17 @@ export interface LessonResponse {
       primary_mode?: string;
       central_question?: string;
       entry_move?: string;
-      layout?: "dossier" | "lab_notebook" | "field_guide" | "build_log" | "theology_map" |
-        "timeline_investigation" | "source_comparison" | "skill_ladder" | "narrative_sequence";
+      /**
+       * Advisory only, and deliberately typed as a plain string rather than
+       * a strict union: the renderer must keep following flow order for a
+       * layout it doesn't recognize (a value newer than this frontend
+       * build, or one the backend rejects and this type never learns about)
+       * rather than erroring or falling back to stage sorting. Known values
+       * as of this writing: dossier, lab_notebook, field_guide, build_log,
+       * theology_map, timeline_investigation, source_comparison,
+       * skill_ladder, narrative_sequence (legacy read-path only).
+       */
+      layout?: string;
       flow?: Array<{ node_id: string; label: string; block_ids: string[] }>;
       constraints?: string[];
       disciplines_integrated?: string[];
