@@ -4,7 +4,7 @@ Tests for Parent Dashboard API endpoints.
 import pytest
 from datetime import datetime, timezone
 from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from app.main import app
 
 client = TestClient(app)
@@ -71,8 +71,14 @@ def test_add_student_success(mock_parent_auth, mock_db_conn):
         None,  # Player identity doesn't exist
     ]
     mock_conn.execute.return_value = None
+    # asyncpg's conn.transaction() is a sync call returning an async context
+    # manager, not itself awaitable — AsyncMock's default child mocking makes
+    # mock_conn.transaction() return a coroutine, which `async with` rejects.
+    mock_conn.transaction = MagicMock()
+    mock_conn.transaction.return_value.__aenter__ = AsyncMock(return_value=None)
+    mock_conn.transaction.return_value.__aexit__ = AsyncMock(return_value=False)
     mock_db_conn.return_value.__aenter__.return_value = mock_conn
-    
+
     payload = {
         "name": "Bob Smith",
         "username": "bob_smith",

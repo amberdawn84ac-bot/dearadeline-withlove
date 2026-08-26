@@ -12,6 +12,8 @@ import logging
 import re
 from dataclasses import dataclass, field
 
+from app.safety.content_filter import SafetyFlag, content_filter
+
 logger = logging.getLogger(__name__)
 
 _GRADE_DESC = {
@@ -112,6 +114,45 @@ def sanitize_learner_text(content: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
 
+def apply_safety_filter(content: str, block_type: str, grade: int) -> str:
+    """Run the Kid-Safe Quality Gate on learner-facing text before delivery.
+
+    Fails open on filter errors (never blocks a lesson because the filter
+    itself broke) and on a hard block returns a short honest placeholder
+    rather than either the unfiltered text or a silently empty block, so a
+    parent knows a review is needed instead of the lesson looking broken.
+    """
+    if not content.strip():
+        return content
+    try:
+        # Kindergarten (grade 0) must not fall through to the filter's
+        # unbounded default ceiling; treat it at least as strictly as grade 1.
+        result = content_filter.check_block(content, block_type, max(grade, 1))
+    except Exception as exc:
+        logger.warning("[Adapter] Safety filter error, passing content through: %s", exc)
+        return content
+
+    if SafetyFlag.PII_DETECTED in result.flags and result.sanitized_content:
+        # PII is redacted in place, not a reason to withhold the whole block.
+        content = result.sanitized_content
+
+    unresolved_hard_flags = {SafetyFlag.VIOLENCE, SafetyFlag.FEAR_CONTENT}.intersection(result.flags)
+    if unresolved_hard_flags:
+        logger.warning(
+            "[Adapter] Safety filter hard-blocked a %s block at grade %s: flags=%s",
+            block_type, grade, result.flags,
+        )
+        return (
+            "This part of the lesson needs a parent's review before Adeline shows it here. "
+            "Ask a parent to check this block in the lesson."
+        )
+
+    if result.warnings:
+        logger.info("[Adapter] Safety filter warnings (%s, grade %s): %s", block_type, grade, result.warnings)
+
+    return content
+
+
 def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: str = "") -> str:
     grade_desc = _GRADE_DESC.get(req.grade_level, f"grade {req.grade_level}")
     interests = ", ".join(req.interests[:4]) if req.interests else "the lesson itself"
@@ -190,6 +231,7 @@ async def adapt_canonical_for_student(canonical: dict, req: AdaptationRequest) -
         block["block_type"] = str(block.get("block_type") or "TEXT").upper()
         if isinstance(block.get("content"), str):
             block["content"] = sanitize_learner_text(block["content"])
+            block["content"] = apply_safety_filter(block["content"], block["block_type"], grade)
         roles = block.get("family_roles") or {}
         metadata = block.setdefault("metadata", {})
         metadata["learner_entry"] = {

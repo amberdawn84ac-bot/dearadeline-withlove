@@ -44,7 +44,7 @@ def build_investigation_pdf(*, title: str, topic: str, grade_level: str, blocks:
     note = ParagraphStyle("DA Note", parent=body, fontName="AdelineSans", textColor=colors.HexColor("#566858"))
 
     story: list = [Paragraph("DEAR ADELINE FAMILY FIELD DOSSIER", eyebrow), Paragraph(_plain(title), title_style)]
-    launch = Table([[Paragraph(f"<b>Investigator:</b> ______________________________", body),
+    launch = Table([[Paragraph("<b>Investigator:</b> ______________________________", body),
                      Paragraph(f"<b>Level:</b> {_plain(grade_level)}", body)]], colWidths=[4.8*inch, 1.5*inch])
     launch.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,-1), cream), ("BOX", (0,0), (-1,-1), 1, orange),
                                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"), ("LEFTPADDING", (0,0), (-1,-1), 10),
@@ -78,9 +78,12 @@ def build_investigation_pdf(*, title: str, topic: str, grade_level: str, blocks:
     story.append(record)
 
     def footer(canvas, document):
-        canvas.saveState(); canvas.setFillColor(green); canvas.setFont("AdelineSans", 8)
+        canvas.saveState()
+        canvas.setFillColor(green)
+        canvas.setFont("AdelineSans", 8)
         canvas.drawString(.68*inch, .34*inch, "Dear Adeline · Family Investigation")
-        canvas.drawRightString(7.82*inch, .34*inch, f"Field page {document.page}"); canvas.restoreState()
+        canvas.drawRightString(7.82*inch, .34*inch, f"Field page {document.page}")
+        canvas.restoreState()
 
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
     return output.getvalue()
