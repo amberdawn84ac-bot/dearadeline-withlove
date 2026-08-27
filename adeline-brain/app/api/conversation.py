@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from typing import Optional, AsyncIterator, Literal
 
@@ -120,6 +121,19 @@ class ConversationRequest(BaseModel):
     highlighted_text: Optional[str] = None
 
 
+_EXPLICIT_LEARNING_REQUEST_RE = re.compile(
+    r"\b(i\s+(?:want|would like|need)\s+to\s+(?:learn|understand|know|explore)|"
+    r"teach me|help me (?:learn|understand)|explain|how does|how do|why does|why do|"
+    r"what (?:is|are|causes|caused)|can (?:we|you) (?:learn|study|investigate|explore))\b",
+    re.IGNORECASE,
+)
+
+
+def _is_explicit_learning_request(message: str) -> bool:
+    """Distinguish a request for teaching from a report of completed work."""
+    return bool(_EXPLICIT_LEARNING_REQUEST_RE.search(message))
+
+
 def _build_conversation_prompt(
     topic: str,
     tracks: list[str],
@@ -167,7 +181,18 @@ def _build_conversation_prompt(
     mode_section = get_mode_directives(tracks)
     tracks_str = ", ".join(t.replace("_", " ").title() for t in tracks) if tracks else "General"
 
-    if learner_turn_count <= 1:
+    if _is_explicit_learning_request(topic):
+        progression = (
+            "TEACHING REQUEST: The learner explicitly asked to learn. Begin teaching in this response. "
+            "Do not classify the message for school credit, ask what they already figured out, or answer "
+            "with only a question. Give a clear foundation, explain the important mechanism or context, "
+            "and then offer one concrete way to investigate or check understanding. If the learner reports "
+            "possible disease, injury, pollution, corporate harm, or a local cluster, take the concern "
+            "seriously while separating verified facts from reports and hypotheses. Teach how the underlying "
+            "science works and how trustworthy evidence could confirm the event, its scale, and any cause; "
+            "never declare causation from a coincidence or unverified report."
+        )
+    elif learner_turn_count <= 1:
         progression = (
             "DISCOVERY TURN: You may ask at most one specific question if a missing detail truly changes "
             "what you should teach or propose. Otherwise begin teaching now."
@@ -218,7 +243,11 @@ def _infer_tracks(message: str, explicit_track: Optional[str]) -> list[str]:
         return ["TRUTH_HISTORY"]
     if any(term in words for term in ("government", "civics", "election", "economics", "law")):
         return ["GOVERNMENT_ECONOMICS"]
-    if any(term in words for term in ("science", "chemistry", "physics", "biology", "energy", "circuit", "experiment")):
+    if any(term in words for term in (
+        "science", "chemistry", "physics", "biology", "energy", "circuit", "experiment",
+        "cancer", "sarcoma", "tumor", "disease", "medicine", "medical", "health", "cell", "cells",
+        "pesticide", "pollution", "toxic", "exposure",
+    )):
         return ["CREATION_SCIENCE"]
     if any(term in words for term in ("math", "algebra", "geometry", "fraction", "number")):
         return ["APPLIED_MATHEMATICS"]

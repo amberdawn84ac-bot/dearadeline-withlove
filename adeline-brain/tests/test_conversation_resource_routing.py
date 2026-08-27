@@ -11,6 +11,11 @@ def test_coding_request_is_routed_to_creative_economy():
     assert "GAME_BUILDER" in _requested_resource_types(message)
 
 
+def test_cancer_learning_request_is_routed_to_science():
+    message = "I want to learn about cancer and Ewing sarcoma."
+    assert _infer_tracks(message, None) == ["CREATION_SCIENCE"]
+
+
 @pytest.mark.asyncio
 async def test_elementary_game_does_not_offer_makecode_arcade():
     packet = await _curated(

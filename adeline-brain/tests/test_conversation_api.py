@@ -69,3 +69,21 @@ async def test_build_conversation_prompt_blends_modes():
     )
     assert "WORKSHOP" in prompt
     assert "LAB" in prompt
+
+
+def test_explicit_learning_request_teaches_instead_of_grading_the_message():
+    from app.api.conversation import _build_conversation_prompt, _is_explicit_learning_request
+
+    topic = "I want to learn about cancer. I read six kids have Ewing sarcoma in Ladera Ranch."
+    assert _is_explicit_learning_request(topic)
+
+    prompt = _build_conversation_prompt(
+        topic=topic,
+        tracks=["CREATION_SCIENCE"],
+        grade_level="8",
+        zpd_directives="",
+    )
+
+    assert "Begin teaching in this response" in prompt
+    assert "Do not classify the message for school credit" in prompt
+    assert "never declare causation" in prompt

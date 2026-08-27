@@ -13,6 +13,7 @@ import { ProjectGuide } from "@/components/projects/ProjectGuide";
 import { useALUStream } from "@/hooks/useALUStream";
 import { StreamingGenUIRenderer } from "@/components/gen-ui/StreamingGenUIRenderer";
 import { parseDataStreamLine } from "@/lib/stream-protocol";
+import { isCompletedActivityReport, isExplicitLearningRequest } from "@/lib/chat-intent";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -63,7 +64,6 @@ const WELCOME_MSG: Message = {
 // ── Intent detection ───────────────────────────────────────────────────────────
 
 const PROJECT_LIST_RE = /\b(show|browse|see|find|list|what|give me).{0,20}(project|craft|make|build|farm)/i;
-const ACTIVITY_RE = /\b(i (spent|did|worked|practiced|baked|built|planted|made|helped|cooked|cleaned|studied|read|drew|painted|sewed|fixed)|today i|this (morning|afternoon|week)|i've been)\b/i;
 
 // ── Activity credit receipt ────────────────────────────────────────────────────
 
@@ -324,6 +324,7 @@ export function AdelineChatPanel({
     setInput("");
     addMessage({ role: "user", content: text });
     setIsLoading(true);
+    const startsTeachingRequest = isExplicitLearningRequest(text);
 
     try {
       if (activeLessonContext) {
@@ -349,7 +350,7 @@ export function AdelineChatPanel({
           content: "",
           rich: { type: "projectList", projects },
         });
-      } else if (pendingActivity || ACTIVITY_RE.test(text)) {
+      } else if (!startsTeachingRequest && (pendingActivity || isCompletedActivityReport(text))) {
         // Life-to-learning: recognize educational value immediately. Duration is
         // irrelevant to credit; follow-up answers can demonstrate the concepts.
         try {
@@ -373,6 +374,9 @@ export function AdelineChatPanel({
         }
       } else {
         // Default: streaming conversation
+        // A fresh request to learn exits any unfinished activity-reflection flow.
+        // Context such as "I read that ..." belongs to the teaching conversation.
+        if (startsTeachingRequest) setPendingActivity(null);
         const streamingId = `${Date.now()}-${Math.random()}`;
         setMessages((prev) => [
           ...prev,
@@ -457,7 +461,7 @@ export function AdelineChatPanel({
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, addMessage, conversationHistory]);
+  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, addMessage, conversationHistory, pendingActivity]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
