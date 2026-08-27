@@ -60,6 +60,7 @@ def shared_family_canonical_slug(request: LessonRequest) -> str:
 
 def canonical_resource_query(request: LessonRequest) -> ResourceQuery:
     """Ask for item-level primary evidence first when authoring true history."""
+    requires_primary = request.track.value in {"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING"}
     is_history = request.track.value == "TRUTH_HISTORY"
     # Archive APIs search literal metadata. Keep the historical subjects while
     # removing Dear Adeline's framing question, which can otherwise turn a
@@ -69,10 +70,53 @@ def canonical_resource_query(request: LessonRequest) -> ResourceQuery:
         topic=archive_topic if is_history and archive_topic else request.topic,
         track=request.track.value,
         grade_level=request.grade_level,
-        resource_types=("PRIMARY_SOURCE",) if is_history else (),
-        interactive_preferred=not is_history,
-        limit=8 if is_history else 5,
+        resource_types=("PRIMARY_SOURCE",) if requires_primary else (),
+        interactive_preferred=not requires_primary,
+        limit=8 if requires_primary else 5,
     )
+
+
+def planned_resource_packet(request: LessonRequest) -> dict[str, Any]:
+    """Validate the planner's small link-only packet for learner display.
+
+    The packet was selected against the exact progression target. Keeping it
+    with the persisted plan avoids a fresh outside search every time a saved
+    skill lesson opens.
+    """
+    packet = request.resource_packet if isinstance(request.resource_packet, dict) else {}
+    resources = [item for item in packet.get("resources", []) if isinstance(item, dict)]
+    return {
+        "topic": str(packet.get("topic") or request.topic),
+        "track": str(packet.get("track") or request.track.value),
+        "resources": resources[:5],
+        "rules": [str(rule) for rule in packet.get("rules", []) if str(rule).strip()],
+    }
+
+
+def merge_resource_packets(*packets: dict[str, Any]) -> dict[str, Any]:
+    resources: list[dict] = []
+    rules: list[str] = []
+    seen: set[str] = set()
+    topic = ""
+    track = ""
+    for packet in packets:
+        if not isinstance(packet, dict):
+            continue
+        topic = topic or str(packet.get("topic") or packet.get("query", {}).get("topic") or "")
+        track = track or str(packet.get("track") or packet.get("query", {}).get("track") or "")
+        for item in packet.get("resources", []):
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("id") or item.get("source_url") or "")
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            resources.append(item)
+        for rule in packet.get("rules", []):
+            value = str(rule).strip()
+            if value and value not in rules:
+                rules.append(value)
+    return {"topic": topic, "track": track, "resources": resources[:8], "rules": rules}
 
 
 def has_verified_history_source(resources: list[dict]) -> bool:
@@ -134,16 +178,72 @@ def sequence_bridge_block(request: LessonRequest) -> dict | None:
     }
 
 
-_INTEGRATION_TERMS = {
-    "math": frozenset({
-        "math", "arithmetic", "algebra", "geometry", "statistics", "measurement",
-        "measure", "data", "ratio", "percentage", "graph", "budget", "economic",
-    }),
-    "literacy": frozenset({
-        "literacy", "language arts", "reading", "writing", "literature", "rhetoric",
-        "communication", "source analysis", "research", "argument", "debate", "journalism",
-    }),
+_SKILL_FAMILIES = {
+    "math": {
+        "number_arithmetic": frozenset({"count", "number", "addition", "subtraction", "multiply", "division", "place value"}),
+        "ratio_proportion": frozenset({"ratio", "proportion", "percent", "percentage", "rate", "unit rate", "scale"}),
+        "measurement_geometry": frozenset({"measure", "measurement", "length", "area", "volume", "angle", "geometry", "dimension", "scale drawing"}),
+        "data_statistics": frozenset({"data", "statistic", "graph", "chart", "average", "median", "sample", "trend", "probability"}),
+        "finance": frozenset({"budget", "cost", "price", "interest", "profit", "revenue", "financial"}),
+        "advanced_functions": frozenset({"function", "limit", "trigonometry", "polynomial", "logarithm", "calculus"}),
+    },
+    "literacy": {
+        "source_reading": frozenset({"close read", "source analysis", "primary source", "cite", "citation", "text evidence", "corroborate"}),
+        "research": frozenset({"research", "question", "source", "bibliography", "note-taking", "inquiry"}),
+        "argument": frozenset({"argument", "claim", "reason", "evidence", "persuade", "rhetoric", "counterclaim", "debate"}),
+        "writing": frozenset({"write", "writing", "draft", "revise", "edit", "letter", "report", "essay"}),
+        "speaking_listening": frozenset({"listen", "discussion", "respond", "verbal", "nonverbal", "interview", "present", "speech", "oral"}),
+        "language": frozenset({"grammar", "sentence", "spelling", "vocabulary", "punctuation", "word choice"}),
+        "literature": frozenset({"literature", "story", "poem", "poetry", "character", "theme", "symbolism", "narrative"}),
+    },
+    "history": {
+        "chronology_causation": frozenset({"chronology", "timeline", "cause", "consequence", "turning point", "historical context"}),
+        "historical_evidence": frozenset({"primary source", "archive", "corroborate", "sourcing", "historical claim", "propaganda"}),
+    },
+    "science": {
+        "scientific_inquiry": frozenset({"observe", "observation", "hypothesis", "experiment", "variable", "evidence", "scientific method"}),
+        "life_earth_physical": frozenset({"ecosystem", "organism", "plant", "chemical", "energy", "force", "matter", "climate", "biology"}),
+    },
+    "homesteading": {
+        "land_and_build": frozenset({"garden", "soil", "seed", "grow", "farm", "preserve", "greenhouse", "build", "water", "food"}),
+    },
+    "discipleship": {
+        "scripture_and_theology": frozenset({"scripture", "bible", "hebrew", "greek", "verse", "exegesis", "theology", "stewardship", "discernment"}),
+    },
+    "justice": {
+        "power_and_accountability": frozenset({"justice", "harm", "power", "accountability", "advocacy", "inequality", "recipient", "remedy"}),
+    },
+    "health": {
+        "health_evidence": frozenset({"health", "body", "nutrition", "risk", "exposure", "dose", "prevention", "medical"}),
+    },
+    "government_economics": {
+        "institutions_and_markets": frozenset({"government", "law", "policy", "regulation", "market", "price", "profit", "incentive", "institution", "legislator"}),
+    },
+    "creative_economy": {
+        "design_and_value": frozenset({"design", "create", "make", "art", "visual", "product", "customer", "portfolio", "communicate"}),
+    },
 }
+
+_DOMAIN_DISCIPLINE_TERMS = {
+    "math": frozenset({"math", "mathematics", "arithmetic", "algebra", "geometry", "statistics", "measurement", "finance"}),
+    "literacy": frozenset({"literacy", "english", "language arts", "reading", "writing", "rhetoric", "communication", "literature"}),
+    "history": frozenset({"history", "historical", "chronology"}),
+    "science": frozenset({"science", "biology", "chemistry", "physics", "ecology", "earth science"}),
+    "homesteading": frozenset({"homesteading", "agriculture", "gardening", "farm", "food preservation"}),
+    "discipleship": frozenset({"discipleship", "scripture", "theology", "biblical studies"}),
+    "justice": frozenset({"justice", "advocacy", "changemaking", "accountability"}),
+    "health": frozenset({"health", "medicine", "nutrition", "public health"}),
+    "government_economics": frozenset({"government", "economics", "civics", "law", "public policy"}),
+    "creative_economy": frozenset({"creative economy", "art", "design", "entrepreneurship", "business"}),
+}
+
+
+def _skill_families_for_text(domain: str, text: str) -> set[str]:
+    normalized = text.lower()
+    return {
+        family for family, terms in _SKILL_FAMILIES.get(domain, {}).items()
+        if any(term in normalized for term in terms)
+    }
 
 
 def skill_connections_for_contract(contract: dict, targets: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -154,25 +254,41 @@ def skill_connections_for_contract(contract: dict, targets: list[dict]) -> tuple
     target into themed work.
     """
     design = contract.get("experience_design") or {}
-    integration_text = " ".join([
-        *(str(item) for item in design.get("disciplines_integrated") or []),
-        str(design.get("integration_rationale") or ""),
-    ]).lower()
+    declared_disciplines = " ".join(
+        str(item).lower() for item in design.get("disciplines_integrated") or []
+    )
+    integration_text = json.dumps({
+        "disciplines_integrated": design.get("disciplines_integrated") or [],
+        "integration_rationale": design.get("integration_rationale") or "",
+        "central_question": design.get("central_question") or "",
+        "real_world_task": contract.get("real_world_task") or {},
+        "mastery_evidence_map": contract.get("mastery_evidence_map") or [],
+    }, ensure_ascii=False).lower()
     integrated: list[dict] = []
     separate: list[dict] = []
     for raw in targets:
         target = dict(raw)
         domain = str(target.get("domain") or "").lower()
-        terms = _INTEGRATION_TERMS.get(domain, frozenset())
-        fits = bool(terms and any(term in integration_text for term in terms))
+        target_text = " ".join([
+            str(target.get("title") or ""),
+            str(target.get("integration_reason") or ""),
+        ])
+        target_families = _skill_families_for_text(domain, target_text)
+        investigation_families = _skill_families_for_text(domain, integration_text)
+        matching_families = sorted(target_families & investigation_families)
+        domain_is_declared = any(
+            re.search(rf"\b{re.escape(term)}\b", declared_disciplines)
+            for term in _DOMAIN_DISCIPLINE_TERMS.get(domain, frozenset())
+        )
+        fits = bool(domain_is_declared and matching_families)
         if fits:
             target["integration_status"] = "INTEGRATED"
-            target["integration_reason"] = str(design.get("integration_rationale") or "").strip() or (
-                f"The authored investigation explicitly includes {domain}."
+            target["integration_reason"] = (
+                f"The investigation genuinely uses this target through {', '.join(item.replace('_', ' ') for item in matching_families)}."
             )
             target["contribution_prompt"] = (
-                f"Use {target.get('title') or f'this {domain} target'} only where the shared evidence or outcome "
-                f"actually calls for {domain}; preserve the work so understanding can be reviewed."
+                f"At working level {target.get('working_level') or 'current'}, use “{target.get('title') or f'this {domain} target'}” "
+                f"where the shared evidence or outcome actually calls for {domain}; preserve the work so understanding can be reviewed."
             )
             integrated.append(target)
         else:
@@ -187,16 +303,17 @@ def skill_connections_for_contract(contract: dict, targets: list[dict]) -> tuple
 def learner_contribution_for_request(contract: dict, adaptation: Any, request: LessonRequest) -> dict:
     """Join the shared theme to this learner's real, current skill path."""
     contribution = learner_contribution(contract, adaptation)
+    progression_targets = list(request.learner_progression_targets or request.individual_skill_targets)
     integrated, separate = skill_connections_for_contract(
-        contract, list(request.individual_skill_targets),
+        contract, progression_targets,
     )
     contribution["delivery_mode"] = request.delivery_mode
     contribution["shared_investigation_id"] = request.shared_investigation_id
     contribution["skill_connections"] = integrated
     contribution["separate_skill_targets"] = separate
     contribution["integration_rule"] = (
-        "Use a math or literacy target inside this investigation only when the sources, quantities, "
-        "communication, or real outcome genuinely require it. Otherwise preserve it as brief individual practice; "
+        "Use a learner progression target inside this investigation only when the sources, quantities, "
+        "communication, making, or real outcome genuinely require it. Otherwise preserve it as brief individual practice; "
         "never manufacture themed busywork."
     )
     return contribution
@@ -234,25 +351,44 @@ async def _run_with_progress(
         raise
 
 
-async def _author(request: LessonRequest, resources: list[dict]) -> dict:
+async def _author(
+    request: LessonRequest,
+    resources: list[dict],
+    *,
+    authoring_brief: str = "",
+) -> dict:
     import openai
     key = GEMINI_API_KEY or GOOGLE_API_KEY
     if not key:
         raise HTTPException(status_code=503, detail="The Canonical Experience Author is not configured.")
-    if request.track.value == "TRUTH_HISTORY" and not has_verified_history_source(resources):
+    if request.track.value in {"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING"} and not has_verified_history_source(resources):
         raise HTTPException(
             status_code=503,
-            detail="Adeline could not verify an item-level primary source for this history investigation yet.",
+            detail="Adeline could not verify an item-level primary source for this evidence-led investigation yet.",
         )
     # Disable SDK-level hidden retries. The explicit loop below records and
     # repairs each attempt, so a provider retry can never silently double the
     # longest step.
     client = openai.AsyncOpenAI(api_key=key, base_url=GEMINI_BASE_URL, max_retries=0)
+    if not authoring_brief:
+        # A foreground recovery for an approved catalog item must retain the
+        # same educational premise as background authoring. Custom topics have
+        # no catalog brief and continue through the general author contract.
+        from app.jobs.canonical_seeding import canonical_seed_for
+
+        seed = canonical_seed_for(request.topic, request.track.value)
+        authoring_brief = seed.authoring_brief if seed else ""
+    brief_section = (
+        "\n\nAPPROVED INVESTIGATION DESIGN BRIEF — PRESERVE THIS PREMISE:\n"
+        f"{authoring_brief.strip()}"
+        if authoring_brief.strip() else ""
+    )
     prompt = (
         f"Author the canonical shared family experience. Topic: {request.topic}. Track: {request.track.value}. "
         "This is the actual lesson, not an outline, article, sequence of narrative boxes, worksheet, or sketchnote. "
         "Use the routed resources only when useful and obey their use_mode and license. "
-        "Return the exact JSON contract. Every block must directly declare experience_stage.\n\n"
+        "Return the exact JSON contract. Every block must directly declare experience_stage."
+        f"{brief_section}\n\n"
         f"ROUTED OUTSIDE TOOLS AND SOURCES:\n{json.dumps(resources[:6], ensure_ascii=False)}"
     )
     last_error = None
@@ -398,7 +534,7 @@ async def _stream(request: LessonRequest):
             canonical_store.get(slug),
             adaptation_for(request.student_id, request.grade_level, request.track.value),
         )
-        packet = {"resources": []}
+        packet = planned_resource_packet(request)
         logger.info(
             "[ExperienceAuthor] context ready topic=%r canonical_hit=%s resources=%d elapsed=%.2fs",
             request.topic,
@@ -416,7 +552,8 @@ async def _stream(request: LessonRequest):
                 canonical = None
         if not canonical or canonical.get("pending_approval"):
             yield _sse({"type": "status", "message": "Adeline is authoring the experience from the living plan…"})
-            packet = await resource_router.search(canonical_resource_query(request))
+            routed_packet = await resource_router.search(canonical_resource_query(request))
+            packet = merge_resource_packets(packet, routed_packet)
             authored = None
             async for kind, value in _run_with_progress(
                 _author(request, packet["resources"]), AUTHOR_PROGRESS_MESSAGES,
@@ -459,6 +596,8 @@ async def _stream(request: LessonRequest):
         for index, block in enumerate(blocks):
             block.setdefault("block_id", f"{experience_id}-{index}")
         contract = ((canonical.get("blocks") or [{}])[0].get("metadata") or {}).get("canonical_contract") or {}
+        learner_contribution_data = learner_contribution_for_request(contract, adaptation, request)
+        integrated_targets = list(learner_contribution_data.get("skill_connections") or [])
         metadata = {
             "canonical_slug": slug, "topic": request.topic, "grade_level": request.grade_level,
             "required_standard_codes": request.required_standard_codes,
@@ -477,11 +616,22 @@ async def _stream(request: LessonRequest):
             "prerequisite_concept_ids": request.prerequisite_concept_ids,
             "prerequisite_standard_ids": request.prerequisite_standard_ids,
             "bridge_required": request.bridge_required,
-            "learner_contribution": learner_contribution_for_request(contract, adaptation, request),
+            "learner_contribution": learner_contribution_data,
+            "integrated_standard_codes": list(dict.fromkeys(
+                str(target.get("standard_code"))
+                for target in integrated_targets
+                if target.get("standard_code")
+            )),
+            "integrated_concept_ids": list(dict.fromkeys(
+                str(target.get("concept_id"))
+                for target in integrated_targets
+                if target.get("concept_id")
+            )),
             "portfolio_task": contract.get("portfolio_task") or {},
             "delivery_mode": request.delivery_mode,
             "shared_investigation_id": request.shared_investigation_id,
             "individual_skill_targets": request.individual_skill_targets,
+            "learner_progression_targets": request.learner_progression_targets,
         }
         record = await student_experience_store.save_ready(
             request.student_id, plan_item_id, title=canonical.get("title") or request.topic,
@@ -516,7 +666,10 @@ async def _emit_persisted(request: LessonRequest, record: dict):
     for block in record.get("blocks") or []:
         yield _sse({"type": "block", "block": block})
     metadata = record.get("metadata") or {}
-    codes = list(metadata.get("required_standard_codes") or request.required_standard_codes)
+    codes = list(dict.fromkeys([
+        *(metadata.get("required_standard_codes") or request.required_standard_codes),
+        *(metadata.get("integrated_standard_codes") or []),
+    ]))
     standards = [{"standard_id": code, "text": "Internal learning-plan target", "grade": 0, "source_type": "required_plan"} for code in codes]
     title = record.get("title") or request.topic
     yield _sse({"type": "done", "lesson_id": lesson_id, "title": title,

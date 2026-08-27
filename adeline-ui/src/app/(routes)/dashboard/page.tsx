@@ -79,16 +79,13 @@ export default function TodayPage() {
             <small>{today.track.replace(/_/g, ' ')}</small>
             <h3>{today.emoji} {today.title}</h3>
             <p>{today.description}</p>
-            {!!today.individual_skill_targets?.length && <div className="mt-3 grid gap-1 text-xs">
-              {today.individual_skill_targets.map((target) => <span key={`${target.domain}-${target.concept_id ?? target.standard_code ?? target.title}`}><b>{target.domain}:</b> {target.title} · level {target.working_level ?? 'current'} · fit checked when opened</span>)}
-            </div>}
             <small>{today.sequence_policy === 'HARD' ? 'Prerequisites demonstrated' : today.bridge_required ? 'Foundation bridge included' : 'Open exploration'}</small>
             <Link href={`/dashboard/lesson/${encodeURIComponent(today.id)}`}>Begin →</Link>
           </article> : <EmptyCard text="The next plan is being arranged." />}
         </div>
 
         <div className={styles.kanbanColumn}>
-          <header><span>2</span><div><small>Attached to this learner</small><h2>Individual Skill Path</h2></div></header>
+          <header><span>2</span><div><small>At this learner&apos;s level</small><h2>Math &amp; Literacy</h2></div></header>
           {comingUp.map((mission) => <article key={mission.id} className={styles.kanbanCard}>
             <small>{mission.track.replace(/_/g, ' ')}</small><h3>{mission.emoji} {mission.title}</h3>
             <p>{mission.description}</p>

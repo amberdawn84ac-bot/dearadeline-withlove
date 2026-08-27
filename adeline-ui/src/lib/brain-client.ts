@@ -91,6 +91,29 @@ export type Track =
   | "APPLIED_MATHEMATICS"
   | "CREATIVE_ECONOMY";
 
+export interface PlannedResource {
+  id?: string;
+  title?: string;
+  provider?: string;
+  resource_type?: string;
+  source_url?: string;
+  description?: string;
+  use_mode?: string;
+  license?: string;
+  skills_practiced?: string[];
+  estimated_minutes?: number;
+  discovery_prompt?: string;
+  mastery_prompt?: string;
+  portfolio_output?: string;
+}
+
+export interface ResourcePacket {
+  topic?: string;
+  track?: string;
+  resources?: PlannedResource[];
+  rules?: string[];
+}
+
 export interface LessonRequest {
   student_id: string;
   plan_item_id?: string;
@@ -111,6 +134,8 @@ export interface LessonRequest {
   delivery_mode?: "FAMILY_INVESTIGATION" | "INDIVIDUAL_SKILL" | "INDIVIDUAL_EXTENSION";
   shared_investigation_id?: string;
   individual_skill_targets?: IndividualSkillTarget[];
+  learner_progression_targets?: IndividualSkillTarget[];
+  resource_packet?: ResourcePacket;
 }
 
 /**
@@ -119,7 +144,7 @@ export interface LessonRequest {
  * planned title, description, track, grade adaptation, or homestead handling.
  */
 export function lessonRequestFromSuggestion(
-  suggestion: Pick<LessonSuggestion, "id" | "title" | "description" | "track" | "concept_id" | "sequence_target_id" | "sequence_policy" | "sequence_state" | "prerequisite_concept_ids" | "prerequisite_standard_ids" | "bridge_required" | "delivery_mode" | "shared_investigation_id" | "individual_skill_targets">,
+  suggestion: Pick<LessonSuggestion, "id" | "title" | "description" | "track" | "canonical_topic" | "concept_id" | "sequence_target_id" | "sequence_policy" | "sequence_state" | "prerequisite_concept_ids" | "prerequisite_standard_ids" | "bridge_required" | "delivery_mode" | "shared_investigation_id" | "individual_skill_targets" | "learner_progression_targets" | "resource_packet">,
   studentId: string,
   gradeLevel: string,
   requiredStandardCodes: string[] = [],
@@ -130,7 +155,7 @@ export function lessonRequestFromSuggestion(
     // The Curriculum Librarian and Learning Plan both key canonicals by title.
     // Including the card description here creates a different slug, bypasses the
     // approved family lesson, and generates a duplicate generic lesson instead.
-    topic: suggestion.title,
+    topic: suggestion.canonical_topic ?? suggestion.title,
     track: suggestion.track,
     grade_level: gradeLevel,
     is_homestead: suggestion.track === "HOMESTEADING",
@@ -146,6 +171,8 @@ export function lessonRequestFromSuggestion(
     delivery_mode: suggestion.delivery_mode,
     shared_investigation_id: suggestion.shared_investigation_id,
     individual_skill_targets: suggestion.individual_skill_targets,
+    learner_progression_targets: suggestion.learner_progression_targets,
+    resource_packet: suggestion.resource_packet,
   };
 }
 
@@ -364,6 +391,9 @@ export interface LessonResponse {
     delivery_mode?: "FAMILY_INVESTIGATION" | "INDIVIDUAL_SKILL" | "INDIVIDUAL_EXTENSION";
     shared_investigation_id?: string;
     individual_skill_targets?: IndividualSkillTarget[];
+    learner_progression_targets?: IndividualSkillTarget[];
+    integrated_standard_codes?: string[];
+    integrated_concept_ids?: string[];
     printable_request?: LessonRequest;
     /**
      * v11 experience-first authoring. experience_design.flow is the
@@ -1264,6 +1294,7 @@ export interface LessonSuggestion {
   agent?: string;
   canonical_ready: boolean;
   canonical_slug?: string;
+  canonical_topic?: string;
   mission_kind: string;
   success_criteria: string[];
   portfolio_prompt?: string;
@@ -1280,6 +1311,8 @@ export interface LessonSuggestion {
   delivery_mode: "FAMILY_INVESTIGATION" | "INDIVIDUAL_SKILL" | "INDIVIDUAL_EXTENSION";
   shared_investigation_id?: string;
   individual_skill_targets: IndividualSkillTarget[];
+  learner_progression_targets?: IndividualSkillTarget[];
+  resource_packet?: ResourcePacket;
 }
 
 export interface IndividualSkillTarget {
@@ -1326,6 +1359,7 @@ export interface LearningPlanResponse {
   suggestions: LessonSuggestion[];
   family_investigation?: LessonSuggestion;
   individual_skills: LessonSuggestion[];
+  progression_checklist?: IndividualSkillTarget[];
   projects: ProjectSuggestion[];  // Portfolio projects ready to start
   recommended_books: BookRecommendation[];
   total_tracks_active: number;

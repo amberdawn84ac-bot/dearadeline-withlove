@@ -9,7 +9,7 @@ from app.api.learning_plan import get_saved_today_plan, pop_completed_lesson
 
 def _saved_plan() -> dict:
     return {
-        "plan_version": 7,
+        "plan_version": 8,
         "student_id": "student-1",
         "suggestions": [{
             "id": "today-1", "title": "Creek evidence", "track": "CREATION_SCIENCE",

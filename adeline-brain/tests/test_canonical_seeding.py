@@ -54,6 +54,41 @@ def test_launch_catalog_includes_power_and_nation_building_investigation():
     assert "Building America or Consolidating Power?" in topic.topic
 
 
+def test_only_deliberately_briefed_seeds_are_quality_approved():
+    approved = [seed for seed in CANONICAL_SEED_CATALOG if seed.quality_approved]
+
+    assert approved
+    assert all(seed.family_summary.strip() for seed in approved)
+    assert all(seed.authoring_brief.strip() for seed in approved)
+    assert all(seed.content_revision.strip() for seed in approved)
+
+
+def test_operation_hooked_states_pleas_plainly_without_collapsing_opioid_history():
+    seed = next(seed for seed in CANONICAL_SEED_CATALOG if seed.learner_title.startswith("Operation Hooked"))
+
+    assert "pleaded guilty" in seed.authoring_brief
+    assert "not chemically identical" in seed.authoring_brief
+    assert "do not attribute every opioid death to Purdue" in seed.authoring_brief
+    assert "Greek word" in seed.authoring_brief
+
+
+def test_bitter_harvest_preserves_mission_energy_and_requires_real_records():
+    seed = next(seed for seed in CANONICAL_SEED_CATALOG if seed.learner_title.startswith("Operation Bitter Harvest"))
+
+    assert "PRESERVE THE MISSION/CASE-FILE ENERGY" in seed.authoring_brief
+    assert "State any documented verdict" in seed.authoring_brief
+    assert "Do not fabricate internal memos" in seed.authoring_brief
+    assert "minors" in seed.authoring_brief
+
+
+def test_regulatory_capture_uses_actual_model_and_legislative_text():
+    seed = next(seed for seed in CANONICAL_SEED_CATALOG if seed.learner_title.startswith("Operation Regulatory Capture"))
+
+    assert "Living Wage Mandate Preemption Act" in seed.authoring_brief
+    assert "side-by-side textual comparison" in seed.authoring_brief
+    assert "actual representative" in seed.authoring_brief
+
+
 @pytest.mark.asyncio
 async def test_replenishment_exits_when_another_replica_owns_lock():
     conn = _LockConnection(owns_lock=False)

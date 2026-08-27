@@ -92,7 +92,8 @@ class PersonalizedCurriculumPlannerAgent:
         seeds: list[tuple] = []
         for week in range(total_weeks):
             seed = ordered[week % len(ordered)]
-            seeds.append((f"{seed[0]}-week-{week + 1}", seed[1], seed[2], seed[3]))
+            canonical_topic = seed[4] if len(seed) > 4 else seed[1]
+            seeds.append((f"{seed[0]}-week-{week + 1}", seed[1], seed[2], seed[3], canonical_topic))
         return seeds
 
     def delivery_mode(self, track: str) -> str:

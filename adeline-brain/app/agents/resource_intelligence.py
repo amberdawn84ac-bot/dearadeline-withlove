@@ -23,6 +23,11 @@ class ResourceSource:
     rights_note: str
     mission_use: str
     authority: str = "primary_or_institutional"
+    discovery_prompt: str = "What can you discover by trying, manipulating, or examining this resource?"
+    mastery_prompt: str = "Use what you learned in one fresh example, then explain why your answer or strategy works."
+    portfolio_output: str = "Save the clearest example, model, or explanation that shows what you can now do."
+    estimated_minutes: int = 20
+    resource_type: str = "REFERENCE"
 
 
 SOURCES: tuple[ResourceSource, ...] = (
@@ -145,6 +150,50 @@ SOURCES: tuple[ResourceSource, ...] = (
         use_mode="LINK",
         rights_note="Link to the live tool by default. Commercial and redistribution rights differ from free educational use.",
         mission_use="Model geometry, graph real measurements, explore functions, test conjectures, and visualize data.",
+        discovery_prompt="Change one value or construction at a time. What stays the same, and what changes?",
+        mastery_prompt="Build a fresh graph, construction, or data model and explain the mathematical relationship it demonstrates.",
+        portfolio_output="Save the model or graph with a short explanation of the relationship you tested.",
+        resource_type="INTERACTIVE",
+    ),
+    ResourceSource(
+        id="mathigon-polypad",
+        title="Polypad Virtual Manipulatives",
+        provider="Mathigon / Amplify",
+        url="https://mathigon.org/polypad",
+        kinds=("math", "interactive", "virtual_manipulatives", "game"),
+        tracks=("APPLIED_MATHEMATICS",),
+        keywords=(
+            "number", "place value", "addition", "subtraction", "multiplication", "division",
+            "fraction", "decimal", "percent", "ratio", "proportion", "algebra", "equation",
+            "function", "geometry", "angle", "area", "volume", "probability", "statistics",
+        ),
+        use_mode="LINK",
+        rights_note="Use the live Polypad tool. Do not copy or redistribute the platform or its proprietary assets.",
+        mission_use="Use fraction bars, algebra tiles, balances, number tools, geometry pieces, dice, spinners, charts, and other manipulatives to make an abstract relationship visible.",
+        discovery_prompt="Build the idea with objects before writing a rule. Move one piece or value and predict what must happen next.",
+        mastery_prompt="Create a fresh model that was not shown in the lesson, solve it, and explain how the objects prove the answer.",
+        portfolio_output="Save a screenshot or drawing of the model beside the matching equation and your explanation.",
+        resource_type="MANIPULATIVE",
+    ),
+    ResourceSource(
+        id="nrich",
+        title="NRICH Mathematical Games and Investigations",
+        provider="University of Cambridge NRICH",
+        url="https://nrich.maths.org/home",
+        kinds=("math", "game", "puzzle", "investigation"),
+        tracks=("APPLIED_MATHEMATICS",),
+        keywords=(
+            "number", "operation", "fraction", "decimal", "percent", "ratio", "proportion",
+            "pattern", "sequence", "algebra", "equation", "function", "geometry", "measurement",
+            "probability", "statistics", "logic", "problem solving",
+        ),
+        use_mode="LINK",
+        rights_note="Link to the live NRICH task. Treat task text and media as copyrighted unless its page states otherwise.",
+        mission_use="Choose a curriculum-linked game, puzzle, or rich problem that makes the learner test strategies and explain a pattern instead of repeating a worksheet procedure.",
+        discovery_prompt="Play or investigate long enough to form a strategy. Which moves work, and what pattern explains them?",
+        mastery_prompt="State your strategy as a rule, test it on a changed version of the problem, and explain why it still works or where it fails.",
+        portfolio_output="Save the strategy, one failed attempt, the revision you made, and a successful test case.",
+        resource_type="GAME",
     ),
     ResourceSource(
         id="baker-creek",
@@ -179,30 +228,69 @@ class ResourceIntelligenceAgent:
     """Select a small, rights-aware source packet for a mission."""
 
     def select(self, topic: str, track: str, limit: int = 4) -> dict:
-        words = {w.strip(".,:;!?()[]{}\"'").lower() for w in topic.split() if w.strip()}
+        stop_words = {
+            "a", "an", "and", "as", "at", "by", "for", "from", "in", "into", "of", "on", "or", "the", "to", "with",
+            "build", "compare", "create", "explore", "learn", "make", "model", "practice", "study", "test", "use",
+        }
+        words = {
+            normalized for word in topic.split()
+            if (normalized := word.strip(".,:;!?()[]{}\"'").lower()) and normalized not in stop_words
+        }
         scored: list[tuple[int, ResourceSource]] = []
         for source in SOURCES:
             score = 0
-            if track in source.tracks:
-                score += 5
+            if track not in source.tracks:
+                continue
+            keyword_matches = 0
             for keyword in source.keywords:
-                key_words = set(keyword.lower().split())
+                key_words = set(keyword.lower().split()) - stop_words
                 if key_words and key_words.issubset(words):
                     score += 4
+                    keyword_matches += 1
                 elif words.intersection(key_words):
                     score += 1
-            if score:
+                    keyword_matches += 1
+            # A matching track alone is not a reason to send a child to an
+            # outside website. Math manipulatives and rich-problem libraries
+            # are broad enough to support any exact math target; other sources
+            # must match the topic itself.
+            broadly_useful_math = track == "APPLIED_MATHEMATICS" and source.id in {
+                "mathigon-polypad", "nrich",
+            }
+            if keyword_matches or broadly_useful_math:
+                score += 5
                 scored.append((score, source))
         scored.sort(key=lambda pair: (-pair[0], pair[1].provider, pair[1].title))
         selected = [source for _, source in scored[:limit]]
+        resources = [
+            {
+                "id": source.id,
+                "title": source.title,
+                "provider": source.provider,
+                "resource_type": source.resource_type,
+                "source_url": source.url,
+                "description": source.mission_use,
+                "use_mode": source.use_mode,
+                "license": source.rights_note,
+                "skills_practiced": list(source.keywords),
+                "estimated_minutes": source.estimated_minutes,
+                "discovery_prompt": source.discovery_prompt,
+                "mastery_prompt": source.mastery_prompt,
+                "portfolio_output": source.portfolio_output,
+            }
+            for source in selected
+        ]
         return {
             "topic": topic,
             "track": track,
             "sources": [asdict(source) for source in selected],
+            "resources": resources,
             "rules": [
                 "Primary/open institutional sources outrank commercial explainers for factual claims.",
                 "Free access is not permission to copy, ingest, remix, or redistribute.",
                 "Mission builders must obey each source's use_mode and rights_note.",
+                "A game, simulation, or manipulative must teach the learner's exact current target; decorative theme matching does not count.",
+                "Playing is practice, not mastery. The learner must solve or model a fresh case and explain the strategy afterward.",
                 "Label fact, interpretation, claim, disputed point, and unknown separately when evidence warrants it.",
                 "Never invent a source, quotation, record, dataset, or rights status.",
             ],

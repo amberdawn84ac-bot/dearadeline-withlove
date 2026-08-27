@@ -91,6 +91,21 @@ def test_truth_history_archive_query_removes_framing_question():
     assert canonical_resource_query(request).topic == "Railroads, Oil, and the Robber Barons"
 
 
+def test_justice_investigation_also_requires_supplied_primary_records():
+    request = LessonRequest(
+        student_id="investigator",
+        track=Track.JUSTICE_CHANGEMAKING,
+        topic="Operation Hooked",
+        grade_level="9",
+    )
+
+    query = canonical_resource_query(request)
+
+    assert query.resource_types == ("PRIMARY_SOURCE",)
+    assert query.interactive_preferred is False
+    assert query.limit == 8
+
+
 def test_only_direct_experience_builder_is_mounted():
     from app.main import app
     paths = {route.path for route in app.routes}

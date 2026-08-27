@@ -95,3 +95,4 @@ async def test_compose_preserves_ranking_and_enriches_each_mission(monkeypatch):
     composed = await agent.compose(ranked, "8", ["gardening"])
     assert [item.id for item in composed] == ["first", "second"]
     assert all(item.canonical_ready for item in composed)
+    assert all(item.resource_packet.get("resources") for item in composed)

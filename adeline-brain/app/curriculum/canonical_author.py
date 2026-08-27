@@ -42,7 +42,7 @@ _INVESTIGATION_FAMILY_TYPES = frozenset({
     "investigation", "stem", "steam", "public_interest_investigation",
     "civic_action_project", "family_project",
 })
-_EVIDENCE_ORIENTED_TRACKS = frozenset({"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING", "DISCIPLESHIP"})
+_EVIDENCE_ORIENTED_TRACKS = frozenset({"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING"})
 _STEM_TYPES = frozenset({"stem", "steam"})
 _MAKER_TYPES = frozenset({"maker_build", "design_challenge"})
 
@@ -115,6 +115,15 @@ def validate_canonical_contract(payload: dict) -> list[str]:
     )
     if not preserved:
         errors.append("portfolio_task must preserve observable process or product evidence")
+
+    if primary_mode in _INVESTIGATION_FAMILY_TYPES | _MAKER_TYPES | _STEM_TYPES:
+        task = payload.get("real_world_task") or {}
+        if not str(task.get("description") or "").strip():
+            errors.append("the shared experience must name the real work learners will undertake")
+        if not str(task.get("deliverable") or "").strip():
+            errors.append("the shared experience must culminate in a concrete deliverable or tested outcome")
+        if not str(task.get("shared_family_component") or "").strip():
+            errors.append("the real-world task must preserve one shared family outcome")
 
     evidence_map = payload.get("mastery_evidence_map")
     if not isinstance(evidence_map, list) or not evidence_map:
@@ -235,10 +244,10 @@ def validate_experience_substance(payload: dict) -> list[str]:
 
     track = str(payload.get("track") or "").upper()
     if track in _EVIDENCE_ORIENTED_TRACKS or exp_type == "public_interest_investigation":
-        if not (present_types & EVIDENCE_CAPABLE_TYPES):
+        if "PRIMARY_SOURCE" not in present_types:
             errors.append(
-                f"{track or exp_type} experiences must contain an actual PRIMARY_SOURCE "
-                "or RESEARCH_MISSION component, not prose describing or asserting sources"
+                f"{track or exp_type} experiences must put an actual routed PRIMARY_SOURCE in the lesson; "
+                "a RESEARCH_MISSION that sends the family away to find the teaching does not qualify"
             )
 
     if exp_type in _STEM_TYPES:
@@ -298,10 +307,10 @@ EXPERIENCE FLOW — YOU AUTHOR ONE SEQUENCE, NOT A BAG OF BLOCKS:
   learner actually investigates or acts with — PRIMARY_SOURCE, RESEARCH_MISSION,
   EXPERIMENT, LAB_MISSION, REAL_WORLD_APP, DISCUSSION_FORUM, GENUI_ASSEMBLY —
   not prose describing what an investigation would contain.
-- If you claim TRUTH_HISTORY, JUSTICE_CHANGEMAKING, DISCIPLESHIP, or
-  public_interest_investigation, you must include an actual PRIMARY_SOURCE or
-  RESEARCH_MISSION block — a real cited source, not a paragraph asserting one
-  exists.
+- If you claim TRUTH_HISTORY, JUSTICE_CHANGEMAKING, or
+  public_interest_investigation, you must include an actual PRIMARY_SOURCE block
+  from a routed item. A RESEARCH_MISSION may extend supplied teaching, but sending
+  the family away to locate the core evidence does not qualify.
 - If you claim stem or steam, you must include a real EXPERIMENT or
   LAB_MISSION block with an evidence/observation opportunity, not a
   description of an experiment.

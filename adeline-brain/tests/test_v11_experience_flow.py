@@ -123,8 +123,6 @@ def test_all_text_flow_fails_substance_even_with_perfect_composition():
     assert any("no component beyond TEXT/NARRATIVE" in e for e in errors)
     assert any("no genuine learner-action component" in e for e in errors)
     assert any("no genuine demonstration" in e for e in errors)
-    # DISCIPLESHIP is evidence-oriented — must also flag missing real evidence
-    assert any("PRIMARY_SOURCE or RESEARCH_MISSION" in e for e in errors)
 
 
 def test_investigation_family_requires_real_action_or_evidence_component():
@@ -158,7 +156,28 @@ def test_evidence_oriented_track_rejects_prose_describing_sources():
         ],
     }
     errors = validate_experience_substance(payload)
-    assert any("PRIMARY_SOURCE or RESEARCH_MISSION" in e and "prose describing" in e for e in errors)
+    assert any("actual routed PRIMARY_SOURCE" in e for e in errors)
+
+
+def test_research_mission_cannot_replace_supplied_primary_evidence():
+    payload = {
+        "track": "JUSTICE_CHANGEMAKING",
+        "experience_design": {
+            "primary_mode": "public_interest_investigation",
+            "central_question": "Who wrote the law?",
+            "layout": "dossier",
+            "flow": [_flow_node("opening", "b1"), _flow_node("research", "b2"), _flow_node("show", "b3")],
+        },
+        "blocks": [
+            _block("b1", "TEXT"),
+            _block("b2", "RESEARCH_MISSION"),
+            _block("b3", "QUIZ"),
+        ],
+    }
+
+    errors = validate_experience_substance(payload)
+
+    assert any("actual routed PRIMARY_SOURCE" in error for error in errors)
 
 
 def test_stem_requires_real_experiment_and_evidence_opportunity():

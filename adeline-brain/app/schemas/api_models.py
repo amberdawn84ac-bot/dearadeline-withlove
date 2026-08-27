@@ -293,6 +293,13 @@ class LessonRequest(BaseModel):
     )
     shared_investigation_id: Optional[str] = Field(default=None, max_length=200)
     individual_skill_targets: list[dict] = Field(default_factory=list, max_length=8)
+    # Exact current concepts from the learner's progression checklist across
+    # all ten tracks. The family experience may weave in only genuine matches.
+    learner_progression_targets: list[dict] = Field(default_factory=list, max_length=12)
+    # Persisted by the planner so a saved skill path opens with the vetted
+    # game/manipulative/tool chosen for its exact target, without another
+    # network search in the learner's click path.
+    resource_packet: dict = Field(default_factory=dict)
     # Hydrated server-side by the planner/router before specialist generation.
     required_standard_context: list[dict] = Field(default_factory=list)
     routed_resource_context: list[dict] = Field(default_factory=list)

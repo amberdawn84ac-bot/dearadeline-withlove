@@ -90,7 +90,9 @@ def _score(item: RoutedResource, query: ResourceQuery) -> float:
     # when a search-page title happens to repeat every query word.
     if item.availability in {"VERIFIED_API_ITEM", "VERIFIED_ARCHIVE_ITEM"}:
         score += 50
-    if query.interactive_preferred and item.resource_type in {"GAME", "GAME_BUILDER", "SIMULATION", "ARTIFACT_3D"}:
+    if query.interactive_preferred and item.resource_type in {
+        "GAME", "GAME_BUILDER", "SIMULATION", "ARTIFACT_3D", "INTERACTIVE", "MANIPULATIVE",
+    }:
         score += 18
     if item.license in {"CC0", "PUBLIC_DOMAIN"}:
         score += 7
@@ -251,6 +253,61 @@ async def _curated(query: ResourceQuery, _client: httpx.AsyncClient) -> list[Rou
     words = _terms(f"{query.topic} {query.objective}")
     grade = _grade_number(query.grade_level)
     output: list[RoutedResource] = []
+    if query.track == "APPLIED_MATHEMATICS":
+        output.extend([
+            RoutedResource(
+                id="mathigon:polypad",
+                title=f"Build and move a model of {query.topic}",
+                provider="Mathigon / Amplify",
+                resource_type="MANIPULATIVE",
+                source_url="https://mathigon.org/polypad",
+                description=(
+                    "Use virtual fraction bars, algebra tiles, balance scales, number tools, geometry pieces, "
+                    "dice, spinners, charts, and other manipulatives to make the relationship visible."
+                ),
+                license="PLATFORM_TERMS",
+                commercial_use="LINK_ONLY",
+                estimated_minutes=20,
+                skills_practiced=["mathematical modeling", "conjecture", "visual reasoning"],
+                discovery_prompt="Build the idea with objects before writing a rule. What changes when you move one piece or value?",
+                mastery_prompt="Create and solve one fresh model, then explain how the objects prove the answer.",
+                portfolio_output="Save the model beside the matching equation and your explanation.",
+            ),
+            RoutedResource(
+                id="nrich:investigations",
+                title=f"Find a strategy game or rich problem for {query.topic}",
+                provider="University of Cambridge NRICH",
+                resource_type="GAME",
+                source_url="https://nrich.maths.org/home",
+                description=(
+                    "Choose a curriculum-linked game, puzzle, or investigation that makes the learner test "
+                    "strategies and explain a pattern rather than repeat a worksheet procedure."
+                ),
+                license="LINK_ONLY",
+                commercial_use="LINK_ONLY",
+                estimated_minutes=25,
+                skills_practiced=["problem solving", "strategy", "mathematical explanation"],
+                discovery_prompt="Which moves or examples work, and what pattern explains them?",
+                mastery_prompt="State the strategy as a rule and test it on a changed version of the problem.",
+                portfolio_output="Save the strategy, one revision, and a successful test case.",
+            ),
+        ])
+        if words & _terms("algebra equation function graph geometry angle transformation statistics probability calculus"):
+            output.append(RoutedResource(
+                id="geogebra:math",
+                title=f"Model {query.topic} dynamically",
+                provider="GeoGebra",
+                resource_type="INTERACTIVE",
+                source_url="https://www.geogebra.org/math",
+                description="Use an interactive graph, construction, or data model to test how quantities and relationships change.",
+                license="PLATFORM_TERMS",
+                commercial_use="LINK_ONLY",
+                estimated_minutes=20,
+                skills_practiced=["graphing", "dynamic geometry", "mathematical modeling"],
+                discovery_prompt="Change one value or construction at a time. What stays invariant?",
+                mastery_prompt="Build a new graph, construction, or data model and explain the relationship it demonstrates.",
+                portfolio_output="Save the model with a short explanation of the relationship you tested.",
+            ))
     science = bool(words & _terms("physics chemistry energy circuit force waves matter atom molecule math algebra probability"))
     if query.track in {"CREATION_SCIENCE", "APPLIED_MATHEMATICS"} and science:
         output.append(RoutedResource(
@@ -550,7 +607,7 @@ class ResourceRouter:
     ]
 
     async def search(self, query: ResourceQuery) -> dict[str, Any]:
-        cache_key = "resource-router:v4:" + hashlib.sha256(
+        cache_key = "resource-router:v5:" + hashlib.sha256(
             json.dumps(asdict(query), sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
         try:
@@ -596,18 +653,25 @@ resource_router = ResourceRouter()
 
 def resource_block_from_packet(packet: dict[str, Any]) -> dict[str, Any] | None:
     from app.curriculum.family_style import CANONICAL_FORMAT_VERSION
-    resources = packet["resources"]
+    resources = packet.get("resources") or []
     if not resources:
         return None
+    track = str(packet.get("track") or packet.get("query", {}).get("track") or "")
+    is_math = track == "APPLIED_MATHEMATICS"
     return {
         "block_type": "RESOURCE_COLLECTION",
         "experience_stage": "RESOURCE",
-        "title": "Explore the real thing",
-        "content": "Choose the outside resource that gives this family the strongest evidence, manipulation, game, or creation experience. Adeline remains the teacher; the resource is the laboratory or archive.",
+        "title": "Play with the idea, then prove it" if is_math else "Explore the real thing",
+        "content": (
+            "Choose the game, puzzle, or manipulative matched to this exact math target. Try strategies, change the problem, and notice the pattern. Then solve or model one fresh case and explain why your strategy works; time played alone is never mastery."
+            if is_math else
+            "Choose the outside resource that gives this family the strongest evidence, manipulation, game, or creation experience. Adeline remains the teacher; the resource is the laboratory or archive."
+        ),
         "metadata": {
             "resources": resources,
-            "rights_rules": packet["rules"],
-            "requires_evidence": False,
+            "rights_rules": packet.get("rules") or [],
+            "requires_evidence": is_math,
+            "exact_target_required": is_math,
         },
         "evidence": [], "is_silenced": False, "family_style": True,
         "canonical_format_version": CANONICAL_FORMAT_VERSION,

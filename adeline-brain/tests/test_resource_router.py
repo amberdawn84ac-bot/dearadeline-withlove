@@ -8,6 +8,7 @@ from app.services.resource_router import (
     _curated_archive_evidence,
     _youtube_resources,
     resource_block_for_lesson,
+    resource_block_from_packet,
 )
 
 
@@ -68,6 +69,19 @@ async def test_lesson_resource_block_is_live_not_canonical_content(monkeypatch):
     assert block["metadata"]["resources"][0]["id"] == "makecode:arcade"
 
 
+def test_math_resource_block_requires_fresh_demonstration_after_play():
+    block = resource_block_from_packet({
+        "track": "APPLIED_MATHEMATICS",
+        "resources": [{"id": "mathigon-polypad", "resource_type": "MANIPULATIVE"}],
+        "rules": ["Playing is practice, not mastery."],
+    })
+
+    assert block["title"] == "Play with the idea, then prove it"
+    assert "fresh case" in block["content"]
+    assert block["metadata"]["requires_evidence"] is True
+    assert block["metadata"]["exact_target_required"] is True
+
+
 def test_science_youtube_is_restricted_to_approved_channels():
     videos = _youtube_resources(ResourceQuery(topic="chemical reactions", track="CREATION_SCIENCE"))
     providers = {video.provider for video in videos}
@@ -86,6 +100,19 @@ async def test_curated_science_sources_include_models_experiments_and_real_data(
     results = await _curated(ResourceQuery(topic="diffusion", track="CREATION_SCIENCE"), DummyClient())
     ids = {item.id for item in results}
     assert {"concord:models", "science-buddies:projects", "hhmi:biointeractive", "bhl:search"} <= ids
+
+
+@pytest.mark.asyncio
+async def test_math_resources_are_part_of_the_broader_router_not_a_four_site_whitelist():
+    results = await _curated(ResourceQuery(
+        topic="ratios percentages and package claims",
+        track="APPLIED_MATHEMATICS",
+        grade_level="7",
+    ), DummyClient())
+    ids = {item.id for item in results}
+
+    assert {"mathigon:polypad", "nrich:investigations"} <= ids
+    assert {"makecode:arcade", "khan:practice", "concord:models"} <= ids
 
 
 @pytest.mark.asyncio

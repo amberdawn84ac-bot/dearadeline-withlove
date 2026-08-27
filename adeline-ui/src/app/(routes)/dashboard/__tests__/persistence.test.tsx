@@ -29,7 +29,7 @@ vi.mock('@/lib/brain-client', async () => {
 });
 
 const plan = {
-  plan_version: 7,
+  plan_version: 8,
   student_id: 'student-1',
   suggestions: [{
     id: 'today-1', title: 'Creek evidence', track: 'CREATION_SCIENCE',
@@ -86,7 +86,7 @@ describe('durable Today and experience reopening', () => {
     render(<TodayPage />);
 
     await screen.findByText('🔬 Creek evidence');
-    expect(screen.getByRole('heading', { name: 'Individual Skill Path' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Math & Literacy' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Practice →' })).toHaveAttribute(
       'href', '/dashboard/lesson/math-1',
     );
