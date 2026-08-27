@@ -79,6 +79,25 @@ describe("formatMLAWork", () => {
     const result = formatMLAWork(evidence);
     expect(result).toContain("n.d.");
   });
+
+  it("formats item-level archival citation metadata", () => {
+    const evidence: Evidence = {
+      source_title: "Pacific Railway Act (1862)",
+      source_url: "https://www.archives.gov/milestone-documents/pacific-railway-act",
+      creator_or_issuer: "United States Congress",
+      date: "July 1, 1862",
+      holding_institution: "U.S. National Archives",
+      item_identifier: "General Records of the United States Government",
+      excerpt_or_observable_feature: "The enacted land-grant provisions.",
+      claim_supported: "Congress supported railroad construction.",
+    };
+
+    const result = formatMLAWork(evidence);
+
+    expect(result).toContain("United States Congress");
+    expect(result).toContain("July 1, 1862");
+    expect(result).toContain("Pacific Railway Act (1862)");
+  });
 });
 
 // ── formatMLA ─────────────────────────────────────────────────────────────────

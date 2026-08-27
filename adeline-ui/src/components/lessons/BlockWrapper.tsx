@@ -83,6 +83,9 @@ export default function BlockWrapper({
   const topEvidence = block.evidence[0];
   const score = topEvidence?.similarity_score;
   const isPrimarySource = block.block_type === "PRIMARY_SOURCE";
+  const citationCreator = topEvidence?.witness_citation?.author || topEvidence?.creator_or_issuer;
+  const citationDate = topEvidence?.witness_citation?.year ?? topEvidence?.date;
+  const citationInstitution = topEvidence?.witness_citation?.archive_name || topEvidence?.holding_institution;
 
   const { focusGap } = useFocusMonitor(studentId, block.block_id, block.block_type);
 
@@ -134,12 +137,13 @@ export default function BlockWrapper({
         <div className="mt-4 pt-3 border-t border-paradise/20">
           <p className="font-mono text-xs text-fuschia/60">
             {topEvidence.source_title}
-            {topEvidence.witness_citation?.author && (
+            {citationCreator && (
               <>
-                {" "}— {topEvidence.witness_citation.author}
-                {topEvidence.witness_citation.year && `, ${topEvidence.witness_citation.year}`}
+                {" "}— {citationCreator}
+                {citationDate && `, ${citationDate}`}
               </>
             )}
+            {citationInstitution && ` · ${citationInstitution}`}
           </p>
           {topEvidence.source_url && (
             <a
@@ -151,7 +155,7 @@ export default function BlockWrapper({
               {topEvidence.source_url}
             </a>
           )}
-          {showScores && (
+          {showScores && score !== undefined && (
             <p className="font-mono text-xs text-paradise/60 mt-1">
               similarity: {score?.toFixed(4)} &ge; 0.85
             </p>

@@ -47,7 +47,12 @@ function EventItem({
 }) {
   const [expanded, setExpanded] = useState(false);
   const hasDetail = event.description && event.description.length > 60;
-  const hasSource = !!(event.source_title || event.source_url || evidenceForEvent);
+  const evidenceCreator = evidenceForEvent?.witness_citation?.author || evidenceForEvent?.creator_or_issuer;
+  const evidenceDate = evidenceForEvent?.witness_citation?.year ?? evidenceForEvent?.date;
+  const evidenceArchive = evidenceForEvent?.witness_citation?.archive_name || evidenceForEvent?.holding_institution;
+  const evidenceTitle = evidenceForEvent?.source_title;
+  const sourceUrl = event.source_url || evidenceForEvent?.source_url;
+  const hasSource = !!(event.source_title || sourceUrl || evidenceForEvent);
 
   return (
     <div className="flex gap-3 group">
@@ -127,29 +132,29 @@ function EventItem({
                     style={{ background: `${themeColor}08`, border: `1px solid ${themeColor}20` }}
                   >
                     <span className="text-sm shrink-0 mt-0.5">
-                      {archiveIcon(event.source_title || evidenceForEvent?.witness_citation?.archive_name)}
+                      {archiveIcon(event.source_title || evidenceTitle || evidenceArchive)}
                     </span>
                     <div className="flex-1 min-w-0">
-                      {(event.source_title || evidenceForEvent?.witness_citation) && (
+                      {(event.source_title || evidenceTitle || evidenceCreator) && (
                         <p className="text-[10px] font-semibold text-[#374151] leading-snug">
-                          {event.source_title || evidenceForEvent?.witness_citation?.author}
-                          {evidenceForEvent?.witness_citation?.year && (
+                          {event.source_title || evidenceTitle || evidenceCreator}
+                          {evidenceDate && (
                             <span className="font-normal text-[#9CA3AF]">
-                              {" "}({evidenceForEvent.witness_citation.year})
+                              {" "}({evidenceDate})
                             </span>
                           )}
                         </p>
                       )}
-                      {evidenceForEvent?.witness_citation?.archive_name && (
+                      {evidenceArchive && (
                         <p className="text-[10px] text-[#9CA3AF] flex items-center gap-1 mt-0.5">
                           <Archive size={9} />
-                          {evidenceForEvent.witness_citation.archive_name}
+                          {evidenceArchive}
                         </p>
                       )}
                     </div>
-                    {event.source_url && (
+                    {sourceUrl && (
                       <a
-                        href={event.source_url}
+                        href={sourceUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}

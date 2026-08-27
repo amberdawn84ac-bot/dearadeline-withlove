@@ -214,18 +214,33 @@ class WitnessCitation(BaseModel):
     archive_name: str = ""
 
 class Evidence(BaseModel):
+    """One of two evidence records used by the canonical contract.
+
+    Witness Protocol records carry a similarity score, verdict, retrieved
+    chunk, and witness citation. Authored PRIMARY_SOURCE blocks instead carry
+    item-level archive metadata. Both are traceable evidence; an archival item
+    must not be forced to invent a vector-match verdict merely to render.
+    """
     source_id:        str = Field(default_factory=lambda: str(uuid.uuid4()))
     source_title:     str
     source_url:       str = ""
     source_type:      str = "PRIMARY_SOURCE"
     witness_citation: WitnessCitation = Field(default_factory=WitnessCitation)
-    similarity_score: float = Field(ge=0.0, le=1.0)
+    similarity_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     verdict:          Optional[EvidenceVerdict] = None
-    chunk:            str
+    chunk:            str = ""
+    creator_or_issuer: Optional[str] = None
+    date:              Optional[str | int] = None
+    holding_institution: Optional[str] = None
+    item_identifier:  Optional[str] = None
+    excerpt_or_observable_feature: Optional[str] = None
+    claim_supported:  Optional[str] = None
 
     @field_validator("similarity_score")
     @classmethod
-    def score_must_be_valid(cls, v: float) -> float:
+    def score_must_be_valid(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return v
         if not 0.0 <= v <= 1.0:
             raise ValueError("similarity_score must be between 0 and 1")
         return v

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Track, ALL_TRACKS, BlockType, LessonBlockSchema } from "../types";
+import { Track, ALL_TRACKS, BlockType, EvidenceSchema, LessonBlockSchema } from "../types";
 import * as enumsModule from "../enums/tracks";
 
 describe("Track enum — canonical source", () => {
@@ -90,5 +90,22 @@ describe("BlockType enum — completeness", () => {
       createdAt: new Date().toISOString(),
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("EvidenceSchema — both provenance protocols", () => {
+  it("accepts an item-level archival citation without a synthetic Witness verdict", () => {
+    const result = EvidenceSchema.safeParse({
+      sourceTitle: "Pacific Railway Act (1862)",
+      sourceUrl: "https://www.archives.gov/milestone-documents/pacific-railway-act",
+      creatorOrIssuer: "United States Congress",
+      date: "July 1, 1862",
+      holdingInstitution: "U.S. National Archives",
+      itemIdentifier: "General Records of the United States Government",
+      excerptOrObservableFeature: "The enacted land-grant and subsidy provisions.",
+      claimSupported: "Congress materially supported railroad construction.",
+    });
+
+    expect(result.success).toBe(true);
   });
 });

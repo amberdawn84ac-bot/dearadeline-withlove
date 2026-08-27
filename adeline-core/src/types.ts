@@ -102,7 +102,7 @@ export const WitnessCitationSchema = z.object({
 
 export type WitnessCitation = z.infer<typeof WitnessCitationSchema>;
 
-export const EvidenceSchema = z.object({
+export const WitnessEvidenceSchema = z.object({
   sourceId:        z.string().uuid(),
   sourceTitle:     z.string().min(1),
   sourceUrl:       z.string().url(),
@@ -133,6 +133,25 @@ export const EvidenceSchema = z.object({
     });
   }
 });
+
+export const CitationEvidenceSchema = z.object({
+  sourceId:                   z.string().uuid().optional(),
+  sourceTitle:                z.string().min(1),
+  sourceUrl:                  z.string().url(),
+  sourceType:                 z.string().default("PRIMARY_SOURCE"),
+  creatorOrIssuer:            z.string().min(1),
+  date:                       z.union([z.string().min(1), z.number().int()]),
+  holdingInstitution:         z.string().min(1),
+  itemIdentifier:             z.string().min(1),
+  excerptOrObservableFeature: z.string().min(1),
+  claimSupported:             z.string().min(1),
+});
+
+/**
+ * Witness matches and item-level archival citations are separate provenance
+ * protocols. Archival records do not invent a vector similarity or verdict.
+ */
+export const EvidenceSchema = z.union([WitnessEvidenceSchema, CitationEvidenceSchema]);
 
 export type Evidence = z.infer<typeof EvidenceSchema>;
 

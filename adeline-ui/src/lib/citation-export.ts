@@ -45,8 +45,8 @@ export interface LessonBlock {
 const Q = String.fromCharCode(34); // "
 
 export function formatMLAWork(evidence: Evidence): string {
-  const author = evidence.witness_citation?.author || "Unknown Author";
-  const year   = evidence.witness_citation?.year   ?? "n.d.";
+  const author = evidence.witness_citation?.author || evidence.creator_or_issuer || "Unknown Author";
+  const year   = evidence.witness_citation?.year   ?? evidence.date ?? "n.d.";
   const title  = evidence.source_title;
   const url    = evidence.source_url;
 

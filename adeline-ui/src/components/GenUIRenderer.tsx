@@ -11,7 +11,8 @@
  *   QUIZ            (future — scaffold route)
  *   TEXT            (plain content — catch-all)
  *
- * Evidence from the Witness Protocol is displayed on PRIMARY_SOURCE blocks.
+ * Witness Protocol matches and item-level archival citations are displayed on
+ * PRIMARY_SOURCE blocks without conflating their different provenance rules.
  * Cross-track OAS standards are shown in a GraphRAG sidebar section.
  */
 
@@ -331,8 +332,10 @@ interface GenUIRendererProps {
 
 // ── Witness verdict badge ─────────────────────────────────────────────────────
 
-function VerdictBadge({ verdict }: { verdict: Evidence["verdict"] }) {
-  const icons: Record<Evidence["verdict"], string> = {
+type WitnessVerdict = NonNullable<Evidence["verdict"]>;
+
+function VerdictBadge({ verdict }: { verdict: WitnessVerdict }) {
+  const icons: Record<WitnessVerdict, string> = {
     VERIFIED:         "✓",
     ARCHIVE_SILENT:   "◎",
     RESEARCH_MISSION: "?",
@@ -355,13 +358,18 @@ function VerdictBadge({ verdict }: { verdict: Evidence["verdict"] }) {
 
 // ── Evidence footer ───────────────────────────────────────────────────────────
 
-function EvidenceFooter({ evidence }: { evidence: Evidence[] }) {
+export function EvidenceFooter({ evidence }: { evidence: Evidence[] }) {
   if (!evidence.length) return null;
   const ev = evidence[0];
+  const creator = ev.witness_citation?.author || ev.creator_or_issuer;
+  const citationDate = ev.witness_citation?.year ?? ev.date;
+  const parsedYear = typeof citationDate === "number"
+    ? citationDate
+    : Number(String(citationDate ?? "").match(/\b\d{4}\b/)?.[0]) || undefined;
   return (
     <div className="mt-3 pt-3 border-t border-[#E7DAC3] space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <VerdictBadge verdict={ev.verdict} />
+        {ev.verdict && <VerdictBadge verdict={ev.verdict} />}
         <span className="text-[11px] text-[#2F4731]/60 truncate max-w-xs">
           {ev.source_url ? (
             <a
@@ -375,12 +383,16 @@ function EvidenceFooter({ evidence }: { evidence: Evidence[] }) {
           ) : (
             ev.source_title
           )}
-          {ev.witness_citation?.author && ` · ${ev.witness_citation.author}`}
-          {ev.witness_citation?.year && ` (${ev.witness_citation.year})`}
+          {creator && ` · ${creator}`}
+          {citationDate && ` (${citationDate})`}
+          {ev.holding_institution && ` · ${ev.holding_institution}`}
         </span>
-        <span className="text-[10px] text-[#2F4731]/40 ml-auto shrink-0">
+        {typeof ev.similarity_score === "number" && <span className="text-[10px] text-[#2F4731]/40 ml-auto shrink-0">
           {(ev.similarity_score * 100).toFixed(0)}% match
-        </span>
+        </span>}
+        {typeof ev.similarity_score !== "number" && ev.item_identifier && <span className="text-[10px] text-[#2F4731]/40 ml-auto shrink-0">
+          {ev.item_identifier}
+        </span>}
       </div>
       {evidence.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -390,7 +402,7 @@ function EvidenceFooter({ evidence }: { evidence: Evidence[] }) {
               sourceType={(ev as ExtendedEvidence).source_type ?? "PRIMARY_SOURCE"}
               sourceTitle={ev.source_title}
               sourceUrl={ev.source_url}
-              citationYear={ev.witness_citation?.year ?? undefined}
+              citationYear={ev.witness_citation?.year ?? parsedYear}
             />
           ))}
         </div>

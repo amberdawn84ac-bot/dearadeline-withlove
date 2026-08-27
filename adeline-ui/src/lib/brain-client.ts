@@ -156,13 +156,20 @@ export interface WitnessCitation {
 }
 
 export interface Evidence {
-  source_id: string;
+  source_id?: string;
   source_title: string;
-  source_url: string;
-  witness_citation: WitnessCitation;
-  similarity_score: number;
-  verdict: "VERIFIED" | "ARCHIVE_SILENT" | "RESEARCH_MISSION";
-  chunk: string;
+  source_url?: string;
+  source_type?: string;
+  witness_citation?: WitnessCitation;
+  similarity_score?: number;
+  verdict?: "VERIFIED" | "ARCHIVE_SILENT" | "RESEARCH_MISSION";
+  chunk?: string;
+  creator_or_issuer?: string;
+  date?: string | number | null;
+  holding_institution?: string;
+  item_identifier?: string;
+  excerpt_or_observable_feature?: string;
+  claim_supported?: string;
 }
 
 export interface MindMapNode { id: string; label: string; children: MindMapNode[]; }
