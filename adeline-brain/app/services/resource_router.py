@@ -487,7 +487,12 @@ def _curated_archive_evidence(query: ResourceQuery) -> list[RoutedResource]:
         and bool(words & {"railroad", "railroads"})
         and bool(words & {"oil", "standard", "monopoly"})
     )
-    if not robber_baron_topic:
+    ladera_health_topic = (
+        query.track == "JUSTICE_CHANGEMAKING"
+        and "ladera" in words
+        and bool(words & {"ewing", "sarcoma", "cancer"})
+    )
+    if not robber_baron_topic and not ladera_health_topic:
         return []
 
     verified_at = datetime.now(timezone.utc).isoformat()
@@ -498,6 +503,112 @@ def _curated_archive_evidence(query: ResourceQuery) -> list[RoutedResource]:
         "availability": "VERIFIED_ARCHIVE_ITEM",
         "verified_at": verified_at,
     }
+    if ladera_health_topic:
+        return [
+            RoutedResource(
+                id="cdph:ladera-ranch-cancer-concern",
+                title="Ladera Ranch Cancer Concern",
+                provider="California Department of Public Health",
+                resource_type="PRIMARY_SOURCE",
+                source_url="https://www.cdph.ca.gov/Programs/CCDPHP/DCDIC/CDSRB/Pages/Ladera-Ranch-Cancer-Concern.aspx",
+                description=(
+                    "The state public-health status page describing Ewing sarcoma, the earlier 2024 "
+                    "case analysis, renewed community concern, and the scope and limits of the current review."
+                ),
+                creator_or_issuer="California Department of Public Health",
+                source_date="2026-08-26",
+                holding_institution="California Department of Public Health",
+                source_identifier="CDPH Ladera Ranch Cancer Concern",
+                source_item_id="ladera-ranch-cancer-concern",
+                evidence_scope=(
+                    "Establishes what state public-health officials have reported and reviewed. It does not "
+                    "establish that pesticides or any other exposure caused an individual cancer case."
+                ),
+                license="PUBLIC_DOMAIN_US_GOVERNMENT",
+                commercial_use="LINK_OR_PUBLIC_DOMAIN_TEXT",
+                discovery_prompt="Separate the reported cases, comparison population, earlier result, current review, and unanswered exposure questions.",
+                portfolio_output="Build a dated status card that distinguishes a reported signal from a proven cluster or cause.",
+                **{key: value for key, value in shared.items() if key != "resource_type"},
+            ),
+            RoutedResource(
+                id="ca-ad72:ladera-joint-investigation-request",
+                title="Request for Joint Investigation into the Pediatric Cancer Cluster in Ladera Ranch",
+                provider="California State Assembly, District 72",
+                resource_type="PRIMARY_SOURCE",
+                source_url="https://ad72.asmrc.org/2026/07/21/request-for-joint-investigation-into-the-pediatric-cancer-cluster-in-ladera-ranch-california/",
+                description=(
+                    "A July 21, 2026 official request asking federal and state authorities to coordinate an "
+                    "environmental and public-health investigation."
+                ),
+                creator_or_issuer="Assemblymember Diane Dixon and participating officials",
+                source_date="2026-07-21",
+                holding_institution="California State Assembly",
+                source_identifier="AD72 joint investigation request, July 21, 2026",
+                source_item_id="ad72-ladera-joint-investigation-2026-07-21",
+                evidence_scope=(
+                    "Establishes what elected officials requested, from whom, and why. A request for an "
+                    "investigation is not a scientific finding that a causal exposure has been identified."
+                ),
+                license="PUBLIC_DOMAIN_US_GOVERNMENT",
+                commercial_use="LINK_OR_PUBLIC_DOMAIN_TEXT",
+                discovery_prompt="List every agency addressed, question requested, record sought, and action the letter asks government to take.",
+                portfolio_output="Map the legal authority and next accountable step for every recipient named in the request.",
+                **{key: value for key, value in shared.items() if key != "resource_type"},
+            ),
+            RoutedResource(
+                id="larmac:integrated-pest-management-2026",
+                title="LARMAC Integrated Pest Management Records",
+                provider="Ladera Ranch Maintenance Corporation",
+                resource_type="PRIMARY_SOURCE",
+                source_url="https://laderalife.com/about/larmac/your-hoa-at-work/integrated-pest-management",
+                description=(
+                    "The community association's own pest-management notices and landscaping-practice records, "
+                    "which can be compared with product labels, application logs, field access, and resident questions."
+                ),
+                creator_or_issuer="Ladera Ranch Maintenance Corporation",
+                source_date="2026",
+                holding_institution="Ladera Ranch Maintenance Corporation",
+                source_identifier="LARMAC Integrated Pest Management portal",
+                source_item_id="larmac-ipm-2026",
+                evidence_scope=(
+                    "Establishes what the association publicly reports about its practices. It does not alone "
+                    "establish actual dose, individual exposure, regulatory compliance, or cancer causation."
+                ),
+                license="ITEM_LEVEL_RIGHTS",
+                commercial_use="LINK_ONLY",
+                discovery_prompt="Inventory named products, dates, locations, notice procedures, application restrictions, and records that are still missing.",
+                portfolio_output="Create a records-request checklist connecting each exposure question to the document that could answer it.",
+                **{key: value for key, value in shared.items() if key != "resource_type"},
+            ),
+            RoutedResource(
+                id="epa-hero:659132",
+                title="Pesticides and Childhood Cancer",
+                provider="U.S. Environmental Protection Agency HERO",
+                resource_type="READING",
+                source_url="https://hero.epa.gov/reference/659132/",
+                description=(
+                    "EPA's Health and Environmental Research Online record for a peer-reviewed review of "
+                    "pesticide exposure and childhood cancers, including reported associations and major study limitations."
+                ),
+                creator_or_issuer="Zahm and Ward",
+                source_date="1998",
+                holding_institution="U.S. Environmental Protection Agency HERO",
+                source_identifier="EPA HERO reference 659132",
+                source_item_id="659132",
+                evidence_scope=(
+                    "Summarizes epidemiological associations and limitations across studies; it does not identify "
+                    "the cause of the Ladera Ranch cases or substitute for local exposure assessment."
+                ),
+                license="LINK_ONLY",
+                commercial_use="LINK_ONLY",
+                skills_practiced=["epidemiology", "risk evidence", "study limitations"],
+                availability="VERIFIED_ARCHIVE_ITEM",
+                verified_at=verified_at,
+                discovery_prompt="Mark the exposure routes, cancer outcomes, study limitations, and statements that are association rather than causation.",
+                portfolio_output="Add a study-evidence card naming what the review can and cannot answer about the local concern.",
+            ),
+        ]
+
     return [
         RoutedResource(
             id="archives:pacific-railway-act-1862",

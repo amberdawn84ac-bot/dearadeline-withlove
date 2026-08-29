@@ -31,8 +31,8 @@ EXPERIENCE_LAYOUTS = frozenset({
 # both are persisted so a future targeted re-authoring pass (see
 # app/scripts/audit_canonical_quality.py) can identify exactly which
 # canonicals predate a given rule or prompt change.
-CONTRACT_VERSION = "2026-08-26.1"
-PROMPT_VERSION = "v11-flow-2026-08-26"
+CONTRACT_VERSION = "2026-08-27.1"
+PROMPT_VERSION = "v11-family-evidence-2026-08-27"
 
 # A block only counts as "genuine evidence" — as opposed to prose describing
 # or asserting evidence exists — if it's one of these types.
@@ -45,6 +45,29 @@ _INVESTIGATION_FAMILY_TYPES = frozenset({
 _EVIDENCE_ORIENTED_TRACKS = frozenset({"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING"})
 _STEM_TYPES = frozenset({"stem", "steam"})
 _MAKER_TYPES = frozenset({"maker_build", "design_challenge"})
+
+_TRACEABLE_PRIMARY_FIELDS = (
+    "source_title",
+    "source_url",
+    "holding_institution",
+    "item_identifier",
+    "excerpt_or_observable_feature",
+    "claim_supported",
+)
+
+
+def _traceable_primary_records(blocks: list[dict]) -> list[dict]:
+    """Return actual item-level records, not labels that merely say source."""
+    records: list[dict] = []
+    for block in blocks:
+        if str(block.get("block_type") or "").upper() != "PRIMARY_SOURCE":
+            continue
+        for item in block.get("evidence") or []:
+            if not isinstance(item, dict):
+                continue
+            if all(str(item.get(field) or "").strip() for field in _TRACEABLE_PRIMARY_FIELDS):
+                records.append(item)
+    return records
 
 
 def enforce_non_exposure_mastery(payload: dict) -> dict:
@@ -106,6 +129,20 @@ def validate_canonical_contract(payload: dict) -> list[str]:
             for action in actions
         ):
             errors.append("civic agency requires a real recipient, validated need, intended change, and impact signal")
+
+    if primary_mode in _INVESTIGATION_FAMILY_TYPES | _MAKER_TYPES | _STEM_TYPES:
+        family_discussion = payload.get("family_discussion") or {}
+        if not str(family_discussion.get("launch") or "").strip():
+            errors.append("family investigations must begin with one shared family launch")
+        questions = [
+            str(question).strip()
+            for question in family_discussion.get("questions") or []
+            if str(question).strip()
+        ]
+        if len(questions) < 2:
+            errors.append("family investigations must supply at least two shared evidence questions")
+        if not str(family_discussion.get("synthesis_prompt") or "").strip():
+            errors.append("family investigations must bring individual findings back to one family synthesis")
 
     portfolio = payload.get("portfolio_task") or {}
     preserved = (
@@ -249,6 +286,23 @@ def validate_experience_substance(payload: dict) -> list[str]:
                 f"{track or exp_type} experiences must put an actual routed PRIMARY_SOURCE in the lesson; "
                 "a RESEARCH_MISSION that sends the family away to find the teaching does not qualify"
             )
+        else:
+            records = _traceable_primary_records(list(blocks_by_id.values()))
+            if not records:
+                errors.append(
+                    "a PRIMARY_SOURCE label is not evidence: supply an item-level title, URL, holding "
+                    "institution, identifier, excerpt or observable feature, and bounded claim"
+                )
+            elif exp_type in {"public_interest_investigation", "civic_action_project"}:
+                distinct_records = {
+                    (str(record.get("source_url") or ""), str(record.get("item_identifier") or ""))
+                    for record in records
+                }
+                if len(distinct_records) < 2:
+                    errors.append(
+                        "public-interest investigations must supply at least two distinct traceable records "
+                        "so the family can compare evidence rather than accept one source"
+                    )
 
     if exp_type in _STEM_TYPES:
         if not ({"EXPERIMENT", "LAB_MISSION"} & present_types):
@@ -311,6 +365,13 @@ EXPERIENCE FLOW — YOU AUTHOR ONE SEQUENCE, NOT A BAG OF BLOCKS:
   public_interest_investigation, you must include an actual PRIMARY_SOURCE block
   from a routed item. A RESEARCH_MISSION may extend supplied teaching, but sending
   the family away to locate the core evidence does not qualify.
+- A block called PRIMARY_SOURCE is not itself a source. Put the routed record in
+  learners' hands: title, creator or issuer, date, institution, item URL and
+  identifier, a lawful excerpt or observable feature, and the exact bounded claim
+  it can support. Public-interest work compares at least two distinct records.
+- Adeline supplies the core teaching and records. "Go research," "find two
+  sources," and "look up the agency" may extend a complete investigation, but
+  may never be the lesson's teaching or primary evidence.
 - If you claim stem or steam, you must include a real EXPERIMENT or
   LAB_MISSION block with an evidence/observation opportunity, not a
   description of an experiment.
@@ -404,6 +465,11 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
     }}],
     "no_predetermined_verdict": true
   }},
+  "family_discussion": {{
+    "launch": "What the family places on the table, screen, or workbench and does together before splitting into individual contributions.",
+    "questions": ["Two or more evidence questions everyone can discuss from the supplied lesson material."],
+    "synthesis_prompt": "How each learner brings findings back so the family reaches one evidence-grounded conclusion, decision, design, or next action."
+  }},
   "blocks": [{{
     "block_id": "",
     "block_type": "",
@@ -485,6 +551,9 @@ decides page layout, placement, and frontend behavior.
 
 QUALITY CHECK BEFORE OUTPUT:
 - One shared family experience, not three lessons.
+- The lesson visibly moves through: learn/examine together, discuss the same supplied
+  evidence, make progression-appropriate individual contributions, and regroup for
+  one family synthesis. Do not hide this structure only in metadata.
 - The investigation has no preset one-week duration. It may take one sitting or many weeks.
 - Give Adeline legitimate ways to narrow, widen, branch, pause, or resume the investigation from learner conversations while preserving its verified evidence and central learning requirements.
 - Completion is based on the shared outcome and demonstrated concepts, never the calendar.

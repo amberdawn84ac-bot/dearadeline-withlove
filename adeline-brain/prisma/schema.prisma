@@ -421,10 +421,21 @@ model OASStandard {
   lessonHook          String?
   homesteadAdaptation String?
   difficulty          String   @default("EMERGING")
+  progressionLane     String   @default("")
+  progressionMode     String   @default("OPEN")
+  progressionOrdinal  Int      @default(0)
+  progressionSourceTitle String @default("")
+  progressionSourceUrl String  @default("")
+  progressionSourceVersion String @default("")
+  progressionEvidenceNote String @default("")
+  progressionReviewStatus String @default("PLACED")
+  progressionParentId   String?
+  progressionIsTerminal Boolean @default(true)
   createdAt           DateTime @default(now())
 
   @@index([subject, grade])
   @@index([track])
+  @@index([progressionLane, progressionOrdinal])
 }
 
 /// Curriculum relationship data formerly kept in a separate graph database.

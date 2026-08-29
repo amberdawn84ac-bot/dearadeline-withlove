@@ -18,7 +18,7 @@ describe('lessonRequestFromSuggestion', () => {
     }];
 
     const request = lessonRequestFromSuggestion({
-      id: 'family-1-v8',
+      id: 'family-1-v9',
       title: 'Operation Hooked',
       description: 'Open the evidence dossier.',
       track: 'JUSTICE_CHANGEMAKING',
@@ -29,7 +29,7 @@ describe('lessonRequestFromSuggestion', () => {
       prerequisite_standard_ids: [],
       bridge_required: false,
       delivery_mode: 'FAMILY_INVESTIGATION',
-      shared_investigation_id: 'family-1-v8',
+      shared_investigation_id: 'family-1-v9',
       individual_skill_targets: progression,
       learner_progression_targets: progression,
       resource_packet: {

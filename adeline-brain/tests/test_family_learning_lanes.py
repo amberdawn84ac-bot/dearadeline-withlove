@@ -8,6 +8,7 @@ from app.api.learning_plan import (
     _family_investigation_suggestion,
     _individual_skill_targets,
     _learner_progression_targets,
+    _progression_map_status,
     _standard_suggestion,
 )
 
@@ -81,6 +82,30 @@ def test_progression_checklist_uses_exact_targets_across_tracks_not_starters():
     assert all(target.title != "Pre-Calculus Concepts" for target in targets)
 
 
+def test_progression_status_counts_placed_standard_targets_as_mapped():
+    targets = _learner_progression_targets([
+        suggestion(
+            concept_id=None,
+            standard_code="MATHEM_G7_7.N.1.1",
+            prerequisite_concept_ids=[],
+            prerequisite_standard_ids=[],
+        ),
+        suggestion(
+            id="reading",
+            track="ENGLISH_LITERATURE",
+            concept_id="text-evidence",
+            title="Use text evidence",
+        ),
+    ], "7")
+
+    status = _progression_map_status(targets)
+
+    math = next(item for item in status.tracks if item.track == "APPLIED_MATHEMATICS")
+    assert math.map_status == "PLACED_STANDARD_SEQUENCE"
+    assert status.mapped_target_count == 2
+    assert status.placed_standard_target_count == 1
+
+
 def test_standard_card_does_not_prepend_the_generic_literacy_hook():
     standard = GradeLevelStandard(
         standard_id="7.1.S.1",
@@ -100,6 +125,49 @@ def test_standard_card_does_not_prepend_the_generic_literacy_hook():
 
     assert result.title == "Listen closely and contribute thoughtfully in discussion"
     assert "What does this text say" not in result.title
+
+
+def test_sequential_standard_waits_for_the_earlier_lane_target():
+    standard = GradeLevelStandard(
+        standard_id="MATHEM_G7_7.N.2.1",
+        subject="Mathematics",
+        grade=7,
+        description="Students will solve proportional problems.",
+        mastered=False,
+        priority=1,
+        track="APPLIED_MATHEMATICS",
+        progression_lane="applied_mathematics:n",
+        progression_mode="SEQUENTIAL",
+        progression_ordinal=12,
+        progression_ready=False,
+    )
+
+    result = _standard_suggestion(standard)
+
+    assert result.sequence_policy == "HARD"
+    assert result.sequence_state == "LOCKED"
+    assert result.prerequisite_readiness == 0
+
+
+def test_first_unfinished_sequential_target_is_ready():
+    standard = GradeLevelStandard(
+        standard_id="ENGLIS_G7_7.3.R.1",
+        subject="English Language Arts",
+        grade=7,
+        description="Students will cite textual evidence.",
+        mastered=False,
+        priority=1,
+        track="ENGLISH_LITERATURE",
+        progression_lane="english_literature:r",
+        progression_mode="SEQUENTIAL",
+        progression_ordinal=1,
+        progression_ready=True,
+    )
+
+    result = _standard_suggestion(standard)
+
+    assert result.sequence_policy == "HARD"
+    assert result.sequence_state == "READY"
 
 
 def test_siblings_share_the_investigation_but_keep_distinct_skill_targets():

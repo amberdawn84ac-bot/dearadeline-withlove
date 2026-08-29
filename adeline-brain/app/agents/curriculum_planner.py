@@ -136,7 +136,11 @@ class PersonalizedCurriculumPlannerAgent:
             for part in re.split(r"(\d+)", standard.standard_id)
             if part
         )
-        return (difficulty_rank, (standard.strand or "").lower(), parts)
+        progression_ordinal = int(getattr(standard, "progression_ordinal", 0) or 0)
+        progression_lane = str(getattr(standard, "progression_lane", "") or "")
+        if progression_ordinal:
+            return (0, progression_lane, progression_ordinal, parts)
+        return (1, difficulty_rank, (standard.strand or "").lower(), parts)
 
     def _dependency_order(self, standards: list[Any]) -> list[Any]:
         """Topologically order verified prerequisites, then stable difficulty/code."""

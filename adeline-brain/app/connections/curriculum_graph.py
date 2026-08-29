@@ -141,10 +141,18 @@ class CurriculumGraph:
             await session.execute(text('''
                 INSERT INTO "OASStandard"
                     (id, code, subject, grade, "gradeBand", strand, description, track,
-                     "lessonHook", "homesteadAdaptation", difficulty, "createdAt")
+                     "lessonHook", "homesteadAdaptation", difficulty,
+                     "progressionLane", "progressionMode", "progressionOrdinal",
+                     "progressionSourceTitle", "progressionSourceUrl", "progressionSourceVersion",
+                     "progressionEvidenceNote", "progressionReviewStatus",
+                     "progressionParentId", "progressionIsTerminal", "createdAt")
                 VALUES
                     (gen_random_uuid(), :code, :subject, :grade, :grade_band, :strand,
-                     :description, :track, :lesson_hook, :homestead, :difficulty, NOW())
+                     :description, :track, :lesson_hook, :homestead, :difficulty,
+                     :progression_lane, :progression_mode, :progression_ordinal,
+                     :progression_source_title, :progression_source_url, :progression_source_version,
+                     :progression_evidence_note, :progression_review_status,
+                     :progression_parent_id, :progression_is_terminal, NOW())
                 ON CONFLICT (code) DO UPDATE SET
                     subject = EXCLUDED.subject,
                     grade = EXCLUDED.grade,
@@ -154,7 +162,17 @@ class CurriculumGraph:
                     track = EXCLUDED.track,
                     "lessonHook" = EXCLUDED."lessonHook",
                     "homesteadAdaptation" = EXCLUDED."homesteadAdaptation",
-                    difficulty = EXCLUDED.difficulty
+                    difficulty = EXCLUDED.difficulty,
+                    "progressionLane" = EXCLUDED."progressionLane",
+                    "progressionMode" = EXCLUDED."progressionMode",
+                    "progressionOrdinal" = EXCLUDED."progressionOrdinal",
+                    "progressionSourceTitle" = EXCLUDED."progressionSourceTitle",
+                    "progressionSourceUrl" = EXCLUDED."progressionSourceUrl",
+                    "progressionSourceVersion" = EXCLUDED."progressionSourceVersion",
+                    "progressionEvidenceNote" = EXCLUDED."progressionEvidenceNote",
+                    "progressionReviewStatus" = EXCLUDED."progressionReviewStatus",
+                    "progressionParentId" = EXCLUDED."progressionParentId",
+                    "progressionIsTerminal" = EXCLUDED."progressionIsTerminal"
             '''), {
                 "code": standard_id,
                 "subject": properties.get("subject", "ELA"),
@@ -166,6 +184,16 @@ class CurriculumGraph:
                 "lesson_hook": properties.get("lesson_hook", ""),
                 "homestead": properties.get("homestead_adaptation", ""),
                 "difficulty": properties.get("difficulty", "EMERGING"),
+                "progression_lane": properties.get("progression_lane", ""),
+                "progression_mode": properties.get("progression_mode", "OPEN"),
+                "progression_ordinal": int(properties.get("progression_ordinal", 0)),
+                "progression_source_title": properties.get("progression_source_title", ""),
+                "progression_source_url": properties.get("progression_source_url", ""),
+                "progression_source_version": properties.get("progression_source_version", ""),
+                "progression_evidence_note": properties.get("progression_evidence_note", ""),
+                "progression_review_status": properties.get("progression_review_status", "PLACED"),
+                "progression_parent_id": properties.get("progression_parent_id"),
+                "progression_is_terminal": bool(properties.get("progression_is_terminal", True)),
             })
             await session.commit()
 
@@ -303,10 +331,30 @@ class CurriculumGraph:
                            ROW_NUMBER() OVER (PARTITION BY base.subject ORDER BY base.code) AS subject_rank
                     FROM "OASStandard" base
                     WHERE base.grade = :grade
+                      AND base."progressionIsTerminal" = TRUE
                 )
                 SELECT s.code AS id, s.description, s.grade, s.subject,
                        s.track::text AS track, s.strand, s."lessonHook" AS lesson_hook,
-                       s.difficulty,
+                       s.difficulty, s."progressionLane" AS progression_lane,
+                       s."progressionMode" AS progression_mode,
+                       s."progressionOrdinal" AS progression_ordinal,
+                       s."progressionSourceTitle" AS progression_source_title,
+                       s."progressionSourceUrl" AS progression_source_url,
+                       s."progressionSourceVersion" AS progression_source_version,
+                       s."progressionReviewStatus" AS progression_review_status,
+                       NOT EXISTS (
+                           SELECT 1
+                           FROM "OASStandard" earlier
+                           LEFT JOIN "StandardMastery" earlier_mastery
+                             ON earlier_mastery."standardId" = earlier.code
+                            AND earlier_mastery."studentId" = :student_id
+                           WHERE earlier."progressionLane" = s."progressionLane"
+                             AND earlier.grade = s.grade
+                             AND earlier."progressionIsTerminal" = TRUE
+                             AND earlier."progressionOrdinal" < s."progressionOrdinal"
+                             AND COALESCE(earlier_mastery.proficiency::text, '')
+                                 NOT IN ('UNDERSTANDING', 'EXTENDING')
+                       ) AS progression_ready,
                        COALESCE(ARRAY(
                            SELECT relation."fromStandardId"
                            FROM "OASStandardRelation" relation
@@ -336,7 +384,7 @@ class CurriculumGraph:
                   ON m."standardId" = s.code AND m."studentId" = :student_id
                 WHERE (CAST(:per_subject_limit AS INTEGER) IS NULL
                        OR s.subject_rank <= CAST(:per_subject_limit AS INTEGER))
-                ORDER BY s.subject, s.code LIMIT :limit
+                ORDER BY s.subject, s."progressionLane", s."progressionOrdinal", s.code LIMIT :limit
             '''), {
                 "student_id": student_id, "grade": grade, "limit": limit,
                 "per_subject_limit": per_subject_limit,

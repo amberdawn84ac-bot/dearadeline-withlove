@@ -363,6 +363,22 @@ export interface LessonResponse {
       artifact_prompt?: string;
       success_criteria?: string[];
     };
+    family_discussion?: {
+      launch?: string;
+      questions?: string[];
+      synthesis_prompt?: string;
+    };
+    real_world_task?: {
+      description?: string;
+      deliverable?: string;
+      shared_family_component?: string;
+      individual_contribution?: string;
+    };
+    family_roles?: {
+      elementary?: string;
+      middle?: string;
+      high_school?: string;
+    };
     learner_contribution?: {
       role?: string;
       prompt?: string;
@@ -1329,6 +1345,30 @@ export interface IndividualSkillTarget {
   contribution_prompt?: string;
   integration_rule: string;
   mastery_eligible: boolean;
+  map_status?: "VERIFIED_STANDARD_MAP" | "CURATED_CONCEPT_GRAPH" | "PLACED_STANDARD_SEQUENCE";
+  prerequisite_ids?: string[];
+  needs_progression_review?: boolean;
+}
+
+export interface ProgressionMapStatus {
+  exact_child_checklist: boolean;
+  ten_track_checklist_complete: boolean;
+  sequential_core_ready: boolean;
+  mapped_target_count: number;
+  verified_standard_target_count: number;
+  curated_concept_target_count: number;
+  placed_standard_target_count: number;
+  missing_track_count: number;
+  tracks: Array<{
+    track: Track;
+    domain: string;
+    target_attached: boolean;
+    target_id?: string;
+    target_title?: string;
+    map_status: "VERIFIED_STANDARD_MAP" | "CURATED_CONCEPT_GRAPH" | "PLACED_STANDARD_SEQUENCE" | "NO_CURRENT_TARGET";
+    sequence_state: "READY" | "BRIDGE_REQUIRED" | "OPEN" | "LOCKED";
+    hard_gate_enforced: boolean;
+  }>;
 }
 
 export interface ProjectSuggestion {
@@ -1360,6 +1400,7 @@ export interface LearningPlanResponse {
   family_investigation?: LessonSuggestion;
   individual_skills: LessonSuggestion[];
   progression_checklist?: IndividualSkillTarget[];
+  progression_map_status: ProgressionMapStatus;
   projects: ProjectSuggestion[];  // Portfolio projects ready to start
   recommended_books: BookRecommendation[];
   total_tracks_active: number;

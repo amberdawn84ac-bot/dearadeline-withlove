@@ -143,6 +143,10 @@
   font-family: var(--font-kalam), cursive;
 }
 
+.fontBody {
+  font-family: 'Lora', Georgia, 'Times New Roman', serif;
+}
+
 .fontPermanentMarker {
   font-family: var(--font-permanent-marker), cursive;
 }

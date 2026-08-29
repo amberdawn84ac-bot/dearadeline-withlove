@@ -9,6 +9,7 @@ from app.jobs.canonical_seeding import (
     canonical_seeding_enabled,
     configured_batch_size,
     replenish_canonical_library,
+    seed_one_canonical,
 )
 
 
@@ -87,6 +88,45 @@ def test_regulatory_capture_uses_actual_model_and_legislative_text():
     assert "Living Wage Mandate Preemption Act" in seed.authoring_brief
     assert "side-by-side textual comparison" in seed.authoring_brief
     assert "actual representative" in seed.authoring_brief
+
+
+def test_catalog_replaces_vague_food_theme_with_specific_public_interest_case():
+    assert not any(seed.topic.startswith("Food Systems:") for seed in CANONICAL_SEED_CATALOG)
+    cereal = next(seed for seed in CANONICAL_SEED_CATALOG if seed.learner_title.startswith("Operation Bright Box"))
+    assert "one named children's cereal" in cereal.authoring_brief
+    assert "Adeline supplies the teaching and records" in cereal.authoring_brief
+
+
+def test_catalog_includes_current_harm_detection_investigation_without_prejudging_cause():
+    field_watch = next(seed for seed in CANONICAL_SEED_CATALOG if seed.learner_title.startswith("Operation Field Watch"))
+    assert "Pesticides are a suspected exposure, not an established cause" in field_watch.authoring_brief
+    assert "signal, cluster, association, and cause" in field_watch.authoring_brief
+
+
+@pytest.mark.asyncio
+async def test_failed_content_upgrade_keeps_current_canonical_live():
+    seed = CanonicalSeed(
+        "Existing investigation", "JUSTICE_CHANGEMAKING", content_revision="new-v2"
+    )
+    existing = {
+        "blocks": [{
+            "family_style": True,
+            "canonical_format_version": 11,
+            "metadata": {"content_revision": "old-v1"},
+        }]
+    }
+    with (
+        patch("app.connections.canonical_store.canonical_store.get", new=AsyncMock(return_value=existing)),
+        patch("app.connections.canonical_store.canonical_store.archive", new=AsyncMock()) as archive,
+        patch("app.connections.canonical_store.canonical_store.save", new=AsyncMock()) as save,
+        patch("app.services.resource_router.resource_router.search", new=AsyncMock(return_value={"resources": []})),
+        patch("app.api.experience_builder._author", new=AsyncMock(side_effect=RuntimeError("bad draft"))),
+    ):
+        result = await seed_one_canonical(seed)
+
+    assert result == "failed"
+    archive.assert_not_awaited()
+    save.assert_not_awaited()
 
 
 @pytest.mark.asyncio

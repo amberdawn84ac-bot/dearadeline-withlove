@@ -96,6 +96,46 @@ describe("isV11FlowExperience", () => {
 });
 
 describe("v11 flow rendering", () => {
+  it("shows the shared family discussion before the learner's progression-based work", () => {
+    const lesson: LessonResponse = {
+      ...baseLessonFields,
+      title: "Operation Field Watch",
+      blocks: [{ ...block("b1", "PRIMARY_SOURCE", "DISCOVERY"), canonical_format_version: 11 }],
+      metadata: {
+        family_discussion: {
+          launch: "Place the supplied health record and pesticide-use record side by side.",
+          questions: ["What is confirmed?", "What evidence is still missing?"],
+          synthesis_prompt: "Bring each finding back to one family evidence board.",
+        },
+        learner_contribution: {
+          role: "Graph observed and expected cases using your current statistics target.",
+          prompt: "Explain what the graph can and cannot establish.",
+          skill_connections: [{
+            domain: "math", track: "APPLIED_MATHEMATICS", title: "Compare observed and expected rates",
+            suggestion_id: "math-1", working_level: "current", contribution_prompt: "Build and explain the graph.",
+            sequence_state: "READY", integration_status: "INTEGRATED",
+            integration_rule: "Use only because the supplied records contain comparable quantities.",
+            mastery_eligible: true,
+          }],
+        },
+        experience_design: {
+          layout: "dossier",
+          central_question: "How should a community investigate possible harm?",
+          flow: [{ node_id: "records", label: "Read the records", block_ids: ["b1"] }],
+        },
+      },
+    };
+
+    render(<FamilyCanonicalLesson lesson={lesson} studentId="student-1" />);
+
+    const familyLaunch = screen.getByText("First, learn and examine together");
+    const learnerWork = screen.getByText("Now, your part of the family investigation");
+    expect(familyLaunch.compareDocumentPosition(learnerWork) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("What is confirmed?")).toBeInTheDocument();
+    expect(screen.getByText(/Graph observed and expected cases/)).toBeInTheDocument();
+    expect(screen.getByText(/Bring each finding back/)).toBeInTheDocument();
+  });
+
   it("renders in authored flow order, not stage order", () => {
     // Stage-bucket order would be INVITATION, DISCOVERY, ACTION, DEMONSTRATION
     // -> b2 (INVITATION), b1 (DISCOVERY), b3 (ACTION), b4 (DEMONSTRATION).

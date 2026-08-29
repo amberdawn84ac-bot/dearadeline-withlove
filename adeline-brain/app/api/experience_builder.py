@@ -568,7 +568,7 @@ async def _stream(request: LessonRequest):
             # Durable contracts live with the canonical blocks so the current DB schema
             # can preserve one source of truth without introducing a parallel lesson table.
             blocks[0].setdefault("metadata", {})["canonical_contract"] = {
-                key: authored.get(key) for key in ("big_question", "learning_goal", "shared_experience", "experience_design", "investigation_scope_contract", "public_interest_contract", "real_world_task", "portfolio_task", "printable_contract", "demonstration_contract", "mastery_evidence_map", "family_roles", "contract_version", "prompt_version")
+                key: authored.get(key) for key in ("big_question", "learning_goal", "shared_experience", "experience_design", "investigation_scope_contract", "public_interest_contract", "family_discussion", "real_world_task", "portfolio_task", "printable_contract", "demonstration_contract", "mastery_evidence_map", "family_roles", "contract_version", "prompt_version")
             }
             canonical = {"id": str(uuid.uuid4()), "topic": request.topic, "track": request.track.value, "title": authored.get("title") or request.topic, "blocks": blocks, "oas_standards": [], "researcher_activated": False, "agent_name": "Canonical Experience Author"}
             await canonical_store.save(slug, canonical, pending=False)
@@ -605,6 +605,9 @@ async def _stream(request: LessonRequest):
             "demonstration_contract": contract.get("demonstration_contract") or {},
             "experience_design": contract.get("experience_design") or {},
             "public_interest_contract": contract.get("public_interest_contract") or {},
+            "family_discussion": contract.get("family_discussion") or {},
+            "real_world_task": contract.get("real_world_task") or {},
+            "family_roles": contract.get("family_roles") or {},
             "mastery_evidence_map": contract.get("mastery_evidence_map") or [],
             "contract_version": contract.get("contract_version"),
             "prompt_version": contract.get("prompt_version"),

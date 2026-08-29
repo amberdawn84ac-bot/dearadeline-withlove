@@ -35,6 +35,17 @@ def _flow_node(node_id: str, *block_ids: str) -> dict:
     return {"node_id": node_id, "label": node_id, "block_ids": list(block_ids)}
 
 
+def _primary_record(identifier: str) -> dict:
+    return {
+        "source_title": f"Official record {identifier}",
+        "source_url": f"https://example.gov/records/{identifier}",
+        "holding_institution": "Example public archive",
+        "item_identifier": identifier,
+        "excerpt_or_observable_feature": "The record states the bounded fact under review.",
+        "claim_supported": "Supports only the stated bounded fact.",
+    }
+
+
 # ── validate_flow_composition — structural checks only ────────────────────────
 
 def test_flow_composition_requires_experience_design():
@@ -178,6 +189,46 @@ def test_research_mission_cannot_replace_supplied_primary_evidence():
     errors = validate_experience_substance(payload)
 
     assert any("actual routed PRIMARY_SOURCE" in error for error in errors)
+
+
+def test_primary_source_label_without_item_level_record_is_rejected():
+    payload = {
+        "track": "JUSTICE_CHANGEMAKING",
+        "experience_design": {
+            "primary_mode": "public_interest_investigation",
+            "central_question": "What does the record establish?",
+            "layout": "dossier",
+            "flow": [_flow_node("source", "b1"), _flow_node("act", "b2"), _flow_node("show", "b3")],
+        },
+        "blocks": [
+            {**_block("b1", "PRIMARY_SOURCE"), "content": "Find and analyze two primary sources."},
+            _block("b2", "DISCUSSION_FORUM"),
+            _block("b3", "QUIZ"),
+        ],
+    }
+
+    errors = validate_experience_substance(payload)
+
+    assert any("PRIMARY_SOURCE label is not evidence" in error for error in errors)
+
+
+def test_public_interest_investigation_compares_two_supplied_traceable_records():
+    payload = {
+        "track": "JUSTICE_CHANGEMAKING",
+        "experience_design": {
+            "primary_mode": "public_interest_investigation",
+            "central_question": "What does the record establish?",
+            "layout": "dossier",
+            "flow": [_flow_node("source", "b1"), _flow_node("act", "b2"), _flow_node("show", "b3")],
+        },
+        "blocks": [
+            {**_block("b1", "PRIMARY_SOURCE", [_primary_record("one"), _primary_record("two")]), "content": "Compare the supplied official records and their claim boundaries."},
+            _block("b2", "DISCUSSION_FORUM"),
+            _block("b3", "QUIZ"),
+        ],
+    }
+
+    assert validate_experience_substance(payload) == []
 
 
 def test_stem_requires_real_experiment_and_evidence_opportunity():

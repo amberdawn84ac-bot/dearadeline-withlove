@@ -9,7 +9,7 @@ from app.api.learning_plan import get_saved_today_plan, pop_completed_lesson
 
 def _saved_plan() -> dict:
     return {
-        "plan_version": 8,
+        "plan_version": 9,
         "student_id": "student-1",
         "suggestions": [{
             "id": "today-1", "title": "Creek evidence", "track": "CREATION_SCIENCE",
@@ -18,6 +18,18 @@ def _saved_plan() -> dict:
         }],
         "family_investigation": None,
         "individual_skills": [],
+        "progression_checklist": [],
+        "progression_map_status": {
+            "exact_child_checklist": True,
+            "ten_track_checklist_complete": False,
+            "sequential_core_ready": False,
+            "mapped_target_count": 0,
+            "verified_standard_target_count": 0,
+            "curated_concept_target_count": 0,
+            "placed_standard_target_count": 0,
+            "missing_track_count": 10,
+            "tracks": [],
+        },
         "projects": [],
         "recommended_books": [],
         "total_tracks_active": 1,

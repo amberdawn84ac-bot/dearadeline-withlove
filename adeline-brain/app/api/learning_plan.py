@@ -96,6 +96,13 @@ class IndividualSkillTarget(BaseModel):
         "otherwise keep practicing it in the learner's individual path."
     )
     mastery_eligible: bool = False
+    map_status: Literal[
+        "VERIFIED_STANDARD_MAP",
+        "CURATED_CONCEPT_GRAPH",
+        "PLACED_STANDARD_SEQUENCE",
+    ] = "PLACED_STANDARD_SEQUENCE"
+    prerequisite_ids: list[str] = Field(default_factory=list)
+    needs_progression_review: bool = False
 
 
 class LessonSuggestion(BaseModel):
@@ -178,6 +185,14 @@ class GradeLevelStandard(BaseModel):
     difficulty: str = "EMERGING"
     prerequisite_standard_ids: list[str] = Field(default_factory=list)
     prerequisites_met: bool = True
+    progression_lane: str = ""
+    progression_mode: Literal["SEQUENTIAL", "SCAFFOLDED", "OPEN"] = "OPEN"
+    progression_ordinal: int = 0
+    progression_source_title: str = ""
+    progression_source_url: str = ""
+    progression_source_version: str = ""
+    progression_review_status: str = "PLACED"
+    progression_ready: bool = True
 
 
 class PlacementProfile(BaseModel):
@@ -269,15 +284,46 @@ class CurriculumCoverage(BaseModel):
     all_required_accounted_for: bool
     subjects: list[SubjectCoverage]
 
+
+class ProgressionTrackStatus(BaseModel):
+    track: str
+    domain: str
+    target_attached: bool
+    target_id: Optional[str] = None
+    target_title: Optional[str] = None
+    map_status: Literal[
+        "VERIFIED_STANDARD_MAP",
+        "CURATED_CONCEPT_GRAPH",
+        "PLACED_STANDARD_SEQUENCE",
+        "NO_CURRENT_TARGET",
+    ]
+    sequence_state: Literal["READY", "BRIDGE_REQUIRED", "OPEN", "LOCKED"] = "OPEN"
+    hard_gate_enforced: bool = False
+
+
+class ProgressionMapStatus(BaseModel):
+    """Honest child-level accounting of progression data, not standards coverage."""
+
+    exact_child_checklist: bool = True
+    ten_track_checklist_complete: bool
+    sequential_core_ready: bool
+    mapped_target_count: int
+    verified_standard_target_count: int
+    curated_concept_target_count: int
+    placed_standard_target_count: int
+    missing_track_count: int
+    tracks: list[ProgressionTrackStatus]
+
 class LearningPlanResponse(BaseModel):
-    # Version 8 invalidates plans that exposed broad seed labels and unplaced
+    # Version 9 invalidates plans that exposed broad seed labels and unplaced
     # starter topics as if they were ready learner work.
-    plan_version: int = 8
+    plan_version: int = 9
     student_id: str
     suggestions: list[LessonSuggestion]
     family_investigation: Optional[LessonSuggestion] = None
     individual_skills: list[LessonSuggestion] = Field(default_factory=list)
     progression_checklist: list[IndividualSkillTarget] = Field(default_factory=list)
+    progression_map_status: ProgressionMapStatus
     projects: list[ProjectSuggestion]  # Portfolio projects ready to start
     recommended_books: list[BookRecommendation] = []
     total_tracks_active: int
@@ -736,6 +782,15 @@ def _learner_progression_targets(
         )
         if not candidate:
             continue
+        if candidate.concept_id:
+            map_status = "CURATED_CONCEPT_GRAPH"
+            prerequisite_ids = list(candidate.prerequisite_concept_ids)
+        elif candidate.prerequisite_standard_ids:
+            map_status = "VERIFIED_STANDARD_MAP"
+            prerequisite_ids = list(candidate.prerequisite_standard_ids)
+        else:
+            map_status = "PLACED_STANDARD_SEQUENCE"
+            prerequisite_ids = []
         targets.append(IndividualSkillTarget(
             suggestion_id=candidate.id,
             domain=domain,
@@ -749,8 +804,69 @@ def _learner_progression_targets(
                 (candidate.concept_id or candidate.standard_code)
                 and candidate.sequence_state == "READY"
             ),
+            map_status=map_status,
+            prerequisite_ids=prerequisite_ids,
+            needs_progression_review=False,
         ))
     return targets
+
+
+def _progression_map_status(targets: list[IndividualSkillTarget]) -> ProgressionMapStatus:
+    """Expose exactly where this child's ten-track progression is mapped or missing."""
+    by_track = {target.track: target for target in targets}
+    tracks: list[ProgressionTrackStatus] = []
+    for track in personalized_curriculum_planner.TRACKS:
+        target = by_track.get(track)
+        if target is None:
+            tracks.append(ProgressionTrackStatus(
+                track=track,
+                domain=TRACK_PROGRESSION_DOMAIN[track],
+                target_attached=False,
+                map_status="NO_CURRENT_TARGET",
+            ))
+            continue
+        target_id = target.concept_id or target.standard_code
+        tracks.append(ProgressionTrackStatus(
+            track=track,
+            domain=target.domain,
+            target_attached=True,
+            target_id=target_id,
+            target_title=target.title,
+            map_status=target.map_status,
+            sequence_state=target.sequence_state,
+            hard_gate_enforced=(
+                target.map_status in {
+                    "VERIFIED_STANDARD_MAP", "CURATED_CONCEPT_GRAPH", "PLACED_STANDARD_SEQUENCE",
+                }
+                and target.sequence_state in {"READY", "LOCKED"}
+            ),
+        ))
+
+    verified = sum(item.map_status == "VERIFIED_STANDARD_MAP" for item in tracks)
+    curated = sum(item.map_status == "CURATED_CONCEPT_GRAPH" for item in tracks)
+    placed = sum(item.map_status == "PLACED_STANDARD_SEQUENCE" for item in tracks)
+    missing = sum(item.map_status == "NO_CURRENT_TARGET" for item in tracks)
+    sequential = {
+        item.track: item for item in tracks
+        if item.track in personalized_curriculum_planner.INDIVIDUAL_SKILL_TRACKS
+    }
+    sequential_core_ready = all(
+        sequential.get(track) is not None
+        and sequential[track].map_status in {
+            "VERIFIED_STANDARD_MAP", "CURATED_CONCEPT_GRAPH", "PLACED_STANDARD_SEQUENCE",
+        }
+        for track in personalized_curriculum_planner.INDIVIDUAL_SKILL_TRACKS
+    )
+    return ProgressionMapStatus(
+        ten_track_checklist_complete=missing == 0,
+        sequential_core_ready=sequential_core_ready,
+        mapped_target_count=verified + curated + placed,
+        verified_standard_target_count=verified,
+        curated_concept_target_count=curated,
+        placed_standard_target_count=placed,
+        missing_track_count=missing,
+        tracks=tracks,
+    )
 
 
 def _individual_skill_targets(
@@ -784,7 +900,7 @@ def _family_investigation_suggestion(
     household_key = hashlib.sha256(household_id.encode("utf-8")).hexdigest()[:12]
     # Include the planning-contract revision so a corrected canonical/fit model
     # cannot reopen a durable learner record created by the retired planner.
-    shared_id = f"family-{household_key}-{iso.year}-w{iso.week:02d}-v8"
+    shared_id = f"family-{household_key}-{iso.year}-w{iso.week:02d}-v9"
     sequence = build_sequence_contract(source="family")
     return LessonSuggestion(
         id=shared_id,
@@ -1091,6 +1207,12 @@ def _standard_suggestion(standard: GradeLevelStandard) -> LessonSuggestion:
             concept_id=standard.standard_id,
             prerequisite_readiness=1.0 if standard.prerequisites_met else 0.0,
         )
+    elif standard.progression_mode == "SEQUENTIAL":
+        sequence = build_sequence_contract(
+            source="zpd",
+            concept_id=standard.standard_id,
+            prerequisite_readiness=1.0 if standard.progression_ready else 0.0,
+        )
     else:
         sequence = build_sequence_contract(source="standard")
     return LessonSuggestion(
@@ -1102,7 +1224,9 @@ def _standard_suggestion(standard: GradeLevelStandard) -> LessonSuggestion:
         sequence_policy=sequence.policy.value,
         sequence_state=sequence.state.value,
         sequence_target_id=standard.standard_id,
-        prerequisite_readiness=1.0 if standard.prerequisites_met else 0.0,
+        prerequisite_readiness=(
+            1.0 if standard.prerequisites_met and standard.progression_ready else 0.0
+        ),
         prerequisite_standard_ids=list(standard.prerequisite_standard_ids),
         bridge_required=sequence.bridge_required,
         sequence_rationale=sequence.rationale,
@@ -1425,6 +1549,14 @@ async def _get_grade_level_standards(student_id: str, grade_level: str) -> list[
                 difficulty=str(r.get("difficulty") or "EMERGING"),
                 prerequisite_standard_ids=list(r.get("prerequisite_standard_ids") or []),
                 prerequisites_met=bool(r.get("prerequisites_met", True)),
+                progression_lane=str(r.get("progression_lane") or ""),
+                progression_mode=str(r.get("progression_mode") or "OPEN"),
+                progression_ordinal=int(r.get("progression_ordinal") or 0),
+                progression_source_title=str(r.get("progression_source_title") or ""),
+                progression_source_url=str(r.get("progression_source_url") or ""),
+                progression_source_version=str(r.get("progression_source_version") or ""),
+                progression_review_status=str(r.get("progression_review_status") or "PLACED"),
+                progression_ready=bool(r.get("progression_ready", True)),
             )
             for i, r in enumerate(rows)
         ]
@@ -1459,7 +1591,7 @@ async def _get_available_projects(track: str = None, limit: int = 3) -> list[Pro
 # ── Redis sliding-window helpers ──────────────────────────────────────────────
 
 def _plan_cache_key(student_id: str) -> str:
-    return f"learning_plan:v8:{student_id}"
+    return f"learning_plan:v9:{student_id}"
 
 
 async def pop_completed_lesson(student_id: str, lesson_title: str) -> None:
@@ -1624,7 +1756,7 @@ async def get_learning_plan(
     if not refresh:
         try:
             persisted = await daily_plan_store.get(student_id, plan_date)
-            if persisted and persisted.get("plan_version") == 8:
+            if persisted and persisted.get("plan_version") == 9:
                 logger.info("[LearningPlan] Persistent HIT for student=%s date=%s", student_id, plan_date)
                 return LearningPlanResponse(**persisted)
         except Exception as e:
@@ -1945,12 +2077,14 @@ async def get_learning_plan(
     if grade_standards and not coverage.all_required_accounted_for:
         logger.error("[LearningPlan] Coverage invariant failed for student=%s", student_id)
 
+    progression_checklist = _learner_progression_targets(progression_candidates, grade_level)
     response = LearningPlanResponse(
         student_id=student_id,
         suggestions=final_suggestions,
         family_investigation=family_investigation,
         individual_skills=individual_skills,
-        progression_checklist=_learner_progression_targets(progression_candidates, grade_level),
+        progression_checklist=progression_checklist,
+        progression_map_status=_progression_map_status(progression_checklist),
         projects=projects,
         recommended_books=recommended_books,
         total_tracks_active=len(active_tracks),
@@ -2001,6 +2135,6 @@ async def get_saved_today_plan(
     response.headers["Pragma"] = "no-cache"
     plan_date = datetime.now(ZoneInfo("America/Chicago")).date()
     persisted = await daily_plan_store.get(student_id, plan_date)
-    if not persisted or persisted.get("plan_version") != 8:
+    if not persisted or persisted.get("plan_version") != 9:
         raise HTTPException(status_code=404, detail="Today's plan has not been created yet")
     return LearningPlanResponse(**persisted)

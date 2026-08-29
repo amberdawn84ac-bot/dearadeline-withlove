@@ -253,6 +253,7 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
   const demonstrationContract = lesson.metadata?.demonstration_contract;
   const portfolioTask = lesson.metadata?.portfolio_task;
   const learnerContribution = lesson.metadata?.learner_contribution;
+  const familyDiscussion = lesson.metadata?.family_discussion;
   const isIndividualSkill = lesson.metadata?.delivery_mode === "INDIVIDUAL_SKILL";
 
   const centralQuestion = design.central_question?.trim() || questionFrom(visible, lesson.title);
@@ -280,10 +281,21 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
         </div>
         <div className="self-center border-l-4 border-[#BD6809] pl-6">
           <p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">The question worth following</p>
-          <p className="mt-3 text-2xl leading-snug" style={{ fontFamily: "var(--font-kalam), cursive" }}>{centralQuestion}</p>
+          <p className="mt-3 font-body text-xl font-semibold leading-8">{centralQuestion}</p>
         </div>
       </div>
     </header>
+
+    {!isIndividualSkill && familyDiscussion?.launch && <section className="rounded-[26px] border border-[#C6B796] bg-[#FFFDF7] p-6 md:p-8">
+      <p className="text-xs font-black uppercase tracking-[.18em] text-[#9A3F4A]">First, learn and examine together</p>
+      <p className="mt-3 max-w-4xl font-body text-lg leading-8 text-[#2F4731]">{familyDiscussion.launch}</p>
+      {!!familyDiscussion.questions?.length && <div className="mt-6 rounded-2xl bg-[#F3E8D5] p-5">
+        <p className="text-xs font-black uppercase tracking-[.14em] text-[#BD6809]">Questions everyone carries through the evidence</p>
+        <ol className="mt-3 grid gap-3 font-body text-base leading-7">
+          {familyDiscussion.questions.map((question, index) => <li key={`${index}-${question}`} className="flex gap-3"><span className="font-bold text-[#9A3F4A]">{index + 1}.</span><span>{question}</span></li>)}
+        </ol>
+      </div>}
+    </section>}
 
     {groups.map(({ node, blocks }) => (
       <FlowStep
@@ -300,6 +312,17 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
 
     {resources.map((block) => <ResourceCollection key={block.block_id} block={block} />)}
 
+    {learnerContribution && <section className="rounded-[26px] border-2 border-[#2F4731] bg-[#E7EFE5] p-6 md:p-8">
+      <p className="text-xs font-black uppercase tracking-[.18em] text-[#9A3F4A]">{isIndividualSkill ? "Your current skill work" : "Now, your part of the family investigation"}</p>
+      {learnerContribution.role && <h2 className="mt-3 font-body text-2xl font-bold leading-9 text-[#2F4731]">{learnerContribution.role}</h2>}
+      {learnerContribution.prompt && learnerContribution.prompt !== learnerContribution.role && <p className="mt-3 max-w-4xl font-body text-base leading-7 text-[#2F4731]/80">{learnerContribution.prompt}</p>}
+      <SkillConnectionSummary contribution={learnerContribution} isIndividualSkill={isIndividualSkill} />
+      {!isIndividualSkill && familyDiscussion?.synthesis_prompt && <div className="mt-6 border-t border-[#2F4731]/20 pt-5">
+        <p className="text-xs font-black uppercase tracking-[.14em] text-[#BD6809]">Come back together</p>
+        <p className="mt-2 font-body text-lg leading-8">{familyDiscussion.synthesis_prompt}</p>
+      </div>}
+    </section>}
+
     <section className="rounded-[26px] border-2 border-[#BD6809] bg-[#FDF6E9] p-6 md:p-8">
       {seal.sealed ? (
         <>
@@ -314,8 +337,6 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
         <>
           <p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">Preserve what you found</p>
           <h2 className="mt-2 text-3xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{demonstrationPrompt}</h2>
-          {learnerContribution?.role && <p className="mt-3 max-w-3xl text-base font-bold leading-7">{learnerContribution.role}</p>}
-          <SkillConnectionSummary contribution={learnerContribution} isIndividualSkill={isIndividualSkill} />
           {(learnerContribution?.success_criteria?.length || demonstrationContract?.success_criteria?.length) ? (
             <ul className="mt-4 grid gap-2 text-sm">
               {(learnerContribution?.success_criteria || demonstrationContract?.success_criteria || []).map((criterion) => (
@@ -369,7 +390,7 @@ function LegacyStageExperience({ lesson, studentId }: { lesson: LessonResponse; 
     <header className="overflow-hidden rounded-[30px] border border-[#D9CFBC] bg-[linear-gradient(135deg,#F5E6C8,#E3ECDD)] shadow-sm">
       <div className="grid gap-8 p-7 md:grid-cols-[1.2fr_.8fr] md:p-11">
         <div><p className="text-xs font-black uppercase tracking-[.2em] text-[#A95322]">{isIndividualSkill ? "Your skill practice" : "Today’s family investigation"}</p><h1 className="mt-3 text-5xl leading-[.95] md:text-6xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{lesson.title}</h1><p className="mt-5 max-w-2xl text-base leading-7 text-[#2F4731]/75">{isIndividualSkill ? "Work at your current level. Practice the skill, show your reasoning, and leave evidence of what you can do." : "Follow the shared question. Use what helps. Make, test, examine, or decide something real."}</p>{lesson.metadata?.printable_request && <button type="button" onClick={() => void print.printDossier()} disabled={print.printing} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#2F4731] bg-white/70 px-4 py-2 text-sm font-bold disabled:opacity-50"><Download className="h-4 w-4" />{print.printing ? "Preparing dossier…" : isIndividualSkill ? "Print skill practice" : "Print field dossier"}</button>}{print.printError && <p className="mt-2 text-sm font-semibold text-red-700">{print.printError}</p>}</div>
-        <div className="self-center border-l-4 border-[#BD6809] pl-6"><p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">The question worth following</p><p className="mt-3 text-2xl leading-snug" style={{ fontFamily: "var(--font-kalam), cursive" }}>{questionFrom(teaching, lesson.title)}</p></div>
+        <div className="self-center border-l-4 border-[#BD6809] pl-6"><p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">The question worth following</p><p className="mt-3 font-body text-xl font-semibold leading-8">{questionFrom(teaching, lesson.title)}</p></div>
       </div>
     </header>
 

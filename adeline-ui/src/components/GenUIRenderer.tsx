@@ -479,9 +479,10 @@ function BlockLabel({ type }: { type: string }) {
 
 // ── Font / color helpers (avoid inline styles) ─────────────────────────────────
 
-function _fontClass(fontFamily: string): string {
-  if (fontFamily.includes("permanent-marker")) return css.fontPermanentMarker;
-  return css.fontKalam;
+function _fontClass(_fontFamily: string): string {
+  // Generated lesson prose must stay readable. Authored font hints cannot turn
+  // paragraphs, evidence, directions, or questions into handwriting/display text.
+  return css.fontBody;
 }
 
 function _colorClass(color: string): string {
@@ -501,7 +502,7 @@ function _colorClass(color: string): string {
 
 function LessonContent({
   content,
-  fontFamily = "var(--font-kalam), cursive",
+  fontFamily = "var(--font-neat), sans-serif",
   color = "#2F4731",
 }: {
   content: string;
@@ -547,6 +548,45 @@ function LessonContent({
 
 // ── PRIMARY_SOURCE block ──────────────────────────────────────────────────────
 
+export function PrimaryEvidenceRecords({ evidence }: { evidence: Evidence[] }) {
+  const records = evidence.filter((item) =>
+    Boolean(
+      item.source_title &&
+      item.source_url &&
+      item.holding_institution &&
+      item.item_identifier &&
+      item.excerpt_or_observable_feature &&
+      item.claim_supported
+    )
+  );
+  if (!records.length) return <EvidenceFooter evidence={evidence} />;
+  return (
+    <div className="mt-5 grid gap-4" aria-label="Supplied primary records">
+      {records.map((record, index) => {
+        const creator = record.creator_or_issuer || record.witness_citation?.author;
+        const date = record.date ?? record.witness_citation?.year;
+        return (
+          <article key={`${record.source_url}-${record.item_identifier}`} className="rounded-xl border border-[#CDBFA8] bg-[#FFFDF7] p-5">
+            <p className="text-[10px] font-black uppercase tracking-[.16em] text-[#9A3F4A]">Record {index + 1}</p>
+            <h3 className="mt-2 text-lg font-bold leading-6 text-[#2F4731]">
+              <a href={record.source_url} target="_blank" rel="noopener noreferrer" className="underline decoration-[#BD6809]/45 underline-offset-4 hover:text-[#9A3F4A]">
+                {record.source_title}
+              </a>
+            </h3>
+            <p className="mt-2 text-xs leading-5 text-[#2F4731]/65">
+              {[creator, date, record.holding_institution, record.item_identifier].filter(Boolean).join(" · ")}
+            </p>
+            <blockquote className="mt-4 border-l-4 border-[#BD6809] pl-4 font-body text-[16px] leading-7 text-[#2F4731]">
+              {record.excerpt_or_observable_feature}
+            </blockquote>
+            <p className="mt-4 font-body text-sm leading-6 text-[#2F4731]/75"><b>What this record can support:</b> {record.claim_supported}</p>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
 function PrimarySourceBlock({
   block,
   isHomestead,
@@ -560,7 +600,7 @@ function PrimarySourceBlock({
     <div className={clsx("rounded-xl p-5 space-y-3", css.primarySource)}>
       <BlockLabel type="PRIMARY_SOURCE" />
       <LessonContent content={content} color="#2F4731" />
-      <EvidenceFooter evidence={block.evidence} />
+      <PrimaryEvidenceRecords evidence={block.evidence} />
     </div>
   );
 }
@@ -574,7 +614,7 @@ function LabMissionBlock({ block }: { block: LessonBlockResponse }) {
         <span className="text-lg">🌱</span>
         <BlockLabel type="LAB_MISSION" />
       </div>
-      <LessonContent content={block.content} fontFamily="var(--font-kalam), cursive" color="#2F4731" />
+      <LessonContent content={block.content} color="#2F4731" />
       <EvidenceFooter evidence={block.evidence} />
     </div>
   );
@@ -593,7 +633,7 @@ function ExperimentBlock({ block }: { block: LessonBlockResponse }) {
           Sovereign Lab
         </span>
       </div>
-      <p className={clsx("text-base text-[#2F4731] leading-relaxed whitespace-pre-wrap font-medium", css.fontKalam)}>
+      <p className={clsx("text-base text-[#2F4731] leading-relaxed whitespace-pre-wrap font-medium", css.fontBody)}>
         {block.content}
       </p>
       <div className="flex items-center gap-3 pt-2 border-t border-[#BD6809]/20">
@@ -634,10 +674,10 @@ function ResearchMissionBlock({ block }: { block: LessonBlockResponse }) {
         <span className="text-lg">🔍</span>
         <BlockLabel type="RESEARCH_MISSION" />
       </div>
-      <p className={clsx("text-base text-[#991B1B] leading-[1.8] whitespace-pre-wrap font-bold", css.fontPermanentMarker)}>
+      <p className={clsx("text-base text-[#991B1B] leading-[1.8] whitespace-pre-wrap font-semibold", css.fontBody)}>
         {block.content}
       </p>
-      <p className={clsx("text-sm text-[#2F4731]/50 italic", css.fontKalam)}>
+      <p className={clsx("text-sm text-[#2F4731]/60", css.fontBody)}>
         No verified archive source was found. This is your research mission.
       </p>
     </div>
@@ -709,11 +749,11 @@ function QuizBlock({ block }: { block: LessonBlockResponse }) {
         <span className="text-lg">❓</span>
         <BlockLabel type="QUIZ" />
       </div>
-      <p className={clsx("text-lg text-[#312E81] leading-[1.7] whitespace-pre-wrap font-bold", css.fontKalam)}>
+      <p className={clsx("text-lg text-[#312E81] leading-[1.7] whitespace-pre-wrap font-bold", css.fontBody)}>
         {block.content}
       </p>
       <textarea
-        className={clsx("w-full mt-1 px-3 py-2 text-base text-[#2F4731] bg-white border border-[#4F46E5]/30 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-[#4F46E5]", css.fontKalam)}
+        className={clsx("w-full mt-1 px-3 py-2 text-base text-[#2F4731] bg-white border border-[#4F46E5]/30 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-[#4F46E5]", css.fontBody)}
         rows={3}
         placeholder="Write your answer here..."
       />
@@ -884,7 +924,6 @@ function TextBlock({ block }: { block: LessonBlockResponse }) {
       <BlockLabel type="TEXT" />
       <LessonContent
         content={block.content}
-        fontFamily="var(--font-kalam), cursive"
         color="#374151"
       />
     </div>
@@ -977,7 +1016,7 @@ function BookSuggestionBlock({ block }: { block: LessonBlockResponse }) {
             </span>
           )}
           {block.content && (
-            <p className={clsx("text-sm text-[#374151] leading-relaxed", css.fontKalam)}>
+            <p className={clsx("text-sm text-[#374151] leading-relaxed", css.fontBody)}>
               {block.content}
             </p>
           )}
@@ -1175,7 +1214,7 @@ function ProblemBlock({ block }: { block: LessonBlockResponse }) {
 
       <div className="space-y-3">
         <h3 className="font-bold text-[#2F4731]">{problem?.title || 'Math Problem'}</h3>
-        <div className={clsx("text-[#374151] leading-relaxed", css.fontKalam)}>
+        <div className={clsx("text-[#374151] leading-relaxed", css.fontBody)}>
           <LessonContent content={problem?.problem_text || block.content} color="#2F4731" />
         </div>
       </div>

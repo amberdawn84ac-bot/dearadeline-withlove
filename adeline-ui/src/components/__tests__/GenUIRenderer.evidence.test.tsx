@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { EvidenceFooter } from "@/components/GenUIRenderer";
+import { EvidenceFooter, PrimaryEvidenceRecords } from "@/components/GenUIRenderer";
 import type { Evidence } from "@/lib/brain-client";
 
 describe("EvidenceFooter evidence contracts", () => {
@@ -48,5 +48,24 @@ describe("EvidenceFooter evidence contracts", () => {
 
     expect(screen.getByText(/VERIFIED/)).toBeInTheDocument();
     expect(screen.getByText("91% match")).toBeInTheDocument();
+  });
+
+  it("puts the supplied record feature and claim boundary in the lesson", () => {
+    const citation: Evidence = {
+      source_title: "Official pesticide-use record",
+      creator_or_issuer: "Community maintenance district",
+      date: "2026-07-21",
+      holding_institution: "Community public records portal",
+      source_url: "https://example.gov/pesticide-record",
+      item_identifier: "application-log-2026-07-21",
+      excerpt_or_observable_feature: "The log names the product, field, date, and application rate.",
+      claim_supported: "Supports when and where the recorded application occurred; it does not prove individual exposure or causation.",
+    };
+
+    render(<PrimaryEvidenceRecords evidence={[citation]} />);
+
+    expect(screen.getByRole("link", { name: citation.source_title })).toHaveAttribute("href", citation.source_url);
+    expect(screen.getByText(citation.excerpt_or_observable_feature!)).toBeInTheDocument();
+    expect(screen.getByText(/it does not prove individual exposure or causation/i)).toBeInTheDocument();
   });
 });

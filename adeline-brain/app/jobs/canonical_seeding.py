@@ -77,21 +77,22 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
         content_revision="drug-policy-comparison-v2",
     ),
     CanonicalSeed(
-        "Food Systems: Who Profits, Who Pays, and What the Evidence Shows",
+        "Children's Cereal: Marketing Claims, Ingredients, and Public Accountability",
         "JUSTICE_CHANGEMAKING",
         True,
-        display_title="Who Controls Our Food? Trace One Family Meal from Seed to Store",
+        archive_query="children cereal marketing FDA FTC nutrition label corporate lobbying",
+        display_title="Operation Bright Box: Who Profits From Children's Breakfast?",
         family_summary=(
-            "Put one real family meal on the table, trace its ingredients, prices, ownership, labor, processing, and rules, then build a verified food-system map "
-            "and choose one useful change the family can test."
+            "Put real cereal packages, child-directed advertisements, nutrition claims, regulator rules, independent health evidence, and corporate incentives on the same table; determine what the records prove and pursue one useful change."
         ),
         authoring_brief=(
-            "DRIVING QUESTION: Who made the important decisions behind one meal, who received the money, who carried the costs, and what can this family verify or change? "
-            "OPENING ENCOUNTER: learners select one meal or grocery item already in the home and examine its package, ingredient list, origin, price, and company ownership before explanation. "
-            "SHARED OUTCOME: a seed-to-store system map grounded in the chosen food, with sourced claims, price or quantity evidence where genuinely useful, and one feasible household, producer, or civic action whose need and impact can be checked. "
-            "Do not survey the entire food industry, preach a predetermined verdict, or assign learners to go research everything themselves. Supply and use the evidence needed for this case."
+            "MISSION FRAME: investigate one named children's cereal or a tightly bounded comparison, not the vague topic of food. "
+            "DRIVING QUESTION: What is being sold to children, which package and advertising claims are supported, what health consequences are established or still uncertain, who profits, which institutions set the rules, and where can citizens intervene? "
+            "OPENING ENCOUNTER: supply and compare actual labels, serving sizes, child-directed marketing, FDA or FTC rules or actions, strong independent health evidence, and relevant company, lobbying, or trade-group records before explaining the system. "
+            "SHARED OUTCOME: one family claim ledger and power map; exact reading, writing, quantity, ratio, statistics, health, economics, or design contributions chosen from each learner's progression targets only when they genuinely fit; a Beneficial Product Standard; and one evidence-specific action to a real school purchaser, company, regulator, legislator, or community group after validating the need. "
+            "Do not claim that a cereal, ingredient, or exposure caused cancer or another disease unless the cited evidence establishes that causal claim. Do not soften documented findings, recalls, deceptive-advertising rulings, admissions, or enforcement actions when the records establish them. Adeline supplies the teaching and records; children do not build the lesson by searching for them."
         ),
-        content_revision="one-meal-system-map-v1",
+        content_revision="operation-bright-box-v1",
     ),
     CanonicalSeed(
         "Operation Bitter Harvest: Glyphosate, Seed Control, and Corporate Accountability",
@@ -135,9 +136,26 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
         authoring_brief=(
             "DRIVING QUESTION: What does a pesticide label require, how is exposure controlled in real work, and whose safety depends on the rules being followed? "
             "OPENING ENCOUNTER: inspect a real EPA label or regulatory record and identify the exact hazard, use, protective-equipment, interval, and enforcement claims it makes. "
-            "SHARED OUTCOME: a source-linked protection map and one useful deliverable for a real grower, worker-support group, family gardener, or public official after confirming the need. Avoid unsupported toxicity claims."
+            "SHARED OUTCOME: a source-linked protection map and one useful deliverable for a real grower, worker-support group, family gardener, or public official after confirming the need. Supply the label, rule excerpts, testimony or exposure record, and enforcement evidence inside the lesson; never replace them with directions to find two sources or research an agency. Avoid unsupported toxicity claims."
         ),
-        content_revision="label-to-field-v1",
+        content_revision="label-to-field-v2",
+    ),
+    CanonicalSeed(
+        "Ladera Ranch Ewing Sarcoma Concern: Pesticides, Public Records, and Precaution",
+        "JUSTICE_CHANGEMAKING",
+        True,
+        archive_query="Ladera Ranch Ewing sarcoma CDPH pesticide investigation public records",
+        display_title="Operation Field Watch: How Does a Community Investigate Possible Harm?",
+        family_summary=(
+            "Follow a current community signal from reported rare childhood cancers through cancer-registry analysis, pesticide-use records, exposure questions, scientific limits, public authority, precaution, and citizen action without pretending the cause is already known."
+        ),
+        authoring_brief=(
+            "CURRENT CASE: families and officials have reported six Ewing sarcoma diagnoses connected to Ladera Ranch since 2013; California public-health officials previously found no unusual county-level rate in a 2024 analysis and are reviewing the renewed concern. Pesticides are a suspected exposure, not an established cause. Treat dates and investigation status as time-sensitive and anchor every current statement to the routed official record. "
+            "DRIVING QUESTION: When a community notices an alarming pattern before causation is established, what evidence should be collected, who must investigate, what precautionary steps are proportionate, and how can ordinary citizens compel transparent action? "
+            "OPENING ENCOUNTER: supply the current CDPH status record, official requests for investigation, local pesticide-use or safety records, and credible epidemiological evidence about what is known and unknown. Teach incidence, expected-versus-observed reasoning, exposure pathways, latency, confounding, registry limits, and the difference between signal, cluster, association, and cause at each learner's progression level. "
+            "SHARED OUTCOME: a living evidence board separating confirmed facts, hypotheses, missing data, responsible institutions, requested tests, precautionary options, and updates; plus one useful request for records, testing, disclosure, safer field management, public reporting, or independent review addressed to a real decision-maker. Protect affected children's privacy and never turn illness into entertainment or a predetermined verdict."
+        ),
+        content_revision="operation-field-watch-v1",
     ),
     CanonicalSeed(
         "Seed Patents, Market Concentration, and Farmer Choice",
@@ -311,14 +329,20 @@ async def seed_one_canonical(seed: CanonicalSeed) -> str:
         if evidence_current and content_current:
             logger.info("[CanonicalSeed] SKIP current — %s / %s", seed.topic, seed.track)
             return "skipped"
+    replacement_reason = ""
     if existing:
-        reason = (
+        replacement_reason = (
             "canonical_evidence_upgrade"
             if seed.evidence_revision and stored_revision != seed.evidence_revision
             else "canonical_content_upgrade" if seed.content_revision
             else "canonical_format_upgrade"
         )
-        await canonical_store.archive(slug, reason=reason)
+        logger.info(
+            "[CanonicalSeed] Preparing replacement while current lesson remains live — "
+            "topic=%s reason=%s",
+            seed.topic,
+            replacement_reason,
+        )
 
     try:
         request = LessonRequest(
@@ -371,6 +395,7 @@ async def seed_one_canonical(seed: CanonicalSeed) -> str:
                 "demonstration_contract",
                 "mastery_evidence_map",
                 "family_roles",
+                "family_discussion",
             )
         }
         if seed.evidence_revision:
@@ -388,7 +413,12 @@ async def seed_one_canonical(seed: CanonicalSeed) -> str:
             "agent_name": "Canonical Experience Author",
         }
         await canonical_store.save(slug, record, pending=False)
-        logger.info("[CanonicalSeed] READY — %s / %s", seed.topic, seed.track)
+        logger.info(
+            "[CanonicalSeed] READY — %s / %s replacement=%s",
+            seed.topic,
+            seed.track,
+            replacement_reason or "new",
+        )
         return "seeded"
     except Exception:
         logger.exception("[CanonicalSeed] FAILED — %s / %s", seed.topic, seed.track)

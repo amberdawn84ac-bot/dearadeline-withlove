@@ -29,7 +29,7 @@ vi.mock('@/lib/brain-client', async () => {
 });
 
 const plan = {
-  plan_version: 8,
+  plan_version: 9,
   student_id: 'student-1',
   suggestions: [{
     id: 'today-1', title: 'Creek evidence', track: 'CREATION_SCIENCE',

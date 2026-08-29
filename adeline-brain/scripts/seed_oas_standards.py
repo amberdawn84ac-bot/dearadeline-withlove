@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.connections.curriculum_graph import curriculum_graph
 from app.connections.postgres import _get_session_factory
+from app.curriculum.progression_placement import build_progression_placements
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(message)s")
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ async def seed_oas_standards() -> None:
     await curriculum_graph.connect()
     with OAS_SEED_PATH.open("r", encoding="utf-8") as source:
         mappings = json.load(source).get("mappings", [])
+    placements = build_progression_placements(mappings)
 
     standards: list[dict] = []
     relations: list[dict] = []
@@ -57,6 +59,7 @@ async def seed_oas_standards() -> None:
             "homestead": mapping.get("homestead_adaptation", ""),
             "difficulty": mapping.get("difficulty", "EMERGING"),
             "track": mapping.get("track", "ENGLISH_LITERATURE"),
+            **placements[standard_id],
         })
         for relation in mapping.get("standard_relationships", mapping.get("neo4j_relationships", [])):
             target = relation.get("target") or relation.get("target_id")
@@ -73,17 +76,35 @@ async def seed_oas_standards() -> None:
         await session.execute(text('''
             INSERT INTO "OASStandard"
                 (id, code, subject, grade, "gradeBand", strand, description, track,
-                 "lessonHook", "homesteadAdaptation", difficulty, "createdAt")
+                 "lessonHook", "homesteadAdaptation", difficulty,
+                 "progressionLane", "progressionMode", "progressionOrdinal",
+                 "progressionSourceTitle", "progressionSourceUrl", "progressionSourceVersion",
+                 "progressionEvidenceNote", "progressionReviewStatus",
+                 "progressionParentId", "progressionIsTerminal", "createdAt")
             VALUES
                 (gen_random_uuid(), :code, :subject, :grade, :grade_band, :strand,
-                 :description, :track, :lesson_hook, :homestead, :difficulty, NOW())
+                 :description, :track, :lesson_hook, :homestead, :difficulty,
+                 :progression_lane, :progression_mode, :progression_ordinal,
+                 :progression_source_title, :progression_source_url, :progression_source_version,
+                 :progression_evidence_note, :progression_review_status,
+                 :progression_parent_id, :progression_is_terminal, NOW())
             ON CONFLICT (code) DO UPDATE SET
                 subject = EXCLUDED.subject, grade = EXCLUDED.grade,
                 "gradeBand" = EXCLUDED."gradeBand", strand = EXCLUDED.strand,
                 description = EXCLUDED.description, track = EXCLUDED.track,
                 "lessonHook" = EXCLUDED."lessonHook",
                 "homesteadAdaptation" = EXCLUDED."homesteadAdaptation",
-                difficulty = EXCLUDED.difficulty
+                difficulty = EXCLUDED.difficulty,
+                "progressionLane" = EXCLUDED."progressionLane",
+                "progressionMode" = EXCLUDED."progressionMode",
+                "progressionOrdinal" = EXCLUDED."progressionOrdinal",
+                "progressionSourceTitle" = EXCLUDED."progressionSourceTitle",
+                "progressionSourceUrl" = EXCLUDED."progressionSourceUrl",
+                "progressionSourceVersion" = EXCLUDED."progressionSourceVersion",
+                "progressionEvidenceNote" = EXCLUDED."progressionEvidenceNote",
+                "progressionReviewStatus" = EXCLUDED."progressionReviewStatus",
+                "progressionParentId" = EXCLUDED."progressionParentId",
+                "progressionIsTerminal" = EXCLUDED."progressionIsTerminal"
         '''), standards)
         if relations:
             await session.execute(text('''
