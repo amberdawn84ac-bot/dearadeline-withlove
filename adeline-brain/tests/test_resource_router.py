@@ -148,23 +148,6 @@ def test_archive_evidence_pack_does_not_leak_into_unrelated_history():
     )) == []
 
 
-def test_ladera_harm_detection_pack_supplies_official_records_and_scientific_limits():
-    results = _curated_archive_evidence(ResourceQuery(
-        topic="Ladera Ranch Ewing sarcoma pesticide investigation public records",
-        track="JUSTICE_CHANGEMAKING",
-    ))
-
-    primary = [item for item in results if item.resource_type == "PRIMARY_SOURCE"]
-    assert len(primary) == 3
-    assert {item.provider for item in primary} >= {
-        "California Department of Public Health",
-        "California State Assembly, District 72",
-    }
-    assert all(item.source_item_id and item.holding_institution for item in primary)
-    assert all(item.evidence_scope and "caus" in item.evidence_scope.lower() for item in primary)
-    assert any(item.provider == "U.S. Environmental Protection Agency HERO" for item in results)
-
-
 @pytest.mark.asyncio
 async def test_router_keeps_verified_archive_items_when_live_loc_api_fails(monkeypatch):
     async def broken(*_args, **_kwargs):

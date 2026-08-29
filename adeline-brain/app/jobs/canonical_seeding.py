@@ -141,23 +141,6 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
         content_revision="label-to-field-v2",
     ),
     CanonicalSeed(
-        "Ladera Ranch Ewing Sarcoma Concern: Pesticides, Public Records, and Precaution",
-        "JUSTICE_CHANGEMAKING",
-        True,
-        archive_query="Ladera Ranch Ewing sarcoma CDPH pesticide investigation public records",
-        display_title="Operation Field Watch: How Does a Community Investigate Possible Harm?",
-        family_summary=(
-            "Follow a current community signal from reported rare childhood cancers through cancer-registry analysis, pesticide-use records, exposure questions, scientific limits, public authority, precaution, and citizen action without pretending the cause is already known."
-        ),
-        authoring_brief=(
-            "CURRENT CASE: families and officials have reported six Ewing sarcoma diagnoses connected to Ladera Ranch since 2013; California public-health officials previously found no unusual county-level rate in a 2024 analysis and are reviewing the renewed concern. Pesticides are a suspected exposure, not an established cause. Treat dates and investigation status as time-sensitive and anchor every current statement to the routed official record. "
-            "DRIVING QUESTION: When a community notices an alarming pattern before causation is established, what evidence should be collected, who must investigate, what precautionary steps are proportionate, and how can ordinary citizens compel transparent action? "
-            "OPENING ENCOUNTER: supply the current CDPH status record, official requests for investigation, local pesticide-use or safety records, and credible epidemiological evidence about what is known and unknown. Teach incidence, expected-versus-observed reasoning, exposure pathways, latency, confounding, registry limits, and the difference between signal, cluster, association, and cause at each learner's progression level. "
-            "SHARED OUTCOME: a living evidence board separating confirmed facts, hypotheses, missing data, responsible institutions, requested tests, precautionary options, and updates; plus one useful request for records, testing, disclosure, safer field management, public reporting, or independent review addressed to a real decision-maker. Protect affected children's privacy and never turn illness into entertainment or a predetermined verdict."
-        ),
-        content_revision="operation-field-watch-v1",
-    ),
-    CanonicalSeed(
         "Seed Patents, Market Concentration, and Farmer Choice",
         "GOVERNMENT_ECONOMICS",
         True,

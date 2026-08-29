@@ -97,12 +97,6 @@ def test_catalog_replaces_vague_food_theme_with_specific_public_interest_case():
     assert "Adeline supplies the teaching and records" in cereal.authoring_brief
 
 
-def test_catalog_includes_current_harm_detection_investigation_without_prejudging_cause():
-    field_watch = next(seed for seed in CANONICAL_SEED_CATALOG if seed.learner_title.startswith("Operation Field Watch"))
-    assert "Pesticides are a suspected exposure, not an established cause" in field_watch.authoring_brief
-    assert "signal, cluster, association, and cause" in field_watch.authoring_brief
-
-
 @pytest.mark.asyncio
 async def test_failed_content_upgrade_keeps_current_canonical_live():
     seed = CanonicalSeed(

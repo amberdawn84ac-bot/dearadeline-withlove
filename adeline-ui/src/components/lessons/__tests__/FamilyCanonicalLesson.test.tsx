@@ -99,7 +99,7 @@ describe("v11 flow rendering", () => {
   it("shows the shared family discussion before the learner's progression-based work", () => {
     const lesson: LessonResponse = {
       ...baseLessonFields,
-      title: "Operation Field Watch",
+      title: "Operation Public Record",
       blocks: [{ ...block("b1", "PRIMARY_SOURCE", "DISCOVERY"), canonical_format_version: 11 }],
       metadata: {
         family_discussion: {
