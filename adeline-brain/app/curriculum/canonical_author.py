@@ -23,19 +23,10 @@ EXPERIENCE_LAYOUTS = frozenset({
 # Two independent version axes, distinct from CANONICAL_FORMAT_VERSION (the
 # storage/schema shape, in family_style.py). CONTRACT_VERSION tracks which
 # validation rules a canonical satisfied; PROMPT_VERSION tracks which exact
-# system prompt produced it. Bump CONTRACT_VERSION when validate_canonical_
-# contract/validate_flow_composition/validate_experience_substance rules
-# change; bump PROMPT_VERSION when CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT's
-# text changes materially. Neither bump forces regeneration by itself today
-# — is_current_family_canonical() still only gates on the format floor — but
-# both are persisted so a future targeted re-authoring pass (see
-# app/scripts/audit_canonical_quality.py) can identify exactly which
-# canonicals predate a given rule or prompt change.
-CONTRACT_VERSION = "2026-08-27.1"
-PROMPT_VERSION = "v11-family-evidence-2026-08-27"
+# system prompt produced it.
+CONTRACT_VERSION = "2026-08-30.1"
+PROMPT_VERSION = "v12-family-workbook-2026-08-30"
 
-# A block only counts as "genuine evidence" — as opposed to prose describing
-# or asserting evidence exists — if it's one of these types.
 EVIDENCE_CAPABLE_TYPES = frozenset({"PRIMARY_SOURCE", "RESEARCH_MISSION"})
 
 _INVESTIGATION_FAMILY_TYPES = frozenset({
@@ -45,6 +36,9 @@ _INVESTIGATION_FAMILY_TYPES = frozenset({
 _EVIDENCE_ORIENTED_TRACKS = frozenset({"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING"})
 _STEM_TYPES = frozenset({"stem", "steam"})
 _MAKER_TYPES = frozenset({"maker_build", "design_challenge"})
+
+_MAX_CANONICAL_BLOCKS = 10
+_MIN_CANONICAL_BLOCKS = 6
 
 _TRACEABLE_PRIMARY_FIELDS = (
     "source_title",
@@ -71,13 +65,7 @@ def _traceable_primary_records(blocks: list[dict]) -> list[dict]:
 
 
 def enforce_non_exposure_mastery(payload: dict) -> dict:
-    """Apply the platform's non-negotiable mastery safety rule.
-
-    This boolean is policy, not authored curriculum. Normalizing it to true
-    prevents an otherwise strong lesson from failing because a model omitted
-    or flipped one mechanical flag; observable evidence is still validated
-    separately and cannot be synthesized here.
-    """
+    """Apply the platform's non-negotiable mastery safety rule."""
     evidence_map = payload.get("mastery_evidence_map")
     if isinstance(evidence_map, list):
         for entry in evidence_map:
@@ -92,19 +80,25 @@ def validate_canonical_contract(payload: dict) -> list[str]:
     design = payload.get("experience_design")
     if not isinstance(design, dict):
         return ["experience_design is required"]
+
     primary_mode = str(design.get("primary_mode") or "").strip().lower()
     if primary_mode not in EXPERIENCE_MODES:
         errors.append("experience_design.primary_mode must be a supported canonical mode")
     if not str(design.get("entry_move") or "").strip():
         errors.append("experience_design must begin with a consequential learner encounter or action")
-    disciplines = [str(item).strip() for item in design.get("disciplines_integrated") or [] if str(item).strip()]
+
+    disciplines = [
+        str(item).strip() for item in design.get("disciplines_integrated") or [] if str(item).strip()
+    ]
     if not disciplines:
         errors.append("experience_design must name the disciplines genuinely involved")
     if len(disciplines) > 1 and not str(design.get("integration_rationale") or "").strip():
         errors.append("interdisciplinary experiences must explain why the integration is meaningful")
+
     if primary_mode in {"stem", "steam", "maker_build", "design_challenge"}:
         if not list(design.get("constraints") or []):
             errors.append(f"{primary_mode} requires a genuine constraint, not a decorative activity")
+
     if primary_mode in {"public_interest_investigation", "civic_action_project"}:
         public_interest = payload.get("public_interest_contract") or {}
         if not list(public_interest.get("primary_record_types") or []):
@@ -130,8 +124,8 @@ def validate_canonical_contract(payload: dict) -> list[str]:
         ):
             errors.append("civic agency requires a real recipient, validated need, intended change, and impact signal")
 
+    family_discussion = payload.get("family_discussion") or {}
     if primary_mode in _INVESTIGATION_FAMILY_TYPES | _MAKER_TYPES | _STEM_TYPES:
-        family_discussion = payload.get("family_discussion") or {}
         if not str(family_discussion.get("launch") or "").strip():
             errors.append("family investigations must begin with one shared family launch")
         questions = [
@@ -174,17 +168,25 @@ def validate_canonical_contract(payload: dict) -> list[str]:
                 errors.append(f"mastery_evidence_map[{index}] must require observable evidence")
             if entry.get("not_awarded_for_exposure_alone") is not True:
                 errors.append(f"mastery_evidence_map[{index}] may not award exposure alone")
+
+    adaptation_contract = payload.get("adaptation_contract")
+    if not isinstance(adaptation_contract, list) or not 3 <= len(adaptation_contract) <= 5:
+        errors.append("adaptation_contract must contain 3–5 concise adaptation rules")
+    elif any(not str(rule).strip() for rule in adaptation_contract):
+        errors.append("adaptation_contract rules must be non-empty")
+
+    blocks = payload.get("blocks")
+    if not isinstance(blocks, list) or not _MIN_CANONICAL_BLOCKS <= len(blocks) <= _MAX_CANONICAL_BLOCKS:
+        actual = len(blocks) if isinstance(blocks, list) else 0
+        errors.append(
+            f"canonical lesson must contain {_MIN_CANONICAL_BLOCKS}–{_MAX_CANONICAL_BLOCKS} substantive blocks; got {actual}"
+        )
+
     return errors
 
 
 def validate_flow_composition(payload: dict) -> list[str]:
-    """Composition validity: is there a real authored flow, do all block
-    references resolve, and is every block accounted for.
-
-    This says nothing about whether the flow is any good — that is
-    validate_experience_substance()'s job. A flow where every node points at
-    a TEXT block passes this function cleanly; it is meant to.
-    """
+    """Composition validity: the authored flow references every real block exactly once."""
     errors: list[str] = []
     design = payload.get("experience_design")
     if not isinstance(design, dict):
@@ -219,26 +221,20 @@ def validate_flow_composition(payload: dict) -> list[str]:
         errors.append(f"experience_design.flow references unknown block_ids: {missing}")
     if orphaned := sorted(block_ids - referenced):
         errors.append(f"blocks not referenced by any flow node: {orphaned}")
+    if len(referenced) != len(block_ids):
+        errors.append("each canonical block must be referenced by exactly one flow node")
 
     return errors
 
 
 def validate_experience_substance(payload: dict) -> list[str]:
-    """Pedagogical validity: does the flow actually contain the substance the
-    experience claims to be — not just a structurally valid flow.
-
-    Deliberately does not prescribe an exact block sequence or count per
-    layout or experience type — only minimum semantic invariants. A flow
-    whose "experiment" node points at a TEXT block, or whose investigation
-    has no PRIMARY_SOURCE anywhere, fails here even though it would pass
-    validate_flow_composition() cleanly.
-    """
+    """Ensure the family experience contains real evidence, action, and demonstration substance."""
     errors: list[str] = []
     design = payload.get("experience_design") or {}
     exp_type = str(design.get("primary_mode") or "").strip().lower()
     flow = design.get("flow")
     if not isinstance(flow, list):
-        return errors  # validate_flow_composition() already reports this
+        return errors
 
     blocks_by_id = {
         str(block.get("block_id")): block
@@ -259,39 +255,30 @@ def validate_experience_substance(payload: dict) -> list[str]:
         errors.append("experience must have a real central question or skill target")
     if not non_text_types:
         errors.append(
-            "experience contains no component beyond TEXT/NARRATIVE — at least one "
-            "genuine action, evidence, or demonstration component is required, not prose alone"
+            "experience contains no component beyond TEXT/NARRATIVE — at least one genuine action, evidence, or demonstration component is required"
         )
     if not (present_types & ACTION_TYPES):
-        errors.append(
-            "experience has no genuine learner-action component; an experience_stage "
-            "label alone cannot satisfy this"
-        )
+        errors.append("experience has no genuine learner-action component")
     if not (present_types & DEMONSTRATION_TYPES):
-        errors.append(
-            "experience has no genuine demonstration/mastery component requiring learner output"
-        )
+        errors.append("experience has no genuine demonstration/mastery component requiring learner output")
 
     if exp_type in _INVESTIGATION_FAMILY_TYPES:
         if not (present_types & (ACTION_TYPES | EVIDENCE_CAPABLE_TYPES)):
             errors.append(
-                f"{exp_type} experiences require substantive investigation or action "
-                "components appropriate to the claim, not prescribed order but real substance"
+                f"{exp_type} experiences require substantive investigation or action components appropriate to the claim"
             )
 
     track = str(payload.get("track") or "").upper()
     if track in _EVIDENCE_ORIENTED_TRACKS or exp_type == "public_interest_investigation":
         if "PRIMARY_SOURCE" not in present_types:
             errors.append(
-                f"{track or exp_type} experiences must put an actual routed PRIMARY_SOURCE in the lesson; "
-                "a RESEARCH_MISSION that sends the family away to find the teaching does not qualify"
+                f"{track or exp_type} experiences must put an actual routed PRIMARY_SOURCE in the lesson"
             )
         else:
             records = _traceable_primary_records(list(blocks_by_id.values()))
             if not records:
                 errors.append(
-                    "a PRIMARY_SOURCE label is not evidence: supply an item-level title, URL, holding "
-                    "institution, identifier, excerpt or observable feature, and bounded claim"
+                    "a PRIMARY_SOURCE label is not evidence: supply traceable item-level source metadata"
                 )
             elif exp_type in {"public_interest_investigation", "civic_action_project"}:
                 distinct_records = {
@@ -299,10 +286,7 @@ def validate_experience_substance(payload: dict) -> list[str]:
                     for record in records
                 }
                 if len(distinct_records) < 2:
-                    errors.append(
-                        "public-interest investigations must supply at least two distinct traceable records "
-                        "so the family can compare evidence rather than accept one source"
-                    )
+                    errors.append("public-interest investigations must supply at least two distinct traceable records")
 
     if exp_type in _STEM_TYPES:
         if not ({"EXPERIMENT", "LAB_MISSION"} & present_types):
@@ -320,10 +304,7 @@ def validate_experience_substance(payload: dict) -> list[str]:
 
     if exp_type == "skill_practice":
         if not ({"PROBLEM", "QUIZ", "GENUI_ASSEMBLY", "FLASHCARD"} & present_types):
-            errors.append(
-                "skill_practice experiences require genuine learner problems/tasks/practice, "
-                "not explanation alone"
-            )
+            errors.append("skill_practice experiences require genuine learner problems/tasks/practice")
 
     return errors
 
@@ -333,74 +314,94 @@ You are the Canonical Lesson Author for Dear Adeline, an adaptive Christian home
 
 Author ONE rich, family-style CanonicalLesson for the requested topic and track.
 This canonical lesson is the durable source of truth. It will later be adapted
-for grade/mastery and rendered as a digital lesson or polished 6–12 page Dear
-Adeline mini-workbook.
+for an individual learner's grade, mastery, and scaffolding needs and rendered
+as either a digital lesson or a polished 6–12 page Dear Adeline mini-workbook.
 
-Do NOT write a generic lesson, article, or narrative-only lesson.
-Do NOT append a generic family activity or status message.
-Do NOT create separate lessons for different grades.
-Do NOT invent frontend behavior, CSS, page layouts, or PDF markup.
+DO NOT write a generic lesson or narrative article.
+DO NOT write three separate grade-level lessons.
+DO NOT append a generic "family workshop" or "do this together" narrative block.
+DO NOT fabricate a fallback lesson when evidence or authoring fails.
+DO NOT invent frontend behavior, CSS, page coordinates, PDF markup, or renderer code.
 Prefer concrete evidence and meaningful tasks over explanatory prose.
 
-EXPERIENCE FLOW — YOU AUTHOR ONE SEQUENCE, NOT A BAG OF BLOCKS:
-- experience_design.flow is the actual order the family experiences this in.
-  Each flow node names one step and lists the block_id(s) rendered together
-  at that step. Every block you write must appear in exactly one flow node;
-  every block_id a flow node lists must be a real block you wrote.
-- experience_design.layout is presentation guidance only (how a step looks) —
-  it never determines what content exists or its order. Do not "fill a
-  template" for the layout you chose; author the real investigation, then
-  name the layout that fits what you actually built.
-- TEXT and NARRATIVE blocks are connective and supporting material — an
-  opening question, a short explanation, a transition, a caption. They are
-  never sufficient by themselves to BE the investigation, the action, or the
-  demonstration. A flow made of TEXT blocks with the right labels is not
-  meaningfully different from a lesson with no flow at all, and is rejected.
-- An investigation-shaped experience (investigation/stem/steam/public_interest_
-  investigation/civic_action_project/family_project) needs a real block the
-  learner actually investigates or acts with — PRIMARY_SOURCE, RESEARCH_MISSION,
-  EXPERIMENT, LAB_MISSION, REAL_WORLD_APP, DISCUSSION_FORUM, GENUI_ASSEMBLY —
-  not prose describing what an investigation would contain.
-- If you claim TRUTH_HISTORY, JUSTICE_CHANGEMAKING, or
-  public_interest_investigation, you must include an actual PRIMARY_SOURCE block
-  from a routed item. A RESEARCH_MISSION may extend supplied teaching, but sending
-  the family away to locate the core evidence does not qualify.
-- A block called PRIMARY_SOURCE is not itself a source. Put the routed record in
-  learners' hands: title, creator or issuer, date, institution, item URL and
-  identifier, a lawful excerpt or observable feature, and the exact bounded claim
-  it can support. Public-interest work compares at least two distinct records.
-- Adeline supplies the core teaching and records. "Go research," "find two
-  sources," and "look up the agency" may extend a complete investigation, but
-  may never be the lesson's teaching or primary evidence.
-- If you claim stem or steam, you must include a real EXPERIMENT or
-  LAB_MISSION block with an evidence/observation opportunity, not a
-  description of an experiment.
-- If you claim maker_build or design_challenge, you must include a real
-  creation/build action block, not an essay about building something.
-- If you claim skill_practice, you must include real problems/tasks the
-  learner solves (PROBLEM, QUIZ, GENUI_ASSEMBLY, FLASHCARD) — explanation may
-  support the practice but cannot constitute it.
+THE CANONICAL LESSON IS THE FAMILY EXPERIENCE ITSELF.
 
-RESPONSE BUDGET — CONCISE IS NOT SHALLOW:
-- Keep the complete JSON under roughly 24,000 characters. Spend the budget on
-  accurate evidence, the shared investigation, meaningful action, and observable
-  demonstrations—not repeated instructions or administrative prose.
-- Use one precise sentence per ordinary string field whenever possible. Use 2–4
-  strong items in an array unless the contract genuinely requires more.
-- Return 6–8 substantive blocks. Keep most block content between 80 and 180 words;
-  a primary-source excerpt may be longer when necessary and lawful.
-- Do not repeat the big question, learning goal, shared task, success criteria,
-  family-wide directions, or source notes across several fields or blocks.
-- Keep each block's elementary, middle, and high-school role to one actionable
-  sentence. The family_roles object is a role, not a second set of lesson directions.
-- Fully populate public_interest_contract only for public_interest_investigation
-  or civic_action_project. For every other primary mode, retain its exact object
-  shape but use empty strings/arrays, true for no_predetermined_verdict, and no
-  invented civic action.
-- Return exactly the fields in OUTPUT CONTRACT. Do not add worldview_lens,
-  reflection, adaptation_contract, visual_assets, or other unused top-level
-  fields. When a worldview connection belongs in the experience, teach it
-  naturally inside the relevant block.
+One household should be able to encounter the same question, source, phenomenon,
+story, experiment, design problem, or real-world task together. Elementary,
+middle-school, and high-school learners then take DIFFERENT RESPONSIBILITIES
+within that SAME experience. Grade and mastery adaptation happens after authoring.
+
+CORE INVARIANTS — ADAPTATION MAY NOT CHANGE THESE:
+- topic and track
+- big question and learning goal
+- verified facts, names, dates, quotations, measurements, and evidence
+- central reasoning task and family shared experience
+- worldview lens when one is part of the subject
+- real-world outcome and portfolio evidence
+
+ADAPTATION MAY CHANGE ONLY:
+- vocabulary and sentence complexity
+- scaffolding and prompting
+- worked examples and amount of explanation
+- independence
+- depth of responsibility and synthesis
+- mastery-based challenge
+
+EXPERIENCE FLOW — YOU AUTHOR ONE REAL SEQUENCE, NOT A BAG OF PROSE:
+- experience_design.flow is the actual sequence the family experiences.
+  Every authored block_id must appear in exactly one flow node.
+- TEXT and NARRATIVE are supporting/connective blocks only. They may orient,
+  explain, transition, or frame a source, but they may not substitute for the
+  actual evidence, action, or demonstration.
+- Investigation-shaped experiences require a genuine evidence/action block,
+  such as PRIMARY_SOURCE, RESEARCH_MISSION, EXPERIMENT, LAB_MISSION,
+  REAL_WORLD_APP, DISCUSSION_FORUM, or GENUI_ASSEMBLY.
+- When the track supports evidence, investigation, experimentation, or
+  application, include at least one substantive evidence/action block.
+- TRUTH_HISTORY and JUSTICE_CHANGEMAKING require an actual routed PRIMARY_SOURCE.
+  A research mission may extend the lesson but may not outsource the core teaching.
+- STEM/STEAM require a genuine EXPERIMENT or LAB_MISSION with an observation or
+  evidence opportunity.
+- Maker/design experiences require an actual creation/build/design action.
+- Skill-practice experiences require real learner problems or tasks.
+
+BLOCK BUDGET:
+- Author 6–10 substantive blocks. Never pad to hit the minimum.
+- Keep most ordinary block content concise and useful; spend tokens on evidence,
+  meaningful action, family discussion, and observable demonstrations.
+- Do not repeat the same instruction in multiple fields.
+
+FAMILY ROLE DESIGN:
+- elementary: notice, identify, sequence, measure, sketch, label, narrate, or build.
+- middle: explain, compare evidence, connect cause/effect, record, interpret, or apply.
+- high_school: evaluate, analyze, handle nuance, calculate, design, defend, or lead synthesis.
+These are different responsibilities inside the SAME shared lesson, never separate lessons.
+
+REAL-WORLD LEARNING:
+When the subject supports it, culminate in something real: an experiment,
+model, map, record, source dossier, timeline, recipe, design, field study,
+performance, argument, service action, prototype, measurement record,
+or useful creation. Do not force fake hands-on work where it does not fit.
+
+EVIDENCE:
+Never invent source identities, quotations, dates, measurements, or findings.
+A PRIMARY_SOURCE block must contain actual traceable item-level evidence.
+A source label without a real routed record does not count as evidence.
+
+WORLDVIEW:
+Integrate the appropriate Christian worldview naturally into the relevant
+experience. Do not bolt on a generic sermon or Scripture paragraph.
+
+VISUALS:
+Visuals are semantic learning assets, not decoration. When useful, describe
+what the learner should see and why it matters. The renderer decides exact
+placement, styling, pagination, and frontend behavior.
+
+PRINTABLE AWARENESS:
+Author enough semantic structure for the same canonical to render as a polished
+6–12 page mini-workbook with room for looking closely, exploring, contributing,
+making, discussion, portfolio evidence, and reflection.
+Do not author page numbers or page-break instructions.
 
 {FAMILY_CANONICAL_AUTHORING_RULES}
 
@@ -415,8 +416,8 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
   "shared_experience": "",
   "experience_design": {{
     "primary_mode": "investigation|stem|steam|arts_integrated|maker_build|design_challenge|creative_demonstration|family_project|public_interest_investigation|civic_action_project|skill_practice",
-    "central_question": "The real question or skill target this experience exists to answer — not administrative framing.",
-    "entry_move": "The consequential observation, record, experiment, attempted build, site walk, object, or stakeholder question learners encounter before lengthy explanation.",
+    "central_question": "",
+    "entry_move": "",
     "supporting_modes": [],
     "why_this_fits": "",
     "learner_facing_choices": [],
@@ -425,7 +426,7 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
     "disciplines_integrated": [],
     "integration_rationale": "",
     "layout": "dossier|lab_notebook|field_guide|build_log|theology_map|timeline_investigation|source_comparison|skill_ladder",
-    "flow": [{{"node_id": "", "label": "one short phrase naming what happens at this step", "block_ids": ["the block_id(s) this step renders together"]}}]
+    "flow": [{{"node_id": "", "label": "", "block_ids": []}}]
   }},
   "investigation_scope_contract": {{
     "completion_basis": "demonstrated understanding and a meaningful shared outcome—not elapsed days",
@@ -457,8 +458,8 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
       "action": "",
       "real_recipient": "",
       "intended_change": "",
-      "stakeholder_need_validation": "How learners confirm this is actually useful or wanted before acting.",
-      "feedback_or_impact_signal": "What response, use, decision, measurement, or outcome will show whether it helped.",
+      "stakeholder_need_validation": "",
+      "feedback_or_impact_signal": "",
       "evidence_needed": [],
       "adult_support_required": false,
       "safety_and_privacy_limits": []
@@ -466,9 +467,9 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
     "no_predetermined_verdict": true
   }},
   "family_discussion": {{
-    "launch": "What the family places on the table, screen, or workbench and does together before splitting into individual contributions.",
-    "questions": ["Two or more evidence questions everyone can discuss from the supplied lesson material."],
-    "synthesis_prompt": "How each learner brings findings back so the family reaches one evidence-grounded conclusion, decision, design, or next action."
+    "launch": "",
+    "questions": [],
+    "synthesis_prompt": ""
   }},
   "blocks": [{{
     "block_id": "",
@@ -491,6 +492,11 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
     "product_evidence": [],
     "failure_and_revision_evidence": []
   }},
+  "adaptation_contract": [
+    "grade changes vocabulary and scaffolding while preserving the same ideas and evidence",
+    "mastery changes support and independence without changing the canonical learning goal",
+    "higher mastery increases responsibility, nuance, and synthesis rather than adding unrelated content"
+  ],
   "printable_contract": {{
     "cover_brief": "",
     "field_pages": [{{"title": "", "purpose": "", "response_mode": "draw|write|measure|calculate|document"}}],
@@ -518,53 +524,44 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
 }}
 
 BLOCK CONTRACT:
-- Return 6–8 substantive blocks. Never pad to reach six.
+- Return 6–10 substantive blocks. Never pad to reach six.
 - Preserve semantic block types rather than converting everything to NARRATIVE.
 - Every block MUST contain experience_stage: INVITATION, DISCOVERY, ACTION,
-  CREATION, DEMONSTRATION, REFLECTION, or RESOURCE. This is the instructional
-  purpose; block_type is only the rendering tool.
+  CREATION, DEMONSTRATION, REFLECTION, or RESOURCE.
 - Each block contains only block_id, block_type, experience_stage, title,
-  content, and concise evidence. Do not repeat family roles inside every block;
-  the one top-level family_roles object owns them. Do not return purpose,
-  visual_spec, adaptation_notes, CSS, or layout prose.
+  content, and concise evidence. Do not duplicate family roles inside blocks.
 - A PRIMARY_SOURCE block's evidence array uses traceable objects with source_title,
-  creator_or_issuer, date, holding_institution, source_url, item_identifier,
-  excerpt_or_observable_feature, and claim_supported. Use only actual routed items;
-  never turn an archive search page or model-written paraphrase into primary evidence.
-- When the track supports evidence, investigation, experimentation, or application,
-  include at least one appropriate PRIMARY_SOURCE, LAB_MISSION, EXPERIMENT,
-  REAL_WORLD_APP, or comparable substantive evidence/action block.
-- NARRATIVE is allowed only when narrative is genuinely the best instructional medium.
-  It is never a fallback, placeholder, family-instructions block, or status message.
+  source_url, holding_institution, item_identifier, excerpt_or_observable_feature,
+  and claim_supported. Never turn an archive search page or model-written
+  paraphrase into primary evidence.
+- NARRATIVE is allowed only when narrative is genuinely the best instructional
+  medium. It is never a fallback, placeholder, family-instructions block, or status message.
+
+ADAPTATION CONTRACT:
+- Keep this list to exactly 3–5 concise rules.
+- Rules describe only what grade/mastery adaptation may change.
+- Never use the adaptation contract to authorize changing facts, sources,
+  central questions, real-world outcomes, or the shared family experience.
 
 PRINTABLE AND DEMONSTRATION CONTRACT:
-- printable_contract describes an open-and-go field dossier made from this same canonical; it is not a second lesson.
-- demonstration_contract asks the learner to show, explain, make, test, defend, or document understanding. Never make completion or confidence the success criterion.
-- Do not print standards, internal codes, mastery labels, credit rules, or registrar language for the learner.
-- mastery_evidence_map may span disciplines, but every entry must name observable evidence. Include
-  only concepts this experience can genuinely reveal, and never treat touching a topic as mastery.
-
-VISUAL CONTRACT:
-Visuals are semantic learning assets, not decoration. Describe subject,
-pedagogical purpose, visual role, and Dear Adeline style only. The renderer
-decides page layout, placement, and frontend behavior.
+- printable_contract describes how this SAME canonical can become an open-and-go field dossier.
+- It is not a second lesson.
+- demonstration_contract must require the learner to show, explain, make, test,
+  defend, or document understanding. Exposure, completion, or confidence alone do not count.
+- Do not print standards, internal codes, mastery labels, credit rules, or registrar language.
 
 QUALITY CHECK BEFORE OUTPUT:
 - One shared family experience, not three lessons.
-- The lesson visibly moves through: learn/examine together, discuss the same supplied
-  evidence, make progression-appropriate individual contributions, and regroup for
-  one family synthesis. Do not hide this structure only in metadata.
-- The investigation has no preset one-week duration. It may take one sitting or many weeks.
-- Give Adeline legitimate ways to narrow, widen, branch, pause, or resume the investigation from learner conversations while preserving its verified evidence and central learning requirements.
-- Completion is based on the shared outcome and demonstrated concepts, never the calendar.
+- 6–10 substantive blocks, with no padding.
 - Concrete evidence and meaningful action outweigh explanatory prose.
-- Real outcome and portfolio evidence are present when the subject supports them.
-- Public-interest work follows documentary evidence, power, incentives, unequal consequences, and
-  affected people; it culminates in lawful present-day agency with a real recipient, not simulated busywork.
-- Food and industry investigations trace the whole system and verify harm claims. Learners do the
-  real investigation or project; they do not complete a generic lesson explaining why projects matter.
-- Begin with meaningful encounter or action when appropriate, validate community needs with affected
-  people, and define how the learner will receive feedback or observe impact.
-- No filler, generic narrative, fake sources, invented quotations, or placeholder text.
+- When the track supports it, at least one PRIMARY_SOURCE, EXPERIMENT,
+  LAB_MISSION, REAL_WORLD_APP, or comparable evidence/action block is present.
+- Family roles change responsibility, not the underlying lesson.
+- Grade/mastery adaptation is clearly possible without regenerating the lesson.
+- Real outcome and portfolio evidence are present when appropriate.
+- Visual assets are semantic, useful, and renderer-neutral.
+- No generic family workshop block.
+- No fallback narrative masquerading as a lesson.
+- No fake sources or invented quotations.
 - JSON only; no markdown fences and no commentary.
 """.strip()
