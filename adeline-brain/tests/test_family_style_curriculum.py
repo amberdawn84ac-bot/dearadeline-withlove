@@ -21,6 +21,7 @@ def test_only_current_family_canonicals_are_reused():
         "canonical_format_version": CANONICAL_FORMAT_VERSION,
     }
     assert is_current_family_canonical([current])
+    assert not is_current_family_canonical([{**current, "canonical_format_version": 11}])
     assert not is_current_family_canonical([{**current, "canonical_format_version": 1}])
 
 

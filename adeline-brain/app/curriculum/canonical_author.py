@@ -24,8 +24,8 @@ EXPERIENCE_LAYOUTS = frozenset({
 # storage/schema shape, in family_style.py). CONTRACT_VERSION tracks which
 # validation rules a canonical satisfied; PROMPT_VERSION tracks which exact
 # system prompt produced it.
-CONTRACT_VERSION = "2026-08-30.1"
-PROMPT_VERSION = "v12-family-workbook-2026-08-30"
+CONTRACT_VERSION = "2026-09-03.1"
+PROMPT_VERSION = "v13-complete-family-unit-2026-09-03"
 
 EVIDENCE_CAPABLE_TYPES = frozenset({"PRIMARY_SOURCE", "RESEARCH_MISSION"})
 
@@ -37,7 +37,7 @@ _EVIDENCE_ORIENTED_TRACKS = frozenset({"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING"})
 _STEM_TYPES = frozenset({"stem", "steam"})
 _MAKER_TYPES = frozenset({"maker_build", "design_challenge"})
 
-_MAX_CANONICAL_BLOCKS = 10
+_MAX_CANONICAL_BLOCKS = 30
 _MIN_CANONICAL_BLOCKS = 6
 
 _TRACEABLE_PRIMARY_FIELDS = (
@@ -80,6 +80,55 @@ def validate_canonical_contract(payload: dict) -> list[str]:
     design = payload.get("experience_design")
     if not isinstance(design, dict):
         return ["experience_design is required"]
+
+    unit = payload.get("unit_plan")
+    if not isinstance(unit, dict):
+        errors.append("unit_plan is required: every canonical is a complete teachable unit")
+    else:
+        concepts = [item for item in unit.get("essential_concepts") or [] if isinstance(item, dict)]
+        lessons = [item for item in unit.get("lessons") or [] if isinstance(item, dict)]
+        if not concepts:
+            errors.append("unit_plan must identify the essential concepts before choosing lessons")
+        if not lessons:
+            errors.append("unit_plan must contain the lessons required for mastery")
+        elif len(lessons) > 20:
+            errors.append("unit_plan may contain at most 20 lessons; narrow the unit rather than truncate it")
+        if not str(unit.get("lesson_count_rationale") or "").strip():
+            errors.append("unit_plan must explain why its lesson count is sufficient")
+
+        concept_ids = {str(item.get("concept_id") or "").strip() for item in concepts}
+        concept_ids.discard("")
+        lesson_ids = [str(item.get("lesson_id") or "").strip() for item in lessons]
+        if len(set(lesson_ids)) != len(lesson_ids) or any(not item for item in lesson_ids):
+            errors.append("unit_plan lesson_id values must be non-empty and unique")
+        lesson_order = {lesson_id: index for index, lesson_id in enumerate(lesson_ids)}
+        covered_blocks: list[str] = []
+        for index, lesson in enumerate(lessons):
+            taught = {str(item) for item in lesson.get("concept_ids") or []}
+            if not taught:
+                errors.append(f"unit_plan.lessons[{index}] must teach at least one essential concept")
+            if unknown := sorted(taught - concept_ids):
+                errors.append(f"unit_plan.lessons[{index}] references unknown concepts: {unknown}")
+            block_ids = [str(item) for item in lesson.get("block_ids") or [] if str(item).strip()]
+            if not block_ids:
+                errors.append(f"unit_plan.lessons[{index}] must identify its teachable blocks")
+            covered_blocks.extend(block_ids)
+            expectations = lesson.get("individual_expectations") or {}
+            if not all(str(expectations.get(band) or "").strip() for band in ("elementary", "middle", "high_school")):
+                errors.append(f"unit_plan.lessons[{index}] must differentiate responsibility for every age band")
+        if len(covered_blocks) != len(set(covered_blocks)):
+            errors.append("each block may belong to only one unit lesson")
+
+        for index, concept in enumerate(concepts):
+            concept_id = str(concept.get("concept_id") or "").strip()
+            introduced = str(concept.get("introduced_in_lesson_id") or "").strip()
+            demonstrated = [str(item) for item in concept.get("demonstrated_in_lesson_ids") or []]
+            if introduced not in lesson_order:
+                errors.append(f"unit_plan.essential_concepts[{index}] must name a valid introduction lesson")
+            if not demonstrated or any(item not in lesson_order for item in demonstrated):
+                errors.append(f"unit_plan.essential_concepts[{index}] must name valid demonstration lessons")
+            elif introduced in lesson_order and any(lesson_order[item] < lesson_order[introduced] for item in demonstrated):
+                errors.append(f"concept {concept_id or index} may not be assessed before it is taught")
 
     primary_mode = str(design.get("primary_mode") or "").strip().lower()
     if primary_mode not in EXPERIENCE_MODES:
@@ -181,6 +230,17 @@ def validate_canonical_contract(payload: dict) -> list[str]:
         errors.append(
             f"canonical lesson must contain {_MIN_CANONICAL_BLOCKS}–{_MAX_CANONICAL_BLOCKS} substantive blocks; got {actual}"
         )
+    elif isinstance(unit, dict):
+        unit_block_ids = {
+            str(block_id)
+            for lesson in unit.get("lessons") or [] if isinstance(lesson, dict)
+            for block_id in lesson.get("block_ids") or []
+        }
+        authored_block_ids = {
+            str(block.get("block_id")) for block in blocks if isinstance(block, dict)
+        }
+        if unit_block_ids != authored_block_ids:
+            errors.append("unit_plan lessons must assign every authored block exactly once")
 
     return errors
 
@@ -312,19 +372,31 @@ def validate_experience_substance(payload: dict) -> list[str]:
 CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT = f"""
 You are the Canonical Lesson Author for Dear Adeline, an adaptive Christian homeschool learning system.
 
-Author ONE rich, family-style CanonicalLesson for the requested topic and track.
+Author ONE complete, family-style CanonicalUnit for the requested topic and track.
 This canonical lesson is the durable source of truth. It will later be adapted
 for an individual learner's grade, mastery, and scaffolding needs and rendered
 as either a digital lesson or a polished 6–12 page Dear Adeline mini-workbook.
 
 DO NOT write a generic lesson or narrative article.
-DO NOT write three separate grade-level lessons.
+DO NOT write cloned grade-level lessons. Write one shared sequence with distinct responsibilities.
 DO NOT append a generic "family workshop" or "do this together" narrative block.
 DO NOT fabricate a fallback lesson when evidence or authoring fails.
 DO NOT invent frontend behavior, CSS, page coordinates, PDF markup, or renderer code.
 Prefer concrete evidence and meaningful tasks over explanatory prose.
 
-THE CANONICAL LESSON IS THE FAMILY EXPERIENCE ITSELF.
+THE CANONICAL UNIT IS THE FAMILY EXPERIENCE ITSELF.
+
+PUBLIC-SCHOOL DEPTH, DEAR ADELINE FORM:
+- First map the essential concepts and their prerequisites. Then choose exactly as many lessons as
+  learners need to understand and demonstrate them. Never default to one lesson and never pad a unit.
+- A lesson is a coherent teach-act-demonstrate movement, not one card or one paragraph. A unit may
+  contain 1–20 lessons depending on honest scope; if more are needed, narrow the stated unit scope.
+- Cover the substantive knowledge and practices a strong public-school unit would be accountable for,
+  while making the work more alive through family investigation, experiments, building, fieldwork,
+  meaningful arts integration, primary sources, games with real learning mechanics, and useful products.
+- Every essential concept must name where it is first taught and where each learner demonstrates it.
+- Sequence prerequisites before dependent ideas. Surface likely misconceptions instead of quietly
+  teaching around them. Include retrieval, revision, and synthesis where the concept map requires them.
 
 One household should be able to encounter the same question, source, phenomenon,
 story, experiment, design problem, or real-world task together. Elementary,
@@ -366,7 +438,9 @@ EXPERIENCE FLOW — YOU AUTHOR ONE REAL SEQUENCE, NOT A BAG OF PROSE:
 - Skill-practice experiences require real learner problems or tasks.
 
 BLOCK BUDGET:
-- Author 6–10 substantive blocks. Never pad to hit the minimum.
+- Author 6–30 substantive blocks across the complete unit. Never pad to hit the minimum.
+- Keep the full JSON under roughly 24,000 characters by removing repetition, not necessary learning.
+- CONCISE IS NOT SHALLOW: retain accurate evidence, meaningful action, and observable mastery.
 - Keep most ordinary block content concise and useful; spend tokens on evidence,
   meaningful action, family discussion, and observable demonstrations.
 - Do not repeat the same instruction in multiple fields.
@@ -376,6 +450,7 @@ FAMILY ROLE DESIGN:
 - middle: explain, compare evidence, connect cause/effect, record, interpret, or apply.
 - high_school: evaluate, analyze, handle nuance, calculate, design, defend, or lead synthesis.
 These are different responsibilities inside the SAME shared lesson, never separate lessons.
+Do not repeat family roles inside every block; keep them in the unit lesson and family-role contracts.
 
 REAL-WORLD LEARNING:
 When the subject supports it, culminate in something real: an experiment,
@@ -386,6 +461,7 @@ or useful creation. Do not force fake hands-on work where it does not fit.
 EVIDENCE:
 Never invent source identities, quotations, dates, measurements, or findings.
 A PRIMARY_SOURCE block must contain actual traceable item-level evidence.
+A PRIMARY_SOURCE must use actual routed items, never an archive search page.
 A source label without a real routed record does not count as evidence.
 
 WORLDVIEW:
@@ -406,7 +482,7 @@ Do not author page numbers or page-break instructions.
 {FAMILY_CANONICAL_AUTHORING_RULES}
 
 OUTPUT CONTRACT:
-Return ONLY valid JSON for exactly one CanonicalLesson object:
+Return ONLY valid JSON for exactly one CanonicalUnit object:
 {{
   "canonical_format_version": 10,
   "title": "",
@@ -414,6 +490,31 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
   "big_question": "",
   "learning_goal": "",
   "shared_experience": "",
+  "unit_plan": {{
+    "unit_title": "",
+    "scope_rationale": "",
+    "lesson_count_rationale": "",
+    "public_school_depth_statement": "",
+    "essential_concepts": [{{
+      "concept_id": "",
+      "concept": "",
+      "prerequisite_concept_ids": [],
+      "misconception_to_surface": "",
+      "introduced_in_lesson_id": "",
+      "demonstrated_in_lesson_ids": [],
+      "mastery_evidence": ""
+    }}],
+    "lessons": [{{
+      "lesson_id": "",
+      "title": "",
+      "purpose": "",
+      "concept_ids": [],
+      "block_ids": [],
+      "family_work": "",
+      "individual_expectations": {{"elementary": "", "middle": "", "high_school": ""}},
+      "estimated_minutes": 0
+    }}]
+  }},
   "experience_design": {{
     "primary_mode": "investigation|stem|steam|arts_integrated|maker_build|design_challenge|creative_demonstration|family_project|public_interest_investigation|civic_action_project|skill_practice",
     "central_question": "",
@@ -524,7 +625,7 @@ Return ONLY valid JSON for exactly one CanonicalLesson object:
 }}
 
 BLOCK CONTRACT:
-- Return 6–10 substantive blocks. Never pad to reach six.
+- Return 6–30 substantive blocks across the unit. Never pad to reach six.
 - Preserve semantic block types rather than converting everything to NARRATIVE.
 - Every block MUST contain experience_stage: INVITATION, DISCOVERY, ACTION,
   CREATION, DEMONSTRATION, REFLECTION, or RESOURCE.
@@ -551,8 +652,9 @@ PRINTABLE AND DEMONSTRATION CONTRACT:
 - Do not print standards, internal codes, mastery labels, credit rules, or registrar language.
 
 QUALITY CHECK BEFORE OUTPUT:
-- One shared family experience, not three lessons.
-- 6–10 substantive blocks, with no padding.
+- One shared family unit, not cloned grade lessons.
+- The concept map determines the lesson count; every concept is taught before it is assessed.
+- 6–30 substantive blocks, with no padding.
 - Concrete evidence and meaningful action outweigh explanatory prose.
 - When the track supports it, at least one PRIMARY_SOURCE, EXPERIMENT,
   LAB_MISSION, REAL_WORLD_APP, or comparable evidence/action block is present.

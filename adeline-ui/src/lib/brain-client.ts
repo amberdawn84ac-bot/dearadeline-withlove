@@ -349,6 +349,31 @@ export interface LessonResponse {
     canonical_slug?: string;
     topic?: string;
     grade_level?: string;
+    unit_plan?: {
+      unit_title?: string;
+      scope_rationale?: string;
+      lesson_count_rationale?: string;
+      public_school_depth_statement?: string;
+      essential_concepts?: Array<{
+        concept_id: string;
+        concept: string;
+        prerequisite_concept_ids?: string[];
+        misconception_to_surface?: string;
+        introduced_in_lesson_id?: string;
+        demonstrated_in_lesson_ids?: string[];
+        mastery_evidence?: string;
+      }>;
+      lessons?: Array<{
+        lesson_id: string;
+        title: string;
+        purpose?: string;
+        concept_ids?: string[];
+        block_ids: string[];
+        family_work?: string;
+        individual_expectations?: { elementary?: string; middle?: string; high_school?: string };
+        estimated_minutes?: number;
+      }>;
+    };
     investigation_scope_contract?: {
       completion_basis?: string;
       starting_scope?: string;

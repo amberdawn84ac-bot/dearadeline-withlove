@@ -169,6 +169,43 @@ describe("v11 flow rendering", () => {
     expect(ids).toEqual(["b1", "b2", "b3", "b4"]);
   });
 
+  it("renders a complete unit as ordered lesson sections with learner responsibilities", () => {
+    const lesson: LessonResponse = {
+      ...baseLessonFields,
+      title: "Living Sourdough",
+      blocks: [
+        { ...block("b1", "TEXT", "DISCOVERY"), canonical_format_version: 12 },
+        { ...block("b2", "EXPERIMENT", "ACTION"), canonical_format_version: 12 },
+      ],
+      metadata: {
+        grade_level: "8",
+        unit_plan: {
+          unit_title: "The Living Chemistry of Sourdough",
+          scope_rationale: "Build the biological and chemical model before evaluating starter behavior.",
+          lessons: [
+            { lesson_id: "microbes", title: "Meet the community", block_ids: ["b1"], family_work: "Observe one starter together.", individual_expectations: { middle: "Distinguish observation from inference." } },
+            { lesson_id: "fermentation", title: "Measure fermentation", block_ids: ["b2"], family_work: "Run a controlled comparison.", individual_expectations: { middle: "Graph the measurements and identify limitations." } },
+          ],
+        },
+        experience_design: {
+          layout: "lab_notebook",
+          flow: [
+            { node_id: "learn", label: "Build the model", block_ids: ["b1"] },
+            { node_id: "test", label: "Test the model", block_ids: ["b2"] },
+          ],
+        },
+      },
+    };
+
+    render(<FamilyCanonicalLesson lesson={lesson} studentId="student-1" />);
+
+    expect(screen.getByText("The Living Chemistry of Sourdough")).toBeInTheDocument();
+    expect(screen.getAllByText("Meet the community")).toHaveLength(2);
+    expect(screen.getByText(/Distinguish observation from inference/)).toBeInTheDocument();
+    expect(screen.getByText(/Graph the measurements and identify limitations/)).toBeInTheDocument();
+    expect(screen.getAllByTestId(/^block-/).map((element) => element.textContent)).toEqual(["b1", "b2"]);
+  });
+
   it("renders a multi-block flow node as one grouped step, not independent cards", () => {
     const blocks: LessonBlockResponse[] = [
       { ...block("b3", "EXPERIMENT", "ACTION"), canonical_format_version: 11 },

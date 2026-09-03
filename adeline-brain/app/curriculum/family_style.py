@@ -11,7 +11,7 @@ from typing import Any
 
 from app.curriculum.experience_contract import ExperienceStage, annotate_experience, validate_experience
 
-CANONICAL_FORMAT_VERSION = 11
+CANONICAL_FORMAT_VERSION = 12
 # The floor below which a cached canonical is no longer safe to serve at all
 # (pre-family-style formats). Content stamped between this floor and the
 # current CANONICAL_FORMAT_VERSION remains servable from cache without
@@ -19,7 +19,7 @@ CANONICAL_FORMAT_VERSION = 11
 # keep rendering through the legacy stage-bucketed path; only a version-11+
 # canonical carries a fresh-authoring experience.flow. See
 # is_current_family_canonical() below for the actual gate.
-MIN_SERVEABLE_FORMAT_VERSION = 10
+MIN_SERVEABLE_FORMAT_VERSION = 12
 
 _OBSOLETE_FORMATS = {
     "ANIMATED_SKETCHNOTE_LESSON",
@@ -34,7 +34,7 @@ _PLACEHOLDER_PHRASES = (
     "lesson is being prepared",
     "come back later",
 )
-_MAX_CANONICAL_BLOCKS = 12
+_MAX_CANONICAL_BLOCKS = 30
 _MIN_CANONICAL_BLOCKS = 3
 _SUBSTANTIVE_BLOCK_TYPES = frozenset({
     "PRIMARY_SOURCE",
@@ -296,7 +296,7 @@ def finalize_family_lesson(blocks: list[dict], topic: str, *, track: str | None 
 
     Specialists own the actual lesson. This finalizer only removes obsolete or
     unusable blocks, deduplicates identical content, preserves block types, marks
-    the result as the current family canonical format, and enforces the 6–10
+    the result as the current family canonical format, and enforces the canonical
     canonical block ceiling. It never calls an LLM and never appends a synthetic
     narrative block.
     """
@@ -343,13 +343,9 @@ def finalize_family_lesson(blocks: list[dict], topic: str, *, track: str | None 
 def is_current_family_canonical(blocks: list[dict]) -> bool:
     """True if this cached record is safe to reuse without regenerating.
 
-    Deliberately a floor (>=), not equality with CANONICAL_FORMAT_VERSION —
-    a version-10 canonical (pre experience.flow) is still safely servable
-    from cache via the legacy renderer; it is not "stale" in the sense that
-    forces regeneration. Whether a served canonical actually carries a
-    fresh-authoring experience.flow (and can therefore use the new
-    flow-aware renderer once that exists) is a separate, later decision —
-    not what this function answers.
+    Version 12 is the first complete-unit contract. Earlier family experiences
+    remain archived for recovery but are regenerated once through the sole
+    canonical author instead of continuing to surface thin lesson packets.
     """
     return bool(blocks) and all(
         block.get("family_style")

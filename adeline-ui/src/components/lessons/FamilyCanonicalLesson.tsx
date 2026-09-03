@@ -250,6 +250,8 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
   const flow = (design.flow ?? []) as FlowNode[];
   const layout = design.layout ?? "";
   const groups = resolveFlowGroups(visible, flow);
+  const unitPlan = lesson.metadata?.unit_plan;
+  const unitLessons = unitPlan?.lessons ?? [];
   const demonstrationContract = lesson.metadata?.demonstration_contract;
   const portfolioTask = lesson.metadata?.portfolio_task;
   const learnerContribution = lesson.metadata?.learner_contribution;
@@ -286,6 +288,19 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
       </div>
     </header>
 
+    {!!unitLessons.length && <section className="rounded-[26px] border border-[#D9CFBC] bg-white/80 p-6 md:p-8">
+      <p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">Your complete learning path</p>
+      <h2 className="mt-2 text-3xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{unitPlan?.unit_title || lesson.title}</h2>
+      {unitPlan?.scope_rationale && <p className="mt-3 max-w-4xl text-sm leading-6 text-[#2F4731]/70">{unitPlan.scope_rationale}</p>}
+      <ol className="mt-5 grid gap-3 md:grid-cols-2">
+        {unitLessons.map((unitLesson, index) => <li key={unitLesson.lesson_id} className="rounded-2xl border border-[#E7DAC3] bg-[#FDF6E9] p-4">
+          <p className="text-[11px] font-black uppercase tracking-[.14em] text-[#9A3F4A]">Lesson {index + 1}{unitLesson.estimated_minutes ? ` · about ${unitLesson.estimated_minutes} minutes` : ""}</p>
+          <p className="mt-1 font-body text-lg font-bold">{unitLesson.title}</p>
+          {unitLesson.purpose && <p className="mt-1 text-sm leading-5 text-[#2F4731]/65">{unitLesson.purpose}</p>}
+        </li>)}
+      </ol>
+    </section>}
+
     {!isIndividualSkill && familyDiscussion?.launch && <section className="rounded-[26px] border border-[#C6B796] bg-[#FFFDF7] p-6 md:p-8">
       <p className="text-xs font-black uppercase tracking-[.18em] text-[#9A3F4A]">First, learn and examine together</p>
       <p className="mt-3 max-w-4xl font-body text-lg leading-8 text-[#2F4731]">{familyDiscussion.launch}</p>
@@ -297,17 +312,26 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
       </div>}
     </section>}
 
-    {groups.map(({ node, blocks }) => (
-      <FlowStep
-        key={node.node_id}
-        node={node}
-        blocks={blocks}
-        layout={layout}
-        lessonId={lesson.lesson_id}
-        studentId={studentId}
-        isHomestead={lesson.track === "HOMESTEADING"}
-        agentName={lesson.agent_name}
-      />
+    {unitLessons.length ? unitLessons.map((unitLesson, lessonIndex) => {
+      const lessonBlockIds = new Set(unitLesson.block_ids);
+      const lessonGroups = groups
+        .map((group) => ({ ...group, blocks: group.blocks.filter((block) => lessonBlockIds.has(block.block_id)) }))
+        .filter((group) => group.blocks.length > 0);
+      const expectationBand = Number.parseInt(lesson.metadata?.grade_level ?? "", 10) <= 6
+        ? "elementary"
+        : Number.parseInt(lesson.metadata?.grade_level ?? "", 10) <= 8 ? "middle" : "high_school";
+      const expectation = unitLesson.individual_expectations?.[expectationBand];
+      return <section key={unitLesson.lesson_id} className="space-y-5 rounded-[28px] border-2 border-[#D9CFBC] bg-[#FFFDF7] p-5 md:p-8">
+        <div className="border-b border-[#D9CFBC] pb-5">
+          <p className="text-xs font-black uppercase tracking-[.18em] text-[#9A3F4A]">Lesson {lessonIndex + 1} of {unitLessons.length}</p>
+          <h2 className="mt-2 text-4xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{unitLesson.title}</h2>
+          {unitLesson.family_work && <p className="mt-3 text-sm leading-6 text-[#2F4731]/70"><b>Together:</b> {unitLesson.family_work}</p>}
+          {expectation && <p className="mt-2 text-sm leading-6 text-[#2F4731]/70"><b>Your responsibility:</b> {expectation}</p>}
+        </div>
+        {lessonGroups.map(({ node, blocks }) => <FlowStep key={node.node_id} node={node} blocks={blocks} layout={layout} lessonId={lesson.lesson_id} studentId={studentId} isHomestead={lesson.track === "HOMESTEADING"} agentName={lesson.agent_name} />)}
+      </section>;
+    }) : groups.map(({ node, blocks }) => (
+      <FlowStep key={node.node_id} node={node} blocks={blocks} layout={layout} lessonId={lesson.lesson_id} studentId={studentId} isHomestead={lesson.track === "HOMESTEADING"} agentName={lesson.agent_name} />
     ))}
 
     {resources.map((block) => <ResourceCollection key={block.block_id} block={block} />)}

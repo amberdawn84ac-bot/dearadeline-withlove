@@ -132,6 +132,40 @@ def test_author_contract_budgets_repetition_not_learning_quality():
     assert "archive search page" in prompt
 
 
+def test_author_contract_requires_concept_mapped_complete_units():
+    from app.curriculum.canonical_author import (
+        CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT,
+        validate_canonical_contract,
+    )
+
+    assert "PUBLIC-SCHOOL DEPTH, DEAR ADELINE FORM" in CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT
+    assert "concept map determines the lesson count" in CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT
+    errors = validate_canonical_contract({"experience_design": {}})
+    assert "unit_plan is required: every canonical is a complete teachable unit" in errors
+
+
+def test_unit_contract_rejects_assessment_before_instruction():
+    from app.curriculum.canonical_author import validate_canonical_contract
+
+    payload = {
+        "experience_design": {"primary_mode": "investigation", "entry_move": "Observe.", "disciplines_integrated": ["science"], "flow": []},
+        "unit_plan": {
+            "lesson_count_rationale": "Two lessons are required.",
+            "essential_concepts": [{
+                "concept_id": "c1", "introduced_in_lesson_id": "lesson-2",
+                "demonstrated_in_lesson_ids": ["lesson-1"],
+            }],
+            "lessons": [
+                {"lesson_id": "lesson-1", "concept_ids": ["c1"], "block_ids": ["b1"], "individual_expectations": {"elementary": "observe", "middle": "compare", "high_school": "analyze"}},
+                {"lesson_id": "lesson-2", "concept_ids": ["c1"], "block_ids": ["b2"], "individual_expectations": {"elementary": "observe", "middle": "compare", "high_school": "analyze"}},
+            ],
+        },
+        "blocks": [{"block_id": "b1"}, {"block_id": "b2"}],
+    }
+    errors = validate_canonical_contract(payload)
+    assert any("may not be assessed before it is taught" in error for error in errors)
+
+
 def test_printable_is_same_experience_and_hides_internal_standards():
     pdf = build_investigation_pdf(
         title="Creek Detectives", topic="erosion", grade_level="Grade 3",
