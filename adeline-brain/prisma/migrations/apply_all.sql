@@ -596,6 +596,27 @@ REVOKE ALL ON TABLE "ChildPrivacyConsent" FROM anon, authenticated;
 ALTER TABLE student_profiles ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE student_profiles FROM anon, authenticated;
 
+-- ── 2026-09-04: Persistent learner position inside a unit Space ────────────
+
+CREATE TABLE IF NOT EXISTS "SpaceSession" (
+  "id" TEXT NOT NULL DEFAULT gen_random_uuid()::text,
+  "studentId" TEXT NOT NULL,
+  "planItemId" TEXT NOT NULL,
+  "experienceId" TEXT NOT NULL,
+  "currentBlockIndex" INTEGER NOT NULL DEFAULT 0,
+  "completedBlockIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  "messagesJson" JSONB NOT NULL DEFAULT '[]',
+  "status" TEXT NOT NULL DEFAULT 'active',
+  "version" INTEGER NOT NULL DEFAULT 0,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "SpaceSession_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "SpaceSession_studentId_planItemId_key"
+  ON "SpaceSession"("studentId", "planItemId");
+CREATE INDEX IF NOT EXISTS "SpaceSession_studentId_status_idx"
+  ON "SpaceSession"("studentId", "status");
+
 -- ── 2026-08-23: Lock archived adeline-world invite RPC ──────────────────────
 
 DO $$ BEGIN

@@ -37,6 +37,15 @@ def _lesson_for_block(metadata: dict, block_id: str, block_index: int) -> dict:
             "title": f"Activity {block_index + 1}", "block_ids": [block_id]}
 
 
+def _learner_depth(metadata: dict, block: dict | None) -> dict:
+    grade_text = str((metadata or {}).get("grade_level") or "8")
+    grade = next((int(part) for part in grade_text.replace("-", " ").split() if part.isdigit()), 8)
+    band = "elementary" if grade <= 5 else "middle" if grade <= 8 else "high_school"
+    tier = "foundation" if band == "elementary" else "analysis" if band == "middle" else "synthesis"
+    roles = (block or {}).get("family_roles") or {}
+    return {"grade": grade, "band": band, "tier": tier, "assignment": roles.get(band) or ""}
+
+
 def _state(session: dict, experience: dict) -> dict:
     blocks = experience.get("blocks") or []
     index = min(session["currentBlockIndex"], max(len(blocks) - 1, 0))
@@ -49,6 +58,7 @@ def _state(session: dict, experience: dict) -> dict:
         "version": session["version"], "current_block_index": index,
         "total_blocks": len(blocks), "completed_block_ids": session["completedBlockIds"] or [],
         "current_block": block, "current_lesson": lesson,
+        "learner_depth": _learner_depth(experience.get("metadata") or {}, block),
         "messages": session["messagesJson"] or [], "metadata": experience.get("metadata") or {},
     }
 
@@ -139,8 +149,20 @@ async def breakout_standards(student_id: str, plan_item_id: str,
     state = _state(session, experience)
     block = state.get("current_block") or {}
     concept = " ".join(filter(None, [block.get("title"), block.get("content")]))[:8000]
-    tracks = {"science": "CREATION_SCIENCE", "math": "APPLIED_MATHEMATICS",
-              "literature": "ENGLISH_LITERATURE", "history": "TRUTH_HISTORY"}
+    # Keep all ten constitutional tracks visible. A track may legitimately
+    # return no strong OAS match; absence is more truthful than forced alignment.
+    tracks = {
+        "God's Creation & Science": "CREATION_SCIENCE",
+        "Health & Naturopathy": "HEALTH_NATUROPATHY",
+        "Homesteading & Stewardship": "HOMESTEADING",
+        "Government & Economics": "GOVERNMENT_ECONOMICS",
+        "Justice & Change-making": "JUSTICE_CHANGEMAKING",
+        "Discipleship & Discernment": "DISCIPLESHIP",
+        "Truth-Based History": "TRUTH_HISTORY",
+        "English Language & Literature": "ENGLISH_LITERATURE",
+        "Applied Mathematics": "APPLIED_MATHEMATICS",
+        "Creative Economy": "CREATIVE_ECONOMY",
+    }
     embedding = await _embed(concept)
     conn = await get_db_conn()
     try:

@@ -11,6 +11,7 @@ type SpaceState = {
   current_block_index: number; total_blocks: number; completed_block_ids: string[];
   current_block: LessonBlockResponse | null;
   current_lesson: { index: number; count: number; title: string; purpose?: string };
+  learner_depth: { grade: number; band: string; tier: string; assignment: string };
   messages: Message[]; resource_triggers?: string[];
   breakout_data?: Record<string, Standard[]> | null;
 };
@@ -62,7 +63,7 @@ export default function SpacePlayer({ lesson, studentId, planItemId }: {
   return <div className="space-y-6">
     <header className="rounded-[28px] border border-[#D8C9AB] bg-[#FFFDF8] p-6 shadow-sm">
       <p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">Unit Space · Lesson {space.current_lesson.index + 1} of {space.current_lesson.count}</p>
-      <div className="mt-2 flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-3xl text-[#2F4731]" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>{space.title}</h1><p className="mt-1 text-[#2F4731]/70">{space.current_lesson.title}</p></div><strong className="text-sm text-[#2F4731]">{progress}% explored</strong></div>
+      <div className="mt-2 flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-3xl text-[#2F4731]" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>{space.title}</h1><p className="mt-1 text-[#2F4731]/70">{space.current_lesson.title}</p>{space.learner_depth.assignment && <p className="mt-2 max-w-3xl text-sm font-semibold text-[#2F4731]"><span className="uppercase tracking-wide text-[#BD6809]">Your {space.learner_depth.tier} work:</span> {space.learner_depth.assignment}</p>}</div><strong className="text-sm text-[#2F4731]">{progress}% explored</strong></div>
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#E9E1D2]"><div className="h-full bg-[#2F5A3A] transition-all" style={{ width: `${progress}%` }} /></div>
       <ol className="mt-4 flex flex-wrap gap-2" aria-label="Unit activities">{lesson.blocks.map((block, index) => <li key={block.block_id} className={`rounded-full px-3 py-1 text-xs font-bold ${index === space.current_block_index ? 'bg-[#2F5A3A] text-white' : space.completed_block_ids.includes(block.block_id) ? 'bg-[#DCE8D8] text-[#2F4731]' : 'bg-[#F2ECE1] text-[#2F4731]/55'}`}>{index + 1}. {block.title || block.experience_stage || 'Activity'}</li>)}</ol>
     </header>
@@ -81,5 +82,5 @@ export default function SpacePlayer({ lesson, studentId, planItemId }: {
 }
 
 function BreakoutTracks({ data }: { data: Record<string, Standard[]> }) {
-  return <section className="rounded-[28px] border border-[#E7DAC3] bg-[#FDF6E9] p-5"><h2 className="text-2xl text-[#2F4731]" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>Breakout tracks</h2><p className="mt-1 text-sm text-[#2F4731]/65">The same investigation, connected to each subject’s Oklahoma standards.</p><div className="mt-4 grid gap-3 md:grid-cols-2">{Object.entries(data).map(([subject, standards]) => <article key={subject} className="rounded-2xl bg-white p-4"><h3 className="font-black capitalize text-[#2F4731]">{subject}</h3><div className="mt-2 space-y-2">{standards.length ? standards.map((standard) => <p key={standard.code} className="text-xs leading-5 text-[#2F4731]/75"><strong className="rounded bg-[#DCE8D8] px-2 py-1 text-[#2F4731]">{standard.code}</strong> {standard.description}</p>) : <p className="text-xs text-[#2F4731]/55">No strong standards match for this activity.</p>}</div></article>)}</div></section>;
+  return <section className="rounded-[28px] border border-[#E7DAC3] bg-[#FDF6E9] p-5"><h2 className="text-2xl text-[#2F4731]" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>Ten-track breakout</h2><p className="mt-1 text-sm text-[#2F4731]/65">The shared investigation stays intact while each track shows only genuine Oklahoma standards connections.</p><div className="mt-4 grid gap-3 md:grid-cols-2">{Object.entries(data).map(([subject, standards]) => <article key={subject} className="rounded-2xl bg-white p-4"><h3 className="font-black text-[#2F4731]">{subject}</h3><div className="mt-2 space-y-2">{standards.length ? standards.map((standard) => <p key={standard.code} className="text-xs leading-5 text-[#2F4731]/75"><strong className="rounded bg-[#DCE8D8] px-2 py-1 text-[#2F4731]">{standard.code}</strong> {standard.description}</p>) : <p className="text-xs text-[#2F4731]/55">No strong standards match for this activity; this track is not forced.</p>}</div></article>)}</div></section>;
 }

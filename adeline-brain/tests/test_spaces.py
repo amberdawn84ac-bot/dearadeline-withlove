@@ -1,4 +1,4 @@
-from app.api.spaces import _lesson_for_block, _state
+from app.api.spaces import _learner_depth, _lesson_for_block, _state
 
 
 def test_space_maps_blocks_to_unit_lessons():
@@ -14,3 +14,10 @@ def test_space_state_never_indexes_past_saved_blocks():
                "status": "active", "version": 2}
     experience = {"title": "Starter", "blocks": [{"block_id": "b1"}], "metadata": {}}
     assert _state(session, experience)["current_block_index"] == 0
+
+
+def test_depth_assignment_uses_saved_learner_grade_and_family_role():
+    block = {"family_roles": {"middle": "Graph rise over time and interpret the rate."}}
+    depth = _learner_depth({"grade_level": "Grade 7"}, block)
+    assert depth == {"grade": 7, "band": "middle", "tier": "analysis",
+                     "assignment": "Graph rise over time and interpret the rate."}
