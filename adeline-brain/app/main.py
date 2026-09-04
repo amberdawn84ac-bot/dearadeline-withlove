@@ -65,6 +65,7 @@ from app.api.standards import router as standards_router
 from app.api.agent_team import router as agent_team_router
 from app.api.resources import router as resources_router
 from app.api.family import router as family_router
+from app.api.spaces import router as spaces_router
 from app.connections.journal_store import journal_store
 from app.connections.conversation_store import conversation_store
 from app.connections.postgres import init_postgres
@@ -232,6 +233,7 @@ app.add_middleware(
 
 app.include_router(lessons_router)
 app.include_router(experience_builder_router)
+app.include_router(spaces_router)
 app.include_router(opportunities_router)
 app.include_router(journal_router)
 app.include_router(transcripts_router)

@@ -80,7 +80,7 @@ export default function TodayPage() {
             <h3>{today.emoji} {today.title}</h3>
             <p>{today.description}</p>
             <small>{today.sequence_policy === 'HARD' ? 'Prerequisites demonstrated' : today.bridge_required ? 'Foundation bridge included' : 'Open exploration'}</small>
-            <Link href={`/dashboard/lesson/${encodeURIComponent(today.id)}`}>Begin →</Link>
+            <Link href={`/dashboard/spaces/${encodeURIComponent(today.id)}`}>Open unit Space →</Link>
           </article> : <EmptyCard text="The next plan is being arranged." />}
         </div>
 

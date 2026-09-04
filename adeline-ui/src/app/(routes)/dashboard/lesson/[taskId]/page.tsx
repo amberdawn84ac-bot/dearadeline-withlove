@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import FamilyCanonicalLesson from '@/components/lessons/FamilyCanonicalLesson';
+import SpacePlayer from '@/components/spaces/SpacePlayer';
 import {
   buildExperience, getLearningPlan, getSavedExperience, getSavedTodayPlan,
   lessonRequestFromSuggestion,
@@ -71,7 +72,7 @@ function selectPlannedTask(plan: Awaited<ReturnType<typeof getLearningPlan>>, re
   return { selected, requiredStandardCodes };
 }
 
-export default function CanonicalLessonPage() {
+export function CanonicalExperiencePage({ view = 'lesson' }: { view?: 'lesson' | 'space' }) {
   const params = useParams<{ taskId: string }>();
   const { student, loading: studentLoading } = useStudent();
   const [task, setTask] = useState<LessonSuggestion | null>(null);
@@ -198,7 +199,13 @@ export default function CanonicalLessonPage() {
 
       {status && <p className="rounded-2xl border border-[#E7DAC3] bg-[#FDF6E9] p-5 text-sm italic text-[#2F4731]/70" role="status">{status}</p>}
       {error && <div className="rounded-2xl bg-red-50 p-5 text-sm text-red-700" role="alert"><p>{error}</p><div className="mt-3 flex flex-wrap gap-4">{canRetry && <button type="button" onClick={() => setRetryVersion((value) => value + 1)} className="font-bold underline">Retry safely</button>}<Link href="/dashboard" className="font-bold underline">Return to today</Link></div></div>}
-      {lesson && <FamilyCanonicalLesson lesson={lesson} studentId={student.id} />}
+      {lesson && task && (view === 'space'
+        ? <SpacePlayer lesson={lesson} studentId={student.id} planItemId={task.id} />
+        : <FamilyCanonicalLesson lesson={lesson} studentId={student.id} />)}
     </div>
   );
+}
+
+export default function CanonicalLessonPage() {
+  return <CanonicalExperiencePage />;
 }

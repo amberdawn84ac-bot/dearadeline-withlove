@@ -215,6 +215,25 @@ model StudentExperience {
   @@index([studentId, status])
 }
 
+/// Durable position and conversation for a learner moving through one unit Space.
+/// This is navigation state only; it never awards credit or claims mastery.
+model SpaceSession {
+  id                String   @id @default(uuid())
+  studentId         String
+  planItemId        String
+  experienceId      String
+  currentBlockIndex Int      @default(0)
+  completedBlockIds String[] @default([])
+  messagesJson      Json     @default("[]")
+  status            String   @default("active")
+  version           Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([studentId, planItemId])
+  @@index([studentId, status])
+}
+
 model DailyPlan {
   studentId String
   forDate   DateTime @db.Date
