@@ -129,8 +129,10 @@ export function CanonicalExperiencePage({ view = 'lesson' }: { view?: 'lesson' |
             return;
           }
         }
-        if (persisted?.status === 'failed' && retryVersion === 0) {
-          throw new Error(persisted.error_message || 'That experience did not finish. Your Today plan is safe.');
+        // The backend atomically reclaims failed records. Reopening a Space is
+        // itself a safe retry; do not strand the learner behind a stale 503.
+        if (persisted?.status === 'failed') {
+          setStatus('The earlier draft did not pass Adeline’s quality checks. Rebuilding it safely…');
         }
 
         const blocks: LessonBlockResponse[] = [];

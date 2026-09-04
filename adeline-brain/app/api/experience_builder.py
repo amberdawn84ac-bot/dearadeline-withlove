@@ -393,7 +393,10 @@ async def _author(
     )
     last_error = None
     repair_instruction = ""
-    for attempt in range(2):
+    # Complete units carry a larger cross-referenced contract than the former
+    # one-lesson packet. Give one additional targeted repair pass before
+    # preserving failure; each pass receives the exact semantic errors.
+    for attempt in range(3):
         started = time.perf_counter()
         try:
             attempt_prompt = prompt
