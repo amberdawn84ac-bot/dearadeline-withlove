@@ -224,6 +224,13 @@ model SpaceSession {
   experienceId      String
   currentBlockIndex Int      @default(0)
   completedBlockIds String[] @default([])
+  /// block_id -> {"evaluation": "correct"|"partial"|"incorrect"|"not_answered", "at": ISO8601}
+  /// Recorded on every transition so lesson-boundary mastery credit has a real
+  /// correct/partial/incorrect signal to compute proficiency from.
+  blockEvaluations  Json     @default("{}")
+  /// lesson_id values already credited via record_mastery_credit, so a
+  /// lesson-boundary completion never double-credits on retry/replay.
+  creditedLessonIds String[] @default([])
   messagesJson      Json     @default("[]")
   status            String   @default("active")
   version           Int      @default(0)

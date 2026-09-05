@@ -14,6 +14,7 @@ type SpaceState = {
   learner_depth: { grade: number; band: string; tier: string; assignment: string };
   messages: Message[]; resource_triggers?: string[];
   breakout_data?: Record<string, Standard[]> | null;
+  credited_this_session?: string[];
 };
 
 export default function SpacePlayer({ lesson, studentId, planItemId }: {
@@ -23,6 +24,7 @@ export default function SpacePlayer({ lesson, studentId, planItemId }: {
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [creditedConcepts, setCreditedConcepts] = useState<string[]>([]);
   const encodedPath = useMemo(() => `${encodeURIComponent(studentId)}/${encodeURIComponent(planItemId)}`, [studentId, planItemId]);
 
   useEffect(() => {
@@ -49,6 +51,9 @@ export default function SpacePlayer({ lesson, studentId, planItemId }: {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Adeline could not hear that.');
       setSpace(result as SpaceState);
+      if (result.credited_this_session?.length) {
+        setCreditedConcepts((previous) => [...new Set([...previous, ...result.credited_this_session])]);
+      }
     } catch (reason) {
       setMessage(submitted);
       setError(reason instanceof Error ? reason.message : 'Adeline could not hear that.');
@@ -75,7 +80,11 @@ export default function SpacePlayer({ lesson, studentId, planItemId }: {
     <section className="overflow-hidden rounded-[28px] border-2 border-[#2F5A3A] bg-[#FFF9ED]">
       <header className="bg-[#2F5A3A] px-5 py-4 text-white"><small className="uppercase tracking-[.18em] text-white/70">Learning companion</small><h2 className="text-xl">Adeline</h2></header>
       <div className="min-h-32 p-5"><p className="max-w-3xl rounded-2xl bg-white p-4 text-sm leading-6 text-[#2F4731] shadow-sm">{lastAssistant?.content || `We’ll work through “${space.current_lesson.title}” together. Tell me what you notice, tried, or need help with.`}</p></div>
-      {space.status === 'completed' ? <p className="border-t border-[#E7DAC3] p-5 font-bold text-[#2F5A3A]">You reached the end of this unit Space. Record evidence to have your understanding evaluated.</p> : <div className="flex gap-2 border-t border-[#E7DAC3] p-4"><label className="sr-only" htmlFor="space-message">Tell Adeline what you did or wondered</label><input id="space-message" value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void sendTurn(); }} placeholder="Tell Adeline what you did, noticed, or want to learn…" className="min-w-0 flex-1 rounded-full border border-[#D8C9AB] bg-white px-4 py-3 text-sm text-[#2F4731]" disabled={sending} /><button type="button" onClick={() => void sendTurn()} disabled={sending || !message.trim()} className="rounded-full bg-[#2F5A3A] px-5 py-3 text-sm font-bold text-white disabled:opacity-40">{sending ? 'Thinking…' : 'Send'}</button></div>}
+      {space.status === 'completed' ? <div className="border-t border-[#E7DAC3] p-5">
+        <p className="font-bold text-[#2F5A3A]">You reached the end of this unit Space.</p>
+        {creditedConcepts.length > 0 ? <p className="mt-2 text-sm text-[#2F4731]">Adeline recorded mastery as you went, for: <strong>{creditedConcepts.join(', ')}</strong>. Check the Learning Map to see it reflected on the transcript.</p>
+          : <p className="mt-2 text-sm text-[#2F4731]/70">No mastery was recorded this time through — Adeline only credits concepts once your answers are judged correct along the way. Feel free to revisit this Space to try again.</p>}
+      </div> : <div className="flex gap-2 border-t border-[#E7DAC3] p-4"><label className="sr-only" htmlFor="space-message">Tell Adeline what you did or wondered</label><input id="space-message" value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void sendTurn(); }} placeholder="Tell Adeline what you did, noticed, or want to learn…" className="min-w-0 flex-1 rounded-full border border-[#D8C9AB] bg-white px-4 py-3 text-sm text-[#2F4731]" disabled={sending} /><button type="button" onClick={() => void sendTurn()} disabled={sending || !message.trim()} className="rounded-full bg-[#2F5A3A] px-5 py-3 text-sm font-bold text-white disabled:opacity-40">{sending ? 'Thinking…' : 'Send'}</button></div>}
       {error && <p className="px-5 pb-4 text-sm text-red-700" role="alert">{error}</p>}
     </section>
   </div>;

@@ -4,7 +4,6 @@ Journal API — /journal/*
 POST /journal/seal      — Seal a completed lesson into the student's journal
 GET  /journal/progress/{student_id} — Fetch track progress counts
 """
-import asyncio
 import json
 import logging
 from fastapi import APIRouter, HTTPException, Depends
@@ -14,7 +13,7 @@ from typing import Any
 from app.schemas.api_models import Track
 from app.api.middleware import get_current_user_id, verify_student_access
 from app.connections.journal_store import journal_store
-from app.connections.curriculum_graph import curriculum_graph
+from app.services.mastery_credit import ConceptCredit, record_mastery_credit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/journal", tags=["journal"])
@@ -101,57 +100,35 @@ async def seal_journal(
         )
 
     proficiency = _evidence_proficiency(body)
+    concept_credits = _concept_credits_from_seal(body)
 
     try:
-        track_progress = await journal_store.seal(
+        # Awaited (not fire-and-forget) so the parent Learning Map is correct
+        # immediately after the learner saves the experience.
+        track_progress = await record_mastery_credit(
             student_id=student_id,
-            lesson_id=body.lesson_id,
             track=body.track.value,
+            lesson_id=body.lesson_id,
             completed_blocks=body.completed_blocks,
-            sources=(body.evidence_sources + [
+            proficiency=proficiency,
+            evidence_sources=body.evidence_sources + [
                 {"type": "learner_reflection", "content": reflection},
                 *({"type": "artifact", "url": ref} for ref in body.artifact_refs),
-            ]) or None,
+            ],
+            plan_item_id=body.plan_item_id,
+            oas_standards=body.oas_standards,
+            concept_credits=concept_credits,
         )
     except Exception as e:
-        logger.exception("[/journal/seal] DB error")
-        raise HTTPException(status_code=500, detail=str(e))
-
-    # Invalidate student state cache so next lesson sees fresh mastery scores
-    from app.models.student import invalidate_student_state_cache
-    await invalidate_student_state_cache(student_id)
-
-    # Record standards mastery in the same Postgres transaction system.
-    if body.oas_standards:
-        # Await this write so the parent Learning Map is correct immediately
-        # after the learner saves the experience.
-        try:
-            await curriculum_graph.record_standard_mastery(
-                student_id, body.track.value, body.oas_standards, proficiency=proficiency,
-            )
-        except Exception as exc:
-            logger.exception("[/journal/seal] Mastery persistence failed")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Journal saved but mastery did not finish; retrying is safe: {exc}",
-            ) from exc
-
-    # Fire-and-forget BKT + SM-2 card update with quiz-derived quality signal
-    asyncio.create_task(
-        _update_card_safe(student_id, body)
-    )
+        logger.exception("[/journal/seal] mastery credit failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not finish saving this experience; retrying is safe: {e}",
+        ) from e
 
     # Learner-controlled payloads never set a transcript amount. Conventional
     # course equivalency is derived from reviewed standards/mastery reports.
     credit_sealed = False
-
-    # Completion changes both mastery coverage and the next-best experience.
-    # Invalidate the whole adaptive plan even when the lesson earns no credit.
-    try:
-        from app.api.learning_plan import pop_completed_lesson
-        await pop_completed_lesson(student_id, body.plan_item_id or body.lesson_id)
-    except Exception as exc:
-        logger.warning("Learning plan invalidation failed after journal seal: %s", exc)
 
     return SealResponse(
         sealed=True,
@@ -180,6 +157,21 @@ def _quiz_quality(quiz_results: list[dict]) -> int:
     return 1
 
 
+def _concept_credits_from_seal(body: SealRequest) -> list[ConceptCredit]:
+    """Only a scored demonstration with an exact concept_id is real BKT evidence —
+    never guess a mastery target from a reflection/artifact alone."""
+    if not body.quiz_results:
+        return []
+    if not body.concept_id:
+        logger.info("[Journal] Skipping concept mastery update: no exact concept_id")
+        return []
+    return [ConceptCredit(
+        concept_id=body.concept_id,
+        concept_name=body.concept_name or "",
+        quality=_quiz_quality(body.quiz_results),
+    )]
+
+
 def _evidence_proficiency(body: SealRequest) -> str:
     """Translate reviewable evidence into a conservative learning status."""
     if body.quiz_results:
@@ -197,37 +189,6 @@ def _evidence_proficiency(body: SealRequest) -> str:
     if body.artifact_refs:
         return "APPROACHING"
     return "DEVELOPING"
-
-
-async def _update_card_safe(student_id: str, body: SealRequest) -> None:
-    """Fire-and-forget: update BKT pL + SM-2 schedule after lesson seal."""
-    if not body.quiz_results:
-        # Saving a reflection/artifact is not a correct BKT response.
-        return
-    try:
-        from app.algorithms.bkt_tracker import update_card_after_lesson
-
-        quality = _quiz_quality(body.quiz_results)
-
-        concept_id   = body.concept_id
-        concept_name = body.concept_name or ""
-
-        # Never guess a mastery target. A quiz may count as lesson evidence,
-        # but it cannot unlock a curriculum dependency without the exact
-        # concept selected by the persisted plan.
-        if not concept_id:
-            logger.info("[Journal] Skipping concept mastery update: no exact concept_id")
-            return
-
-        await update_card_after_lesson(
-            student_id=student_id,
-            concept_id=concept_id,
-            concept_name=concept_name,
-            track=body.track.value,
-            quality=quality,
-        )
-    except Exception as exc:
-        logger.warning(f"[Journal] BKT/SM-2 update failed (non-fatal): {exc}")
 
 
 @router.get("/progress/{student_id}", response_model=ProgressResponse)
