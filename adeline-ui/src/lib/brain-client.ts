@@ -1418,12 +1418,42 @@ export interface BookRecommendation {
   relevance_score: number;
 }
 
+export interface UpcomingInvestigation {
+  slot: string;
+  canonical_topic: string;
+  track: string;
+  position: number;
+}
+
+export interface SpaceListItem {
+  plan_item_id: string;
+  title: string;
+  track: string;
+  status: 'active' | 'completed';
+  completed_blocks: number;
+  total_blocks: number;
+  updated_at: string | null;
+}
+
+export async function listSpaces(studentId: string): Promise<SpaceListItem[]> {
+  // BRAIN_URL ("/brain") already supplies the leading segment the catch-all
+  // proxy re-adds before forwarding upstream; spaces_router is mounted bare
+  // with its own internal "/brain/spaces" prefix, so the browser path here
+  // is "/brain" + "/spaces/{id}" = "/brain/spaces/{id}", matching it exactly.
+  const res = await fetch(`${BRAIN_URL}/spaces/${encodeURIComponent(studentId)}`, {
+    headers: await getBrainHeaders(), cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`Failed to fetch Spaces: ${res.status}`);
+  return res.json() as Promise<SpaceListItem[]>;
+}
+
 export interface LearningPlanResponse {
   plan_version: number;
   student_id: string;
   suggestions: LessonSuggestion[];
   family_investigation?: LessonSuggestion;
   family_investigations?: LessonSuggestion[];
+  upcoming_family_investigations?: UpcomingInvestigation[];
   individual_skills: LessonSuggestion[];
   progression_checklist?: IndividualSkillTarget[];
   progression_map_status: ProgressionMapStatus;

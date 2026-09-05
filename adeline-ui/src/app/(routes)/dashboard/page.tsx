@@ -108,7 +108,11 @@ export default function TodayPage() {
           {!finished.length && <EmptyCard text="Completed lessons appear here after evidence is recorded." />}
         </div>
       </section>
-      <p className={styles.planFootnote}><Link href="/dashboard/portfolio">See what you have made and learned →</Link></p>
+      <p className={styles.planFootnote}>
+        <Link href="/dashboard/spaces">Browse all your Spaces →</Link>
+        {' · '}
+        <Link href="/dashboard/portfolio">See what you have made and learned →</Link>
+      </p>
     </div>
   );
 }

@@ -2,6 +2,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from datetime import datetime, timezone
+
 from app.api.spaces import (
     OffPlanTopic,
     _concept_credits_for_lesson,
@@ -14,6 +16,7 @@ from app.api.spaces import (
     _lesson_fully_completed,
     _newly_completed_lesson,
     _proficiency_from_evaluations,
+    _space_list_item,
     _state,
 )
 
@@ -188,3 +191,28 @@ async def test_off_plan_topic_failure_is_swallowed_not_raised():
             fallback_track="CREATION_SCIENCE", fallback_grade=7, topic=topic,
         )
     assert result is None
+
+
+def test_space_list_item_shapes_a_db_row_into_the_list_response():
+    row = {
+        "planItemId": "family-abc-science-0", "status": "active",
+        "completedBlockIds": ["b1", "b2"], "updatedAt": datetime(2026, 9, 5, tzinfo=timezone.utc),
+        "title": "Kitchen Chemistry: Sourdough", "track": "CREATION_SCIENCE", "total_blocks": 8,
+    }
+    item = _space_list_item(row)
+    assert item["plan_item_id"] == "family-abc-science-0"
+    assert item["completed_blocks"] == 2
+    assert item["total_blocks"] == 8
+    assert item["updated_at"] == "2026-09-05T00:00:00+00:00"
+
+
+def test_space_list_item_handles_missing_completed_blocks_and_updated_at():
+    row = {
+        "planItemId": "family-abc-history-0", "status": "completed",
+        "completedBlockIds": None, "updatedAt": None,
+        "title": "The Poison Squad", "track": "TRUTH_HISTORY", "total_blocks": None,
+    }
+    item = _space_list_item(row)
+    assert item["completed_blocks"] == 0
+    assert item["total_blocks"] == 0
+    assert item["updated_at"] is None

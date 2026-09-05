@@ -43,6 +43,21 @@ class FamilyInvestigationQueueStore:
         finally:
             await conn.close()
 
+    async def list_upcoming(self, household_id: str, slot: str, after_position: int) -> list[dict]:
+        """Queued-but-not-yet-current items in a slot, in queue order."""
+        conn = await get_db_conn()
+        try:
+            rows = await conn.fetch(
+                'SELECT id::text, position, "canonicalTopic", track FROM "FamilyInvestigationQueue" '
+                'WHERE "householdId"=$1 AND slot=$2 AND position > $3 '
+                'ORDER BY position ASC',
+                household_id, slot, after_position,
+            )
+            return [{"id": row["id"], "position": row["position"],
+                     "canonical_topic": row["canonicalTopic"], "track": row["track"]} for row in rows]
+        finally:
+            await conn.close()
+
     async def enqueue(self, household_id: str, slot: str, canonical_topic: str, track: str) -> dict:
         conn = await get_db_conn()
         try:

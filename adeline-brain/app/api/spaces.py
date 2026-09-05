@@ -341,6 +341,39 @@ async def _load_or_create(student_id: str, plan_item_id: str) -> tuple[dict, dic
         await conn.close()
 
 
+def _space_list_item(row) -> dict:
+    return {
+        "plan_item_id": row["planItemId"], "title": row["title"], "track": row["track"],
+        "status": row["status"], "completed_blocks": len(row["completedBlockIds"] or []),
+        "total_blocks": row["total_blocks"] or 0,
+        "updated_at": row["updatedAt"].isoformat() if row["updatedAt"] else None,
+    }
+
+
+@router.get("/{student_id}")
+async def list_spaces(student_id: str, response: Response,
+                      _user_id: str = Depends(verify_student_access)):
+    """Every Space this student has actually opened — active and completed —
+    most-recently-active first. Does not include queued-but-not-yet-started
+    investigations; those are previewed via the learning plan instead, since
+    they have no StudentExperience/SpaceSession until they actually begin."""
+    response.headers["Cache-Control"] = "private, no-store"
+    conn = await get_db_conn()
+    try:
+        rows = await conn.fetch(
+            '''SELECT s."planItemId", s.status, s."completedBlockIds", s."updatedAt",
+                      e.title, e.track, jsonb_array_length(e."blocksJson") AS total_blocks
+                 FROM "SpaceSession" s
+                 JOIN "StudentExperience" e ON e.id = s."experienceId"
+                WHERE s."studentId" = $1
+                ORDER BY s."updatedAt" DESC''',
+            student_id,
+        )
+    finally:
+        await conn.close()
+    return [_space_list_item(row) for row in rows]
+
+
 @router.get("/{student_id}/{plan_item_id}")
 async def read_space(student_id: str, plan_item_id: str, response: Response,
                      _user_id: str = Depends(verify_student_access)):

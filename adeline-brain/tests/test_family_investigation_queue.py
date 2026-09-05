@@ -7,6 +7,7 @@ from app.api.learning_plan import (
     LessonSuggestion,
     _family_investigation_suggestion_for_slot,
     _family_investigation_suggestions,
+    _upcoming_family_investigations,
 )
 
 
@@ -99,3 +100,25 @@ async def test_both_slots_present_and_independent_of_each_others_completion():
     assert topics == {"Sourdough", "Poison Squad"}
     tracks = {item.track for item in results}
     assert tracks == {"CREATION_SCIENCE", "TRUTH_HISTORY"}
+
+
+@pytest.mark.asyncio
+async def test_upcoming_investigations_lists_items_queued_after_the_current_one():
+    async def fake_get_current(household_id, slot):
+        return _queue_row(0, "Sourdough", "CREATION_SCIENCE") if slot == "science" else None
+
+    async def fake_list_upcoming(household_id, slot, after_position):
+        if slot == "science":
+            assert after_position == 0
+            return [_queue_row(1, "Fermented Vegetables", "CREATION_SCIENCE")]
+        assert after_position == -1
+        return [_queue_row(0, "Poison Squad", "TRUTH_HISTORY")]
+
+    with (
+        patch("app.api.learning_plan.family_investigation_queue_store.get_current", new=fake_get_current),
+        patch("app.api.learning_plan.family_investigation_queue_store.list_upcoming", new=fake_list_upcoming),
+    ):
+        upcoming = await _upcoming_family_investigations("household-1")
+
+    topics = {(item.slot, item.canonical_topic) for item in upcoming}
+    assert topics == {("science", "Fermented Vegetables"), ("history", "Poison Squad")}

@@ -316,6 +316,13 @@ class ProgressionMapStatus(BaseModel):
     missing_track_count: int
     tracks: list[ProgressionTrackStatus]
 
+class UpcomingInvestigation(BaseModel):
+    slot: str
+    canonical_topic: str
+    track: str
+    position: int
+
+
 class LearningPlanResponse(BaseModel):
     # Version 9 invalidates plans that exposed broad seed labels and unplaced
     # starter topics as if they were ready learner work.
@@ -327,6 +334,9 @@ class LearningPlanResponse(BaseModel):
     # slots) — replaces the single calendar-bound family_investigation above,
     # which is kept set to the first of these for back-compat only.
     family_investigations: list[LessonSuggestion] = Field(default_factory=list)
+    # Queued-but-not-yet-started items in each slot — a preview only, not
+    # openable as a Space until they actually become current.
+    upcoming_family_investigations: list[UpcomingInvestigation] = Field(default_factory=list)
     individual_skills: list[LessonSuggestion] = Field(default_factory=list)
     progression_checklist: list[IndividualSkillTarget] = Field(default_factory=list)
     progression_map_status: ProgressionMapStatus
@@ -981,6 +991,21 @@ async def _family_investigation_suggestions(
         if suggestion:
             suggestions.append(suggestion)
     return suggestions
+
+
+async def _upcoming_family_investigations(household_id: str) -> list[UpcomingInvestigation]:
+    """Queued-but-not-yet-started items in each slot — not real Spaces yet,
+    just a preview of what's next once the current item finishes."""
+    upcoming: list[UpcomingInvestigation] = []
+    for slot in FAMILY_INVESTIGATION_SLOTS:
+        current = await family_investigation_queue_store.get_current(household_id, slot)
+        after_position = current["position"] if current else -1
+        for item in await family_investigation_queue_store.list_upcoming(household_id, slot, after_position):
+            upcoming.append(UpcomingInvestigation(
+                slot=slot, canonical_topic=item["canonical_topic"], track=item["track"],
+                position=item["position"],
+            ))
+    return upcoming
 
 
 def _family_investigation_for_learner(
@@ -2090,6 +2115,7 @@ async def get_learning_plan(
     )
     family_investigation = family_investigations[0] if family_investigations else None
     family_cards = list(family_investigations)
+    upcoming_family_investigations = await _upcoming_family_investigations(family_context.household_id)
     final_suggestions = [
         *family_cards,
         *individual_skills[:max(0, limit - len(family_cards))],
@@ -2167,6 +2193,7 @@ async def get_learning_plan(
         suggestions=final_suggestions,
         family_investigation=family_investigation,
         family_investigations=family_investigations,
+        upcoming_family_investigations=upcoming_family_investigations,
         individual_skills=individual_skills,
         progression_checklist=progression_checklist,
         progression_map_status=_progression_map_status(progression_checklist),
