@@ -1602,6 +1602,8 @@ export interface LessonPortfolioItem {
   reflection?: string | null;
   artifact_description?: string | null;
   artifact_refs: string[];
+  // Links back to the Space this evidence came from, if any.
+  plan_item_id?: string | null;
 }
 
 export async function getLessonPortfolio(studentId: string): Promise<LessonPortfolioItem[]> {

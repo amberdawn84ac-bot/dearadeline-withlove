@@ -59,6 +59,7 @@ async def record_mastery_credit(
         track=track,
         completed_blocks=completed_blocks,
         sources=evidence_sources or None,
+        plan_item_id=plan_item_id,
     )
 
     await invalidate_student_state_cache(student_id)

@@ -14,6 +14,7 @@ async def test_portfolio_decodes_saved_reflection_and_artifact():
         "track": "ENGLISH_LITERATURE",
         "title": "The Art of Persuasion",
         "sealed_at": datetime(2026, 8, 24, tzinfo=timezone.utc),
+        "plan_item_id": None,
         "sources_json": (
             '[{"type":"learner_reflection","content":"Words should serve truth."},'
             '{"type":"artifact","url":"portfolio://investigation/lesson-1",'
@@ -29,7 +30,27 @@ async def test_portfolio_decodes_saved_reflection_and_artifact():
     assert response.items[0].reflection == "Words should serve truth."
     assert response.items[0].artifact_description == "Letter and annotated evidence"
     assert response.items[0].artifact_refs == ["portfolio://investigation/lesson-1"]
+    assert response.items[0].plan_item_id is None
     connection.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_portfolio_item_carries_the_space_it_came_from():
+    connection = AsyncMock()
+    connection.fetch.return_value = [{
+        "lesson_id": "lesson-1",
+        "track": "CREATION_SCIENCE",
+        "title": "Kitchen Chemistry: The Science of Sourdough",  # resolved via plan_item_id join
+        "sealed_at": datetime(2026, 9, 5, tzinfo=timezone.utc),
+        "plan_item_id": "family-abc123-science-0",
+        "sources_json": '[{"type":"space_conversation_transcript","lesson_title":"Feeding the starter","concepts":["Wild yeast capture"]}]',
+    }]
+
+    with patch("app.config.get_db_conn", new=AsyncMock(return_value=connection)):
+        response = await get_portfolio_items("student-1", _user_id="student-1")
+
+    assert response.items[0].plan_item_id == "family-abc123-science-0"
+    assert response.items[0].title == "Kitchen Chemistry: The Science of Sourdough"
 
 
 @pytest.mark.asyncio

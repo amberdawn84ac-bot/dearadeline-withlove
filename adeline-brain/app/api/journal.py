@@ -68,6 +68,9 @@ class PortfolioItem(BaseModel):
     reflection: str | None = None
     artifact_description: str | None = None
     artifact_refs: list[str] = Field(default_factory=list)
+    # Links back to the Space this evidence came from, if any (null for
+    # evidence sealed outside a Space, e.g. the manual FamilyCanonicalLesson flow).
+    plan_item_id: str | None = None
 
 class PortfolioResponse(BaseModel):
     student_id: str
@@ -236,11 +239,17 @@ async def get_portfolio_items(
     conn = await get_db_conn()
     try:
         rows = await conn.fetch(
-            '''SELECT j.lesson_id, j.track, j.sources_json, j.sealed_at,
-                      COALESCE(e.title, j.lesson_id) AS title
+            '''SELECT j.lesson_id, j.track, j.sources_json, j.sealed_at, j.plan_item_id,
+                      -- Space-sourced entries: lesson_id is the in-unit lesson id, not
+                      -- StudentExperience.id, so the real Space's title is only found
+                      -- by joining on plan_item_id. e1 covers older non-Space entries
+                      -- where lesson_id *was* the StudentExperience id.
+                      COALESCE(e2.title, e1.title, j.lesson_id) AS title
                FROM student_journal j
-               LEFT JOIN "StudentExperience" e
-                 ON e.id = j.lesson_id AND e."studentId" = j.student_id
+               LEFT JOIN "StudentExperience" e1
+                 ON e1.id = j.lesson_id AND e1."studentId" = j.student_id
+               LEFT JOIN "StudentExperience" e2
+                 ON e2."planItemId" = j.plan_item_id AND e2."studentId" = j.student_id
                WHERE j.student_id = $1
                ORDER BY j.sealed_at DESC LIMIT $2''',
             student_id, min(max(limit, 1), 200),
@@ -265,5 +274,6 @@ async def get_portfolio_items(
             lesson_id=str(row["lesson_id"]), title=title, track=str(row["track"]),
             sealed_at=row["sealed_at"].isoformat() if row["sealed_at"] else None,
             reflection=reflection, artifact_description=artifact_description, artifact_refs=refs,
+            plan_item_id=row["plan_item_id"],
         ))
     return PortfolioResponse(student_id=student_id, items=items)

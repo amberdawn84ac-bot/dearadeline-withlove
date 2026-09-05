@@ -34,6 +34,10 @@ class StudentJournalEntry(JournalBase):
     completed_blocks = Column(Integer, default=0, nullable=False)
     # JSON array of {title, url, author, year} for the Evidence Appendix
     sources_json     = Column(Text, nullable=True, default="[]")
+    # Traces a Space-sourced entry back to its shared_investigation_id/plan
+    # item, so a portfolio entry can link to the Space it came from. Null for
+    # entries sealed outside a Space (the manual FamilyCanonicalLesson flow).
+    plan_item_id     = Column(String, nullable=True)
     sealed_at        = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -66,6 +70,12 @@ class JournalStore:
                 )
                 async with self._engine.begin() as conn:
                     await conn.run_sync(JournalBase.metadata.create_all)
+                    # create_all only creates missing tables; it never alters an
+                    # existing one, and this table predates Prisma-tracked
+                    # migrations entirely. Self-heal new columns here instead.
+                    await conn.execute(text(
+                        "ALTER TABLE student_journal ADD COLUMN IF NOT EXISTS plan_item_id VARCHAR"
+                    ))
                 logger.info("[JournalStore] Connected — student_journal table ready")
                 return
             except Exception as exc:
@@ -85,6 +95,7 @@ class JournalStore:
         track: str,
         completed_blocks: int,
         sources: list[dict] | None = None,
+        plan_item_id: str | None = None,
     ) -> dict:
         """
         Upsert a sealed lesson entry.
@@ -97,14 +108,15 @@ class JournalStore:
             await session.execute(
                 text("""
                     INSERT INTO student_journal
-                        (student_id, lesson_id, track, completed_blocks, sources_json, sealed_at)
+                        (student_id, lesson_id, track, completed_blocks, sources_json, plan_item_id, sealed_at)
                     VALUES
-                        (:student_id, :lesson_id, :track, :completed_blocks, :sources_json, NOW())
+                        (:student_id, :lesson_id, :track, :completed_blocks, :sources_json, :plan_item_id, NOW())
                     ON CONFLICT (student_id, lesson_id)
                     DO UPDATE SET
                         track            = EXCLUDED.track,
                         completed_blocks = EXCLUDED.completed_blocks,
                         sources_json     = EXCLUDED.sources_json,
+                        plan_item_id     = EXCLUDED.plan_item_id,
                         sealed_at        = NOW()
                 """),
                 {
@@ -113,6 +125,7 @@ class JournalStore:
                     "track": track,
                     "completed_blocks": completed_blocks,
                     "sources_json": sources_str,
+                    "plan_item_id": plan_item_id,
                 },
             )
             await session.commit()
