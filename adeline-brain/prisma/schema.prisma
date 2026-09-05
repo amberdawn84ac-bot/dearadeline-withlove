@@ -208,6 +208,10 @@ model StudentExperience {
   blocksJson    Json     @default("[]")
   metadataJson  Json     @default("{}")
   errorMessage  String?
+  /// Consecutive authoring failures for this (student, plan item) — reset to
+  /// 0 on success. Past a threshold, callers stop offering a silent retry and
+  /// escalate instead (see experience_builder.py::_stream).
+  failureCount  Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

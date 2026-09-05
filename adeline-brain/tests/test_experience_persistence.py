@@ -4,7 +4,13 @@ import json
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.api.experience_builder import _emit_persisted, _run_with_progress, _stream, sequence_bridge_block
+from app.api.experience_builder import (
+    EXPERIENCE_FAILURE_ESCALATION_THRESHOLD,
+    _emit_persisted,
+    _run_with_progress,
+    _stream,
+    sequence_bridge_block,
+)
 from app.agents.adapter import AdaptationRequest
 from app.connections.student_experience_store import GenerationClaim
 from app.schemas.api_models import LessonRequest, Track
@@ -193,3 +199,61 @@ async def test_fast_generation_returns_without_fake_progress():
     ]
 
     assert events == [("result", "ready")]
+
+
+@pytest.mark.asyncio
+async def test_repeated_failure_short_circuits_without_another_author_attempt():
+    """Already past the threshold before this attempt starts — must not spend
+    another LLM call proving what prior attempts already showed."""
+    author = AsyncMock()
+    notify = AsyncMock()
+    with (
+        patch("app.api.experience_builder.student_experience_store.claim", new=AsyncMock(
+            return_value=GenerationClaim("generating", True, {
+                "id": "experience-doomed", "failure_count": EXPERIENCE_FAILURE_ESCALATION_THRESHOLD,
+            })
+        )),
+        patch("app.api.experience_builder._author", new=author),
+        patch("app.api.experience_builder._notify_repeated_authoring_failure", new=notify),
+    ):
+        events = [frame async for frame in _stream(_request())]
+
+    author.assert_not_awaited()
+    notify.assert_not_awaited()  # only the mark_failed path notifies; the pre-check just short-circuits
+    assert any("flagged for review" in frame for frame in events)
+
+
+@pytest.mark.asyncio
+async def test_failure_below_threshold_still_offers_a_normal_retry_message():
+    with (
+        patch("app.api.experience_builder.student_experience_store.claim", new=AsyncMock(
+            return_value=GenerationClaim("generating", True, {"id": "experience-1", "failure_count": 1})
+        )),
+        patch("app.api.experience_builder.canonical_store.get", new=AsyncMock(return_value=None)),
+        patch("app.api.experience_builder.resource_router.search", new=AsyncMock(side_effect=RuntimeError("boom"))),
+        patch("app.api.experience_builder.student_experience_store.mark_failed", new=AsyncMock(return_value=2)),
+        patch("app.api.experience_builder._notify_repeated_authoring_failure", new=AsyncMock()) as notify,
+    ):
+        events = [frame async for frame in _stream(_request())]
+
+    notify.assert_not_awaited()
+    assert any("please retry" in frame.lower() for frame in events)
+    assert not any("flagged for review" in frame for frame in events)
+
+
+@pytest.mark.asyncio
+async def test_failure_reaching_threshold_notifies_and_escalates():
+    with (
+        patch("app.api.experience_builder.student_experience_store.claim", new=AsyncMock(
+            return_value=GenerationClaim("generating", True, {"id": "experience-1", "failure_count": 1})
+        )),
+        patch("app.api.experience_builder.canonical_store.get", new=AsyncMock(return_value=None)),
+        patch("app.api.experience_builder.resource_router.search", new=AsyncMock(side_effect=RuntimeError("boom"))),
+        patch("app.api.experience_builder.student_experience_store.mark_failed",
+              new=AsyncMock(return_value=EXPERIENCE_FAILURE_ESCALATION_THRESHOLD)),
+        patch("app.api.experience_builder._notify_repeated_authoring_failure", new=AsyncMock()) as notify,
+    ):
+        events = [frame async for frame in _stream(_request())]
+
+    notify.assert_awaited_once()
+    assert any("flagged for review" in frame for frame in events)

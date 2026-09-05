@@ -30,7 +30,7 @@ class StudentExperienceStore:
         try:
             row = await conn.fetchrow(
                 '''SELECT id, status, title, track, "blocksJson", "metadataJson",
-                          "errorMessage", "canonicalSlug"
+                          "errorMessage", "canonicalSlug", "failureCount"
                    FROM "StudentExperience"
                    WHERE "studentId" = $1 AND "planItemId" = $2''',
                 student_id, plan_item_id,
@@ -42,8 +42,11 @@ class StudentExperienceStore:
     async def claim(self, student_id: str, plan_item_id: str, canonical_slug: str) -> GenerationClaim:
         """Atomically claim generation, or return the existing state.
 
-        Failed rows are claimable again. Generating and ready rows cannot be
-        claimed by a duplicate click or another application instance.
+        Failed rows are claimable again. A generating row is only reclaimable
+        after a short stale window — most real authoring finishes in well
+        under a minute; 3 minutes is generous headroom for a slow LLM call
+        without leaving a family staring at a dead request for 15 minutes
+        after a deploy or dropped connection killed it mid-stream.
         """
         conn = await get_db_conn()
         try:
@@ -57,9 +60,9 @@ class StudentExperienceStore:
                      status = 'generating', "errorMessage" = NULL, "updatedAt" = NOW()
                    WHERE "StudentExperience".status = 'failed'
                       OR ("StudentExperience".status = 'generating'
-                          AND "StudentExperience"."updatedAt" < NOW() - INTERVAL '15 minutes')
+                          AND "StudentExperience"."updatedAt" < NOW() - INTERVAL '3 minutes')
                    RETURNING id, status, title, track, "blocksJson", "metadataJson",
-                             "errorMessage", "canonicalSlug"''',
+                             "errorMessage", "canonicalSlug", "failureCount"''',
                 experience_id, student_id, plan_item_id, canonical_slug,
             )
             if row:
@@ -67,7 +70,7 @@ class StudentExperienceStore:
                 return GenerationClaim("generating", True, record)
             existing_row = await conn.fetchrow(
                 '''SELECT id, status, title, track, "blocksJson", "metadataJson",
-                          "errorMessage", "canonicalSlug" FROM "StudentExperience"
+                          "errorMessage", "canonicalSlug", "failureCount" FROM "StudentExperience"
                    WHERE "studentId" = $1 AND "planItemId" = $2''',
                 student_id, plan_item_id,
             )
@@ -83,25 +86,29 @@ class StudentExperienceStore:
             row = await conn.fetchrow(
                 '''UPDATE "StudentExperience" SET status = 'ready', title = $3,
                      track = $4, "blocksJson" = $5::jsonb, "metadataJson" = $6::jsonb,
-                     "errorMessage" = NULL, "updatedAt" = NOW()
+                     "errorMessage" = NULL, "failureCount" = 0, "updatedAt" = NOW()
                    WHERE "studentId" = $1 AND "planItemId" = $2
                    RETURNING id, status, title, track, "blocksJson", "metadataJson",
-                             "errorMessage", "canonicalSlug"''',
+                             "errorMessage", "canonicalSlug", "failureCount"''',
                 student_id, plan_item_id, title, track, json.dumps(blocks), json.dumps(metadata),
             )
             return self._record(row)
         finally:
             await conn.close()
 
-    async def mark_failed(self, student_id: str, plan_item_id: str, message: str) -> None:
+    async def mark_failed(self, student_id: str, plan_item_id: str, message: str) -> int:
+        """Returns the new consecutive-failure count so callers can decide
+        whether to escalate instead of silently offering another retry."""
         conn = await get_db_conn()
         try:
-            await conn.execute(
+            row = await conn.fetchrow(
                 '''UPDATE "StudentExperience" SET status = 'failed',
-                     "errorMessage" = $3, "updatedAt" = NOW()
-                   WHERE "studentId" = $1 AND "planItemId" = $2 AND status = 'generating' ''',
+                     "errorMessage" = $3, "failureCount" = "failureCount" + 1, "updatedAt" = NOW()
+                   WHERE "studentId" = $1 AND "planItemId" = $2 AND status = 'generating'
+                   RETURNING "failureCount"''',
                 student_id, plan_item_id, message[:500],
             )
+            return row["failureCount"] if row else 0
         finally:
             await conn.close()
 
@@ -123,6 +130,7 @@ class StudentExperienceStore:
             "blocks": decoded(row["blocksJson"], []),
             "metadata": decoded(row["metadataJson"], {}),
             "error_message": row["errorMessage"], "canonical_slug": row["canonicalSlug"],
+            "failure_count": row["failureCount"],
         }
 
 

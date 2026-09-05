@@ -8,6 +8,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 import re
 import time
 import uuid
@@ -52,6 +53,34 @@ ADAPTER_PROGRESS_MESSAGES = (
     "Preparing this learner's role in the shared experience…",
     "Making the entry point clear without simplifying the ideas…",
 )
+
+# Past this many consecutive failures for the same (student, plan item), stop
+# offering a silent "please retry" and escalate instead — both to the family
+# (an honest message instead of an endless rebuild loop) and to an admin
+# (same webhook pattern canonical_store.py uses for pending-review canonicals).
+EXPERIENCE_FAILURE_ESCALATION_THRESHOLD = 3
+
+
+async def _notify_repeated_authoring_failure(
+    student_id: str, plan_item_id: str, topic: str, failure_count: int, last_error: str,
+) -> None:
+    """Fire-and-forget HITL notification once a unit has failed authoring
+    repeatedly — non-fatal if the webhook itself fails."""
+    msg = (
+        f"[Adeline] Experience authoring failed {failure_count}x in a row: "
+        f"student={student_id} plan_item={plan_item_id} topic={topic!r} — last error: {last_error[:300]}"
+    )
+    webhook_url = os.getenv("ADMIN_REVIEW_WEBHOOK_URL", "")
+    if webhook_url:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(webhook_url, json={"text": msg})
+            logger.info("[ExperienceAuthor] Repeated-failure webhook notified for plan_item=%s", plan_item_id)
+        except Exception as exc:
+            logger.warning("[ExperienceAuthor] Repeated-failure webhook failed (non-fatal): %s — %s", exc, msg)
+    else:
+        logger.warning("[ExperienceAuthor] %s", msg)
 
 
 def shared_family_canonical_slug(request: LessonRequest) -> str:
@@ -526,9 +555,26 @@ async def _stream(request: LessonRequest):
                     yield event
                 return
             if record and record["status"] == "failed":
-                yield _sse({"type": "error", "message": "That experience did not finish. Please retry."})
+                if (record.get("failure_count") or 0) >= EXPERIENCE_FAILURE_ESCALATION_THRESHOLD:
+                    yield _sse({"type": "error", "message": (
+                        "Adeline has had trouble creating this experience several times in a row. "
+                        "This has been flagged for review — try a different topic for now, or check back later."
+                    )})
+                else:
+                    yield _sse({"type": "error", "message": "That experience did not finish. Please retry."})
                 return
         yield _sse({"type": "error", "message": "That experience is still being prepared. Reopen it in a moment."})
+        return
+
+    if (claim.record.get("failure_count") or 0) >= EXPERIENCE_FAILURE_ESCALATION_THRESHOLD:
+        # Already past the threshold before this attempt even starts — don't
+        # spend another LLM call proving what three prior attempts already
+        # showed. A family switching to a different topic gets a fresh row
+        # (failure_count=0) and is unaffected by this short-circuit.
+        yield _sse({"type": "error", "message": (
+            "Adeline has had trouble creating this experience several times in a row. "
+            "This has been flagged for review — try a different topic for now, or check back later."
+        )})
         return
 
     try:
@@ -654,15 +700,26 @@ async def _stream(request: LessonRequest):
         async for event in _emit_persisted(request, record):
             yield event
     except asyncio.CancelledError:
-        # A browser navigation or dropped connection must not strand the durable
-        # item in `generating` until the stale-claim timeout expires.
+        # A browser navigation, dropped connection, or a backend deploy killing
+        # the request mid-stream must not strand the durable item in
+        # `generating` until the stale-claim timeout expires.
         await student_experience_store.mark_failed(
             request.student_id, plan_item_id, "Generation connection closed before completion"
         )
         raise
     except Exception as exc:
-        await student_experience_store.mark_failed(request.student_id, plan_item_id, str(exc))
-        logger.exception("[ExperienceAuthor] learner experience failed student=%s item=%s", request.student_id, plan_item_id)
+        failure_count = await student_experience_store.mark_failed(request.student_id, plan_item_id, str(exc))
+        logger.exception(
+            "[ExperienceAuthor] learner experience failed (failure #%d) student=%s item=%s",
+            failure_count, request.student_id, plan_item_id,
+        )
+        if failure_count >= EXPERIENCE_FAILURE_ESCALATION_THRESHOLD:
+            await _notify_repeated_authoring_failure(request.student_id, plan_item_id, request.topic, failure_count, str(exc))
+            yield _sse({"type": "error", "message": (
+                "Adeline has had trouble creating this experience several times in a row. "
+                "This has been flagged for review — try a different topic for now, or check back later."
+            )})
+            return
         detail = exc.detail if isinstance(exc, HTTPException) else "Adeline could not finish that experience. Your Today plan is safe; please retry."
         yield _sse({"type": "error", "message": str(detail)})
 
