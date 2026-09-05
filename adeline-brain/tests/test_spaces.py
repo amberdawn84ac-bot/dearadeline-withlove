@@ -1,5 +1,12 @@
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
 from app.api.spaces import (
+    OffPlanTopic,
     _concept_credits_for_lesson,
+    _concept_slug,
+    _credit_off_plan_topic,
     _decoded,
     _learner_depth,
     _lesson_content,
@@ -115,3 +122,69 @@ def test_lesson_content_joins_only_blocks_belonging_to_the_lesson():
     assert "Feed the starter" in content
     assert "Check for bubbles" in content
     assert "Unrelated" not in content
+
+
+def test_concept_slug_normalizes_arbitrary_concept_names():
+    assert _concept_slug("Why does yeast make bubbles?!") == "why-does-yeast-make-bubbles"
+    assert _concept_slug("  Osmosis  ") == "osmosis"
+    assert _concept_slug("???") == "topic"
+
+
+@pytest.mark.asyncio
+async def test_demonstrated_off_plan_topic_gets_full_mastery_credit():
+    topic = OffPlanTopic(concept_name="Osmosis", track=None, tier="demonstrated")
+    with (
+        patch("app.api.spaces._topic_oas_standards", new=AsyncMock(return_value=[{"standard_id": "SCI.1"}])),
+        patch("app.api.spaces.record_mastery_credit", new=AsyncMock()) as mock_credit,
+    ):
+        result = await _credit_off_plan_topic(
+            student_id="student-1", plan_item_id="plan-1", session_id="session-1",
+            fallback_track="CREATION_SCIENCE", fallback_grade=7, topic=topic,
+        )
+
+    assert result == "Osmosis"
+    mock_credit.assert_awaited_once()
+    kwargs = mock_credit.call_args.kwargs
+    assert kwargs["track"] == "CREATION_SCIENCE"
+    assert kwargs["oas_standards"] == [{"standard_id": "SCI.1"}]
+    assert kwargs["concept_credits"][0].concept_name == "Osmosis"
+    assert kwargs["lesson_id"] == "rabbit-hole-osmosis-student-1"
+
+
+@pytest.mark.asyncio
+async def test_encountered_off_plan_topic_is_logged_not_credited():
+    topic = OffPlanTopic(concept_name="Capillary action", track=None, tier="encountered")
+    with (
+        patch("app.api.spaces.record_mastery_credit", new=AsyncMock()) as mock_credit,
+        patch("app.api.spaces.concept_encounter_store.record", new=AsyncMock()) as mock_record,
+    ):
+        result = await _credit_off_plan_topic(
+            student_id="student-1", plan_item_id="plan-1", session_id="session-1",
+            fallback_track="CREATION_SCIENCE", fallback_grade=7, topic=topic,
+        )
+
+    assert result is None
+    mock_credit.assert_not_awaited()
+    mock_record.assert_awaited_once_with("student-1", "Capillary action", "CREATION_SCIENCE", "session-1")
+
+
+@pytest.mark.asyncio
+async def test_off_plan_topic_track_override_takes_precedence_over_fallback():
+    topic = OffPlanTopic(concept_name="Regulatory capture", track="JUSTICE_CHANGEMAKING", tier="encountered")
+    with patch("app.api.spaces.concept_encounter_store.record", new=AsyncMock()) as mock_record:
+        await _credit_off_plan_topic(
+            student_id="student-1", plan_item_id="plan-1", session_id="session-1",
+            fallback_track="TRUTH_HISTORY", fallback_grade=9, topic=topic,
+        )
+    mock_record.assert_awaited_once_with("student-1", "Regulatory capture", "JUSTICE_CHANGEMAKING", "session-1")
+
+
+@pytest.mark.asyncio
+async def test_off_plan_topic_failure_is_swallowed_not_raised():
+    topic = OffPlanTopic(concept_name="Osmosis", track=None, tier="demonstrated")
+    with patch("app.api.spaces._topic_oas_standards", new=AsyncMock(side_effect=RuntimeError("pgvector down"))):
+        result = await _credit_off_plan_topic(
+            student_id="student-1", plan_item_id="plan-1", session_id="session-1",
+            fallback_track="CREATION_SCIENCE", fallback_grade=7, topic=topic,
+        )
+    assert result is None

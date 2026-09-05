@@ -31,20 +31,38 @@ export async function POST(request: Request) {
   const state = await stateResponse.json();
 
   const history = (state.messages as Array<{ role: 'user' | 'assistant'; content: string }>).slice(-12);
-  const { output } = await generateText({
-    model: process.env.ADELINE_SPACE_MODEL || 'google/gemini-3.8-flash',
-    output: Output.object({ schema: spaceEvaluationSchema }),
-    system: `You are Adeline, a warm but rigorous learning companion guiding one family through a unit Space.
-The server has selected exactly one current activity. Teach that activity and evaluate only evidence in the learner's newest message.
-Never claim credit, mastery, completion, or standards proficiency. Never skip ahead. Ask no more than one question.
-Recommend "advance" only when the learner has supplied the evidence or answer this current activity explicitly requires.
-Use "complete_unit" only under that same rule when this is the final activity. Otherwise recommend "stay".
-Use display_breakout_tracks only when subject-specific work is useful now, and show_microscope_diagram only when microscopy is relevant.
+  const activityMode = state.status === 'completed'
+    ? `This unit's planned activities are already finished — you're in open conversation mode now. The family may ask
+follow-up questions, revisit something, or wander into a new question entirely. Answer genuinely and substantively;
+there is no "next activity" to advance to, so "recommended_action" should stay "stay" unless the family is clearly
+done, in which case "complete_unit" is fine (it is a safe no-op once already complete).
+
+LAST ACTIVITY DISCUSSED: ${state.current_lesson?.title || 'Current lesson'}
+${JSON.stringify(state.current_block)}`
+    : `The server has selected exactly one current activity. Teach that activity and evaluate only evidence in the learner's newest message.
+Never skip ahead. Recommend "advance" only when the learner has supplied the evidence or answer this current activity
+explicitly requires. Use "complete_unit" only under that same rule when this is the final activity. Otherwise recommend "stay".
 
 UNIT: ${state.title}
 LESSON: ${state.current_lesson?.title || 'Current lesson'}
 ACTIVITY ${state.current_block_index + 1} OF ${state.total_blocks}:
-${JSON.stringify(state.current_block)}`,
+${JSON.stringify(state.current_block)}`;
+
+  const { output } = await generateText({
+    model: process.env.ADELINE_SPACE_MODEL || 'google/gemini-3.8-flash',
+    output: Output.object({ schema: spaceEvaluationSchema }),
+    system: `You are Adeline, a warm but rigorous learning companion guiding one family through a unit Space.
+Never claim credit, mastery, completion, or standards proficiency directly to the family — that is handled separately
+from what you say. Ask no more than one question.
+Use display_breakout_tracks only when subject-specific work is useful now, and show_microscope_diagram only when microscopy is relevant.
+
+${activityMode}
+
+RABBIT HOLES: if the family's question or discussion genuinely goes beyond the activity above — a real tangent, not a
+passing mention — set "off_plan_topic" to name that concept. Use tier "demonstrated" only when the family's answer
+meets the same correctness bar you'd require to advance a planned activity. Use tier "encountered" when a real
+question got a real, substantive answer but was not demonstrated to that same correctness bar. Leave "off_plan_topic"
+null for every ordinary turn that stayed on the current activity.`,
     messages: [...history, { role: 'user', content: userMessage }],
   });
 

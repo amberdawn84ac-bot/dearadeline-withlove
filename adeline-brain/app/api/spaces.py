@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from app.api.middleware import require_internal_key, verify_student_access
 from app.config import get_db_conn
+from app.connections.concept_encounter_store import concept_encounter_store
 from app.services.mastery_credit import ConceptCredit, record_mastery_credit
 from app.services.standards_mapper import _embed
 
@@ -36,12 +38,19 @@ class SpaceMessage(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
 
 
+class OffPlanTopic(BaseModel):
+    concept_name: str = Field(min_length=1, max_length=200)
+    track: str | None = None
+    tier: Literal["encountered", "demonstrated"]
+
+
 class SpaceEvaluation(BaseModel):
     adeline_message: str = Field(min_length=1, max_length=4000)
     evaluation: Literal["correct", "partial", "incorrect", "not_answered"]
     recommended_action: Literal["stay", "advance", "complete_unit"]
     is_waiting_for_user: bool
     resource_triggers: list[Literal["show_microscope_diagram", "display_breakout_tracks"]] = Field(default_factory=list)
+    off_plan_topic: OffPlanTopic | None = None
     user_message: str = Field(min_length=1, max_length=4000)
     expected_version: int = Field(ge=0)
 
@@ -157,12 +166,17 @@ def _concept_credits_for_lesson(unit_plan: dict, lesson: dict) -> list[ConceptCr
     return credits
 
 
-async def _lesson_oas_standards(track: str, grade: int, lesson_content: str) -> list[dict]:
-    """Live per-lesson OAS standards match (same pgvector pattern as
-    breakout_standards below), instead of the unit-wide CanonicalLesson.oasStandards
-    column — which is authored at the whole-unit level (often empty) and would
-    credit every lesson in a unit with the same, usually-irrelevant, standards."""
-    content = lesson_content.strip()
+async def _topic_oas_standards(track: str, grade: int, topic_text: str) -> list[dict]:
+    """Live OAS standards match (same pgvector pattern as breakout_standards
+    below) for arbitrary topic text, instead of the unit-wide
+    CanonicalLesson.oasStandards column — which is authored at the
+    whole-unit level (often empty) and would credit every lesson in a unit
+    with the same, usually-irrelevant, standards.
+
+    Used both for a completed lesson's own block content, and for a
+    rabbit-hole topic that has no pre-authored block at all.
+    """
+    content = topic_text.strip()
     if not content:
         return []
     embedding = await _embed(content[:8000])
@@ -214,7 +228,7 @@ async def _credit_newly_completed_lesson(
         ]
         proficiency = _proficiency_from_evaluations(evaluations)
         grade = _grade_from_metadata(metadata)
-        oas_standards = await _lesson_oas_standards(track, grade, _lesson_content(blocks, lesson))
+        oas_standards = await _topic_oas_standards(track, grade, _lesson_content(blocks, lesson))
 
         await record_mastery_credit(
             student_id=student_id,
@@ -252,6 +266,55 @@ async def _credit_newly_completed_lesson(
             student_id, plan_item_id, lesson_id,
         )
         return []
+
+
+def _concept_slug(concept_name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", concept_name.strip().lower()).strip("-") or "topic"
+
+
+async def _credit_off_plan_topic(
+    *, student_id: str, plan_item_id: str, session_id: str, fallback_track: str,
+    fallback_grade: int, topic: "OffPlanTopic",
+) -> str | None:
+    """A conversation went beyond the planned activity. Best-effort, entirely
+    independent of lesson-boundary crediting — a failure here must never
+    strand the family behind a stuck turn.
+
+    Returns the concept name if it was credited as mastery (for the
+    frontend's "credited this session" summary), or None otherwise —
+    "encountered" topics are logged but deliberately never surfaced as credit.
+    """
+    track = topic.track or fallback_track
+    try:
+        if topic.tier == "encountered":
+            await concept_encounter_store.record(student_id, topic.concept_name, track, session_id)
+            return None
+
+        standards = await _topic_oas_standards(track, fallback_grade, topic.concept_name)
+        slug = _concept_slug(topic.concept_name)
+        await record_mastery_credit(
+            student_id=student_id,
+            track=track,
+            lesson_id=f"rabbit-hole-{slug}-{student_id}",
+            completed_blocks=1,
+            proficiency="APPROACHING",
+            evidence_sources=[{
+                "type": "rabbit_hole_conversation",
+                "concept": topic.concept_name,
+            }],
+            plan_item_id=plan_item_id,
+            oas_standards=standards,
+            concept_credits=[ConceptCredit(
+                concept_id=f"rabbit-hole:{slug}", concept_name=topic.concept_name, quality=4,
+            )],
+        )
+        return topic.concept_name
+    except Exception:
+        logger.exception(
+            "[Spaces] Off-plan topic handling failed student=%s plan_item=%s concept=%s tier=%s",
+            student_id, plan_item_id, topic.concept_name, topic.tier,
+        )
+        return None
 
 
 async def _load_or_create(student_id: str, plan_item_id: str) -> tuple[dict, dict]:
@@ -351,6 +414,18 @@ async def transition_space(student_id: str, plan_item_id: str, body: SpaceEvalua
                     blocks=blocks, lesson=newly_completed, block_evaluations=block_evaluations,
                     session_id=session_row["id"],
                 )
+
+        # Independent of lesson-boundary credit above — a conversation can go
+        # off-plan on any turn, whether mid-unit or after everything's done.
+        if body.off_plan_topic:
+            off_plan_credit = await _credit_off_plan_topic(
+                student_id=student_id, plan_item_id=plan_item_id, session_id=session_row["id"],
+                fallback_track=experience_row["track"] or "", fallback_grade=_grade_from_metadata(metadata),
+                topic=body.off_plan_topic,
+            )
+            if off_plan_credit:
+                credited_this_session = [*credited_this_session, off_plan_credit]
+
         result["credited_this_session"] = credited_this_session
         return result
     finally:
