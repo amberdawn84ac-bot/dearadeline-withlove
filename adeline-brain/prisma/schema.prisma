@@ -241,6 +241,24 @@ model SpaceSession {
   @@index([studentId, status])
 }
 
+/// A parent-pinned override for a household's shared family investigation in
+/// one specific real-calendar ISO week. When present, this wins over the
+/// hash-and-calendar-week rotation in PersonalizedCurriculumPlannerAgent
+/// .family_investigation_cycle() for that household+week; absent, that
+/// algorithm is completely unchanged.
+model FamilyInvestigationOverride {
+  id             String   @id @default(uuid())
+  householdId    String
+  isoYear        Int
+  isoWeek        Int
+  canonicalTopic String
+  track          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([householdId, isoYear, isoWeek])
+}
+
 model DailyPlan {
   studentId String
   forDate   DateTime @db.Date

@@ -1,4 +1,7 @@
 from datetime import date
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from app.api.experience_builder import skill_connections_for_contract
 from app.api.learning_plan import (
@@ -10,6 +13,14 @@ from app.api.learning_plan import (
     _learner_progression_targets,
     _progression_map_status,
     _standard_suggestion,
+)
+
+# These tests exercise the no-override fallback path only (the existing
+# algorithmic rotation); the override lookup itself is covered separately in
+# test_family_investigation_override.py.
+_no_override = patch(
+    "app.api.learning_plan.family_investigation_override_store.get",
+    new=AsyncMock(return_value=None),
 )
 
 
@@ -170,23 +181,25 @@ def test_first_unfinished_sequential_target_is_ready():
     assert result.sequence_state == "READY"
 
 
-def test_siblings_share_the_investigation_but_keep_distinct_skill_targets():
+@pytest.mark.asyncio
+async def test_siblings_share_the_investigation_but_keep_distinct_skill_targets():
     catalog = (("saved-canonical", "Railroads and Power", "TRUTH_HISTORY", "Compare the records."),)
     plan_date = date(2026, 8, 26)
-    younger = _family_investigation_suggestion(
-        "household-1",
-        plan_date,
-        [suggestion(title="Count equal groups", concept_id="equal-groups")],
-        "3",
-        catalog,
-    )
-    older = _family_investigation_suggestion(
-        "household-1",
-        plan_date,
-        [suggestion(title="Compare rates of change", concept_id="rates")],
-        "9",
-        catalog,
-    )
+    with _no_override:
+        younger = await _family_investigation_suggestion(
+            "household-1",
+            plan_date,
+            [suggestion(title="Count equal groups", concept_id="equal-groups")],
+            "3",
+            catalog,
+        )
+        older = await _family_investigation_suggestion(
+            "household-1",
+            plan_date,
+            [suggestion(title="Compare rates of change", concept_id="rates")],
+            "9",
+            catalog,
+        )
 
     assert younger is not None and older is not None
     assert younger.id == older.id
@@ -200,11 +213,13 @@ def test_siblings_share_the_investigation_but_keep_distinct_skill_targets():
     assert younger.bridge_required is older.bridge_required is False
 
 
-def test_durable_household_choice_replaces_private_skill_attachments():
+@pytest.mark.asyncio
+async def test_durable_household_choice_replaces_private_skill_attachments():
     catalog = (("saved-canonical", "Bread Chemistry", "CREATION_SCIENCE", "Test fermentation."),)
-    shared = _family_investigation_suggestion(
-        "household-1", date(2026, 8, 26), [suggestion(title="Count batches")], "3", catalog,
-    )
+    with _no_override:
+        shared = await _family_investigation_suggestion(
+            "household-1", date(2026, 8, 26), [suggestion(title="Count batches")], "3", catalog,
+        )
     assert shared is not None
 
     older = _family_investigation_for_learner(
@@ -219,8 +234,9 @@ def test_durable_household_choice_replaces_private_skill_attachments():
     assert older.individual_skill_targets[0].working_level == "10"
 
 
-def test_family_card_is_withheld_when_no_pregenerated_lesson_is_ready():
-    assert _family_investigation_suggestion(
+@pytest.mark.asyncio
+async def test_family_card_is_withheld_when_no_pregenerated_lesson_is_ready():
+    assert await _family_investigation_suggestion(
         "household-1", date(2026, 8, 26), [suggestion()], "7", (),
     ) is None
 

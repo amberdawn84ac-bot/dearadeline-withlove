@@ -31,12 +31,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from app.schemas.api_models import Track
-from app.api.middleware import verify_student_access
+from app.api.middleware import verify_student_access, require_account_role
+from app.schemas.api_models import UserRole
 from app.models.student import load_student_state
 from app.connections.journal_store import journal_store
 from app.connections.curriculum_graph import curriculum_graph
 from app.connections.redis_client import redis_client
 from app.connections.daily_plan_store import daily_plan_store
+from app.connections.family_investigation_override_store import family_investigation_override_store
 from app.services.rate_limit import enforce_rate_limit
 from app.tools.graph_query import tool_get_zpd_candidates, ZPDCandidate
 from app.agents.curriculum_planner import personalized_curriculum_planner
@@ -879,7 +881,7 @@ def _individual_skill_targets(
     ]
 
 
-def _family_investigation_suggestion(
+async def _family_investigation_suggestion(
     household_id: str,
     plan_date: date,
     skill_suggestions: list[LessonSuggestion],
@@ -891,12 +893,26 @@ def _family_investigation_suggestion(
 
     if not seed_catalog:
         return None
-    cycle = personalized_curriculum_planner.family_investigation_cycle(
-        household_id, total_weeks=36, seed_catalog=seed_catalog,
-    )
     iso = plan_date.isocalendar()
-    cycle_index = (iso.week - 1) % len(cycle)
-    seed_id, title, track, description, canonical_topic = cycle[cycle_index]
+
+    seed_id = f"family-pin-{household_id}"
+    title = track = description = canonical_topic = None
+    try:
+        pin = await family_investigation_override_store.get(household_id, iso.year, iso.week)
+    except Exception as exc:
+        logger.warning("[LearningPlan] Family investigation override lookup failed (falling back to rotation): %s", exc)
+        pin = None
+    if pin:
+        canonical_topic = pin["canonical_topic"]
+        track = pin["track"]
+        title = personalized_curriculum_planner.TRACK_LABELS.get(track, canonical_topic)
+        description = canonical_topic
+    else:
+        cycle = personalized_curriculum_planner.family_investigation_cycle(
+            household_id, total_weeks=36, seed_catalog=seed_catalog,
+        )
+        cycle_index = (iso.week - 1) % len(cycle)
+        seed_id, title, track, description, canonical_topic = cycle[cycle_index]
     household_key = hashlib.sha256(household_id.encode("utf-8")).hexdigest()[:12]
     # Include the planning-contract revision so a corrected canonical/fit model
     # cannot reopen a durable learner record created by the retired planner.
@@ -1708,6 +1724,47 @@ async def _replenish_learning_plan_queue(student_id: str) -> None:
         logger.warning(f"[LearningPlan/Replenish] Background replenishment failed (non-fatal): {e}")
 
 
+class FamilyInvestigationOverrideRequest(BaseModel):
+    household_id: str
+    iso_year: int = Field(ge=2020, le=2100)
+    iso_week: int = Field(ge=1, le=53)
+    canonical_topic: str
+    track: Track
+
+
+class FamilyInvestigationOverrideResponse(BaseModel):
+    household_id: str
+    iso_year: int
+    iso_week: int
+    canonical_topic: str
+    track: Track
+
+
+@router.post("/family-investigation-override", response_model=FamilyInvestigationOverrideResponse)
+async def set_family_investigation_override(
+    body: FamilyInvestigationOverrideRequest,
+    _role: str = Depends(require_account_role(UserRole.PARENT, UserRole.ADMIN)),
+):
+    """Pin a specific canonical topic/track to one household's shared family
+    investigation for one specific real-calendar ISO year/week — overriding
+    the hash-and-calendar-week rotation that would otherwise decide it.
+
+    Known limitation: this only verifies the caller holds a parent or admin
+    account, not that they specifically own `household_id` — there is no
+    existing household-ownership check anywhere else in this codebase to
+    reuse (household_id is an internal rotation/cache key, not a modeled
+    tenant boundary). Fine for now since nothing in the product surfaces this
+    endpoint to end users yet; tighten if that changes.
+    """
+    await family_investigation_override_store.set(
+        body.household_id, body.iso_year, body.iso_week, body.canonical_topic, body.track.value,
+    )
+    return FamilyInvestigationOverrideResponse(
+        household_id=body.household_id, iso_year=body.iso_year, iso_week=body.iso_week,
+        canonical_topic=body.canonical_topic, track=body.track,
+    )
+
+
 @router.get("/{student_id}", response_model=LearningPlanResponse)
 async def get_learning_plan(
     student_id: str,
@@ -2001,7 +2058,7 @@ async def get_learning_plan(
             LessonSuggestion(**shared_family_data), progression_candidates, grade_level,
         )
     else:
-        family_investigation = _family_investigation_suggestion(
+        family_investigation = await _family_investigation_suggestion(
             family_context.household_id, plan_date, progression_candidates, grade_level,
             ready_family_catalog,
         )
