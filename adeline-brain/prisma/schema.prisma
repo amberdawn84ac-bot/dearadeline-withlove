@@ -302,43 +302,6 @@ model CanonicalLesson {
   generatedAt         DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   pendingApproval     Boolean       @default(false)
-  atomicUnits         AtomicUnit[]
-}
-
-/// An Atomic Learning Unit — the smallest teachable concept within a CanonicalLesson.
-/// Each ALU contains one learning objective and carries metadata that drives adaptive routing.
-/// A CanonicalLesson is a playlist of ordered ALUs; each ALU's blocks are its multimodal views.
-model AtomicUnit {
-  id                              String   @id @default(uuid())
-  /// Stable slug, e.g. "circular-orbital-velocity" — used as prerequisite reference key
-  unitSlug                        String   @unique
-  title                           String
-  lessonId                        String
-  lesson                          CanonicalLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  track                           Track
-  difficulty                      DifficultyLevel @default(DEVELOPING)
-  /// Ordered position within the parent lesson playlist (0-based)
-  order                           Int      @default(0)
-  /// Estimated cognitive load 0.0–10.0 (used by CognitiveLoadBudget to gate delivery)
-  estimatedCognitiveLoad          Float    @default(5.0)
-  /// Learning modalities this ALU targets, e.g. ["visual","kinesthetic"]
-  targetModalities                String[]
-  /// Slugs of AtomicUnits that must be mastered before this one is unlocked
-  prerequisiteUnitSlugs           String[] @default([])
-  /// Seconds of student inactivity/stalling that triggers a Temporal Friction pivot
-  temporalFrictionThresholdSecs   Int      @default(45)
-  /// Max incorrect attempts before scaffold is injected (0 = inject immediately on first wrong)
-  maxIncorrectBeforeScaffold      Int      @default(1)
-  /// Component type to stream as remediation (e.g. "FocusReset", "TaskScaffold")
-  scaffoldComponent               String   @default("FocusReset")
-  /// JSON props passed to the scaffold component
-  scaffoldProps                   Json     @default("{}")
-  createdAt                       DateTime @default(now())
-  updatedAt                       DateTime @updatedAt
-
-  @@index([lessonId])
-  @@index([track])
-  @@index([unitSlug])
 }
 
 model InviteCode {

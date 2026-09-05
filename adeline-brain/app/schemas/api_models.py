@@ -473,42 +473,6 @@ class ProjectStartResponse(BaseModel):
 # A CanonicalLesson is a playlist of ordered ALUs; each ALU's blocks are its
 # multimodal views (text, slides, audio dialogue, mind map, quiz, etc.).
 
-class ALUScaffoldConfig(BaseModel):
-    """Defines the remediation scaffold injected on overload or failure."""
-    component:  str  = "FocusReset"  # React component name
-    props:      dict = Field(default_factory=dict)
-
-
-class AtomicUnitMetadata(BaseModel):
-    """
-    ALU metadata broadcast to the frontend in alu_start SSE events.
-    Drives the client-side temporal friction timer and prerequisite chips.
-    """
-    unit_slug:                     str
-    title:                         str
-    track:                         str
-    difficulty:                    str                 = "DEVELOPING"
-    order:                         int                 = 0
-    estimated_cognitive_load:      float               = 5.0
-    target_modalities:             list[str]           = Field(default_factory=list)
-    prerequisite_unit_slugs:       list[str]           = Field(default_factory=list)
-    temporal_friction_threshold_secs: int              = 45
-    max_incorrect_before_scaffold: int                 = 1
-    scaffold:                      ALUScaffoldConfig   = Field(default_factory=ALUScaffoldConfig)
-
-
-class ALULessonPayload(BaseModel):
-    """
-    Wraps a lesson response with an ordered ALU playlist.
-    Streamed as the final 'done' SSE event so the frontend can hydrate
-    the ALUCard playlist from a single atomic source of truth.
-    """
-    lesson_id:   str
-    title:       str
-    track:       str
-    alu_playlist: list[AtomicUnitMetadata] = Field(default_factory=list)
-
-
 # ── Audio Dialogue models ────────────────────────────────────────────────────
 # Used by POST /lesson/dialogue and the AUDIO_DIALOGUE block type.
 
