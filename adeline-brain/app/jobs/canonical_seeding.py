@@ -253,6 +253,91 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
     CanonicalSeed("Map a Household Supply Chain from Raw Material to Waste", "APPLIED_MATHEMATICS", True),
     CanonicalSeed("Build a Community Price Index", "APPLIED_MATHEMATICS", True),
     CanonicalSeed("Create a Useful Product with a Real Customer", "CREATIVE_ECONOMY", True),
+    CanonicalSeed(
+        "Kitchen Chemistry: The Science of Sourdough",
+        "CREATION_SCIENCE",
+        True,
+        display_title="Kitchen Chemistry: Capturing Wild Yeast for Sourdough",
+        family_summary=(
+            "Capture and feed a wild sourdough starter, observe the wild yeast and lactic-acid bacteria "
+            "living in it, track its rise and sour flavor over days, and preserve a tested, working starter "
+            "and bread formula with evidence explaining why each step matters."
+        ),
+        authoring_brief=(
+            "MISSION FRAME: this is a multi-day living-culture investigation, not a single-session recipe. "
+            "DRIVING QUESTION: What wild organisms live in flour and air, how do they out-compete unwanted "
+            "microbes to leaven bread without commercial yeast, and how does a family read and steer that "
+            "living culture over time? "
+            "OPENING ENCOUNTER: mix a starting flour-and-water culture and observe it daily (smell, bubbles, "
+            "rise-and-fall timing, texture) before explaining the microbiology, so the family builds real "
+            "evidence before the vocabulary. "
+            "SHARED OUTCOME: a dated family starter log (a genuine multi-day lab notebook, not a worksheet), "
+            "a working starter maintained past this unit, and a tested loaf or family bread formula with an "
+            "evidence-backed explanation connecting the starter's behavior to wild yeast fermentation, lactic "
+            "acid production, gluten development, hydration ratio, and feeding schedule. "
+            "CROSS-TRACK INTEGRATION (fold in only where it genuinely fits each learner's level): Applied "
+            "Mathematics — baker's percentages, hydration ratio, feeding-schedule doubling/ratios for older "
+            "learners; younger learners contribute through counting, measuring, and comparing rise heights. "
+            "Homesteading — grain stewardship, why a starter is a durable, low-cost household food resource, "
+            "and how a maintained culture reduces dependence on store-bought leavening. Creative Economy — "
+            "what it would take to sell sourdough bread or starters at a real market, including realistic "
+            "pricing for ingredients and time. Health & Naturopathy — what fermentation does and does not "
+            "change about digestibility and nutrition; do not overstate unproven health claims about "
+            "fermented foods beyond what real sources support. "
+            "CORRECTNESS: wild sourdough fermentation and commercial-yeast bread are different processes; do "
+            "not conflate them or claim one is simply a slower version of the other."
+        ),
+        content_revision="kitchen-chemistry-sourdough-v1",
+    ),
+    CanonicalSeed(
+        "The Poison Squad: Formaldehyde Milk and the Fight for Food Safety",
+        "TRUTH_HISTORY",
+        True,
+        archive_query="Harvey Wiley Poison Squad Bureau of Chemistry formaldehyde milk Pure Food and Drug Act 1906",
+        display_title="The Poison Squad: Who Was Allowed to Poison Your Food?",
+        family_summary=(
+            "Open Harvey Wiley's Bureau of Chemistry records, the volunteer 'Poison Squad' experiments on food "
+            "preservatives, contemporary reporting on formaldehyde-preserved ('embalmed') milk sold to families, "
+            "and the text of the 1906 Pure Food and Drug Act; trace how documented harm, public reporting, and "
+            "political resistance from affected industries led to the first federal food-safety law, then "
+            "connect that history to a real question about food safety and regulation today."
+        ),
+        authoring_brief=(
+            "MISSION FRAME: preserve a primary-source historical-investigation energy, not a simple biography "
+            "of Wiley. DOCUMENTED STARTING POINT: in 1902 USDA chemist Harvey Washington Wiley recruited young "
+            "male volunteers (the press nicknamed them the 'Poison Squad') to eat meals dosed with common food "
+            "preservatives of the era — including borax, salicylic acid, sulfurous acid, benzoate of soda, and "
+            "formaldehyde (sold commercially as 'Preservaline' or 'Formalin') — to test their effects, at a time "
+            "when formaldehyde was being added to milk to mask spoilage and disguise unsanitary dairy conditions, "
+            "including milk sold to orphanages and hospitals. State these documented facts plainly and cite the "
+            "actual Bureau of Chemistry bulletins, Wiley's own writing, and contemporary newspaper coverage — do "
+            "not present this as informal legend; it is federally documented. "
+            "DRIVING QUESTION: through what evidence, public pressure, institutional resistance, and political "
+            "compromise did a federal food-safety law come into being, and who benefited from delay versus who "
+            "bore the cost of unsafe food in the meantime? "
+            "OPENING ENCOUNTER: compare a period preservative-product advertisement, a Bureau of Chemistry "
+            "finding, and a contemporary newspaper account of harm (e.g. infant illness tied to preserved milk) "
+            "before giving the explanatory summary, so the family reasons from primary evidence first. "
+            "SHARED OUTCOME: a sourced timeline/accountability map distinguishing what the Bureau's own "
+            "experiments established, what the press reported, what industry actors argued in response, and what "
+            "the 1906 Act actually changed; a calculation, timeline, source-comparison, or writing contribution "
+            "at each learner's actual progression level; and one connection to a real, current food-safety or "
+            "consumer-protection question the family can investigate locally. "
+            "CROSS-TRACK INTEGRATION (fold in only where it genuinely fits): Government & Economics — why "
+            "regulation of an industry is politically contested and who has incentive to resist it. Justice & "
+            "Changemaking — this is a foundational regulatory-capture-and-reform case; name the industry "
+            "resistance and the reformers' response directly. Applied Mathematics — dosage, timeframes, and any "
+            "real quantitative claims in the Bureau's own findings, used at a level the learner can actually "
+            "verify. English & Literature — Wiley's and contemporary journalists' own published writing as "
+            "primary source text. "
+            "CORRECTNESS: do not attribute a specific number of deaths to formaldehyde-preserved milk unless the "
+            "cited primary source itself states that figure; distinguish established Bureau findings from press "
+            "sensationalism of the period; do not present the Poison Squad experiments as unethical-by-modern-"
+            "standards without also stating that volunteers consented under the terms understood at the time — "
+            "let the record speak, do not import a predetermined verdict."
+        ),
+        content_revision="poison-squad-formaldehyde-milk-v1",
+    ),
 )
 
 
