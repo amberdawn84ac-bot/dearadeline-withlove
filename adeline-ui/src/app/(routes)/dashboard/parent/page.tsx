@@ -8,8 +8,10 @@ import {
   Search, Settings, Users,
 } from 'lucide-react';
 import {
-  addStudent, enqueueFamilyInvestigation, getFamilyDashboard, type FamilyDashboard, type StudentProgress,
+  addStudent, enqueueFamilyInvestigation, getFamilyDashboard, getSpacesInsights,
+  type FamilyDashboard, type SpaceInsight, type StudentProgress,
 } from '@/lib/parent-client';
+import { useStudentMonitor } from '@/hooks/useStudentMonitor';
 import { getLessonPortfolio, type LessonPortfolioItem } from '@/lib/brain-client';
 import { AddStudentDialog } from '@/components/parent/AddStudentDialog';
 import { ClaimStudentDialog } from '@/components/parent/ClaimStudentDialog';
@@ -200,6 +202,75 @@ function InvestigationQueueSection({ dashboard, onChange }: { dashboard: FamilyD
   );
 }
 
+function timeAgo(at: string | null): string {
+  if (!at) return '';
+  const diffMs = Date.now() - new Date(at).getTime();
+  const minutes = Math.round(diffMs / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return new Date(at).toLocaleDateString();
+}
+
+/** Silent per-student listener: opens the existing /ws/monitor/{studentId} channel
+ * and forwards space_insight events up, instead of the feed polling on a timer. */
+function StudentInsightBridge({ studentId, studentName, onInsight }: {
+  studentId: string; studentName: string; onInsight: (insight: SpaceInsight) => void;
+}) {
+  useStudentMonitor({
+    studentId,
+    onEvent: (event) => {
+      if (event.event !== 'space_insight') return;
+      onInsight({
+        kind: event.payload.kind, student_name: studentName, track: event.payload.track,
+        concept_names: event.payload.concept_names, context: event.payload.context,
+        at: new Date().toISOString(),
+      });
+    },
+  });
+  return null;
+}
+
+function SpacesInsightsFeed({ students }: { students: Array<{ id: string; name: string }> }) {
+  const [insights, setInsights] = useState<SpaceInsight[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSpacesInsights(20).then((items) => { if (!cancelled) setInsights(items); }).catch(() => undefined).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleLiveInsight = (insight: SpaceInsight) => setInsights((previous) => [insight, ...previous].slice(0, 30));
+
+  return (
+    <>
+      {students.map((student) => <StudentInsightBridge key={student.id} studentId={student.id} studentName={student.name} onInsight={handleLiveInsight} />)}
+    <section className="rounded-[26px] border border-[#D4C3A7] bg-[#FFFDF7] p-6">
+      <p className="text-xs font-black uppercase tracking-[.14em] text-[#5B314E]">From the Spaces</p>
+      <h2 className="mt-1 text-2xl font-bold" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>What&rsquo;s happening right now</h2>
+      <p className="mt-2 text-sm leading-6 text-[#2F4731]/62">Concepts demonstrated and questions explored across every child&rsquo;s Spaces, most recent first. Updates automatically.</p>
+      {loading ? <p className="mt-4 text-sm text-[#2F4731]/55">Gathering recent activity…</p> : (
+        insights.length ? <ul className="mt-4 space-y-3">
+          {insights.map((item, index) => <li key={index} className="flex items-start gap-3 border-b border-[#E7DAC3] pb-3 last:border-0">
+            <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${item.kind === 'credited' ? 'bg-[#2F6542]' : 'bg-[#BD6809]'}`} aria-hidden="true" />
+            <div>
+              <p className="text-sm font-semibold">
+                {item.student_name} {item.kind === 'credited'
+                  ? <>demonstrated {item.concept_names.length ? item.concept_names.join(', ') : 'understanding'}{item.context ? ` in ${item.context}` : ''}</>
+                  : <>explored {item.concept_names.join(', ')}{item.context ? ` — ${item.context}` : ''}</>}
+              </p>
+              <p className="mt-0.5 text-xs text-[#2F4731]/45">{item.track.replace(/_/g, ' ')} · {item.kind === 'credited' ? 'credited to the transcript' : 'not yet mastered'} · {timeAgo(item.at)}</p>
+            </div>
+          </li>)}
+        </ul> : <p className="mt-4 text-sm text-[#2F4731]/60">Nothing from the Spaces yet — activity will appear here as your family works through them.</p>
+      )}
+    </section>
+    </>
+  );
+}
+
 export default function ParentDashboardPage() {
   const [dashboard, setDashboard] = useState<FamilyDashboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -245,6 +316,7 @@ export default function ParentDashboardPage() {
           <section className="overflow-hidden rounded-[30px] border border-[#C6B796] bg-[#FFFDF7] shadow-[0_18px_55px_rgba(62,50,33,.08)]"><div className="grid lg:grid-cols-[1.35fr_.65fr]"><div className="p-6 sm:p-9"><p className="flex items-center gap-2 text-xs font-black uppercase tracking-[.18em] text-[#9A3F4A]"><Search className="h-4 w-4" /> Family investigation</p>{investigation ? <><h2 className="mt-4 max-w-3xl text-3xl font-bold leading-tight sm:text-4xl" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>{investigation.title}</h2><p className="mt-4 max-w-3xl text-base leading-7 text-[#2F4731]/72">{investigation.description}</p><div className="mt-6 grid gap-3 sm:grid-cols-2"><div className="rounded-2xl bg-[#F3E8D5] p-4"><p className="text-[10px] font-black uppercase tracking-[.15em] text-[#9A3F4A]">Where the family is</p><p className="mt-2 text-sm font-semibold">Following the evidence and deciding what matters next—not racing a weekly deadline.</p></div><div className="rounded-2xl bg-[#E7EFE5] p-4"><p className="text-[10px] font-black uppercase tracking-[.15em] text-[#2F6542]">Suggested next move</p><p className="mt-2 text-sm font-semibold">{investigation.next_action || investigation.success_criteria?.[0] || 'Compare what everyone noticed and choose the next useful question together.'}</p></div></div></> : <><h2 className="mt-4 text-3xl font-bold" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>The next shared question is still emerging</h2><p className="mt-3 max-w-2xl text-sm leading-6 text-[#2F4731]/65">It may narrow, widen, branch, pause, or continue as long as the evidence calls for.</p></>}</div><aside className="border-t border-[#DCCFB9] bg-[#5B314E] p-6 text-white sm:p-8 lg:border-l lg:border-t-0"><p className="text-xs font-black uppercase tracking-[.18em] text-[#F0BE62]">Recent discoveries</p><div className="mt-5 space-y-4">{dashboard.recent_activity.slice(0, 4).map((activity) => <div key={`${activity.student_id}-${activity.lesson_id}-${activity.completed_at}`} className="border-b border-white/15 pb-4 last:border-0"><p className="font-bold">{activity.student_name}</p><p className="mt-1 text-sm leading-5 text-white/70">Added evidence: {activity.title}</p></div>)}{dashboard.recent_activity.length === 0 && <p className="text-sm leading-6 text-white/65">The family&rsquo;s first discoveries will appear here as learners add evidence and reflections.</p>}</div><p className="mt-6 text-xs leading-5 text-white/55">Investigations continue until the family finishes, changes direction, or finds a better question.</p></aside></div></section>
 
           <InvestigationQueueSection dashboard={dashboard} onChange={() => void fetchData()} />
+          <SpacesInsightsFeed students={dashboard.students.map((student) => ({ id: student.student_id, name: student.student_name }))} />
 
           <section><div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">Each child&rsquo;s learning</p><h2 className="mt-1 text-3xl font-bold" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>One family, distinct learners</h2><p className="mt-2 text-sm text-[#2F4731]/62">No impersonating children. Choose one only when you want details.</p></div><div className="flex gap-2"><button onClick={() => setShowClaimStudent(true)} className="inline-flex items-center gap-2 rounded-xl border border-[#CFC1A8] bg-white px-4 py-2.5 text-xs font-bold"><Link2 className="h-4 w-4" /> Connect learner</button><button onClick={() => setShowAddStudent(true)} className="inline-flex items-center gap-2 rounded-xl bg-[#BD6809] px-4 py-2.5 text-xs font-bold text-white"><Plus className="h-4 w-4" /> Create learner</button></div></div><div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">{dashboard.students.map((student) => <ChildCard key={student.student_id} student={student} onSelect={() => setSelectedStudentId(student.student_id)} />)}</div></section>
 

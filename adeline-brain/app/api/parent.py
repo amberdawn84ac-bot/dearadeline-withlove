@@ -108,6 +108,24 @@ class FamilyDashboard(BaseModel):
     upcoming_family_investigations: List[dict] = []
 
 
+class SpaceInsight(BaseModel):
+    """One entry in the Spaces insights feed — either a demonstrated concept
+    (real mastery credit) or one merely encountered (a real question/answer
+    that didn't reach the correctness bar). These are never conflated: an
+    "encountered" entry never implies mastery."""
+    kind: Literal["credited", "encountered"]
+    student_name: str
+    track: str
+    concept_names: List[str]
+    context: Optional[str] = None
+    at: Optional[str] = None
+
+
+class SpaceInsightsResponse(BaseModel):
+    parent_id: str
+    insights: List[SpaceInsight]
+
+
 class ParentConversationTurn(BaseModel):
     role: Literal["parent", "adeline"]
     content: str = Field(min_length=1, max_length=4000)
@@ -467,6 +485,74 @@ async def get_family_dashboard(
             family_investigations=family_investigations,
             upcoming_family_investigations=upcoming_family_investigations,
         )
+
+
+@router.get("/spaces-insights", response_model=SpaceInsightsResponse)
+async def get_spaces_insights(
+    limit: int = 20,
+    authorization: Optional[str] = Header(default=None),
+):
+    """Recent Spaces activity across every child — concepts demonstrated
+    (real mastery credit) and concepts merely encountered (a real exchange
+    that didn't reach the correctness bar), most recent first.
+
+    Sourced from student_journal (credited concepts, written by
+    mastery_credit.py with evidence_sources tagged space_conversation_
+    transcript/rabbit_hole_conversation) and ConceptEncounter (encountered
+    concepts) — never mixed together in a way that implies exposure is
+    mastery.
+    """
+    parent_id = get_current_user_id(authorization=authorization)
+    async with _get_conn() as conn:
+        parent_row = await conn.fetchrow('SELECT role FROM "User" WHERE id = $1', parent_id)
+        if not parent_row or parent_row["role"] != "PARENT":
+            raise HTTPException(status_code=403, detail="Parent role required")
+
+        credited_rows = await conn.fetch(
+            '''SELECT j.track, j.sources_json, j.sealed_at, u.name AS student_name
+               FROM student_journal j
+               JOIN "User" u ON u.id = j.student_id
+               WHERE u."parentId" = $1
+               ORDER BY j.sealed_at DESC LIMIT $2''',
+            parent_id, limit * 2,  # over-fetch; not every journal row is Space-sourced
+        )
+        encountered_rows = await conn.fetch(
+            '''SELECT c.track, c."conceptName", c."encounteredAt", u.name AS student_name
+               FROM "ConceptEncounter" c
+               JOIN "User" u ON u.id = c."studentId"
+               WHERE u."parentId" = $1
+               ORDER BY c."encounteredAt" DESC LIMIT $2''',
+            parent_id, limit,
+        )
+
+    insights: list[SpaceInsight] = []
+    for row in credited_rows:
+        try:
+            sources = json.loads(row["sources_json"] or "[]")
+        except (TypeError, json.JSONDecodeError):
+            sources = []
+        for source in sources:
+            if source.get("type") == "space_conversation_transcript":
+                insights.append(SpaceInsight(
+                    kind="credited", student_name=row["student_name"], track=row["track"],
+                    concept_names=source.get("concepts") or [], context=source.get("lesson_title") or None,
+                    at=row["sealed_at"].isoformat() if row["sealed_at"] else None,
+                ))
+            elif source.get("type") == "rabbit_hole_conversation" and source.get("concept"):
+                insights.append(SpaceInsight(
+                    kind="credited", student_name=row["student_name"], track=row["track"],
+                    concept_names=[source["concept"]], context="a rabbit hole in a Space",
+                    at=row["sealed_at"].isoformat() if row["sealed_at"] else None,
+                ))
+    for row in encountered_rows:
+        insights.append(SpaceInsight(
+            kind="encountered", student_name=row["student_name"], track=row["track"],
+            concept_names=[row["conceptName"]], context="a rabbit hole in a Space",
+            at=row["encounteredAt"].isoformat() if row["encounteredAt"] else None,
+        ))
+
+    insights.sort(key=lambda item: item.at or "", reverse=True)
+    return SpaceInsightsResponse(parent_id=parent_id, insights=insights[:limit])
 
 
 @router.post("/adeline", response_model=ParentAdelineResponse)

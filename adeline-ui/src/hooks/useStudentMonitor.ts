@@ -42,12 +42,20 @@ export interface ZPDShiftEvent {
   consecutive_struggles?: number;
 }
 
+export interface SpaceInsightEvent {
+  kind: "credited" | "encountered";
+  track: string;
+  concept_names: string[];
+  context: string | null;
+}
+
 export type MonitorEvent =
   | { event: "twin_snapshot"; payload: CognitiveTwinSnapshot }
   | { event: "cognitive_update"; payload: CognitiveTwinSnapshot }
   | { event: "block_generated"; payload: BlockGeneratedEvent }
   | { event: "safety_flag"; payload: SafetyFlagEvent }
   | { event: "zpd_shift"; payload: ZPDShiftEvent }
+  | { event: "space_insight"; payload: SpaceInsightEvent }
   | { event: "agent_thinking"; payload: { student_id: string; message: string; track: string } }
   | { event: "session_start"; payload: { session_id: string; student_id: string } }
   | { event: "session_end"; payload: { session_id: string; student_id: string } }

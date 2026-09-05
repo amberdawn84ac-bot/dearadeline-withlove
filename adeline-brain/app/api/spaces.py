@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from app.api.middleware import require_internal_key, verify_student_access
+from app.api.realtime import connection_manager
 from app.config import get_db_conn
 from app.connections.concept_encounter_store import concept_encounter_store
 from app.services.mastery_credit import ConceptCredit, record_mastery_credit
@@ -240,6 +241,7 @@ async def _credit_newly_completed_lesson(
                 "type": "space_conversation_transcript",
                 "lesson_id": lesson_id,
                 "lesson_title": lesson.get("title") or "",
+                "concepts": [credit.concept_name for credit in concept_credits if credit.concept_name],
                 "evaluations": evaluations,
             }],
             plan_item_id=plan_item_id,
@@ -258,7 +260,12 @@ async def _credit_newly_completed_lesson(
         finally:
             await conn.close()
 
-        return [credit.concept_name for credit in concept_credits if credit.concept_name]
+        credited_names = [credit.concept_name for credit in concept_credits if credit.concept_name]
+        await connection_manager.emit_to_student_channels(student_id, "space_insight", {
+            "kind": "credited", "track": track, "concept_names": credited_names,
+            "context": lesson.get("title") or None,
+        })
+        return credited_names
     except Exception:
         logger.exception(
             "[Spaces] Lesson-boundary mastery credit failed student=%s plan_item=%s lesson=%s "
@@ -288,6 +295,10 @@ async def _credit_off_plan_topic(
     try:
         if topic.tier == "encountered":
             await concept_encounter_store.record(student_id, topic.concept_name, track, session_id)
+            await connection_manager.emit_to_student_channels(student_id, "space_insight", {
+                "kind": "encountered", "track": track, "concept_names": [topic.concept_name],
+                "context": "a rabbit hole in a Space",
+            })
             return None
 
         standards = await _topic_oas_standards(track, fallback_grade, topic.concept_name)
@@ -308,6 +319,10 @@ async def _credit_off_plan_topic(
                 concept_id=f"rabbit-hole:{slug}", concept_name=topic.concept_name, quality=4,
             )],
         )
+        await connection_manager.emit_to_student_channels(student_id, "space_insight", {
+            "kind": "credited", "track": track, "concept_names": [topic.concept_name],
+            "context": "a rabbit hole in a Space",
+        })
         return topic.concept_name
     except Exception:
         logger.exception(

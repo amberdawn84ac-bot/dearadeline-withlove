@@ -30,3 +30,55 @@ async def test_portfolio_decodes_saved_reflection_and_artifact():
     assert response.items[0].artifact_description == "Letter and annotated evidence"
     assert response.items[0].artifact_refs == ["portfolio://investigation/lesson-1"]
     connection.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_spaces_insights_merges_credited_and_encountered_sorted_by_recency():
+    from app.api.parent import get_spaces_insights
+
+    connection = AsyncMock()
+    connection.fetchrow.return_value = {"role": "PARENT"}
+    connection.fetch.side_effect = [
+        [
+            {
+                "track": "CREATION_SCIENCE",
+                "sources_json": (
+                    '[{"type":"space_conversation_transcript","lesson_title":"Feeding the starter",'
+                    '"concepts":["Wild yeast capture"]}]'
+                ),
+                "sealed_at": datetime(2026, 9, 5, 10, 0, tzinfo=timezone.utc),
+                "student_name": "Ellie",
+            },
+            {
+                "track": "TRUTH_HISTORY",
+                "sources_json": '[{"type":"rabbit_hole_conversation","concept":"Regulatory capture"}]',
+                "sealed_at": datetime(2026, 9, 5, 12, 0, tzinfo=timezone.utc),
+                "student_name": "Jack",
+            },
+        ],
+        [
+            {
+                "track": "CREATION_SCIENCE",
+                "conceptName": "Osmosis",
+                "encounteredAt": datetime(2026, 9, 5, 11, 0, tzinfo=timezone.utc),
+                "student_name": "Ellie",
+            },
+        ],
+    ]
+
+    with (
+        patch("app.config.get_db_conn", new=AsyncMock(return_value=connection)),
+        patch("app.api.parent.get_current_user_id", return_value="parent-1"),
+    ):
+        response = await get_spaces_insights(limit=20, authorization="Bearer token")
+
+    assert [item.at for item in response.insights] == sorted((item.at for item in response.insights), reverse=True)
+    kinds = {(item.kind, item.student_name) for item in response.insights}
+    assert ("credited", "Jack") in kinds
+    assert ("credited", "Ellie") in kinds
+    assert ("encountered", "Ellie") in kinds
+    credited_ellie = next(item for item in response.insights if item.kind == "credited" and item.student_name == "Ellie")
+    assert credited_ellie.concept_names == ["Wild yeast capture"]
+    assert credited_ellie.context == "Feeding the starter"
+    encountered = next(item for item in response.insights if item.kind == "encountered")
+    assert encountered.concept_names == ["Osmosis"]

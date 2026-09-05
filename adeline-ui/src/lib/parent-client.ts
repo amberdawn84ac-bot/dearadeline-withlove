@@ -176,6 +176,26 @@ export async function getFamilyDashboard(): Promise<FamilyDashboard> {
   return res.json();
 }
 
+export interface SpaceInsight {
+  kind: 'credited' | 'encountered';
+  student_name: string;
+  track: string;
+  concept_names: string[];
+  context: string | null;
+  at: string | null;
+}
+
+export async function getSpacesInsights(limit = 20): Promise<SpaceInsight[]> {
+  const res = await fetch(`${BRAIN_URL}/api/parent/spaces-insights?limit=${limit}`, {
+    headers: await getAuthHeaders(),
+    credentials: 'include',
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`getSpacesInsights failed: ${res.status}`);
+  const data = await res.json();
+  return data.insights as SpaceInsight[];
+}
+
 export async function enqueueFamilyInvestigation(
   householdId: string, slot: 'science' | 'history', canonicalTopic: string, track: string,
 ): Promise<void> {
