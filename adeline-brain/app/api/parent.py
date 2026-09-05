@@ -99,6 +99,13 @@ class FamilyDashboard(BaseModel):
     family_total_credits: float
     recent_activity: List[dict]
     family_investigation: Optional[dict] = None
+    # The real pace-driven science/history slots (see learning_plan.py
+    # FAMILY_INVESTIGATION_SLOTS) — every household member's saved plan
+    # carries the same values, so the first non-empty one found is used.
+    # family_investigation above is a separate, older heuristic (most
+    # commonly shared suggestion across students) kept for back-compat.
+    family_investigations: List[dict] = []
+    upcoming_family_investigations: List[dict] = []
 
 
 class ParentConversationTurn(BaseModel):
@@ -442,6 +449,14 @@ async def get_family_dashboard(
                 "participants": [names_by_id[item] for item in dict.fromkeys(selected["student_ids"]) if item in names_by_id],
             }
 
+        family_investigations: list[dict] = []
+        upcoming_family_investigations: list[dict] = []
+        for plan in plans.values():
+            if plan.get("family_investigations"):
+                family_investigations = plan["family_investigations"]
+                upcoming_family_investigations = plan.get("upcoming_family_investigations") or []
+                break
+
         return FamilyDashboard(
             parent_id=parent_id,
             total_students=len(students_rows),
@@ -449,6 +464,8 @@ async def get_family_dashboard(
             family_total_credits=round(family_total_credits, 2),
             recent_activity=recent_activity,
             family_investigation=family_investigation,
+            family_investigations=family_investigations,
+            upcoming_family_investigations=upcoming_family_investigations,
         )
 
 

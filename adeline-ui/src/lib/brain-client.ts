@@ -1337,6 +1337,7 @@ export interface LessonSuggestion {
   canonical_slug?: string;
   canonical_topic?: string;
   mission_kind: string;
+  slot?: string | null;
   success_criteria: string[];
   portfolio_prompt?: string;
   next_action?: string;

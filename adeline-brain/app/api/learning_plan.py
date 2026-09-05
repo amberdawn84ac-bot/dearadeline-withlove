@@ -123,6 +123,9 @@ class LessonSuggestion(BaseModel):
     canonical_slug: Optional[str] = None
     canonical_topic: Optional[str] = None
     mission_kind: str = "learning_mission"
+    # Which family-investigation slot ("science" | "history") this came from —
+    # only set for delivery_mode="FAMILY_INVESTIGATION" suggestions.
+    slot: Optional[str] = None
     success_criteria: list[str] = Field(default_factory=list)
     portfolio_prompt: Optional[str] = None
     next_action: Optional[str] = None
@@ -959,6 +962,7 @@ async def _family_investigation_suggestion_for_slot(
                 canonical_slug=shared_id,
                 canonical_topic=canonical_topic,
                 mission_kind="family_investigation",
+                slot=slot,
                 success_criteria=[
                     "Work from real observations, records, sources, measurements, or results.",
                     "Let each learner make one meaningful contribution without dividing the family into separate lessons.",

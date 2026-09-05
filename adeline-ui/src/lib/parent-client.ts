@@ -107,6 +107,10 @@ export interface FamilyDashboard {
     success_criteria?: string[];
     participants: string[];
   } & Record<string, unknown>) | null;
+  // The real pace-driven science/history slots. family_investigation above is
+  // a separate, older heuristic kept for back-compat.
+  family_investigations: Array<{ id: string; title: string; track: string; canonical_topic: string; slot: string | null }>;
+  upcoming_family_investigations: Array<{ slot: string; canonical_topic: string; track: string; position: number }>;
 }
 
 export interface ParentAdelineTurn {
@@ -170,6 +174,20 @@ export async function getFamilyDashboard(): Promise<FamilyDashboard> {
   });
   if (!res.ok) throw new Error(`getFamilyDashboard failed: ${res.status}`);
   return res.json();
+}
+
+export async function enqueueFamilyInvestigation(
+  householdId: string, slot: 'science' | 'history', canonicalTopic: string, track: string,
+): Promise<void> {
+  const res = await fetch(`${BRAIN_URL}/learning-plan/family-investigation-queue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+    credentials: 'include',
+    body: JSON.stringify({
+      household_id: householdId, slot, canonical_topic: canonicalTopic, track,
+    }),
+  });
+  if (!res.ok) throw new Error(`Could not add that investigation to the queue (${res.status})`);
 }
 
 export async function askParentAdeline(
