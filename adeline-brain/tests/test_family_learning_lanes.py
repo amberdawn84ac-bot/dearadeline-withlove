@@ -1,4 +1,3 @@
-from datetime import date
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -8,20 +7,25 @@ from app.api.learning_plan import (
     GradeLevelStandard,
     LessonSuggestion,
     _family_investigation_for_learner,
-    _family_investigation_suggestion,
+    _family_investigation_suggestion_for_slot,
     _individual_skill_targets,
     _learner_progression_targets,
     _progression_map_status,
     _standard_suggestion,
 )
 
-# These tests exercise the no-override fallback path only (the existing
-# algorithmic rotation); the override lookup itself is covered separately in
-# test_family_investigation_override.py.
-_no_override = patch(
-    "app.api.learning_plan.family_investigation_override_store.get",
-    new=AsyncMock(return_value=None),
-)
+# These tests exercise the "current queue item is not yet completed" path
+# only; queue advancement itself is covered in test_family_investigation_queue.py.
+_current_item = {"id": "queue-row-1", "position": 0,
+                  "canonical_topic": "Railroads and Power", "track": "TRUTH_HISTORY"}
+
+
+def _mocked_slot(current_item=None):
+    return (
+        patch("app.api.learning_plan.family_investigation_queue_store.get_current",
+              new=AsyncMock(return_value=current_item or _current_item)),
+        patch("app.api.learning_plan._shared_investigation_completed", new=AsyncMock(return_value=False)),
+    )
 
 
 def suggestion(**updates) -> LessonSuggestion:
@@ -183,28 +187,26 @@ def test_first_unfinished_sequential_target_is_ready():
 
 @pytest.mark.asyncio
 async def test_siblings_share_the_investigation_but_keep_distinct_skill_targets():
-    catalog = (("saved-canonical", "Railroads and Power", "TRUTH_HISTORY", "Compare the records."),)
-    plan_date = date(2026, 8, 26)
-    with _no_override:
-        younger = await _family_investigation_suggestion(
+    patch_get_current, patch_completed = _mocked_slot()
+    with patch_get_current, patch_completed:
+        younger = await _family_investigation_suggestion_for_slot(
             "household-1",
-            plan_date,
+            "history",
             [suggestion(title="Count equal groups", concept_id="equal-groups")],
             "3",
-            catalog,
         )
-        older = await _family_investigation_suggestion(
+        older = await _family_investigation_suggestion_for_slot(
             "household-1",
-            plan_date,
+            "history",
             [suggestion(title="Compare rates of change", concept_id="rates")],
             "9",
-            catalog,
         )
 
     assert younger is not None and older is not None
     assert younger.id == older.id
-    assert younger.canonical_slug == older.canonical_slug == "saved-canonical"
-    assert younger.title == older.title == "Railroads and Power"
+    assert younger.canonical_slug == older.canonical_slug
+    assert younger.title == older.title == "Truth-based history"
+    assert younger.canonical_topic == older.canonical_topic == "Railroads and Power"
     assert younger.individual_skill_targets[0].title == "Count equal groups"
     assert older.individual_skill_targets[0].title == "Compare rates of change"
     assert younger.learner_progression_targets[0].concept_id == "equal-groups"
@@ -215,10 +217,12 @@ async def test_siblings_share_the_investigation_but_keep_distinct_skill_targets(
 
 @pytest.mark.asyncio
 async def test_durable_household_choice_replaces_private_skill_attachments():
-    catalog = (("saved-canonical", "Bread Chemistry", "CREATION_SCIENCE", "Test fermentation."),)
-    with _no_override:
-        shared = await _family_investigation_suggestion(
-            "household-1", date(2026, 8, 26), [suggestion(title="Count batches")], "3", catalog,
+    bread_item = {"id": "queue-row-2", "position": 0,
+                  "canonical_topic": "Bread Chemistry", "track": "CREATION_SCIENCE"}
+    patch_get_current, patch_completed = _mocked_slot(bread_item)
+    with patch_get_current, patch_completed:
+        shared = await _family_investigation_suggestion_for_slot(
+            "household-1", "science", [suggestion(title="Count batches")], "3",
         )
     assert shared is not None
 
@@ -236,9 +240,11 @@ async def test_durable_household_choice_replaces_private_skill_attachments():
 
 @pytest.mark.asyncio
 async def test_family_card_is_withheld_when_no_pregenerated_lesson_is_ready():
-    assert await _family_investigation_suggestion(
-        "household-1", date(2026, 8, 26), [suggestion()], "7", (),
-    ) is None
+    with patch("app.api.learning_plan.family_investigation_queue_store.get_current",
+               new=AsyncMock(return_value=None)):
+        assert await _family_investigation_suggestion_for_slot(
+            "household-1", "science", [suggestion()], "7",
+        ) is None
 
 
 def test_only_authored_interdisciplinary_connections_are_woven_into_theme():

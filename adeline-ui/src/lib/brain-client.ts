@@ -1423,6 +1423,7 @@ export interface LearningPlanResponse {
   student_id: string;
   suggestions: LessonSuggestion[];
   family_investigation?: LessonSuggestion;
+  family_investigations?: LessonSuggestion[];
   individual_skills: LessonSuggestion[];
   progression_checklist?: IndividualSkillTarget[];
   progression_map_status: ProgressionMapStatus;

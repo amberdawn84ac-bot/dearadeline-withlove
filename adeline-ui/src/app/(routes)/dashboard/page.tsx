@@ -9,7 +9,7 @@ import styles from '@/components/nav/sites-dashboard.module.css';
 
 export default function TodayPage() {
   const { student, loading: studentLoading } = useStudent();
-  const [today, setToday] = useState<LessonSuggestion | null>(null);
+  const [todayInvestigations, setTodayInvestigations] = useState<LessonSuggestion[]>([]);
   const [weekTheme, setWeekTheme] = useState('');
   const [sharedWithSiblings, setSharedWithSiblings] = useState(false);
   const [comingUp, setComingUp] = useState<LessonSuggestion[]>([]);
@@ -22,12 +22,16 @@ export default function TodayPage() {
 
   const applyPlan = useCallback((plan: LearningPlanResponse) => {
     const lineup = plan.suggestions;
-    const family = plan.family_investigation ?? lineup.find((item) => item.delivery_mode === 'FAMILY_INVESTIGATION') ?? null;
+    const families = plan.family_investigations?.length
+      ? plan.family_investigations
+      : plan.family_investigation
+        ? [plan.family_investigation]
+        : lineup.filter((item) => item.delivery_mode === 'FAMILY_INVESTIGATION');
     const skills = plan.individual_skills?.length
       ? plan.individual_skills
       : lineup.filter((item) => item.delivery_mode === 'INDIVIDUAL_SKILL');
-    setToday(family);
-    setWeekTheme(family?.title ?? 'Family investigation');
+    setTodayInvestigations(families);
+    setWeekTheme(families.map((item) => item.title).join(' + ') || 'Family investigations');
     setSharedWithSiblings(plan.family_context.shared_with_siblings);
     setComingUp(skills.slice(0, 4));
     setIsNextSchoolDay(false);
@@ -75,13 +79,13 @@ export default function TodayPage() {
       <section className={styles.kanban} aria-label="Today's learning board">
         <div className={`${styles.kanbanColumn} ${styles.kanbanToday}`}>
           <header><span>1</span><div><small>Right now</small><h2>Today</h2></div></header>
-          {today ? <article className={styles.kanbanCard}>
-            <small>{today.track.replace(/_/g, ' ')}</small>
-            <h3>{today.emoji} {today.title}</h3>
-            <p>{today.description}</p>
-            <small>{today.sequence_policy === 'HARD' ? 'Prerequisites demonstrated' : today.bridge_required ? 'Foundation bridge included' : 'Open exploration'}</small>
-            <Link href={`/dashboard/spaces/${encodeURIComponent(today.id)}`}>Open unit Space →</Link>
-          </article> : <EmptyCard text="The next plan is being arranged." />}
+          {todayInvestigations.length ? todayInvestigations.map((investigation) => <article key={investigation.id} className={styles.kanbanCard}>
+            <small>{investigation.track.replace(/_/g, ' ')}</small>
+            <h3>{investigation.emoji} {investigation.title}</h3>
+            <p>{investigation.description}</p>
+            <small>{investigation.sequence_policy === 'HARD' ? 'Prerequisites demonstrated' : investigation.bridge_required ? 'Foundation bridge included' : 'Open exploration'}</small>
+            <Link href={`/dashboard/spaces/${encodeURIComponent(investigation.id)}`}>Open unit Space →</Link>
+          </article>) : <EmptyCard text="The next plan is being arranged." />}
         </div>
 
         <div className={styles.kanbanColumn}>

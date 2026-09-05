@@ -246,17 +246,25 @@ model SpaceSession {
 /// hash-and-calendar-week rotation in PersonalizedCurriculumPlannerAgent
 /// .family_investigation_cycle() for that household+week; absent, that
 /// algorithm is completely unchanged.
-model FamilyInvestigationOverride {
-  id             String   @id @default(uuid())
+/// A per-household, per-slot ("science" | "history") ordered queue for the
+/// shared family investigation. The current item in a slot is the
+/// lowest-position row with completedAt still null; it stays current until
+/// its Space's activities are actually finished, however long that takes —
+/// no calendar binding anywhere. Replaces FamilyInvestigationOverride, which
+/// pinned topics to real-calendar ISO weeks and didn't fit this pace-driven,
+/// two-concurrent-slots model.
+model FamilyInvestigationQueue {
+  id             String    @id @default(uuid())
   householdId    String
-  isoYear        Int
-  isoWeek        Int
+  slot           String
+  position       Int
   canonicalTopic String
   track          String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
 
-  @@unique([householdId, isoYear, isoWeek])
+  @@unique([householdId, slot, position])
+  @@index([householdId, slot, completedAt])
 }
 
 model DailyPlan {

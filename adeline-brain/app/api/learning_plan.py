@@ -38,7 +38,7 @@ from app.connections.journal_store import journal_store
 from app.connections.curriculum_graph import curriculum_graph
 from app.connections.redis_client import redis_client
 from app.connections.daily_plan_store import daily_plan_store
-from app.connections.family_investigation_override_store import family_investigation_override_store
+from app.connections.family_investigation_queue_store import family_investigation_queue_store
 from app.services.rate_limit import enforce_rate_limit
 from app.tools.graph_query import tool_get_zpd_candidates, ZPDCandidate
 from app.agents.curriculum_planner import personalized_curriculum_planner
@@ -323,6 +323,10 @@ class LearningPlanResponse(BaseModel):
     student_id: str
     suggestions: list[LessonSuggestion]
     family_investigation: Optional[LessonSuggestion] = None
+    # Up to two concurrent, pace-driven investigations (science + history
+    # slots) — replaces the single calendar-bound family_investigation above,
+    # which is kept set to the first of these for back-compat only.
+    family_investigations: list[LessonSuggestion] = Field(default_factory=list)
     individual_skills: list[LessonSuggestion] = Field(default_factory=list)
     progression_checklist: list[IndividualSkillTarget] = Field(default_factory=list)
     progression_map_status: ProgressionMapStatus
@@ -881,70 +885,102 @@ def _individual_skill_targets(
     ]
 
 
-async def _family_investigation_suggestion(
+FAMILY_INVESTIGATION_SLOTS = ("science", "history")
+
+
+async def _shared_investigation_completed(shared_id: str) -> bool:
+    """Household-level completion signal: any SpaceSession for this shared
+    investigation id reaching 'completed' finishes it for the whole
+    household, matching the existing 'first sibling's choice' simplification
+    daily_plan_store.get_household_family_investigation already uses."""
+    from app.config import get_db_conn
+    conn = await get_db_conn()
+    try:
+        row = await conn.fetchval(
+            'SELECT 1 FROM "SpaceSession" WHERE "planItemId"=$1 AND status=\'completed\' LIMIT 1',
+            shared_id,
+        )
+        return bool(row)
+    finally:
+        await conn.close()
+
+
+async def _family_investigation_suggestion_for_slot(
     household_id: str,
-    plan_date: date,
+    slot: str,
     skill_suggestions: list[LessonSuggestion],
     working_grade: str,
-    seed_catalog: tuple[tuple, ...],
 ) -> LessonSuggestion | None:
-    """Choose one stable household experience and attach learner-specific supports."""
+    """This slot's current queue item, advancing past anything already finished.
+
+    Pace-driven, not calendar-bound: an item stays current until its Space's
+    activities are actually completed, however long that takes.
+    """
     import hashlib
-
-    if not seed_catalog:
-        return None
-    iso = plan_date.isocalendar()
-
-    seed_id = f"family-pin-{household_id}"
-    title = track = description = canonical_topic = None
-    try:
-        pin = await family_investigation_override_store.get(household_id, iso.year, iso.week)
-    except Exception as exc:
-        logger.warning("[LearningPlan] Family investigation override lookup failed (falling back to rotation): %s", exc)
-        pin = None
-    if pin:
-        canonical_topic = pin["canonical_topic"]
-        track = pin["track"]
-        title = personalized_curriculum_planner.TRACK_LABELS.get(track, canonical_topic)
-        description = canonical_topic
-    else:
-        cycle = personalized_curriculum_planner.family_investigation_cycle(
-            household_id, total_weeks=36, seed_catalog=seed_catalog,
-        )
-        cycle_index = (iso.week - 1) % len(cycle)
-        seed_id, title, track, description, canonical_topic = cycle[cycle_index]
     household_key = hashlib.sha256(household_id.encode("utf-8")).hexdigest()[:12]
-    # Include the planning-contract revision so a corrected canonical/fit model
-    # cannot reopen a durable learner record created by the retired planner.
-    shared_id = f"family-{household_key}-{iso.year}-w{iso.week:02d}-v9"
-    sequence = build_sequence_contract(source="family")
-    return LessonSuggestion(
-        id=shared_id,
-        title=title,
-        track=track,
-        description=description,
-        emoji=TRACK_EMOJI.get(track, "✦"),
-        priority=1.0,
-        source="family",
-        agent=TRACK_AGENT_MAP.get(track),
-        canonical_ready=True,
-        canonical_slug=seed_id.rsplit("-week-", 1)[0],
-        canonical_topic=canonical_topic,
-        mission_kind="family_investigation",
-        success_criteria=[
-            "Work from real observations, records, sources, measurements, or results.",
-            "Let each learner make one meaningful contribution without dividing the family into separate lessons.",
-        ],
-        personalization_reason="The household shares the investigation; this learner's math and literacy supports remain level-specific.",
-        sequence_policy=sequence.policy.value,
-        sequence_state=sequence.state.value,
-        bridge_required=sequence.bridge_required,
-        sequence_rationale=sequence.rationale,
-        delivery_mode="FAMILY_INVESTIGATION",
-        shared_investigation_id=shared_id,
-        individual_skill_targets=_individual_skill_targets(skill_suggestions, working_grade),
-        learner_progression_targets=_learner_progression_targets(skill_suggestions, working_grade),
-    )
+
+    for _ in range(25):  # defensive bound; a real queue is never this deep in one read
+        current = await family_investigation_queue_store.get_current(household_id, slot)
+        if not current:
+            return None
+        shared_id = f"family-{household_key}-{slot}-{current['position']}"
+        try:
+            completed = await _shared_investigation_completed(shared_id)
+        except Exception as exc:
+            logger.warning(
+                "[LearningPlan] Family investigation completion check failed "
+                "(leaving current item active): %s", exc,
+            )
+            completed = False
+        if not completed:
+            track = current["track"]
+            canonical_topic = current["canonical_topic"]
+            sequence = build_sequence_contract(source="family")
+            return LessonSuggestion(
+                id=shared_id,
+                title=personalized_curriculum_planner.TRACK_LABELS.get(track, canonical_topic),
+                track=track,
+                description=canonical_topic,
+                emoji=TRACK_EMOJI.get(track, "✦"),
+                priority=1.0,
+                source="family",
+                agent=TRACK_AGENT_MAP.get(track),
+                canonical_ready=True,
+                canonical_slug=shared_id,
+                canonical_topic=canonical_topic,
+                mission_kind="family_investigation",
+                success_criteria=[
+                    "Work from real observations, records, sources, measurements, or results.",
+                    "Let each learner make one meaningful contribution without dividing the family into separate lessons.",
+                ],
+                personalization_reason="The household shares the investigation; this learner's math and literacy supports remain level-specific.",
+                sequence_policy=sequence.policy.value,
+                sequence_state=sequence.state.value,
+                bridge_required=sequence.bridge_required,
+                sequence_rationale=sequence.rationale,
+                delivery_mode="FAMILY_INVESTIGATION",
+                shared_investigation_id=shared_id,
+                individual_skill_targets=_individual_skill_targets(skill_suggestions, working_grade),
+                learner_progression_targets=_learner_progression_targets(skill_suggestions, working_grade),
+            )
+        await family_investigation_queue_store.mark_completed(current["id"])
+    return None
+
+
+async def _family_investigation_suggestions(
+    household_id: str,
+    skill_suggestions: list[LessonSuggestion],
+    working_grade: str,
+) -> list[LessonSuggestion]:
+    """Up to two concurrent family investigations — one per slot with an active item."""
+    suggestions = []
+    for slot in FAMILY_INVESTIGATION_SLOTS:
+        suggestion = await _family_investigation_suggestion_for_slot(
+            household_id, slot, skill_suggestions, working_grade,
+        )
+        if suggestion:
+            suggestions.append(suggestion)
+    return suggestions
 
 
 def _family_investigation_for_learner(
@@ -1724,30 +1760,30 @@ async def _replenish_learning_plan_queue(student_id: str) -> None:
         logger.warning(f"[LearningPlan/Replenish] Background replenishment failed (non-fatal): {e}")
 
 
-class FamilyInvestigationOverrideRequest(BaseModel):
+class FamilyInvestigationQueueRequest(BaseModel):
     household_id: str
-    iso_year: int = Field(ge=2020, le=2100)
-    iso_week: int = Field(ge=1, le=53)
+    slot: str = Field(pattern="^(science|history)$")
     canonical_topic: str
     track: Track
 
 
-class FamilyInvestigationOverrideResponse(BaseModel):
+class FamilyInvestigationQueueResponse(BaseModel):
     household_id: str
-    iso_year: int
-    iso_week: int
+    slot: str
+    position: int
     canonical_topic: str
     track: Track
 
 
-@router.post("/family-investigation-override", response_model=FamilyInvestigationOverrideResponse)
-async def set_family_investigation_override(
-    body: FamilyInvestigationOverrideRequest,
+@router.post("/family-investigation-queue", response_model=FamilyInvestigationQueueResponse)
+async def enqueue_family_investigation(
+    body: FamilyInvestigationQueueRequest,
     _role: str = Depends(require_account_role(UserRole.PARENT, UserRole.ADMIN)),
 ):
-    """Pin a specific canonical topic/track to one household's shared family
-    investigation for one specific real-calendar ISO year/week — overriding
-    the hash-and-calendar-week rotation that would otherwise decide it.
+    """Append a topic/track to the end of one household's science or history
+    investigation queue. The current item in a slot runs until its Space's
+    activities are actually completed — no calendar involved — then the queue
+    advances to whatever was enqueued next.
 
     Known limitation: this only verifies the caller holds a parent or admin
     account, not that they specifically own `household_id` — there is no
@@ -1756,12 +1792,12 @@ async def set_family_investigation_override(
     tenant boundary). Fine for now since nothing in the product surfaces this
     endpoint to end users yet; tighten if that changes.
     """
-    await family_investigation_override_store.set(
-        body.household_id, body.iso_year, body.iso_week, body.canonical_topic, body.track.value,
+    row = await family_investigation_queue_store.enqueue(
+        body.household_id, body.slot, body.canonical_topic, body.track.value,
     )
-    return FamilyInvestigationOverrideResponse(
-        household_id=body.household_id, iso_year=body.iso_year, iso_week=body.iso_week,
-        canonical_topic=body.canonical_topic, track=body.track,
+    return FamilyInvestigationQueueResponse(
+        household_id=body.household_id, slot=body.slot, position=row["position"],
+        canonical_topic=row["canonical_topic"], track=body.track,
     )
 
 
@@ -2044,25 +2080,16 @@ async def get_learning_plan(
             reverse=True,
         )[:max(2, limit - 1)]
 
-    shared_family_data = None
-    if family_context.shared_with_siblings:
-        try:
-            shared_family_data = await daily_plan_store.get_household_family_investigation(
-                family_context.household_id, plan_date,
-            )
-        except Exception as exc:
-            logger.warning("[LearningPlan] Household family plan reuse unavailable: %s", exc)
     ready_family_catalog = await _ready_family_seed_catalog()
-    if shared_family_data:
-        family_investigation = _family_investigation_for_learner(
-            LessonSuggestion(**shared_family_data), progression_candidates, grade_level,
-        )
-    else:
-        family_investigation = await _family_investigation_suggestion(
-            family_context.household_id, plan_date, progression_candidates, grade_level,
-            ready_family_catalog,
-        )
-    family_cards = [family_investigation] if family_investigation else []
+    # Pace-driven, not date-cached: each slot's current queue item is already
+    # a deterministic, cheap lookup (no LLM/expensive work), so every sibling's
+    # read naturally lands on the same shared_investigation_id without needing
+    # the old per-date household cache.
+    family_investigations = await _family_investigation_suggestions(
+        family_context.household_id, progression_candidates, grade_level,
+    )
+    family_investigation = family_investigations[0] if family_investigations else None
+    family_cards = list(family_investigations)
     final_suggestions = [
         *family_cards,
         *individual_skills[:max(0, limit - len(family_cards))],
@@ -2139,6 +2166,7 @@ async def get_learning_plan(
         student_id=student_id,
         suggestions=final_suggestions,
         family_investigation=family_investigation,
+        family_investigations=family_investigations,
         individual_skills=individual_skills,
         progression_checklist=progression_checklist,
         progression_map_status=_progression_map_status(progression_checklist),
