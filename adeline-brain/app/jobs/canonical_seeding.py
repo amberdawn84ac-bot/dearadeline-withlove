@@ -451,11 +451,12 @@ async def seed_one_canonical(seed: CanonicalSeed) -> str:
             packet.get("resources") or [],
             authoring_brief=seed.authoring_brief,
         )
-        blocks = finalize_family_lesson(
+        blocks, finalize_errors = finalize_family_lesson(
             authored.get("blocks") or [], seed.topic, track=seed.track
         )
         if not blocks:
-            raise ValueError("canonical author returned no valid investigation blocks")
+            detail = f": {'; '.join(finalize_errors)}" if finalize_errors else ""
+            raise ValueError(f"canonical author returned no valid investigation blocks{detail}")
         blocks[0].setdefault("metadata", {})["canonical_contract"] = {
             key: authored.get(key)
             for key in (

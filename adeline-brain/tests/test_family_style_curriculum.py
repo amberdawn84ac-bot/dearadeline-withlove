@@ -44,8 +44,9 @@ def test_finalizer_preserves_structure_and_removes_obsolete_rebuilders():
         {"block_type": "TEXT", "experience_stage": "REFLECTION", "content": "Record the result."},
     ]
 
-    finalized = finalize_family_lesson(blocks, "Woodworking", track="CREATIVE_ECONOMY")
+    finalized, errors = finalize_family_lesson(blocks, "Woodworking", track="CREATIVE_ECONOMY")
 
+    assert errors == []
     assert [block["block_type"] for block in finalized] == [
         "NARRATIVE", "GENUI_ASSEMBLY", "TEXT", "REAL_WORLD_APP", "QUIZ", "TEXT",
     ]
@@ -88,19 +89,21 @@ def test_truth_history_requires_traceable_outside_primary_evidence_and_timeline(
         "source_url": "https://catalog.archives.gov/id/123",
     }]
 
-    finalized = finalize_family_lesson(
+    finalized, errors = finalize_family_lesson(
         _truth_history_blocks(evidence), "Railroads and Power", track="TRUTH_HISTORY"
     )
 
+    assert errors == []
     assert any(block["block_type"] == "PRIMARY_SOURCE" for block in finalized)
     assert any(block["block_type"] == "TIMELINE" for block in finalized)
 
 
 def test_truth_history_rejects_model_paraphrase_as_primary_evidence():
-    finalized = finalize_family_lesson(
+    finalized, errors = finalize_family_lesson(
         _truth_history_blocks([{"source_title": "A source-like summary"}]),
         "Railroads and Power",
         track="TRUTH_HISTORY",
     )
 
     assert finalized == []
+    assert errors and "traceable outside item" in errors[0]

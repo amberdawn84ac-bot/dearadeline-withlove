@@ -490,7 +490,9 @@ async def _author(
                 last_error = ValueError("; ".join(contract_errors))
                 repair_instruction = "The draft failed these semantic requirements: " + "; ".join(contract_errors)
                 continue
-            blocks = finalize_family_lesson(parsed.get("blocks") or [], request.topic, track=request.track.value)
+            blocks, finalize_errors = finalize_family_lesson(
+                parsed.get("blocks") or [], request.topic, track=request.track.value
+            )
             logger.info(
                 "[ExperienceAuthor] finalized topic=%r attempt=%d blocks_surviving=%d",
                 request.topic, attempt + 1, len(blocks),
@@ -524,12 +526,23 @@ async def _author(
                     elapsed,
                 )
                 return parsed
-            last_error = ValueError("author output failed semantic experience validation")
-            repair_instruction = (
-                "The blocks failed the experience contract. Provide 6–8 concise substantive blocks "
-                "with explicit stages, including a meaningful invitation, action or creation, and a "
-                "reviewable demonstration. Do not add filler."
-            )
+            if finalize_errors:
+                logger.warning(
+                    "[ExperienceAuthor] finalization rejected topic=%r attempt=%d errors=%s",
+                    request.topic, attempt + 1, finalize_errors,
+                )
+                last_error = ValueError("; ".join(finalize_errors))
+                repair_instruction = (
+                    "The draft failed these structural requirements after finalization: "
+                    + "; ".join(finalize_errors)
+                )
+            else:
+                last_error = ValueError("author output failed semantic experience validation")
+                repair_instruction = (
+                    "The blocks failed the experience contract. Provide 6–8 concise substantive blocks "
+                    "with explicit stages, including a meaningful invitation, action or creation, and a "
+                    "reviewable demonstration. Do not add filler."
+                )
         except Exception as exc:
             logger.warning(
                 "[ExperienceAuthor] attempt failed topic=%r attempt=%d elapsed=%.2fs error=%s",

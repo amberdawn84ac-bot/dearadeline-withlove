@@ -6,10 +6,13 @@ and mastery and rendered for digital or printable surfaces.
 """
 
 from copy import deepcopy
+import logging
 import re
 from typing import Any
 
 from app.curriculum.experience_contract import ExperienceStage, annotate_experience, validate_experience
+
+logger = logging.getLogger(__name__)
 
 CANONICAL_FORMAT_VERSION = 12
 # The floor below which a cached canonical is no longer safe to serve at all
@@ -291,7 +294,9 @@ def validate_canonical_lesson(
     return errors
 
 
-def finalize_family_lesson(blocks: list[dict], topic: str, *, track: str | None = None) -> list[dict]:
+def finalize_family_lesson(
+    blocks: list[dict], topic: str, *, track: str | None = None
+) -> tuple[list[dict], list[str]]:
     """Normalize specialist output without rebuilding it into another format.
 
     Specialists own the actual lesson. This finalizer only removes obsolete or
@@ -299,6 +304,10 @@ def finalize_family_lesson(blocks: list[dict], topic: str, *, track: str | None 
     the result as the current family canonical format, and enforces the canonical
     canonical block ceiling. It never calls an LLM and never appends a synthetic
     narrative block.
+
+    Returns (blocks, errors). blocks is empty when the result fails structural
+    validation (validate_canonical_lesson) — errors then explains why, so a
+    caller can repair-loop against a real reason instead of a generic message.
     """
     finalized: list[dict] = []
     seen: set[tuple[str, str]] = set()
@@ -334,10 +343,16 @@ def finalize_family_lesson(blocks: list[dict], topic: str, *, track: str | None 
     errors = validate_canonical_lesson(finalized, track=track)
     if errors:
         # A short/structurally invalid lesson must fail closed rather than being
-        # disguised as a generic narrative lesson.
-        return []
+        # disguised as a generic narrative lesson — but the caller needs the
+        # actual reason to repair against, not a silent empty result.
+        logger.warning(
+            "[FamilyStyle] finalize_family_lesson failing closed topic=%r track=%r "
+            "surviving_before_gate=%d errors=%s",
+            topic, track, len(finalized), errors,
+        )
+        return [], errors
 
-    return annotate_experience(finalized)
+    return annotate_experience(finalized), []
 
 
 def is_current_family_canonical(blocks: list[dict]) -> bool:
