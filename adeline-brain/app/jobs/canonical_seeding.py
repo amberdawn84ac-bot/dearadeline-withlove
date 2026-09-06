@@ -275,10 +275,14 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
             "a working starter maintained past this unit, and a tested loaf or family bread formula with an "
             "evidence-backed explanation connecting the starter's behavior to wild yeast fermentation, lactic "
             "acid production, gluten development, hydration ratio, and feeding schedule. "
-            "REQUIRED BLOCK: include at least one SCAFFOLDED_PROBLEM or QUIZ block — after the starter log "
-            "observations, check the learner's own understanding of why the culture behaves as it does (e.g. "
-            "predict what a change in temperature or feeding ratio would do, or explain a specific observed "
-            "sign of fermentation) — not a repeat of the observation log itself. "
+            "REQUIRED BLOCK: exactly one existing block in the LATER half of the unit — after wild yeast and "
+            "lactic-acid bacteria have already been introduced and observed, never before — must use "
+            "block_type SCAFFOLDED_PROBLEM or QUIZ instead of TEXT/NARRATIVE, checking the learner's own "
+            "understanding of why the culture behaves as it does (e.g. predict what a change in temperature "
+            "or feeding ratio would do, or explain a specific observed sign of fermentation). Do not add an "
+            "extra block for this — retype one of the planned later-unit blocks. It must still be assigned to "
+            "exactly one lesson and exactly one flow node like every other block, and any concept it assesses "
+            "must already be marked introduced in an earlier lesson via introduced_in_lesson_id. "
             "CROSS-TRACK INTEGRATION (fold in only where it genuinely fits each learner's level): Applied "
             "Mathematics — baker's percentages, hydration ratio, feeding-schedule doubling/ratios for older "
             "learners; younger learners contribute through counting, measuring, and comparing rise heights. "
@@ -291,7 +295,7 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
             "CORRECTNESS: wild sourdough fermentation and commercial-yeast bread are different processes; do "
             "not conflate them or claim one is simply a slower version of the other."
         ),
-        content_revision="kitchen-chemistry-sourdough-v2",
+        content_revision="kitchen-chemistry-sourdough-v3",
     ),
     CanonicalSeed(
         "The Poison Squad: Formaldehyde Milk and the Fight for Food Safety",
