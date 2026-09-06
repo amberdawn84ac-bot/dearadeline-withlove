@@ -465,11 +465,20 @@ async def _author(
                 getattr(usage, "completion_tokens", None),
                 getattr(usage, "total_tokens", None),
             )
+            logger.info("[ExperienceAuthor] parsing raw response topic=%r attempt=%d", request.topic, attempt + 1)
             parsed = enforce_non_exposure_mastery(_json_object(raw))
+            logger.info(
+                "[ExperienceAuthor] parsed, validating topic=%r attempt=%d blocks_in_payload=%d",
+                request.topic, attempt + 1, len(parsed.get("blocks") or []),
+            )
             contract_errors = (
                 validate_canonical_contract(parsed)
                 + validate_flow_composition(parsed)
                 + validate_experience_substance(parsed)
+            )
+            logger.info(
+                "[ExperienceAuthor] validated topic=%r attempt=%d contract_error_count=%d",
+                request.topic, attempt + 1, len(contract_errors),
             )
             if contract_errors:
                 logger.warning(
@@ -482,6 +491,10 @@ async def _author(
                 repair_instruction = "The draft failed these semantic requirements: " + "; ".join(contract_errors)
                 continue
             blocks = finalize_family_lesson(parsed.get("blocks") or [], request.topic, track=request.track.value)
+            logger.info(
+                "[ExperienceAuthor] finalized topic=%r attempt=%d blocks_surviving=%d",
+                request.topic, attempt + 1, len(blocks),
+            )
             if blocks:
                 parsed["blocks"] = blocks
                 # finalize_family_lesson can drop blocks (dedup, obsolete formats,
@@ -618,6 +631,7 @@ async def _stream(request: LessonRequest):
                     authored = value
             if authored is None:
                 raise RuntimeError("Canonical author completed without a result")
+            logger.info("[ExperienceAuthor] author returned topic=%r, saving canonical…", request.topic)
             blocks = authored["blocks"]
             # Durable contracts live with the canonical blocks so the current DB schema
             # can preserve one source of truth without introducing a parallel lesson table.
@@ -626,6 +640,7 @@ async def _stream(request: LessonRequest):
             }
             canonical = {"id": str(uuid.uuid4()), "topic": request.topic, "track": request.track.value, "title": authored.get("title") or request.topic, "blocks": blocks, "oas_standards": [], "researcher_activated": False, "agent_name": "Canonical Experience Author"}
             await canonical_store.save(slug, canonical, pending=False)
+            logger.info("[ExperienceAuthor] canonical saved topic=%r, adapting for student…", request.topic)
         yield _sse({"type": "status", "message": "The shared experience is ready. Preparing this learner's entry point…"})
         blocks = None
         async for kind, value in _run_with_progress(
@@ -640,6 +655,7 @@ async def _stream(request: LessonRequest):
                 blocks = value
         if blocks is None:
             raise RuntimeError("Learner adaptation completed without a result")
+        logger.info("[ExperienceAuthor] adaptation returned topic=%r, building metadata…", request.topic)
         bridge = sequence_bridge_block(request)
         if bridge:
             blocks.insert(0, bridge)
