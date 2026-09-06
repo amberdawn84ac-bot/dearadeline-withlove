@@ -439,8 +439,13 @@ async def _author(
                 model=GEMINI_MODEL,
                 # Canonical experiences contain several substantive blocks and
                 # their contracts. 8k tokens could cut otherwise valid JSON in
-                # the middle of an object, leaving every retry unparsable.
-                max_tokens=16000,
+                # the middle of an object, leaving every retry unparsable. A
+                # thorough family unit can legitimately need more than 16k
+                # (observed finish_reason="length" at completion_tokens=13704,
+                # well under 16000 — this authoring cost is paid once per
+                # canonical topic and then reused by every family that studies
+                # it, so generous headroom here is worth it).
+                max_tokens=32000,
                 response_format={"type": "json_object"},
                 messages=[{"role": "system", "content": CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT}, {"role": "user", "content": attempt_prompt}],
             )

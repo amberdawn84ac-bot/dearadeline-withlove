@@ -295,7 +295,7 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
             "CORRECTNESS: wild sourdough fermentation and commercial-yeast bread are different processes; do "
             "not conflate them or claim one is simply a slower version of the other."
         ),
-        content_revision="kitchen-chemistry-sourdough-v3",
+        content_revision="kitchen-chemistry-sourdough-v5",
     ),
     CanonicalSeed(
         "The Poison Squad: Formaldehyde Milk and the Fight for Food Safety",
