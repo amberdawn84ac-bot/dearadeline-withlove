@@ -86,8 +86,10 @@ export function CanonicalExperiencePage({ view = 'lesson' }: { view?: 'lesson' |
     if (!student?.id || !params.taskId) return;
     let cancelled = false;
 
-    const waitForPersisted = async (planItemId: string): Promise<SavedExperience | null> => {
-      for (let attempt = 0; attempt < 120 && !cancelled; attempt += 1) {
+    const waitForPersisted = async (
+      planItemId: string, maxAttempts = 120,
+    ): Promise<SavedExperience | null> => {
+      for (let attempt = 0; attempt < maxAttempts && !cancelled; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 500));
         const record = await getSavedExperience(student.id, planItemId);
         if (!record || record.status !== 'generating') return record;
@@ -162,7 +164,17 @@ export function CanonicalExperiencePage({ view = 'lesson' }: { view?: 'lesson' |
         }
 
         if (!completed && !cancelled) {
-          const recovered = await getSavedExperience(student.id, selected.id);
+          // The streaming connection can be cut by an infrastructure proxy
+          // limit well before authoring finishes server-side (it keeps
+          // running as a detached backend task regardless). Don't treat a
+          // dropped connection as a failure -- keep polling the saved copy
+          // the same way we do for an experience that was already
+          // generating when this page opened.
+          let recovered = await getSavedExperience(student.id, selected.id);
+          if (recovered?.status === 'generating') {
+            setStatus('Still preparing this experience. This can take a few minutes for a thorough unit…');
+            recovered = await waitForPersisted(selected.id, 240);
+          }
           if (recovered?.status === 'ready') {
             setLesson(lessonFromSaved(recovered, selected, experienceRequest));
             setStatus('');
