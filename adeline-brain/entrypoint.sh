@@ -24,6 +24,8 @@ if [ -n "$_DB" ]; then
     done
     echo "[entrypoint] Running Prisma migrations..."
     HOME=/tmp DIRECT_DATABASE_URL="$_DB" DATABASE_URL="$_DB" timeout 120 prisma migrate deploy --schema /app/prisma/schema.prisma
+    echo "[entrypoint] Evicting archived canonicals from the fast cache..."
+    python scripts/evict_pending_canonical_cache.py
 else
     echo "[entrypoint] No DATABASE_URL set — skipping Prisma migrate"
 fi
