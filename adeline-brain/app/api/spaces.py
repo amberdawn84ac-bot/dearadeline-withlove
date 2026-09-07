@@ -97,6 +97,10 @@ labels tailored to exactly what THIS activity asks the family to record. Example
 warrant ["Day", "Rise", "Bubbles", "Smell"]; a bean-growth experiment might warrant ["Day", "Height (cm)", "Leaf
 color"]; a multi-day build project that tracks progress might warrant ["Day", "What we built", "Problem we solved"].
 Leave "log_fields" empty whenever the activity only asks for a single one-time answer, whatever its block_type.
+CRITICAL: log_fields must cover every specific thing YOUR OWN "adeline_message" this turn asks the family to record —
+not just the activity's general theme. If your message asks for the exact time they mixed it, what ingredients they
+used, and what it smelled like, log_fields must be exactly those things (e.g. ["Time mixed", "Ingredients", "Smell"]),
+not a generic or previously-used set that leaves any of your own questions uncovered.
 
 {activity_mode}
 
