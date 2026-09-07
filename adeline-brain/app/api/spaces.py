@@ -159,14 +159,36 @@ async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
     llm = create_llm(model=os.getenv("ADELINE_SPACE_MODEL", GEMINI_MODEL), max_tokens=4096)
 
     last_error: Exception | None = None
-    for attempt in range(2):
+    for attempt in range(3):
         response = await llm.ainvoke(lc_messages)
+        content = str(response.content or "")
+        if not content.strip():
+            # Confirmed live: Gemini occasionally returns a fully empty
+            # response (not truncated -- nothing at all). response_metadata
+            # usually carries why (a finish_reason like SAFETY/RECITATION);
+            # logging it is the only way to tell a content-filter block from
+            # a transient blip without a family ever seeing the difference.
+            last_error = ValueError("Empty LLM response")
+            logger.warning(
+                "[Spaces] Turn evaluation got an empty response (attempt %d/3), metadata=%s",
+                attempt + 1, getattr(response, "response_metadata", None),
+            )
+            continue
         try:
-            return _TurnEvaluation.model_validate(_parse_json_response(str(response.content)))
+            return _TurnEvaluation.model_validate(_parse_json_response(content))
         except Exception as exc:  # malformed/truncated JSON is rare but not impossible even with headroom
             last_error = exc
-            logger.warning("[Spaces] Turn evaluation parse failed (attempt %d/2): %s", attempt + 1, exc)
-    raise last_error
+            logger.warning("[Spaces] Turn evaluation parse failed (attempt %d/3): %s", attempt + 1, exc)
+
+    # Never leave the family stuck behind a dead end -- a genuine, honest
+    # in-character fallback beats a scary "could not reach the service" error
+    # the LLM flaked on every attempt. Nothing is credited or advanced; the
+    # family can just try again, same as if they'd re-typed their message.
+    logger.error("[Spaces] Turn evaluation exhausted all retries: %s", last_error)
+    return _TurnEvaluation(
+        adeline_message="I want to make sure I understand you correctly — could you say that again, maybe a little differently?",
+        evaluation="not_answered", recommended_action="stay", is_waiting_for_user=True,
+    )
 
 
 def _lesson_for_block(metadata: dict, block_id: str, block_index: int) -> dict:
