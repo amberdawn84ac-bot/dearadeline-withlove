@@ -267,15 +267,20 @@ async def add_student(
         now = datetime.now(timezone.utc)
         
         async with conn.transaction():
+            # createdAt/updatedAt are "timestamp without time zone" columns --
+            # binding a tz-aware Python datetime (datetime.now(timezone.utc))
+            # here throws "can't subtract offset-naive and offset-aware
+            # datetimes" inside asyncpg's codec. NOW() is timezone-safe and
+            # matches every other insert in this codebase (e.g. student_auth.py).
             await conn.execute(
                 '''
                 INSERT INTO "User" (
                     id, name, email, role, "gradeLevel", interests, "parentId",
                     username, "pinHash", "linkCode", "isHomestead", "coppaVerified", "createdAt", "updatedAt"
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, TRUE, $11, $12)
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, TRUE, NOW(), NOW())
                 ''',
                 student_id, payload.name, placeholder_email, "STUDENT", payload.grade_level,
-                payload.interests, parent_id, payload.username, pin_hash, link_code, now, now,
+                payload.interests, parent_id, payload.username, pin_hash, link_code,
             )
             await conn.execute(
                 '''INSERT INTO student_profiles (id, name, email, grade_level, is_homestead)
@@ -730,9 +735,8 @@ async def update_student(
         if not updates:
             raise HTTPException(status_code=400, detail="No fields to update")
         
-        updates.append(f'"updatedAt" = ${param_idx}')
-        params.append(datetime.now(timezone.utc))
-        
+        updates.append('"updatedAt" = NOW()')
+
         query = f'UPDATE "User" SET {", ".join(updates)} WHERE id = $1'
         await conn.execute(query, *params)
         
@@ -763,8 +767,7 @@ async def remove_student(
         
         # Soft delete: remove parent link
         await conn.execute(
-            'UPDATE "User" SET "parentId" = NULL, "updatedAt" = $1 WHERE id = $2',
-            datetime.now(timezone.utc),
+            'UPDATE "User" SET "parentId" = NULL, "updatedAt" = NOW() WHERE id = $1',
             student_id,
         )
         

@@ -97,6 +97,13 @@ def test_add_student_success(mock_parent_auth, mock_db_conn):
     issued_sql = "\n".join(str(call.args[0]) for call in mock_conn.execute.await_args_list)
     assert 'INSERT INTO "ChildPrivacyConsent"' in issued_sql
     assert "CREATE TABLE" not in issued_sql
+    # "createdAt"/"updatedAt" are "timestamp without time zone" columns; binding
+    # a tz-aware datetime.now(timezone.utc) here throws "can't subtract
+    # offset-naive and offset-aware datetimes" against real asyncpg (this mock
+    # accepts anything, so only an explicit check like this catches it) --
+    # NOW() must be used in the SQL text instead of a bound Python datetime.
+    insert_user_call = next(call for call in mock_conn.execute.await_args_list if 'INSERT INTO "User"' in str(call.args[0]))
+    assert not any(isinstance(arg, datetime) for arg in insert_user_call.args)
 
 
 def test_add_student_requires_explicit_privacy_consent(mock_parent_auth, mock_db_conn):
