@@ -16,7 +16,13 @@ import { StreamingGenUIRenderer } from "@/components/gen-ui/StreamingGenUIRender
 import { parseDataStreamLine } from "@/lib/stream-protocol";
 import { isCompletedActivityReport, isExplicitLearningRequest } from "@/lib/chat-intent";
 
-const LOGGABLE_BLOCK_TYPES = new Set(["LAB_MISSION", "LAB_GUIDE", "EXPERIMENT"]);
+// Bootstrap-only fallback: block types that are loggable often enough to show
+// the (generic, editable-label) log form before Adeline has had a turn to
+// judge log_fields for herself. Any block type gets the form once she
+// explicitly tailors log_fields for it -- a repeated-progress project is just
+// as loggable as a lab activity, and hardcoding the type here would only
+// recreate the same "fields that don't fit this activity" complaint.
+const DEFAULT_LOGGABLE_BLOCK_TYPES = new Set(["LAB_MISSION", "LAB_GUIDE", "EXPERIMENT"]);
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -287,7 +293,9 @@ function ConversationBlockCard({ block, onReflect, onLogSubmit, logFields }: {
           <p className="text-[11px] text-[#2F4731]/60">Credit comes from what you can demonstrate or explain afterward—not from opening the link or time spent.</p>
         </div>
       )}
-      {onLogSubmit && LOGGABLE_BLOCK_TYPES.has(blockType) && <LogEntryForm onSubmit={onLogSubmit} fields={logFields} />}
+      {onLogSubmit && (logFields?.length || DEFAULT_LOGGABLE_BLOCK_TYPES.has(blockType)) && (
+        <LogEntryForm onSubmit={onLogSubmit} fields={logFields} />
+      )}
     </div>
   );
 }

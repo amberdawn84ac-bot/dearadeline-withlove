@@ -88,13 +88,14 @@ Offer zero to four suggested_replies. Use them for natural short answers such as
 set of genuine choices. Do not offer them when the learner needs to explain reasoning, show evidence, or write freely.
 Use display_breakout_tracks only when subject-specific work is useful now, and show_microscope_diagram only when microscopy is relevant.
 
-LOG FIELDS: if the current activity is a hands-on observation/log activity (a LAB_MISSION, LAB_GUIDE, or EXPERIMENT
-block that asks the family to record what they've observed over time), set "log_fields" to 2-5 short field labels
-tailored to exactly what THIS activity asks the family to record — read its actual content, don't guess generically.
-Examples: a sourdough starter log might warrant ["Day", "Rise", "Bubbles", "Smell"]; a bean-growth experiment might
-warrant ["Day", "Height (cm)", "Leaf color"]; a titration lab might warrant ["Trial #", "Volume added (mL)", "Color
-change"]. Leave "log_fields" empty for every other activity type, including a LAB_MISSION/EXPERIMENT that only asks
-for a one-time answer rather than a repeated log.
+LOG FIELDS: this is about what the activity asks for, not its block_type label — a PROJECT_BUILDER, RESEARCH_MISSION,
+or any other block can want a repeated log just as much as a LAB_MISSION/EXPERIMENT does. If the current activity
+(read its actual content, don't guess generically) asks the family to record observations or progress repeatedly
+over time — a log kept across multiple sessions, not a single one-time answer — set "log_fields" to 2-5 short field
+labels tailored to exactly what THIS activity asks the family to record. Examples: a sourdough starter log might
+warrant ["Day", "Rise", "Bubbles", "Smell"]; a bean-growth experiment might warrant ["Day", "Height (cm)", "Leaf
+color"]; a multi-day build project that tracks progress might warrant ["Day", "What we built", "Problem we solved"].
+Leave "log_fields" empty whenever the activity only asks for a single one-time answer, whatever its block_type.
 
 {activity_mode}
 
