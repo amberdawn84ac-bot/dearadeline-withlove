@@ -1,6 +1,7 @@
 """Durable, server-paced unit Spaces built from saved canonical experiences."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -160,7 +161,19 @@ async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
 
     last_error: Exception | None = None
     for attempt in range(3):
-        response = await llm.ainvoke(lc_messages)
+        try:
+            response = await llm.ainvoke(lc_messages)
+        except Exception as exc:
+            # Confirmed live: the Gemini API key is on the free tier (20
+            # requests/minute) and genuinely runs out of budget under real
+            # multi-kid usage -- this was previously uncaught here, so a rate
+            # limit or any other transport error crashed straight through to
+            # a hard 502 instead of ever reaching the graceful fallback below.
+            last_error = exc
+            logger.warning("[Spaces] Turn evaluation call failed (attempt %d/3): %s", attempt + 1, exc)
+            if attempt < 2:
+                await asyncio.sleep(1.5)
+            continue
         content = str(response.content or "")
         if not content.strip():
             # Confirmed live: Gemini occasionally returns a fully empty
