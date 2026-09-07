@@ -3,15 +3,17 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from app.api.middleware import require_internal_key, verify_student_access
 from app.api.realtime import connection_manager
-from app.config import get_db_conn
+from app.config import GEMINI_MODEL, create_llm, get_db_conn
 from app.connections.concept_encounter_store import concept_encounter_store
 from app.services.mastery_credit import ConceptCredit, record_mastery_credit
 from app.services.standards_mapper import _embed
@@ -54,6 +56,89 @@ class SpaceEvaluation(BaseModel):
     off_plan_topic: OffPlanTopic | None = None
     user_message: str = Field(min_length=1, max_length=4000)
     expected_version: int = Field(ge=0)
+
+
+class SpaceTurnRequest(BaseModel):
+    user_message: str = Field(min_length=1, max_length=4000)
+    expected_version: int = Field(ge=0)
+
+
+class _TurnEvaluation(BaseModel):
+    """What the LLM itself decides, before user_message/expected_version (already
+    known server-side) are attached to build a full SpaceEvaluation for _apply_transition."""
+    adeline_message: str = Field(min_length=1, max_length=4000)
+    evaluation: Literal["correct", "partial", "incorrect", "not_answered"]
+    recommended_action: Literal["stay", "advance", "complete_unit"]
+    is_waiting_for_user: bool
+    resource_triggers: list[Literal["show_microscope_diagram", "display_breakout_tracks"]] = Field(default_factory=list)
+    off_plan_topic: OffPlanTopic | None = None
+    suggested_replies: list[str] = Field(default_factory=list)
+
+
+_TURN_SYSTEM_PROMPT = """You are Adeline, a warm but rigorous learning companion guiding one family through a unit Space.
+Never claim credit, mastery, completion, or standards proficiency directly to the family — that is handled separately
+from what you say. Ask no more than one question.
+Offer zero to four suggested_replies. Use them for natural short answers such as yes/no, ready/not yet, or a small
+set of genuine choices. Do not offer them when the learner needs to explain reasoning, show evidence, or write freely.
+Use display_breakout_tracks only when subject-specific work is useful now, and show_microscope_diagram only when microscopy is relevant.
+
+{activity_mode}
+
+RABBIT HOLES: if the family's question or discussion genuinely goes beyond the activity above — a real tangent, not a
+passing mention — set "off_plan_topic" to name that concept. Use tier "demonstrated" only when the family's answer
+meets the same correctness bar you'd require to advance a planned activity. Use tier "encountered" when a real
+question got a real, substantive answer but was not demonstrated to that same correctness bar. Leave "off_plan_topic"
+null for every ordinary turn that stayed on the current activity.
+
+Respond with ONLY a JSON object (no markdown fences, no commentary) matching exactly this shape:
+{{"adeline_message": string, "evaluation": "correct"|"partial"|"incorrect"|"not_answered",
+  "recommended_action": "stay"|"advance"|"complete_unit", "is_waiting_for_user": boolean,
+  "resource_triggers": ["show_microscope_diagram"|"display_breakout_tracks", ...] (0-2 items),
+  "off_plan_topic": null | {{"concept_name": string, "track": string|null, "tier": "encountered"|"demonstrated"}},
+  "suggested_replies": [string, ...] (0-4 items)}}"""
+
+
+def _turn_activity_mode(state: dict) -> str:
+    if state["status"] == "completed":
+        return (
+            "This unit's planned activities are already finished — you're in open conversation mode now. The family may "
+            "ask follow-up questions, revisit something, or wander into a new question entirely. Answer genuinely and "
+            "substantively; there is no \"next activity\" to advance to, so \"recommended_action\" should stay \"stay\" "
+            "unless the family is clearly done, in which case \"complete_unit\" is fine (it is a safe no-op once already "
+            f"complete).\n\nLAST ACTIVITY DISCUSSED: {(state.get('current_lesson') or {}).get('title') or 'Current lesson'}\n"
+            f"{json.dumps(state.get('current_block'))}"
+        )
+    return (
+        "The server has selected exactly one current activity. Teach that activity and evaluate only evidence in the "
+        "learner's newest message. Never skip ahead. Recommend \"advance\" only when the learner has supplied the "
+        "evidence or answer this current activity explicitly requires. Use \"complete_unit\" only under that same rule "
+        f"when this is the final activity. Otherwise recommend \"stay\".\n\nUNIT: {state.get('title')}\n"
+        f"LESSON: {(state.get('current_lesson') or {}).get('title') or 'Current lesson'}\n"
+        f"ACTIVITY {state['current_block_index'] + 1} OF {state['total_blocks']}:\n{json.dumps(state.get('current_block'))}"
+    )
+
+
+def _parse_json_response(text: str) -> dict:
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+    return json.loads(text)
+
+
+async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
+    lc_messages: list = [SystemMessage(content=_TURN_SYSTEM_PROMPT.format(activity_mode=_turn_activity_mode(state)))]
+    for item in (state.get("messages") or [])[-12:]:
+        content = str(item.get("content") or "")
+        if not content:
+            continue
+        lc_messages.append(HumanMessage(content=content) if item.get("role") == "user" else AIMessage(content=content))
+    lc_messages.append(HumanMessage(content=user_message))
+
+    llm = create_llm(model=os.getenv("ADELINE_SPACE_MODEL", GEMINI_MODEL), max_tokens=1024)
+    response = await llm.ainvoke(lc_messages)
+    return _TurnEvaluation.model_validate(_parse_json_response(str(response.content)))
 
 
 def _lesson_for_block(metadata: dict, block_id: str, block_index: int) -> dict:
@@ -397,9 +482,7 @@ async def read_space(student_id: str, plan_item_id: str, response: Response,
     return _state(session, experience)
 
 
-@router.post("/{student_id}/{plan_item_id}/transition", dependencies=[Depends(require_internal_key)])
-async def transition_space(student_id: str, plan_item_id: str, body: SpaceEvaluation,
-                           _user_id: str = Depends(verify_student_access)):
+async def _apply_transition(student_id: str, plan_item_id: str, body: SpaceEvaluation) -> dict:
     conn = await get_db_conn()
     try:
         async with conn.transaction():
@@ -480,9 +563,49 @@ async def transition_space(student_id: str, plan_item_id: str, body: SpaceEvalua
         await conn.close()
 
 
-@router.get("/{student_id}/{plan_item_id}/breakout-standards")
-async def breakout_standards(student_id: str, plan_item_id: str,
-                             _user_id: str = Depends(verify_student_access)):
+@router.post("/{student_id}/{plan_item_id}/transition", dependencies=[Depends(require_internal_key)])
+async def transition_space(student_id: str, plan_item_id: str, body: SpaceEvaluation,
+                           _user_id: str = Depends(verify_student_access)):
+    return await _apply_transition(student_id, plan_item_id, body)
+
+
+@router.post("/{student_id}/{plan_item_id}/turn")
+async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
+                     _user_id: str = Depends(verify_student_access)):
+    """Single round trip for a Space conversation turn: evaluate the learner's
+    message with the LLM in-process (no separate AI-gateway hop from the
+    frontend), then apply the resulting transition. Consolidates what used to
+    be a Next.js route calling out to Vercel's AI Gateway plus two more HTTP
+    calls back into this same backend."""
+    session, experience = await _load_or_create(student_id, plan_item_id)
+    state = _state(session, experience)
+
+    try:
+        evaluation = await _evaluate_turn(state, body.user_message)
+    except Exception:
+        logger.exception("[Spaces] Turn evaluation failed student=%s plan_item=%s", student_id, plan_item_id)
+        raise HTTPException(status_code=502, detail="Adeline could not continue this Space just now.")
+
+    result = await _apply_transition(student_id, plan_item_id, SpaceEvaluation(
+        adeline_message=evaluation.adeline_message,
+        evaluation=evaluation.evaluation,
+        recommended_action=evaluation.recommended_action,
+        is_waiting_for_user=evaluation.is_waiting_for_user,
+        resource_triggers=evaluation.resource_triggers,
+        off_plan_topic=evaluation.off_plan_topic,
+        user_message=body.user_message,
+        expected_version=body.expected_version,
+    ))
+
+    result["breakout_data"] = (
+        await _breakout_data(student_id, plan_item_id)
+        if "display_breakout_tracks" in evaluation.resource_triggers else None
+    )
+    result["suggested_replies"] = evaluation.suggested_replies
+    return result
+
+
+async def _breakout_data(student_id: str, plan_item_id: str) -> dict:
     session, experience = await _load_or_create(student_id, plan_item_id)
     state = _state(session, experience)
     block = state.get("current_block") or {}
@@ -527,3 +650,9 @@ async def breakout_standards(student_id: str, plan_item_id: str,
             "similarity": float(row["similarity"]),
         })
     return result
+
+
+@router.get("/{student_id}/{plan_item_id}/breakout-standards")
+async def breakout_standards(student_id: str, plan_item_id: str,
+                             _user_id: str = Depends(verify_student_access)):
+    return await _breakout_data(student_id, plan_item_id)

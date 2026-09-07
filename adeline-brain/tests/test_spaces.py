@@ -4,8 +4,11 @@ import pytest
 
 from datetime import datetime, timezone
 
+from pydantic import ValidationError
+
 from app.api.spaces import (
     OffPlanTopic,
+    _TurnEvaluation,
     _concept_credits_for_lesson,
     _concept_slug,
     _credit_off_plan_topic,
@@ -19,6 +22,24 @@ from app.api.spaces import (
     _space_list_item,
     _state,
 )
+
+
+def test_turn_evaluation_rejects_unsupported_resource_triggers():
+    with pytest.raises(ValidationError):
+        _TurnEvaluation.model_validate({
+            "adeline_message": "Look closely.", "evaluation": "partial", "recommended_action": "stay",
+            "is_waiting_for_user": True, "resource_triggers": ["award_credit"],
+        })
+
+
+def test_turn_evaluation_suggested_replies_default_to_empty():
+    base = {
+        "adeline_message": "Are you ready to begin?", "evaluation": "not_answered",
+        "recommended_action": "stay", "is_waiting_for_user": True, "resource_triggers": [],
+    }
+    assert _TurnEvaluation.model_validate(base).suggested_replies == []
+    assert _TurnEvaluation.model_validate({**base, "suggested_replies": ["Yes", "Not yet"]}).suggested_replies \
+        == ["Yes", "Not yet"]
 
 
 def test_space_maps_blocks_to_unit_lessons():
