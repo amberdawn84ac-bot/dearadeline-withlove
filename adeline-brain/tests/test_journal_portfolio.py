@@ -54,6 +54,32 @@ async def test_portfolio_item_carries_the_space_it_came_from():
 
 
 @pytest.mark.asyncio
+async def test_portfolio_signs_uploaded_project_photos_but_leaves_other_urls_alone():
+    connection = AsyncMock()
+    connection.fetch.return_value = [{
+        "lesson_id": "lesson-1",
+        "track": "CREATION_SCIENCE",
+        "title": "Kitchen Chemistry: The Science of Sourdough",
+        "sealed_at": datetime(2026, 9, 5, tzinfo=timezone.utc),
+        "plan_item_id": "family-abc123-science-0",
+        "sources_json": (
+            '[{"type":"artifact","url":"evidence-key://student-1/family-abc123-science-0/20260905_ab12cd34.jpg",'
+            '"title":"Finished loaf"},'
+            '{"type":"artifact","url":"portfolio://project/other-project"}]'
+        ),
+    }]
+
+    with (
+        patch("app.config.get_db_conn", new=AsyncMock(return_value=connection)),
+        patch("app.api.journal.get_evidence_url", new=AsyncMock(return_value="https://signed.example/loaf.jpg")) as signer,
+    ):
+        response = await get_portfolio_items("student-1", _user_id="student-1")
+
+    signer.assert_awaited_once_with("student-1/family-abc123-science-0/20260905_ab12cd34.jpg")
+    assert response.items[0].artifact_refs == ["https://signed.example/loaf.jpg", "portfolio://project/other-project"]
+
+
+@pytest.mark.asyncio
 async def test_spaces_insights_merges_credited_and_encountered_sorted_by_recency():
     from app.api.parent import get_spaces_insights
 

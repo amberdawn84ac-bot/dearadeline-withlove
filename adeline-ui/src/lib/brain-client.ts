@@ -1104,6 +1104,24 @@ export async function uploadActivityEvidence(activityId: string, file: File): Pr
   return result;
 }
 
+export async function uploadSpaceProjectPhoto(
+  studentId: string, planItemId: string, file: File, description: string,
+): Promise<{ attached: boolean }> {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("description", description || `Finished project photo for ${planItemId}`);
+  const res = await fetch(
+    `${BRAIN_URL}/brain/spaces/${encodeURIComponent(studentId)}/${encodeURIComponent(planItemId)}/photo`,
+    { method: "POST", headers: await getBrainHeaders(), body, cache: "no-store" },
+  );
+  if (!res.ok) {
+    const result = await res.json().catch(() => null) as { detail?: string } | null;
+    throw new Error(result?.detail || `Photo upload failed: ${res.status}`);
+  }
+  clearStudentDataCaches(studentId);
+  return await res.json() as { attached: boolean };
+}
+
 export async function listActivities(
   studentId: string,
   role: "STUDENT" | "ADMIN" = "STUDENT",

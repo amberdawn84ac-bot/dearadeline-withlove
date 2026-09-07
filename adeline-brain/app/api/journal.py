@@ -14,6 +14,7 @@ from app.schemas.api_models import Track
 from app.api.middleware import get_current_user_id, verify_student_access
 from app.connections.journal_store import journal_store
 from app.services.mastery_credit import ConceptCredit, record_mastery_credit
+from app.services.storage import get_evidence_url
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/journal", tags=["journal"])
@@ -267,9 +268,19 @@ async def get_portfolio_items(
         artifact = next((item for item in sources if item.get("type") == "artifact" or str(item.get("url") or "").startswith("portfolio://")), None)
         title = str((artifact or {}).get("title") or row["title"])
         artifact_description = str(artifact.get("author") or artifact.get("description") or artifact.get("title") or "Portfolio artifact") if artifact else None
-        refs = list(dict.fromkeys(
+        raw_urls = list(dict.fromkeys(
             str(item.get("url")) for item in sources if item.get("url")
         ))
+        # A finished-project photo is stored as a private "evidence-key://" storage
+        # key (see spaces.py's photo upload), not a directly usable URL like the
+        # plain http(s)/portfolio:// links other sources already write here —
+        # resolve only those into a freshly signed, short-lived Supabase URL.
+        refs: list[str] = []
+        for url in raw_urls:
+            if url.startswith("evidence-key://"):
+                refs.append(await get_evidence_url(url.removeprefix("evidence-key://")) or url)
+            else:
+                refs.append(url)
         items.append(PortfolioItem(
             lesson_id=str(row["lesson_id"]), title=title, track=str(row["track"]),
             sealed_at=row["sealed_at"].isoformat() if row["sealed_at"] else None,

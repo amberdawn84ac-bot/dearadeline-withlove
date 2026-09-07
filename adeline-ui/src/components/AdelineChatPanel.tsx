@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Sparkles, Send, Loader2 } from "lucide-react";
-import { scaffold, listProjects, getProject, reportActivity, streamConversation, uploadActivityEvidence } from "@/lib/brain-client";
+import { scaffold, listProjects, getProject, reportActivity, streamConversation, uploadActivityEvidence, uploadSpaceProjectPhoto } from "@/lib/brain-client";
 import type {
   Track, ScaffoldResponse,
   ProjectSummary, ProjectDetail, ActivityReportResponse,
@@ -10,10 +10,13 @@ import type {
 } from "@/lib/brain-client";
 import { ProjectCatalog } from "@/components/projects/ProjectCard";
 import { ProjectGuide } from "@/components/projects/ProjectGuide";
+import { LogEntryForm } from "@/components/spaces/LogEntryForm";
 import { useALUStream } from "@/hooks/useALUStream";
 import { StreamingGenUIRenderer } from "@/components/gen-ui/StreamingGenUIRenderer";
 import { parseDataStreamLine } from "@/lib/stream-protocol";
 import { isCompletedActivityReport, isExplicitLearningRequest } from "@/lib/chat-intent";
+
+const LOGGABLE_BLOCK_TYPES = new Set(["LAB_MISSION", "LAB_GUIDE", "EXPERIMENT"]);
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -198,7 +201,13 @@ const BLOCK_CONFIGS: Record<string, { icon: string; bg: string; border: string; 
   NARRATIVE:            { icon: "📖", bg: "#FDF6E9", border: "#E7DAC3",  color: "#2F4731",  label: "Narrative" },
 };
 
-function ConversationBlockCard({ block, onReflect }: { block: Record<string, unknown>; onReflect?: (prompt: string) => void }) {
+function ConversationBlockCard({ block, onReflect, onLogSubmit }: {
+  block: Record<string, unknown>;
+  onReflect?: (prompt: string) => void;
+  /** Present only inside a Space conversation, for blocks where a structured
+   * log entry is a natural stand-in for typing the same thing as one paragraph. */
+  onLogSubmit?: (text: string) => void;
+}) {
   const [sharedResource, setSharedResource] = useState<string | null>(null);
   const blockType = String(block.block_type ?? "NARRATIVE").toUpperCase();
   const c = BLOCK_CONFIGS[blockType] ?? BLOCK_CONFIGS.NARRATIVE;
@@ -267,6 +276,7 @@ function ConversationBlockCard({ block, onReflect }: { block: Record<string, unk
           <p className="text-[11px] text-[#2F4731]/60">Credit comes from what you can demonstrate or explain afterward—not from opening the link or time spent.</p>
         </div>
       )}
+      {onLogSubmit && LOGGABLE_BLOCK_TYPES.has(blockType) && <LogEntryForm onSubmit={onLogSubmit} />}
     </div>
   );
 }
@@ -291,8 +301,25 @@ export function AdelineChatPanel({
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [spaceState, setSpaceState] = useState<SpaceChatState | null>(null);
   const [suggestedReplies, setSuggestedReplies] = useState<string[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+  const [photoAttached, setPhotoAttached] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const attachProjectPhoto = useCallback(async (file: File | undefined) => {
+    if (!file || !spacePlanItemId) return;
+    setUploadingPhoto(true);
+    setPhotoError("");
+    try {
+      await uploadSpaceProjectPhoto(studentId, spacePlanItemId, file, spaceState?.title ? `Finished project: ${spaceState.title}` : "Finished project photo");
+      setPhotoAttached(true);
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "Photo upload failed");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }, [spacePlanItemId, studentId, spaceState?.title]);
 
   // ── ALU Stream: progressive rendering + ALU playlist + temporal friction ─
   const {
@@ -693,7 +720,11 @@ export function AdelineChatPanel({
                           )}
                         </p>
                       ) : (
-                        <ConversationBlockCard key={i} block={seg.data} onReflect={(prompt) => { setInput(prompt); inputRef.current?.focus(); }} />
+                        <ConversationBlockCard
+                          key={i} block={seg.data}
+                          onReflect={(prompt) => { setInput(prompt); inputRef.current?.focus(); }}
+                          onLogSubmit={spacePlanItemId ? (text) => void handleSend(text) : undefined}
+                        />
                       )
                     )
                   )}
@@ -780,6 +811,23 @@ export function AdelineChatPanel({
         className="shrink-0 px-4 py-3 border-t border-[#E7DAC3]"
         style={{ background: "#FFFDF5" }}
       >
+        {spacePlanItemId && spaceState?.status === "completed" && (
+          <div className="mb-3 flex items-center gap-2 flex-wrap">
+            {photoAttached ? (
+              <p className="text-xs font-bold text-[#166534]">✓ Photo added to your portfolio</p>
+            ) : (
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[#2F4731]/25 bg-white px-3 py-2 text-xs font-bold text-[#2F4731] hover:bg-[#FDF6E9]">
+                {uploadingPhoto ? "Adding photo…" : "📷 Add a photo of your finished project"}
+                <input
+                  type="file" accept="image/*,video/mp4,video/webm,video/quicktime" className="sr-only"
+                  disabled={uploadingPhoto}
+                  onChange={(e) => void attachProjectPhoto(e.target.files?.[0])}
+                />
+              </label>
+            )}
+            {photoError && <p className="text-xs text-red-700">{photoError}</p>}
+          </div>
+        )}
         {spacePlanItemId && suggestedReplies.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-2" aria-label="Quick replies">
             {suggestedReplies.map((reply) => (

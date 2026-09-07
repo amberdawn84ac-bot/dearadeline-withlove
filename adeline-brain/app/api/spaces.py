@@ -5,9 +5,10 @@ import json
 import logging
 import os
 import re
+import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
@@ -15,8 +16,12 @@ from app.api.middleware import require_internal_key, verify_student_access
 from app.api.realtime import connection_manager
 from app.config import GEMINI_MODEL, create_llm, get_db_conn
 from app.connections.concept_encounter_store import concept_encounter_store
+from app.connections.journal_store import journal_store
 from app.services.mastery_credit import ConceptCredit, record_mastery_credit
 from app.services.standards_mapper import _embed
+from app.services.storage import evidence_upload_slot, read_upload_limited, upload_mastery_evidence
+
+_ALLOWED_EVIDENCE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/gif", "video/mp4", "video/webm", "video/quicktime"}
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/brain/spaces", tags=["spaces"])
@@ -561,6 +566,52 @@ async def _apply_transition(student_id: str, plan_item_id: str, body: SpaceEvalu
         return result
     finally:
         await conn.close()
+
+
+@router.post("/{student_id}/{plan_item_id}/photo")
+async def upload_space_photo(
+    student_id: str, plan_item_id: str,
+    description: str = Form(""),
+    file: UploadFile = File(...),
+    _user_id: str = Depends(verify_student_access),
+):
+    """Attach a photo of the finished project to this Space's portfolio entry.
+
+    Only meaningful once at least one lesson from this Space has already been
+    credited (see _credit_newly_completed_lesson) -- that's what creates the
+    student_journal row this photo attaches to. A family photographing a
+    still-in-progress unit before any lesson has been demonstrated gets a
+    clear 409 rather than a silently discarded upload.
+    """
+    content_type = file.content_type or "application/octet-stream"
+    if content_type not in _ALLOWED_EVIDENCE_TYPES:
+        raise HTTPException(status_code=400, detail="Use a JPG, PNG, GIF, MP4, WebM, or MOV file")
+
+    # Confirms the Space exists and belongs to this student before spending
+    # upload effort on it -- _load_or_create raises 409 if not yet ready.
+    await _load_or_create(student_id, plan_item_id)
+
+    try:
+        async with evidence_upload_slot():
+            file_bytes = await read_upload_limited(file)
+            storage_key = await upload_mastery_evidence(
+                student_id=student_id, standard_id=plan_item_id,
+                file_bytes=file_bytes, content_type=content_type, original_filename=file.filename,
+            )
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=413 if isinstance(exc, ValueError) else 503, detail=str(exc)) from exc
+
+    attached = await journal_store.attach_evidence_by_plan_item(student_id, plan_item_id, {
+        "type": "artifact", "url": f"evidence-key://{storage_key}",
+        "title": description or file.filename or "Finished project photo",
+    })
+    if not attached:
+        raise HTTPException(
+            status_code=409,
+            detail="Adeline hasn't recorded any mastery for this unit yet, so there's no portfolio entry to attach "
+                   "this photo to. Finish a bit more of the Space first, then add the photo.",
+        )
+    return {"evidence_id": str(uuid.uuid4()), "attached": True}
 
 
 @router.post("/{student_id}/{plan_item_id}/transition", dependencies=[Depends(require_internal_key)])

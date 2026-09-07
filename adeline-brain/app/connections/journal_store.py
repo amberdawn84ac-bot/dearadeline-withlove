@@ -132,6 +132,41 @@ class JournalStore:
 
         return await self.get_track_progress(student_id)
 
+    async def attach_evidence_by_plan_item(self, student_id: str, plan_item_id: str, evidence: dict) -> bool:
+        """Append one evidence entry (e.g. a finished-project photo) to the most
+        recently sealed journal row for this Space, so it surfaces in the
+        portfolio through get_portfolio_items' existing sources_json reader.
+
+        Returns False if no lesson from this Space has been sealed yet (nothing
+        credited yet, so there is no row to attach to) -- the caller should
+        surface a clear message rather than silently discard the upload.
+        """
+        async with self._session_factory() as session:
+            row = (await session.execute(
+                text("""
+                    SELECT lesson_id, sources_json FROM student_journal
+                    WHERE student_id = :student_id AND plan_item_id = :plan_item_id
+                    ORDER BY sealed_at DESC LIMIT 1
+                """),
+                {"student_id": student_id, "plan_item_id": plan_item_id},
+            )).mappings().first()
+            if not row:
+                return False
+            try:
+                sources = json.loads(row["sources_json"] or "[]")
+            except json.JSONDecodeError:
+                sources = []
+            sources.append(evidence)
+            await session.execute(
+                text("""
+                    UPDATE student_journal SET sources_json = :sources_json, sealed_at = NOW()
+                    WHERE student_id = :student_id AND lesson_id = :lesson_id
+                """),
+                {"sources_json": json.dumps(sources), "student_id": student_id, "lesson_id": row["lesson_id"]},
+            )
+            await session.commit()
+        return True
+
     async def get_all_sources(self, student_id: str) -> list[dict]:
         """Return a deduplicated list of all primary sources used by this student."""
         async with self._session_factory() as session:
