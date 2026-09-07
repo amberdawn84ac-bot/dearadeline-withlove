@@ -36,10 +36,10 @@ const YEAR_RANGE = Array.from({ length: 21 }, (_, i) => CURRENT_YEAR + i);
 
 export function SettingsForm({ initialProfile }: SettingsFormProps) {
   const [gradeLevel, setGradeLevel] = useState(initialProfile.gradeLevel);
-  const [mathLevel, setMathLevel] = useState<number | null>(initialProfile.mathLevel || null);
-  const [elaLevel, setElaLevel] = useState<number | null>(initialProfile.elaLevel || null);
-  const [scienceLevel, setScienceLevel] = useState<number | null>(initialProfile.scienceLevel || null);
-  const [historyLevel, setHistoryLevel] = useState<number | null>(initialProfile.historyLevel || null);
+  const [mathLevel, setMathLevel] = useState<number | null>(initialProfile.mathLevel ?? null);
+  const [elaLevel, setElaLevel] = useState<number | null>(initialProfile.elaLevel ?? null);
+  const [scienceLevel, setScienceLevel] = useState<number | null>(initialProfile.scienceLevel ?? null);
+  const [historyLevel, setHistoryLevel] = useState<number | null>(initialProfile.historyLevel ?? null);
   const [interests, setInterests] = useState(initialProfile.interests);
   const [pacingMultiplier, setPacingMultiplier] = useState(initialProfile.pacingMultiplier);
   const [state, setState] = useState(initialProfile.state || '');
@@ -65,19 +65,38 @@ export function SettingsForm({ initialProfile }: SettingsFormProps) {
       setSaveStatus('idle');
       setSaveError(null);
 
-      const updateData: Record<string, unknown> = {
-        gradeLevel,
-        interests,
-        pacingMultiplier,
-        state,
-        targetGraduationYear,
-      };
+      // This is a PATCH endpoint, so only send fields the family actually
+      // changed. Some older/PIN-created profiles legitimately have blank
+      // onboarding fields; resubmitting those blanks can fail validation even
+      // when the family only changed something unrelated, such as graduation year.
+      const updateData: Record<string, unknown> = {};
+      const initialInterests = initialProfile.interests ?? [];
+      const interestsChanged =
+        interests.length !== initialInterests.length ||
+        interests.some((interest, index) => interest !== initialInterests[index]);
 
-      // Only include subject levels if the override is enabled
-      if (useMathOverride) updateData.mathLevel = mathLevel;
-      if (useElaOverride) updateData.elaLevel = elaLevel;
-      if (useScienceOverride) updateData.scienceLevel = scienceLevel;
-      if (useHistoryOverride) updateData.historyLevel = historyLevel;
+      if (gradeLevel !== initialProfile.gradeLevel) updateData.gradeLevel = gradeLevel;
+      if (interestsChanged) updateData.interests = interests;
+      if (pacingMultiplier !== initialProfile.pacingMultiplier) {
+        updateData.pacingMultiplier = pacingMultiplier;
+      }
+      if (state !== (initialProfile.state ?? '') && state) updateData.state = state;
+      if (targetGraduationYear !== initialProfile.targetGraduationYear) {
+        updateData.targetGraduationYear = targetGraduationYear;
+      }
+
+      if (useMathOverride && mathLevel !== (initialProfile.mathLevel ?? null)) {
+        updateData.mathLevel = mathLevel;
+      }
+      if (useElaOverride && elaLevel !== (initialProfile.elaLevel ?? null)) {
+        updateData.elaLevel = elaLevel;
+      }
+      if (useScienceOverride && scienceLevel !== (initialProfile.scienceLevel ?? null)) {
+        updateData.scienceLevel = scienceLevel;
+      }
+      if (useHistoryOverride && historyLevel !== (initialProfile.historyLevel ?? null)) {
+        updateData.historyLevel = historyLevel;
+      }
 
       const response = await fetch('/brain/api/onboarding', {
         method: 'PATCH',
@@ -90,7 +109,11 @@ export function SettingsForm({ initialProfile }: SettingsFormProps) {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to save settings');
+        const detail = errorData.detail;
+        const message = Array.isArray(detail)
+          ? detail.map((item) => item?.msg).filter(Boolean).join(', ')
+          : detail;
+        throw new Error(message || 'Failed to save settings');
       }
 
       setSaveStatus('success');

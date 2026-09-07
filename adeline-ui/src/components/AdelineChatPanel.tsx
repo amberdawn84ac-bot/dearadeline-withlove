@@ -93,6 +93,23 @@ function blockSuggestedReplies(block?: Record<string, unknown> | null): string[]
     : [];
 }
 
+function spaceBlockMessage(block: Record<string, unknown>): Omit<Message, "id"> {
+  const blockType = String(block.block_type ?? "NARRATIVE").toUpperCase();
+  if (blockType === "NARRATIVE") {
+    const title = typeof block.title === "string" ? block.title.trim() : "";
+    const content = typeof block.content === "string" ? block.content.trim() : "";
+    return {
+      role: "adeline",
+      content: [title, content].filter(Boolean).join("\n\n"),
+    };
+  }
+  return {
+    role: "adeline",
+    content: "",
+    segments: [{ type: "block", data: block }],
+  };
+}
+
 // ── Activity credit receipt ────────────────────────────────────────────────────
 
 function ActivityCreditCard({ result }: { result: ActivityReportResponse }) {
@@ -183,7 +200,7 @@ const BLOCK_CONFIGS: Record<string, { icon: string; bg: string; border: string; 
 
 function ConversationBlockCard({ block, onReflect }: { block: Record<string, unknown>; onReflect?: (prompt: string) => void }) {
   const [sharedResource, setSharedResource] = useState<string | null>(null);
-  const blockType = (block.block_type as string) ?? "NARRATIVE";
+  const blockType = String(block.block_type ?? "NARRATIVE").toUpperCase();
   const c = BLOCK_CONFIGS[blockType] ?? BLOCK_CONFIGS.NARRATIVE;
   const title   = block.title   as string | undefined;
   const content = block.content as string | undefined;
@@ -365,10 +382,8 @@ export function AdelineChatPanel({
           : [];
         if (state.current_block) {
           history.push({
+            ...spaceBlockMessage(state.current_block),
             id: `space-block-${state.current_block_index}`,
-            role: "adeline",
-            content: "",
-            segments: [{ type: "block", data: state.current_block }],
           });
         }
         setMessages(history);
@@ -445,9 +460,7 @@ export function AdelineChatPanel({
             && nextState.current_block_index !== spaceState.current_block_index
           ) {
             addMessage({
-              role: "adeline",
-              content: "",
-              segments: [{ type: "block", data: nextState.current_block }],
+              ...spaceBlockMessage(nextState.current_block),
             });
           }
           window.dispatchEvent(new CustomEvent("adeline:space-updated", {
