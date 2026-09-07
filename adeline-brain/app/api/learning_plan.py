@@ -951,9 +951,9 @@ async def _family_investigation_suggestion_for_slot(
             sequence = build_sequence_contract(source="family")
             return LessonSuggestion(
                 id=shared_id,
-                title=personalized_curriculum_planner.TRACK_LABELS.get(track, canonical_topic),
+                title=canonical_topic,
                 track=track,
-                description=canonical_topic,
+                description=personalized_curriculum_planner.TRACK_LABELS.get(track, canonical_topic),
                 emoji=TRACK_EMOJI.get(track, "✦"),
                 priority=1.0,
                 source="family",

@@ -205,7 +205,8 @@ async def test_siblings_share_the_investigation_but_keep_distinct_skill_targets(
     assert younger is not None and older is not None
     assert younger.id == older.id
     assert younger.canonical_slug == older.canonical_slug
-    assert younger.title == older.title == "Truth-based history"
+    assert younger.title == older.title == "Railroads and Power"
+    assert younger.description == older.description == "Truth-based history"
     assert younger.canonical_topic == older.canonical_topic == "Railroads and Power"
     assert younger.individual_skill_targets[0].title == "Count equal groups"
     assert older.individual_skill_targets[0].title == "Compare rates of change"
