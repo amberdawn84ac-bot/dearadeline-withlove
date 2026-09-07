@@ -246,8 +246,8 @@ async def register_student_account(request: Request, body: StudentRegisterReques
                         (id, name, email, role, "isHomestead", "gradeLevel",
                          username, "pinHash", "linkCode", xp, "adeCoins",
                          "parentName", "parentEmail", "coppaVerified",
-                         "coppaPendingToken", "coppaTokenExpiresAt")
-                    VALUES ($1, $2, $3, 'STUDENT', TRUE, $4, $5, $6, $7, 0, 0, $8, $9, $10, $11, $12)
+                         "coppaPendingToken", "coppaTokenExpiresAt", "onboardingComplete")
+                    VALUES ($1, $2, $3, 'STUDENT', TRUE, $4, $5, $6, $7, 0, 0, $8, $9, $10, $11, $12, TRUE)
                     """,
                     user_id, body.display_name, placeholder_email, stored_grade_level,
                     body.username, pin_hash, link_code, parent_name, parent_email,

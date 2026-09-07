@@ -17,6 +17,21 @@ export default function OnboardingPage() {
   useEffect(() => {
     const checkOnboardingStatus = async () => {
       try {
+        // Username+PIN students authenticate via an HttpOnly cookie, not a
+        // Supabase client session -- they never have one. Check that path
+        // first so a PIN student who ends up here (e.g. a stale
+        // onboardingComplete flag) lands straight back in the dashboard
+        // instead of being bounced to /login by the Supabase-only check
+        // below, which /login then immediately bounces back from (the
+        // "spazzing" redirect loop this replaces).
+        const cookieSession = await fetch('/api/student-auth', { cache: 'no-store' }).catch(() => null);
+        if (cookieSession?.ok) {
+          console.log('[OnboardingPage] Valid cookie session, redirecting to dashboard');
+          setStatus('redirecting');
+          window.location.href = '/dashboard';
+          return;
+        }
+
         // Get live session from Supabase
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
         if (sessionError || !sessionData.session) {
