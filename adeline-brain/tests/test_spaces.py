@@ -42,6 +42,16 @@ def test_turn_evaluation_suggested_replies_default_to_empty():
         == ["Yes", "Not yet"]
 
 
+def test_turn_evaluation_log_fields_default_to_empty_and_can_be_tailored():
+    base = {
+        "adeline_message": "Record what you see today.", "evaluation": "not_answered",
+        "recommended_action": "stay", "is_waiting_for_user": True, "resource_triggers": [],
+    }
+    assert _TurnEvaluation.model_validate(base).log_fields == []
+    tailored = _TurnEvaluation.model_validate({**base, "log_fields": ["Day", "Height (cm)", "Leaf color"]})
+    assert tailored.log_fields == ["Day", "Height (cm)", "Leaf color"]
+
+
 def test_space_maps_blocks_to_unit_lessons():
     metadata = {"unit_plan": {"lessons": [{"lesson_id": "lesson-1", "title": "Observe", "block_ids": ["b1", "b2"]}]}}
     lesson = _lesson_for_block(metadata, "b2", 1)

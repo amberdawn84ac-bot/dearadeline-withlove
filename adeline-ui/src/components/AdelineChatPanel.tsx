@@ -66,6 +66,7 @@ interface SpaceChatState {
   current_block?: Record<string, unknown> | null;
   messages?: Array<{ role: "user" | "assistant"; content: string }>;
   suggested_replies?: string[];
+  log_fields?: string[];
   [key: string]: unknown;
 }
 
@@ -82,6 +83,16 @@ const WELCOME_MSG: Message = {
 
 const PROJECT_LIST_RE = /\b(show|browse|see|find|list|what|give me).{0,20}(project|craft|make|build|farm)/i;
 
+/** Cheap, no-backend-call fallback for flows that don't return their own
+ * tailored suggested_replies (e.g. the token-streamed general chat, where a
+ * second structured LLM call just to pick reply buttons isn't worth the
+ * round trip). Only fires for an obvious yes/no-shaped question. */
+function heuristicSuggestedReplies(text: string): string[] {
+  return /\b(are you ready|ready to|would you like|do you want|shall we)\b/i.test(text)
+    ? ["Yes", "Not yet", "I have a question"]
+    : [];
+}
+
 function blockSuggestedReplies(block?: Record<string, unknown> | null): string[] {
   if (!block) return [];
   const contribution = block.learner_contribution as { response_options?: unknown[] } | undefined;
@@ -90,10 +101,7 @@ function blockSuggestedReplies(block?: Record<string, unknown> | null): string[]
     .map((option) => option.trim())
     .slice(0, 4);
   if (authored.length) return authored;
-  const content = String(block.content ?? "");
-  return /\b(are you ready|ready to|would you like|do you want|shall we)\b/i.test(content)
-    ? ["Yes", "Not yet", "I have a question"]
-    : [];
+  return heuristicSuggestedReplies(String(block.content ?? ""));
 }
 
 function spaceBlockMessage(block: Record<string, unknown>): Omit<Message, "id"> {
@@ -201,12 +209,15 @@ const BLOCK_CONFIGS: Record<string, { icon: string; bg: string; border: string; 
   NARRATIVE:            { icon: "📖", bg: "#FDF6E9", border: "#E7DAC3",  color: "#2F4731",  label: "Narrative" },
 };
 
-function ConversationBlockCard({ block, onReflect, onLogSubmit }: {
+function ConversationBlockCard({ block, onReflect, onLogSubmit, logFields }: {
   block: Record<string, unknown>;
   onReflect?: (prompt: string) => void;
   /** Present only inside a Space conversation, for blocks where a structured
    * log entry is a natural stand-in for typing the same thing as one paragraph. */
   onLogSubmit?: (text: string) => void;
+  /** Field labels Adeline tailored to this specific activity (e.g. sourdough:
+   * Day/Rise/Bubbles/Smell). Falls back to generic editable fields when empty. */
+  logFields?: string[];
 }) {
   const [sharedResource, setSharedResource] = useState<string | null>(null);
   const blockType = String(block.block_type ?? "NARRATIVE").toUpperCase();
@@ -276,7 +287,7 @@ function ConversationBlockCard({ block, onReflect, onLogSubmit }: {
           <p className="text-[11px] text-[#2F4731]/60">Credit comes from what you can demonstrate or explain afterward—not from opening the link or time spent.</p>
         </div>
       )}
-      {onLogSubmit && LOGGABLE_BLOCK_TYPES.has(blockType) && <LogEntryForm onSubmit={onLogSubmit} />}
+      {onLogSubmit && LOGGABLE_BLOCK_TYPES.has(blockType) && <LogEntryForm onSubmit={onLogSubmit} fields={logFields} />}
     </div>
   );
 }
@@ -508,6 +519,7 @@ export function AdelineChatPanel({
           content: result.adeline_response,
           zpd_zone: result.zpd_zone,
         });
+        setSuggestedReplies(result.suggested_replies?.length ? result.suggested_replies : heuristicSuggestedReplies(result.adeline_response));
       } else if (PROJECT_LIST_RE.test(text)) {
         // Project catalog intent
         addMessage({ role: "adeline", content: "Let me pull up the project catalog for you…" });
@@ -594,6 +606,7 @@ export function AdelineChatPanel({
               setMessages((prev) =>
                 prev.map((m) => m.id === streamingId ? { ...m, streaming: false } : m)
               );
+              setSuggestedReplies(heuristicSuggestedReplies(textBuffer));
             } else if (event.type === "error") {
               setMessages((prev) =>
                 prev.map((m) =>
@@ -724,6 +737,7 @@ export function AdelineChatPanel({
                           key={i} block={seg.data}
                           onReflect={(prompt) => { setInput(prompt); inputRef.current?.focus(); }}
                           onLogSubmit={spacePlanItemId ? (text) => void handleSend(text) : undefined}
+                          logFields={spaceState?.log_fields}
                         />
                       )
                     )
@@ -828,7 +842,7 @@ export function AdelineChatPanel({
             {photoError && <p className="text-xs text-red-700">{photoError}</p>}
           </div>
         )}
-        {spacePlanItemId && suggestedReplies.length > 0 && (
+        {suggestedReplies.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-2" aria-label="Quick replies">
             {suggestedReplies.map((reply) => (
               <button

@@ -720,6 +720,7 @@ export interface ScaffoldResponse {
   witness_anchor_used: string | null;
   mastery_band: MasteryBand;
   mastery_score: number;
+  suggested_replies?: string[];
 }
 
 export async function scaffold(

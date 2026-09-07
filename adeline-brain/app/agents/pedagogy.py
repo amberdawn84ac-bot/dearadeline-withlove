@@ -15,6 +15,7 @@ The system prompt is dynamically constructed from the student's live mastery sta
 """
 from __future__ import annotations
 
+import json
 import os
 import logging
 import re
@@ -212,6 +213,13 @@ she may reference scripture. When she does, she uses the Everett Fox translation
 
 Tone: warm, direct, a little bookish. Like a trusted older sibling who reads a lot.
 Length: 2–4 sentences. Never lecture. Always end with a question or an invitation.
+
+Respond with ONLY a JSON object (no markdown fences, no commentary) of this exact shape:
+{{"reply": string, "suggested_replies": [string, ...]}}
+"reply" is your response as described above. "suggested_replies" is 0 to 4 short, natural replies
+the student could tap instead of typing (e.g. yes/no, ready/not yet, a small set of genuine choices) —
+use them only for questions with real short answers; leave the list empty when the student needs to
+explain their reasoning, show their work, or write freely.
 """
 
 
@@ -224,6 +232,7 @@ class ScaffoldResponse:
     witness_anchor_used: Optional[str]   # The standard text used as bridge, if any
     mastery_band: MasteryBand
     mastery_score: float
+    suggested_replies: list[str]
 
 
 async def scaffold(
@@ -277,6 +286,7 @@ async def scaffold(
         oas_standards=oas_standards,
     )
 
+    suggested_replies: list[str] = []
     try:
         client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         completion = await client.chat.completions.create(
@@ -287,8 +297,14 @@ async def scaffold(
             ],
             temperature=0.7,
             max_tokens=300,
+            response_format={"type": "json_object"},
         )
-        reply = completion.choices[0].message.content.strip()
+        data = json.loads(completion.choices[0].message.content)
+        reply = str(data["reply"]).strip()
+        suggested_replies = [
+            str(item).strip() for item in (data.get("suggested_replies") or [])
+            if str(item).strip()
+        ][:4]
     except Exception as e:
         logger.error(f"[Pedagogy] OpenAI call failed: {e}")
         # Graceful fallback — never leave the student with nothing
@@ -311,6 +327,7 @@ async def scaffold(
         witness_anchor_used=anchor_used,
         mastery_band=track_mastery.mastery_band,
         mastery_score=track_mastery.mastery_score,
+        suggested_replies=suggested_replies,
     )
 
 

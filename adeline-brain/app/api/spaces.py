@@ -78,6 +78,7 @@ class _TurnEvaluation(BaseModel):
     resource_triggers: list[Literal["show_microscope_diagram", "display_breakout_tracks"]] = Field(default_factory=list)
     off_plan_topic: OffPlanTopic | None = None
     suggested_replies: list[str] = Field(default_factory=list)
+    log_fields: list[str] = Field(default_factory=list)
 
 
 _TURN_SYSTEM_PROMPT = """You are Adeline, a warm but rigorous learning companion guiding one family through a unit Space.
@@ -86,6 +87,14 @@ from what you say. Ask no more than one question.
 Offer zero to four suggested_replies. Use them for natural short answers such as yes/no, ready/not yet, or a small
 set of genuine choices. Do not offer them when the learner needs to explain reasoning, show evidence, or write freely.
 Use display_breakout_tracks only when subject-specific work is useful now, and show_microscope_diagram only when microscopy is relevant.
+
+LOG FIELDS: if the current activity is a hands-on observation/log activity (a LAB_MISSION, LAB_GUIDE, or EXPERIMENT
+block that asks the family to record what they've observed over time), set "log_fields" to 2-5 short field labels
+tailored to exactly what THIS activity asks the family to record — read its actual content, don't guess generically.
+Examples: a sourdough starter log might warrant ["Day", "Rise", "Bubbles", "Smell"]; a bean-growth experiment might
+warrant ["Day", "Height (cm)", "Leaf color"]; a titration lab might warrant ["Trial #", "Volume added (mL)", "Color
+change"]. Leave "log_fields" empty for every other activity type, including a LAB_MISSION/EXPERIMENT that only asks
+for a one-time answer rather than a repeated log.
 
 {activity_mode}
 
@@ -100,7 +109,7 @@ Respond with ONLY a JSON object (no markdown fences, no commentary) matching exa
   "recommended_action": "stay"|"advance"|"complete_unit", "is_waiting_for_user": boolean,
   "resource_triggers": ["show_microscope_diagram"|"display_breakout_tracks", ...] (0-2 items),
   "off_plan_topic": null | {{"concept_name": string, "track": string|null, "tier": "encountered"|"demonstrated"}},
-  "suggested_replies": [string, ...] (0-4 items)}}"""
+  "suggested_replies": [string, ...] (0-4 items), "log_fields": [string, ...] (0-5 items)}}"""
 
 
 def _turn_activity_mode(state: dict) -> str:
@@ -653,6 +662,7 @@ async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
         if "display_breakout_tracks" in evaluation.resource_triggers else None
     )
     result["suggested_replies"] = evaluation.suggested_replies
+    result["log_fields"] = evaluation.log_fields
     return result
 
 

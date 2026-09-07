@@ -2,28 +2,33 @@
 
 import { useState } from 'react';
 
+const GENERIC_FIELDS = ['Day', 'Observation 1', 'Observation 2', 'Notes'];
+
 /** A structured alternative to typing a whole log entry as one chat paragraph.
- * Fields are generic (day/measurement/observation/notes) so this applies to any
- * observe-and-record activity, not just the sourdough starter it was built for. */
-export function LogEntryForm({ onSubmit, disabled }: { onSubmit: (text: string) => void; disabled?: boolean }) {
+ * `fields` should be labels Adeline tailored to the current activity (e.g. a
+ * sourdough log: Day/Rise/Bubbles/Smell). When Adeline hasn't supplied any yet
+ * (the very first time this block is shown, before any turn has run), falls
+ * back to generic, editable field labels so the family can name their own
+ * columns rather than see fields that assume a specific kind of experiment. */
+export function LogEntryForm({ onSubmit, disabled, fields }: {
+  onSubmit: (text: string) => void;
+  disabled?: boolean;
+  fields?: string[];
+}) {
+  const usingGenericFields = !fields?.length;
+  const initialLabels = usingGenericFields ? GENERIC_FIELDS : fields;
   const [open, setOpen] = useState(false);
-  const [day, setDay] = useState('');
-  const [rise, setRise] = useState('');
-  const [bubbles, setBubbles] = useState('');
-  const [smell, setSmell] = useState('');
-  const [notes, setNotes] = useState('');
+  const [labels, setLabels] = useState<string[]>(initialLabels);
+  const [values, setValues] = useState<string[]>(initialLabels.map(() => ''));
 
   function submit() {
-    const lines = [
-      day.trim() && `Day: ${day.trim()}`,
-      rise.trim() && `Rise: ${rise.trim()}`,
-      bubbles.trim() && `Bubbles: ${bubbles.trim()}`,
-      smell.trim() && `Smell: ${smell.trim()}`,
-      notes.trim() && `Notes: ${notes.trim()}`,
-    ].filter(Boolean) as string[];
+    const lines = labels
+      .map((label, i) => (values[i]?.trim() ? `${label.trim() || `Field ${i + 1}`}: ${values[i].trim()}` : ''))
+      .filter(Boolean);
     if (!lines.length) return;
     onSubmit(lines.join('\n'));
-    setDay(''); setRise(''); setBubbles(''); setSmell(''); setNotes(''); setOpen(false);
+    setValues(initialLabels.map(() => ''));
+    setOpen(false);
   }
 
   if (!open) {
@@ -43,27 +48,25 @@ export function LogEntryForm({ onSubmit, disabled }: { onSubmit: (text: string) 
     <div className="mt-2 space-y-2 rounded-xl border border-[#E7DAC3] bg-white p-3">
       <p className="text-xs font-bold uppercase tracking-wide text-[#2F4731]/70">Today&apos;s log entry</p>
       <div className="grid grid-cols-2 gap-2">
-        <input
-          value={day} onChange={(e) => setDay(e.target.value)} placeholder="Day #"
-          className="rounded-lg border border-[#E7DAC3] px-2 py-1.5 text-sm text-[#2F4731]"
-        />
-        <input
-          value={rise} onChange={(e) => setRise(e.target.value)} placeholder="Rise (e.g. doubled)"
-          className="rounded-lg border border-[#E7DAC3] px-2 py-1.5 text-sm text-[#2F4731]"
-        />
-        <input
-          value={bubbles} onChange={(e) => setBubbles(e.target.value)} placeholder="Bubbles"
-          className="rounded-lg border border-[#E7DAC3] px-2 py-1.5 text-sm text-[#2F4731]"
-        />
-        <input
-          value={smell} onChange={(e) => setSmell(e.target.value)} placeholder="Smell"
-          className="rounded-lg border border-[#E7DAC3] px-2 py-1.5 text-sm text-[#2F4731]"
-        />
+        {labels.map((label, i) => (
+          <div key={i} className="space-y-1">
+            {usingGenericFields ? (
+              <input
+                value={label}
+                onChange={(e) => setLabels((prev) => prev.map((l, idx) => (idx === i ? e.target.value : l)))}
+                className="w-full rounded-lg border border-transparent bg-transparent px-1 text-[10px] font-bold uppercase tracking-wide text-[#2F4731]/60 focus:border-[#E7DAC3] focus:bg-white"
+              />
+            ) : (
+              <p className="px-1 text-[10px] font-bold uppercase tracking-wide text-[#2F4731]/60">{label}</p>
+            )}
+            <input
+              value={values[i] ?? ''}
+              onChange={(e) => setValues((prev) => prev.map((v, idx) => (idx === i ? e.target.value : v)))}
+              className="w-full rounded-lg border border-[#E7DAC3] px-2 py-1.5 text-sm text-[#2F4731]"
+            />
+          </div>
+        ))}
       </div>
-      <textarea
-        value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything else you noticed…" rows={2}
-        className="w-full resize-none rounded-lg border border-[#E7DAC3] px-2 py-1.5 text-sm text-[#2F4731]"
-      />
       <div className="flex gap-3">
         <button
           type="button" onClick={submit} disabled={disabled}

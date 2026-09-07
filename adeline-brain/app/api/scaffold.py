@@ -38,6 +38,7 @@ class ScaffoldResponseBody(BaseModel):
     witness_anchor_used: str | None
     mastery_band:        MasteryBand
     mastery_score:       float
+    suggested_replies:   list[str] = []
 
 
 @router.post(
@@ -108,6 +109,7 @@ async def scaffold_response(body: ScaffoldRequest, student_id: str = Depends(get
         witness_anchor_used=result.witness_anchor_used,
         mastery_band=result.mastery_band,
         mastery_score=result.mastery_score,
+        suggested_replies=result.suggested_replies,
     )
 
 
