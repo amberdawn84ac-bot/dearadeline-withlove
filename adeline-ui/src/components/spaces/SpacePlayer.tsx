@@ -73,6 +73,9 @@ export default function SpacePlayer({ lesson, studentId, planItemId }: {
     </div>
 
     {space.breakout_data && <BreakoutTracks data={space.breakout_data} />}
+    {space.status === 'active' && <p className="rounded-2xl border border-[#D8C9AB] bg-[#FDF6E9] px-5 py-4 text-sm font-semibold text-[#2F4731]">
+      💬 Talk with Adeline in the chat at the bottom right to continue this Space.
+    </p>}
     {space.status === 'completed' && <div className="rounded-2xl border border-[#D8C9AB] bg-[#FDF6E9] p-5">
         <p className="font-bold text-[#2F5A3A]">You reached the end of this unit Space.</p>
         {creditedConcepts.length > 0 ? <p className="mt-2 text-sm text-[#2F4731]">Adeline recorded mastery as you went, for: <strong>{creditedConcepts.join(', ')}</strong>. Check the Learning Map to see it reflected on the transcript.</p>

@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { ChevronDown, ChevronUp, MessageCircle } from "lucide-react";
+import { ChevronDown, MessageCircle } from "lucide-react";
 import { useStudent } from "@/lib/useStudent";
 import styles from "./PersistentAdeline.module.css";
 
@@ -16,9 +16,7 @@ const AdelineChatPanel = dynamic(
 export function PersistentAdeline() {
   const { student } = useStudent();
   const pathname = usePathname();
-  const [minimized, setMinimized] = useState(false);
-
-  if (!student) return null;
+  const [minimized, setMinimized] = useState(true);
 
   const spacePath = pathname.match(/^\/dashboard\/spaces\/(.+)$/);
   let spacePlanItemId: string | undefined;
@@ -30,23 +28,48 @@ export function PersistentAdeline() {
     }
   }
 
+  // A Space's own content has no other way to advance -- open the chat
+  // automatically the first time a student lands on one, instead of leaving
+  // it collapsed as a bubble they may not notice they need to click.
+  useEffect(() => {
+    if (spacePlanItemId) setMinimized(false);
+  }, [spacePlanItemId]);
+
+  if (!student) return null;
+
+  if (minimized) {
+    return (
+      <button
+        type="button"
+        className={styles.bubble}
+        onClick={() => setMinimized(false)}
+        aria-label="Open chat with Adeline"
+      >
+        <span className={styles.smallPortrait}>
+          <Image src="/adeline-face.webp" alt="" fill sizes="44px" />
+        </span>
+        <MessageCircle size={18} />
+      </button>
+    );
+  }
+
   return (
-    <section className={styles.fixture} data-minimized={minimized} aria-label="Chat with Adeline">
+    <section className={styles.fixture} aria-label="Chat with Adeline">
       <div className={styles.topBar}>
+        {spacePlanItemId && <span className={styles.spaceHint}>Talk here to continue this Space</span>}
         <button
           type="button"
           className={styles.toggle}
-          onClick={() => setMinimized((value) => !value)}
-          aria-expanded={!minimized}
+          onClick={() => setMinimized(true)}
+          aria-expanded
           aria-controls="persistent-adeline-content"
         >
-          {minimized ? <MessageCircle size={16} /> : <ChevronUp size={16} />}
-          {minimized ? "Open chat" : "Minimize"}
-          {minimized && <ChevronDown size={16} />}
+          <ChevronDown size={16} />
+          Minimize
         </button>
       </div>
 
-      <div id="persistent-adeline-content" className={styles.content} hidden={minimized}>
+      <div id="persistent-adeline-content" className={styles.content}>
         <div className={styles.portrait}>
           <Image
             src="/adeline-face.webp"
