@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useStudent } from '@/lib/useStudent';
-import { PersistentAdeline } from '@/components/PersistentAdeline';
 import { supabase } from '@/lib/supabase';
 import { clearStudentDataCaches } from '@/lib/brain-client';
 import styles from './sites-dashboard.module.css';
@@ -76,8 +75,6 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
           )}
         </div>
       </header>
-
-      <PersistentAdeline />
 
       <div className={styles.body}>
         <aside className={styles.sidebar} aria-label="Dashboard menu">

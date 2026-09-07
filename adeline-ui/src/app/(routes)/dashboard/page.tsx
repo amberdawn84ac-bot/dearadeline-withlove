@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useStudent } from '@/lib/useStudent';
 import { getLearningPlan, getRecentTranscript, getSavedTodayPlan, peekLearningPlan } from '@/lib/brain-client';
 import type { LearningPlanResponse, LessonSuggestion, TranscriptEntry } from '@/lib/brain-client';
+import { AdelineConversationCard } from '@/components/AdelineConversationCard';
 import styles from '@/components/nav/sites-dashboard.module.css';
 
 export default function TodayPage() {
@@ -75,6 +76,15 @@ export default function TodayPage() {
       </header>
 
       {error && <p className={styles.error} role="alert">{error}</p>}
+
+      <div className="mb-6">
+        <AdelineConversationCard
+          studentId={student.id}
+          gradeLevel={student.gradeLevel ?? '8'}
+          heightClass="h-[440px]"
+          label="Talk with Adeline"
+        />
+      </div>
 
       <section className={styles.kanban} aria-label="Today's learning board">
         <div className={`${styles.kanbanColumn} ${styles.kanbanToday}`}>
