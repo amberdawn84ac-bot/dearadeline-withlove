@@ -150,9 +150,22 @@ async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
         lc_messages.append(HumanMessage(content=content) if item.get("role") == "user" else AIMessage(content=content))
     lc_messages.append(HumanMessage(content=user_message))
 
-    llm = create_llm(model=os.getenv("ADELINE_SPACE_MODEL", GEMINI_MODEL), max_tokens=1024)
-    response = await llm.ainvoke(lc_messages)
-    return _TurnEvaluation.model_validate(_parse_json_response(str(response.content)))
+    # adeline_message alone allows up to 4000 chars; the previous 1024-token
+    # ceiling routinely truncated mid-string on a longer reply (confirmed live:
+    # "Unterminated string starting at..." from json.loads), which surfaced to
+    # families as an intermittent "could not reach the service" -- it wasn't
+    # network flakiness, just not enough room to finish the JSON object.
+    llm = create_llm(model=os.getenv("ADELINE_SPACE_MODEL", GEMINI_MODEL), max_tokens=4096)
+
+    last_error: Exception | None = None
+    for attempt in range(2):
+        response = await llm.ainvoke(lc_messages)
+        try:
+            return _TurnEvaluation.model_validate(_parse_json_response(str(response.content)))
+        except Exception as exc:  # malformed/truncated JSON is rare but not impossible even with headroom
+            last_error = exc
+            logger.warning("[Spaces] Turn evaluation parse failed (attempt %d/2): %s", attempt + 1, exc)
+    raise last_error
 
 
 def _lesson_for_block(metadata: dict, block_id: str, block_index: int) -> dict:
