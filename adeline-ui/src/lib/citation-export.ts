@@ -31,7 +31,7 @@ export interface Lesson {
  * Evidence array carries the Witness Protocol verdict + source metadata.
  */
 export interface LessonBlock {
-  evidence: Evidence[];
+  evidence?: Evidence[];
 }
 
 // ── MLA formatting ────────────────────────────────────────────────────────────
@@ -61,8 +61,8 @@ export function formatMLAWork(evidence: Evidence): string {
  */
 export function formatMLA(lesson: Lesson): string {
   const citedWorks = lesson.blocks
-    .filter((b: LessonBlock) => b.evidence.length > 0 && b.evidence[0])
-    .map((b: LessonBlock) => formatMLAWork(b.evidence[0]));
+    .filter((b: LessonBlock) => (b.evidence?.length ?? 0) > 0 && b.evidence![0])
+    .map((b: LessonBlock) => formatMLAWork(b.evidence![0]));
 
   const uniqueCitations = [...new Set(citedWorks)];
 

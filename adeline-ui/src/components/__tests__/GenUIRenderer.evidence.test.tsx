@@ -68,4 +68,13 @@ describe("EvidenceFooter evidence contracts", () => {
     expect(screen.getByText(citation.excerpt_or_observable_feature!)).toBeInTheDocument();
     expect(screen.getByText(/it does not prove individual exposure or causation/i)).toBeInTheDocument();
   });
+
+  it("does not crash when a block carries no evidence array at all", () => {
+    // NARRATIVE/LAB_MISSION blocks legitimately omit `evidence` entirely --
+    // this reproduces the production crash where the sourdough unit's first
+    // block (NARRATIVE, no evidence key) threw "Cannot read properties of
+    // undefined (reading 'length')" and took down the whole Space.
+    expect(() => render(<EvidenceFooter evidence={undefined} />)).not.toThrow();
+    expect(() => render(<PrimaryEvidenceRecords evidence={undefined} />)).not.toThrow();
+  });
 });

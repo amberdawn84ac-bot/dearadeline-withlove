@@ -272,8 +272,8 @@ export interface LessonBlockResponse {
     middle?: string;
     high_school?: string;
   };
-  evidence: Evidence[];
-  is_silenced: boolean;
+  evidence?: Evidence[];
+  is_silenced?: boolean;
   homestead_content?: string;
   mind_map_data?:       MindMapData;
   timeline_data?:       TimelineData;

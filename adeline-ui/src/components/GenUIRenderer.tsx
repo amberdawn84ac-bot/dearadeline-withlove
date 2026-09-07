@@ -358,8 +358,8 @@ function VerdictBadge({ verdict }: { verdict: WitnessVerdict }) {
 
 // ── Evidence footer ───────────────────────────────────────────────────────────
 
-export function EvidenceFooter({ evidence }: { evidence: Evidence[] }) {
-  if (!evidence.length) return null;
+export function EvidenceFooter({ evidence }: { evidence: Evidence[] | undefined }) {
+  if (!evidence?.length) return null;
   const ev = evidence[0];
   const creator = ev.witness_citation?.author || ev.creator_or_issuer;
   const citationDate = ev.witness_citation?.year ?? ev.date;
@@ -548,8 +548,8 @@ function LessonContent({
 
 // ── PRIMARY_SOURCE block ──────────────────────────────────────────────────────
 
-export function PrimaryEvidenceRecords({ evidence }: { evidence: Evidence[] }) {
-  const records = evidence.filter((item) =>
+export function PrimaryEvidenceRecords({ evidence }: { evidence: Evidence[] | undefined }) {
+  const records = (evidence ?? []).filter((item) =>
     Boolean(
       item.source_title &&
       item.source_url &&

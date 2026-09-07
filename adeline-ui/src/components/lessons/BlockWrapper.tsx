@@ -80,7 +80,7 @@ export default function BlockWrapper({
   onFocusResetComplete,
 }: BlockWrapperProps) {
   const style = getBlockStyle(block.block_type);
-  const topEvidence = block.evidence[0];
+  const topEvidence = block.evidence?.[0];
   const score = topEvidence?.similarity_score;
   const isPrimarySource = block.block_type === "PRIMARY_SOURCE";
   const citationCreator = topEvidence?.witness_citation?.author || topEvidence?.creator_or_issuer;
