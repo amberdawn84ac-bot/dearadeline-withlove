@@ -293,9 +293,19 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
             "change about digestibility and nutrition; do not overstate unproven health claims about "
             "fermented foods beyond what real sources support. "
             "CORRECTNESS: wild sourdough fermentation and commercial-yeast bread are different processes; do "
-            "not conflate them or claim one is simply a slower version of the other."
+            "not conflate them or claim one is simply a slower version of the other. "
+            "STAGE/BLOCK_TYPE MATCH (repeated failures on this unit have all been caused by mislabeling this): "
+            "experience_stage is validated strictly against block_type — a stage label alone is never enough. "
+            "Only these block_types can carry experience_stage=ACTION: LAB_MISSION, EXPERIMENT, REAL_WORLD_APP, "
+            "SIMULATION, RESEARCH_MISSION, DISCUSSION_FORUM, GENUI_ASSEMBLY, PROBLEM. Only these can carry "
+            "CREATION: PROJECT_BUILDER, TIMELINE, MIND_MAP, CONCEPT_MAP, GENUI_ASSEMBLY. Only these can carry "
+            "DEMONSTRATION: QUIZ, FLASHCARD, SCAFFOLDED_PROBLEM, GENUI_ASSEMBLY. TEXT, NARRATIVE, PRIMARY_SOURCE, "
+            "DATA_EXPLORER, and COMPARISON are DISCOVERY-only block_types and must never be labeled ACTION, "
+            "CREATION, or DEMONSTRATION even when their content describes the family doing something hands-on — "
+            "if a block is meant to carry one of those three stages, its block_type must be one of the matching "
+            "types listed above, not TEXT/NARRATIVE with that stage label bolted on."
         ),
-        content_revision="kitchen-chemistry-sourdough-v5",
+        content_revision="kitchen-chemistry-sourdough-v6",
     ),
     CanonicalSeed(
         "The Poison Squad: Formaldehyde Milk and the Fight for Food Safety",
