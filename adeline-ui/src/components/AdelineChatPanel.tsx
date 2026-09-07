@@ -315,11 +315,16 @@ export function AdelineChatPanel({
     }
     let cancelled = false;
     const path = `${encodeURIComponent(studentId)}/${encodeURIComponent(spacePlanItemId)}`;
-    void fetch(`/brain/spaces/${path}`, { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("This Space is not ready yet.");
-        return response.json() as Promise<SpaceChatState>;
-      })
+    const openSpace = async () => {
+      for (let attempt = 0; attempt < 20 && !cancelled; attempt += 1) {
+        const response = await fetch(`/brain/spaces/${path}`, { cache: "no-store" });
+        if (response.ok) return response.json() as Promise<SpaceChatState>;
+        if (response.status !== 409) throw new Error("This Space is not ready yet.");
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      throw new Error("This Space is not ready yet.");
+    };
+    void openSpace()
       .then((state) => { if (!cancelled) setSpaceState(state); })
       .catch(() => { if (!cancelled) setSpaceState(null); });
     return () => { cancelled = true; };

@@ -27,11 +27,18 @@ export default function SpacePlayer({ lesson, studentId, planItemId }: {
 
   useEffect(() => {
     let cancelled = false;
-    void fetch(`/brain/spaces/${encodedPath}`, { cache: 'no-store' })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('Adeline could not open this Space yet.');
-        return response.json() as Promise<SpaceState>;
-      })
+    const openSpace = async () => {
+      for (let attempt = 0; attempt < 20 && !cancelled; attempt += 1) {
+        const response = await fetch(`/brain/spaces/${encodedPath}`, { cache: 'no-store' });
+        if (response.ok) return response.json() as Promise<SpaceState>;
+        // A newly authored experience can be saved a moment before its Space
+        // session is created. Treat that conflict as a brief loading state.
+        if (response.status !== 409) throw new Error('Adeline could not open this Space yet.');
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      throw new Error('Adeline could not open this Space yet.');
+    };
+    void openSpace()
       .then((state) => { if (!cancelled) setSpace(state); })
       .catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Could not open Space.'); });
     return () => { cancelled = true; };
