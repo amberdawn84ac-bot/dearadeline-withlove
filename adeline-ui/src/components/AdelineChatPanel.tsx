@@ -50,6 +50,17 @@ interface AdelineChatPanelProps {
   highlightedContext?: string | null;
   /** Callback to clear the highlighted context after it's been used */
   onHighlightedContextUsed?: () => void;
+  /** When present, the existing Adeline chat controls this saved unit Space. */
+  spacePlanItemId?: string;
+}
+
+interface SpaceChatState {
+  title: string;
+  version: number;
+  current_block_index: number;
+  total_blocks: number;
+  status: "active" | "completed";
+  [key: string]: unknown;
 }
 
 const DEFAULT_TRACK: Track = "TRUTH_HISTORY";
@@ -226,6 +237,7 @@ export function AdelineChatPanel({
   activeLessonContext,
   highlightedContext,
   onHighlightedContextUsed,
+  spacePlanItemId,
 }: AdelineChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MSG]);
   const [input, setInput] = useState("");
@@ -234,6 +246,7 @@ export function AdelineChatPanel({
   const [pendingActivity, setPendingActivity] = useState<string | null>(null);
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+  const [spaceState, setSpaceState] = useState<SpaceChatState | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -295,6 +308,23 @@ export function AdelineChatPanel({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    if (!spacePlanItemId) {
+      setSpaceState(null);
+      return;
+    }
+    let cancelled = false;
+    const path = `${encodeURIComponent(studentId)}/${encodeURIComponent(spacePlanItemId)}`;
+    void fetch(`/brain/spaces/${path}`, { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("This Space is not ready yet.");
+        return response.json() as Promise<SpaceChatState>;
+      })
+      .then((state) => { if (!cancelled) setSpaceState(state); })
+      .catch(() => { if (!cancelled) setSpaceState(null); });
+    return () => { cancelled = true; };
+  }, [spacePlanItemId, studentId]);
+
   // Handle incoming highlighted context from TextSelectionMenu
   useEffect(() => {
     if (highlightedContext && highlightedContext !== pendingHighlight) {
@@ -327,7 +357,36 @@ export function AdelineChatPanel({
     const startsTeachingRequest = isExplicitLearningRequest(text);
 
     try {
-      if (activeLessonContext) {
+      if (spacePlanItemId) {
+        if (!spaceState) {
+          addMessage({ role: "adeline", content: "This Space is still opening. Give me a moment, then send that again." });
+        } else if (spaceState.status === "completed") {
+          addMessage({ role: "adeline", content: "You have reached the end of this unit Space. We can still talk about anything you want to understand more deeply." });
+        } else {
+          const response = await fetch("/api/spaces/turn", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              studentId,
+              planItemId: spacePlanItemId,
+              userMessage: text,
+              expectedVersion: spaceState.version,
+            }),
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || "Adeline could not continue this Space just now.");
+          const nextState = result as SpaceChatState & { messages?: Array<{ role: string; content: string }> };
+          setSpaceState(nextState);
+          addMessage({
+            role: "adeline",
+            content: nextState.messages?.findLast((item) => item.role === "assistant")?.content
+              || "Let’s continue with the next part.",
+          });
+          window.dispatchEvent(new CustomEvent("adeline:space-updated", {
+            detail: { planItemId: spacePlanItemId, state: nextState },
+          }));
+        }
+      } else if (activeLessonContext) {
         // Scaffold: student is responding to an active lesson
         const result: ScaffoldResponse = await scaffold({
           student_id: studentId,
@@ -461,7 +520,7 @@ export function AdelineChatPanel({
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, addMessage, conversationHistory, pendingActivity]);
+  }, [input, isLoading, activeLessonContext, studentId, gradeLevel, addMessage, conversationHistory, pendingActivity, spacePlanItemId, spaceState]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -649,7 +708,9 @@ export function AdelineChatPanel({
             placeholder={
               pendingHighlight
                 ? "Ask about the highlighted text…"
-                : activeLessonContext
+                : spacePlanItemId
+                  ? "Respond to this part of the Space…"
+                  : activeLessonContext
                   ? "Respond to the lesson…"
                   : "Ask Adeline or enter a topic…"
             }

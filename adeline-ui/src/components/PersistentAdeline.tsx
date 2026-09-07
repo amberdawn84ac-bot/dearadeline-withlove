@@ -3,6 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { ChevronDown, ChevronUp, MessageCircle } from "lucide-react";
 import { useStudent } from "@/lib/useStudent";
 import styles from "./PersistentAdeline.module.css";
@@ -14,9 +15,20 @@ const AdelineChatPanel = dynamic(
 
 export function PersistentAdeline() {
   const { student } = useStudent();
+  const pathname = usePathname();
   const [minimized, setMinimized] = useState(false);
 
   if (!student) return null;
+
+  const spacePath = pathname.match(/^\/dashboard\/spaces\/(.+)$/);
+  let spacePlanItemId: string | undefined;
+  if (spacePath) {
+    try {
+      spacePlanItemId = decodeURIComponent(spacePath[1]);
+    } catch {
+      spacePlanItemId = spacePath[1];
+    }
+  }
 
   return (
     <section className={styles.fixture} data-minimized={minimized} aria-label="Chat with Adeline">
@@ -49,6 +61,7 @@ export function PersistentAdeline() {
             studentId={student.id}
             gradeLevel={student.gradeLevel ?? "8"}
             hideHeader
+            spacePlanItemId={spacePlanItemId}
           />
         </div>
       </div>

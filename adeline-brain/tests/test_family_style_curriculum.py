@@ -64,7 +64,7 @@ def test_learner_text_removes_internal_notes_and_identity_errors():
 
     cleaned = sanitize_learner_text(content)
 
-    assert cleaned == "Your job is to explain what HaShem says."
+    assert cleaned == "Your job is to explain what God says."
 
 
 def _truth_history_blocks(evidence: list[dict]) -> list[dict]:

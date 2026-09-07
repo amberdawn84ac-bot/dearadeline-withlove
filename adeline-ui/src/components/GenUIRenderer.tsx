@@ -658,7 +658,6 @@ function NarrativeBlock({
     isHomestead && block.homestead_content ? block.homestead_content : block.content;
   return (
     <div className={clsx("rounded-xl p-5 space-y-3", css.narrative)}>
-      <BlockLabel type="NARRATIVE" />
       <LessonContent content={content} color="#2F4731" />
       <EvidenceFooter evidence={block.evidence} />
     </div>

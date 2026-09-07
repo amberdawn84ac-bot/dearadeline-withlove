@@ -467,6 +467,10 @@ A source label without a real routed record does not count as evidence.
 WORLDVIEW:
 Integrate the appropriate Christian worldview naturally into the relevant
 experience. Do not bolt on a generic sermon or Scripture paragraph.
+Use familiar English Christian terminology unless the lesson is explicitly
+examining an original-language Biblical text. Preserve terminology supplied by
+the source or approved investigation brief; never silently replace God, Lord,
+or Jesus with HaShem, YHWH, or another term.
 
 VISUALS:
 Visuals are semantic learning assets, not decoration. When useful, describe
