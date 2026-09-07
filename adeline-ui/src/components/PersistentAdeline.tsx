@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -28,14 +28,9 @@ export function PersistentAdeline() {
     }
   }
 
-  // A Space's own content has no other way to advance -- open the chat
-  // automatically the first time a student lands on one, instead of leaving
-  // it collapsed as a bubble they may not notice they need to click.
-  useEffect(() => {
-    if (spacePlanItemId) setMinimized(false);
-  }, [spacePlanItemId]);
-
-  if (!student) return null;
+  // A unit Space is itself an Adeline conversation. It renders its own
+  // full-page chat, so the global floating chat must not duplicate it.
+  if (!student || spacePlanItemId) return null;
 
   if (minimized) {
     return (
@@ -56,7 +51,6 @@ export function PersistentAdeline() {
   return (
     <section className={styles.fixture} aria-label="Chat with Adeline">
       <div className={styles.topBar}>
-        {spacePlanItemId && <span className={styles.spaceHint}>Talk here to continue this Space</span>}
         <button
           type="button"
           className={styles.toggle}
@@ -84,7 +78,6 @@ export function PersistentAdeline() {
             studentId={student.id}
             gradeLevel={student.gradeLevel ?? "8"}
             hideHeader
-            spacePlanItemId={spacePlanItemId}
           />
         </div>
       </div>

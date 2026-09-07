@@ -60,6 +60,9 @@ interface SpaceChatState {
   current_block_index: number;
   total_blocks: number;
   status: "active" | "completed";
+  current_block?: Record<string, unknown> | null;
+  messages?: Array<{ role: "user" | "assistant"; content: string }>;
+  suggested_replies?: string[];
   [key: string]: unknown;
 }
 
@@ -75,6 +78,20 @@ const WELCOME_MSG: Message = {
 // ── Intent detection ───────────────────────────────────────────────────────────
 
 const PROJECT_LIST_RE = /\b(show|browse|see|find|list|what|give me).{0,20}(project|craft|make|build|farm)/i;
+
+function blockSuggestedReplies(block?: Record<string, unknown> | null): string[] {
+  if (!block) return [];
+  const contribution = block.learner_contribution as { response_options?: unknown[] } | undefined;
+  const authored = (contribution?.response_options ?? [])
+    .filter((option): option is string => typeof option === "string" && option.trim().length > 0)
+    .map((option) => option.trim())
+    .slice(0, 4);
+  if (authored.length) return authored;
+  const content = String(block.content ?? "");
+  return /\b(are you ready|ready to|would you like|do you want|shall we)\b/i.test(content)
+    ? ["Yes", "Not yet", "I have a question"]
+    : [];
+}
 
 // ── Activity credit receipt ────────────────────────────────────────────────────
 
@@ -173,6 +190,15 @@ function ConversationBlockCard({ block, onReflect }: { block: Record<string, unk
   const metadata = block.metadata as { resources?: Array<Record<string, unknown>> } | undefined;
   const resources = metadata?.resources ?? [];
 
+  if (blockType === "NARRATIVE") {
+    return (
+      <div className="space-y-2">
+        {title && <p className="text-sm font-bold text-[#2F4731]">{title}</p>}
+        {content && <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#2F4731]">{content}</p>}
+      </div>
+    );
+  }
+
   return (
     <div
       className="rounded-xl px-4 py-3 space-y-1.5 my-2"
@@ -247,6 +273,7 @@ export function AdelineChatPanel({
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [spaceState, setSpaceState] = useState<SpaceChatState | null>(null);
+  const [suggestedReplies, setSuggestedReplies] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -325,7 +352,27 @@ export function AdelineChatPanel({
       throw new Error("This Space is not ready yet.");
     };
     void openSpace()
-      .then((state) => { if (!cancelled) setSpaceState(state); })
+      .then((state) => {
+        if (cancelled) return;
+        setSpaceState(state);
+        setSuggestedReplies(blockSuggestedReplies(state.current_block));
+        const history: Message[] = state.messages?.length
+          ? state.messages.map((message, index) => ({
+              id: `space-history-${index}`,
+              role: message.role === "user" ? "user" as const : "adeline" as const,
+              content: message.content,
+            }))
+          : [];
+        if (state.current_block) {
+          history.push({
+            id: `space-block-${state.current_block_index}`,
+            role: "adeline",
+            content: "",
+            segments: [{ type: "block", data: state.current_block }],
+          });
+        }
+        setMessages(history);
+      })
       .catch(() => { if (!cancelled) setSpaceState(null); });
     return () => { cancelled = true; };
   }, [spacePlanItemId, studentId]);
@@ -353,10 +400,11 @@ export function AdelineChatPanel({
     ]);
   }, []);
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
+  const handleSend = useCallback(async (suggestedText?: string) => {
+    const text = (suggestedText ?? input).trim();
     if (!text || isLoading) return;
     setInput("");
+    setSuggestedReplies([]);
     addMessage({ role: "user", content: text });
     setIsLoading(true);
     const startsTeachingRequest = isExplicitLearningRequest(text);
@@ -382,11 +430,26 @@ export function AdelineChatPanel({
           if (!response.ok) throw new Error(result.error || "Adeline could not continue this Space just now.");
           const nextState = result as SpaceChatState & { messages?: Array<{ role: string; content: string }> };
           setSpaceState(nextState);
+          setSuggestedReplies(
+            nextState.suggested_replies?.length
+              ? nextState.suggested_replies
+              : blockSuggestedReplies(nextState.current_block),
+          );
           addMessage({
             role: "adeline",
             content: nextState.messages?.findLast((item) => item.role === "assistant")?.content
               || "Let’s continue with the next part.",
           });
+          if (
+            nextState.current_block
+            && nextState.current_block_index !== spaceState.current_block_index
+          ) {
+            addMessage({
+              role: "adeline",
+              content: "",
+              segments: [{ type: "block", data: nextState.current_block }],
+            });
+          }
           window.dispatchEvent(new CustomEvent("adeline:space-updated", {
             detail: { planItemId: spacePlanItemId, state: nextState },
           }));
@@ -704,6 +767,21 @@ export function AdelineChatPanel({
         className="shrink-0 px-4 py-3 border-t border-[#E7DAC3]"
         style={{ background: "#FFFDF5" }}
       >
+        {spacePlanItemId && suggestedReplies.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2" aria-label="Quick replies">
+            {suggestedReplies.map((reply) => (
+              <button
+                key={reply}
+                type="button"
+                onClick={() => void handleSend(reply)}
+                disabled={isLoading}
+                className="rounded-full border border-[#2F4731]/25 bg-white px-3 py-2 text-xs font-bold text-[#2F4731] hover:bg-[#FDF6E9] disabled:opacity-50"
+              >
+                {reply}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-end gap-2">
           <textarea
             ref={inputRef}
@@ -724,7 +802,7 @@ export function AdelineChatPanel({
             style={{ lineHeight: "1.4" }}
           />
           <button
-            onClick={handleSend}
+            onClick={() => void handleSend()}
             disabled={!input.trim() || isLoading}
             className="w-9 h-9 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
             style={{ background: "#BD6809", color: "#FFF" }}

@@ -54,6 +54,8 @@ ${JSON.stringify(state.current_block)}`;
     system: `You are Adeline, a warm but rigorous learning companion guiding one family through a unit Space.
 Never claim credit, mastery, completion, or standards proficiency directly to the family — that is handled separately
 from what you say. Ask no more than one question.
+Offer zero to four suggested_replies. Use them for natural short answers such as yes/no, ready/not yet, or a small
+set of genuine choices. Do not offer them when the learner needs to explain reasoning, show evidence, or write freely.
 Use display_breakout_tracks only when subject-specific work is useful now, and show_microscope_diagram only when microscopy is relevant.
 
 ${activityMode}
@@ -78,5 +80,9 @@ null for every ordinary turn that stayed on the current activity.`,
     const breakout = await fetch(`${base}/breakout-standards`, { headers: brainHeaders(token), cache: 'no-store' });
     if (breakout.ok) breakoutData = await breakout.json();
   }
-  return NextResponse.json({ ...nextState, breakout_data: breakoutData });
+  return NextResponse.json({
+    ...nextState,
+    breakout_data: breakoutData,
+    suggested_replies: output.suggested_replies,
+  });
 }

@@ -5,6 +5,8 @@ export const spaceEvaluationSchema = z.object({
   evaluation: z.enum(['correct', 'partial', 'incorrect', 'not_answered']),
   recommended_action: z.enum(['stay', 'advance', 'complete_unit']),
   is_waiting_for_user: z.boolean(),
+  suggested_replies: z.array(z.string().trim().min(1).max(120)).max(4).default([])
+    .describe('Optional short, natural replies the learner can tap instead of typing. Use only when genuinely useful.'),
   resource_triggers: z.array(z.enum(['show_microscope_diagram', 'display_breakout_tracks'])).max(2),
   // Set only when this turn's conversation genuinely engaged a concept beyond
   // the current planned activity — a passing mention never qualifies.
