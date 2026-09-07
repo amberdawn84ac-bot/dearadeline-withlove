@@ -16,7 +16,10 @@ const AdelineChatPanel = dynamic(
 export function PersistentAdeline() {
   const { student } = useStudent();
   const pathname = usePathname();
-  const [minimized, setMinimized] = useState(true);
+  // Visible by default -- Today and every other non-Space page has no other
+  // way to reach Adeline, so starting collapsed made her look like she'd
+  // disappeared from the page entirely.
+  const [minimized, setMinimized] = useState(false);
 
   const spacePath = pathname.match(/^\/dashboard\/spaces\/(.+)$/);
   let spacePlanItemId: string | undefined;
