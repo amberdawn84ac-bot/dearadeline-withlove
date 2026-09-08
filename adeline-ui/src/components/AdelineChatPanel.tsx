@@ -477,17 +477,30 @@ export function AdelineChatPanel({
         } else if (spaceState.status === "completed") {
           addMessage({ role: "adeline", content: "You have reached the end of this unit Space. We can still talk about anything you want to understand more deeply." });
         } else {
-          const response = await fetch("/api/spaces/turn", {
+          const path = `${encodeURIComponent(studentId)}/${encodeURIComponent(spacePlanItemId)}`;
+          const postTurn = (expectedVersion: number) => fetch("/api/spaces/turn", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               studentId,
               planItemId: spacePlanItemId,
               userMessage: text,
-              expectedVersion: spaceState.version,
+              expectedVersion,
             }),
           });
-          const result = await response.json();
+          let priorIndex = spaceState.current_block_index;
+          let response = await postTurn(spaceState.version);
+          let result = await response.json();
+          if (response.status === 409) {
+            const refresh = await fetch(`/brain/spaces/${path}`, { cache: "no-store" });
+            if (refresh.ok) {
+              const latest = await refresh.json() as SpaceChatState;
+              priorIndex = latest.current_block_index;
+              setSpaceState(latest);
+              response = await postTurn(latest.version);
+              result = await response.json();
+            }
+          }
           if (!response.ok) throw new Error(result.error || "Adeline could not continue this Space just now.");
           const nextState = result as SpaceChatState & { messages?: Array<{ role: string; content: string }> };
           setSpaceState(nextState);
@@ -503,7 +516,7 @@ export function AdelineChatPanel({
           });
           if (
             nextState.current_block
-            && nextState.current_block_index !== spaceState.current_block_index
+            && nextState.current_block_index !== priorIndex
           ) {
             addMessage({
               ...spaceBlockMessage(nextState.current_block),

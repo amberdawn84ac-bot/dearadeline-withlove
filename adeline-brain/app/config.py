@@ -116,7 +116,7 @@ def create_llm(model: str | None = None, **kwargs):
         from langchain_google_genai import ChatGoogleGenerativeAI
         return ChatGoogleGenerativeAI(
             model=model or ADELINE_MODEL,
-            google_api_key=GOOGLE_API_KEY or None,
+            google_api_key=GOOGLE_API_KEY or GEMINI_API_KEY or None,
             convert_system_message_to_human=True,
             **kwargs,
         )

@@ -304,7 +304,25 @@ def test_normalize_turn_payload_coerces_case_and_drops_unknown_triggers():
     assert payload["resource_triggers"] == ["show_microscope_diagram"]
 
 
-def test_space_turn_llm_requests_gemini_json_mode(monkeypatch):
+def test_normalize_turn_payload_turns_null_lists_and_empty_off_plan_into_defaults():
+    payload = _normalize_turn_payload({
+        "adeline_message": "Keep going.",
+        "evaluation": "correct",
+        "recommended_action": "stay",
+        "is_waiting_for_user": True,
+        "resource_triggers": None,
+        "suggested_replies": None,
+        "log_fields": None,
+        "off_plan_topic": {},
+    })
+    assert payload["resource_triggers"] == []
+    assert payload["suggested_replies"] == []
+    assert payload["log_fields"] == []
+    assert payload["off_plan_topic"] is None
+    _TurnEvaluation.model_validate(payload)
+
+
+def test_space_turn_llm_requests_gemini_json_mode_without_thinking(monkeypatch):
     captured = {}
 
     def fake_create_llm(model=None, **kwargs):
@@ -316,7 +334,10 @@ def test_space_turn_llm_requests_gemini_json_mode(monkeypatch):
     monkeypatch.setattr("app.api.spaces.create_llm", fake_create_llm)
     _space_turn_llm()
     assert captured["kwargs"]["response_mime_type"] == "application/json"
+    assert captured["kwargs"]["thinking_budget"] == 0
+    assert captured["kwargs"]["max_retries"] == 0
     assert captured["kwargs"]["max_tokens"] == 4096
+    assert captured["kwargs"]["timeout"] == 30
 
 
 class _FakeResponse:
@@ -345,6 +366,7 @@ async def test_evaluate_turn_recovers_from_empty_fence_then_parses_content_block
         _FakeResponse([{"type": "text", "text": json.dumps(_TURN_JSON)}]),
     ])
     monkeypatch.setattr("app.api.spaces._space_turn_llm", lambda: llm)
+    monkeypatch.setattr("app.api.spaces.asyncio.sleep", AsyncMock())
 
     result = await _evaluate_turn(_space_state(), "It smelled tangy and had bubbles.")
 
@@ -358,6 +380,7 @@ async def test_evaluate_turn_recovers_from_empty_fence_then_parses_content_block
 async def test_evaluate_turn_falls_back_instead_of_failing_the_family(monkeypatch):
     llm = _FakeLLM(responses=[_FakeResponse(""), _FakeResponse("```"), _FakeResponse("not json")])
     monkeypatch.setattr("app.api.spaces._space_turn_llm", lambda: llm)
+    monkeypatch.setattr("app.api.spaces.asyncio.sleep", AsyncMock())
 
     result = await _evaluate_turn(_space_state(), "We mixed flour and water.")
 
