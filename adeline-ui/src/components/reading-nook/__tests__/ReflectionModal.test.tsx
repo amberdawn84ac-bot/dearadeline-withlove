@@ -52,9 +52,10 @@ describe('ReflectionModal', () => {
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/reading-session/session-123',
+        '/brain/api/reading-session/session-123',
         expect.objectContaining({
           method: 'PATCH',
+          credentials: 'include',
           body: JSON.stringify({
             status: 'finished',
             student_reflection: 'Amazing book!',
@@ -81,7 +82,7 @@ describe('ReflectionModal', () => {
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/reading-session/session-123',
+        '/brain/api/reading-session/session-123',
         expect.objectContaining({
           body: JSON.stringify({
             status: 'finished',
@@ -104,7 +105,7 @@ describe('ReflectionModal', () => {
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/reading-session/session-123',
+        '/brain/api/reading-session/session-123',
         expect.objectContaining({
           body: JSON.stringify({ status: 'finished' }),
         })
@@ -231,7 +232,7 @@ describe('ReflectionModal', () => {
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/reading-session/session-123',
+        '/brain/api/reading-session/session-123',
         expect.objectContaining({
           body: JSON.stringify({
             status: 'finished',

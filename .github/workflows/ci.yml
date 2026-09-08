@@ -126,3 +126,19 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Type check
         run: cd adeline-ui && pnpm exec tsc --noEmit
+
+  test-ui:
+    name: Tests (adeline-ui)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: pnpm/action-setup@v3
+        with:
+          version: "10"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Unit tests
+        run: cd adeline-ui && pnpm test

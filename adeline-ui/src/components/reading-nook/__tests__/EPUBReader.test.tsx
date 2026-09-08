@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { EPUBReader } from '../EPUBReader';
+import { ReaderProvider } from '@/lib/reader-context';
 
 // Mock EPUB.js at top of file before describe block
-vi.mock('epubjs', () => ({
-  default: vi.fn(() => ({
+vi.mock('epubjs', () => {
+  const makeBook = () => ({
     open: vi.fn().mockResolvedValue(undefined),
     renderTo: vi.fn(() => ({
       display: vi.fn().mockResolvedValue(undefined),
@@ -20,8 +21,12 @@ vi.mock('epubjs', () => ({
     },
     ready: Promise.resolve(),
     navigation: { toc: [] },
-  })),
-}));
+  });
+  function EPub() {
+    return makeBook();
+  }
+  return { default: EPub };
+});
 
 describe('EPUBReader', () => {
   const mockBook = {
@@ -42,6 +47,13 @@ describe('EPUBReader', () => {
     onBack: vi.fn(),
   };
 
+  const renderReader = (props = mockProps) =>
+    render(
+      <ReaderProvider>
+        <EPUBReader {...props} />
+      </ReaderProvider>,
+    );
+
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -54,12 +66,12 @@ describe('EPUBReader', () => {
   });
 
   it('renders loading state initially', () => {
-    render(<EPUBReader {...mockProps} />);
+    renderReader();
     expect(screen.getByText('Loading book...')).toBeInTheDocument();
   });
 
   it('displays close button and control bar', async () => {
-    render(<EPUBReader {...mockProps} />);
+    renderReader();
 
     await waitFor(() => {
       expect(screen.getByText('Close')).toBeInTheDocument();
@@ -67,7 +79,7 @@ describe('EPUBReader', () => {
   });
 
   it('displays book metadata in sidebar', async () => {
-    render(<EPUBReader {...mockProps} />);
+    renderReader();
 
     await waitFor(() => {
       expect(screen.getByText('Test Book')).toBeInTheDocument();
@@ -76,7 +88,7 @@ describe('EPUBReader', () => {
   });
 
   it('shows TOC button and can toggle TOC modal', async () => {
-    render(<EPUBReader {...mockProps} />);
+    renderReader();
 
     await waitFor(() => {
       const tocButton = screen.getByText('TOC');
@@ -85,7 +97,7 @@ describe('EPUBReader', () => {
   });
 
   it('displays lexile level badge when provided', async () => {
-    render(<EPUBReader {...mockProps} />);
+    renderReader();
 
     await waitFor(() => {
       expect(screen.getByText('750L')).toBeInTheDocument();
@@ -93,7 +105,7 @@ describe('EPUBReader', () => {
   });
 
   it('calls onBack when close button is clicked', async () => {
-    render(<EPUBReader {...mockProps} />);
+    renderReader();
 
     await waitFor(() => {
       const closeButton = screen.getByText('Close');
@@ -103,16 +115,16 @@ describe('EPUBReader', () => {
   });
 
   it('displays progress percentage', async () => {
-    render(<EPUBReader {...mockProps} />);
+    renderReader();
 
     await waitFor(() => {
       // Progress should be displayed
-      expect(screen.getByText('%')).toBeInTheDocument();
+      expect(screen.getByText(/complete/)).toBeInTheDocument();
     });
   });
 
   it('renders reading time component', async () => {
-    render(<EPUBReader {...mockProps} />);
+    renderReader();
 
     await waitFor(() => {
       expect(screen.getByText(/minutes reading time/)).toBeInTheDocument();
@@ -156,7 +168,7 @@ describe('EPUBReader', () => {
       new Error('Failed to load book')
     );
 
-    render(<EPUBReader {...errorProps} />);
+    renderReader(errorProps);
 
     await waitFor(() => {
       expect(screen.getByText('Back to Shelf')).toBeInTheDocument();
