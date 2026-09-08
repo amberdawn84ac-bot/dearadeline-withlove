@@ -1,11 +1,18 @@
 """Admin endpoints for maintenance tasks."""
 import logging
 import os
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.api.middleware import require_role
+from app.schemas.api_models import UserRole
+
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(
+    prefix="/admin",
+    tags=["admin"],
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+)
 
 
 @router.get("/env-check")

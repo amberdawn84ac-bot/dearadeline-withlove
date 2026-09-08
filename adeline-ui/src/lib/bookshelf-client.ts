@@ -154,9 +154,9 @@ export async function getBooks(
   if (options?.offset !== undefined) params.append('offset', String(options.offset));
 
   const queryString = params.toString();
-  const endpoint = `/books${queryString ? `?${queryString}` : ''}`;
+  const url = queryString ? `${BOOKS_URL}?${queryString}` : BOOKS_URL;
 
-  return fetchAPI<BookListResponse>(`${BOOKS_URL}${endpoint}`, {
+  return fetchAPI<BookListResponse>(url, {
     method: 'GET',
     studentId,
   });

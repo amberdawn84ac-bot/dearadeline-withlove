@@ -54,10 +54,7 @@ def test_unfinished_standard_becomes_a_real_mission_target():
 
     assert suggestion.id == "standard-9.ELA.1"
     assert suggestion.standard_code == "9.ELA.1"
-    assert suggestion.title == (
-        "Investigate a claim affecting your community — "
-        "Evaluate how evidence supports an argument"
-    )
+    assert suggestion.title == "Evaluate how evidence supports an argument"
     assert suggestion.track == "ENGLISH_LITERATURE"
 
 
@@ -89,6 +86,7 @@ def test_standard_topic_is_concise_and_uses_an_action_verb():
 
     title = _standard_suggestion(standard).title
 
-    assert " — Outline and defend " in title
+    assert title.startswith("Outline and defend")
     assert title.endswith("…")
+    assert "How does Scripture speak" not in title
     assert len(title) < 110
