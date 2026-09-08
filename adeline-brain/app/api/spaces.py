@@ -193,12 +193,18 @@ def _normalize_turn_payload(payload: dict) -> dict:
             data[key] = data[key].strip().lower()
     if isinstance(data.get("is_waiting_for_user"), str):
         data["is_waiting_for_user"] = data["is_waiting_for_user"].strip().lower() in {"true", "1", "yes"}
+    for key in ("resource_triggers", "suggested_replies", "log_fields"):
+        if data.get(key) is None:
+            data[key] = []
     if isinstance(data.get("resource_triggers"), str):
         data["resource_triggers"] = [data["resource_triggers"]]
     if isinstance(data.get("resource_triggers"), list):
         data["resource_triggers"] = [
             trigger for trigger in data["resource_triggers"] if trigger in _ALLOWED_RESOURCE_TRIGGERS
         ]
+    off_plan = data.get("off_plan_topic")
+    if not isinstance(off_plan, dict) or not str(off_plan.get("concept_name") or "").strip():
+        data["off_plan_topic"] = None
     message = data.get("adeline_message")
     if isinstance(message, str) and len(message) > 4000:
         data["adeline_message"] = message[:4000]
@@ -207,11 +213,23 @@ def _normalize_turn_payload(payload: dict) -> dict:
 
 def _space_turn_llm():
     model = os.getenv("ADELINE_SPACE_MODEL", GEMINI_MODEL)
-    kwargs: dict = {"max_tokens": 4096, "temperature": 0.2}
+    kwargs: dict = {
+        "max_tokens": 4096,
+        "temperature": 0.2,
+        # Outer loop owns retries. LangChain's default max_retries=6 nested
+        # under three attempts burns the free-tier 20 req/min budget and
+        # overruns the Vercel proxy even at 60s.
+        "max_retries": 0,
+        "timeout": 30,
+    }
     # JSON mode is Gemini-specific. Without it, Flash freely returns markdown
     # fences or a fence with nothing inside — confirmed live on sourdough.
+    # thinking_budget=0 stops 2.5 Flash from spending the 4096 output budget
+    # on hidden thinking, which is what still produced empty bodies and
+    # mid-JSON truncation after the token ceiling was raised.
     if (model or "").lower().startswith("gemini"):
         kwargs["response_mime_type"] = "application/json"
+        kwargs["thinking_budget"] = 0
     return create_llm(model=model, **kwargs)
 
 
@@ -244,7 +262,7 @@ async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
             last_error = exc
             logger.warning("[Spaces] Turn evaluation call failed (attempt %d/3): %s", attempt + 1, exc)
             if attempt < 2:
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(2.0)
             continue
         content = response.content
         raw_text = _message_text(content)
@@ -259,6 +277,8 @@ async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
                 "[Spaces] Turn evaluation got an empty response (attempt %d/3), metadata=%s",
                 attempt + 1, getattr(response, "response_metadata", None),
             )
+            if attempt < 2:
+                await asyncio.sleep(0.8)
             continue
         try:
             return _TurnEvaluation.model_validate(_normalize_turn_payload(_parse_json_response(content)))
@@ -268,6 +288,8 @@ async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
                 "[Spaces] Turn evaluation parse failed (attempt %d/3): %s | raw_content=%r | metadata=%s",
                 attempt + 1, exc, raw_text[:500], getattr(response, "response_metadata", None),
             )
+            if attempt < 2:
+                await asyncio.sleep(0.8)
 
     # Never leave the family stuck behind a dead end -- a genuine, honest
     # in-character fallback beats a scary "could not reach the service" error
@@ -782,10 +804,17 @@ async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
         expected_version=body.expected_version,
     ))
 
-    result["breakout_data"] = (
-        await _breakout_data(student_id, plan_item_id)
-        if "display_breakout_tracks" in evaluation.resource_triggers else None
-    )
+    try:
+        result["breakout_data"] = (
+            await _breakout_data(student_id, plan_item_id)
+            if "display_breakout_tracks" in evaluation.resource_triggers else None
+        )
+    except Exception:
+        logger.exception(
+            "[Spaces] breakout_data failed after committed turn student=%s plan_item=%s",
+            student_id, plan_item_id,
+        )
+        result["breakout_data"] = None
     result["suggested_replies"] = evaluation.suggested_replies
     result["log_fields"] = evaluation.log_fields
     return result
