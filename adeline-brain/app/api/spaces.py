@@ -138,22 +138,81 @@ def _turn_activity_mode(state: dict) -> str:
     )
 
 
-def _parse_json_response(text: str) -> dict:
-    raw_len = len(text)
-    text = text.strip()
-    if text.startswith("```"):
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-    text = text.strip()
+def _message_text(content) -> str:
+    """LangChain/Gemini may return a string or a list of content blocks."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                value = item.get("text") or item.get("content")
+                if value:
+                    parts.append(str(value))
+            else:
+                value = getattr(item, "text", None) or getattr(item, "content", None)
+                if value:
+                    parts.append(str(value))
+        return "\n".join(parts)
+    return str(content or "")
+
+
+def _parse_json_response(content) -> dict:
+    """Decode a turn-evaluation JSON object from Gemini/LangChain output.
+
+    Space turns used to `str(response.content)` and `json.loads` after a
+    fence strip. That failed live in three distinct ways: a fence with
+    nothing inside (`"```"`), JSON wrapped in LangChain content blocks,
+    and prose around a valid object. Daily Bread already solved this;
+    reuse the same extraction here.
+    """
+    raw = _message_text(content)
+    raw_len = len(raw)
+    text = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
     if not text:
-        # A response consisting of only an opening/closing fence with nothing
-        # between (content == "```") strips down to empty here -- confirmed
-        # live, this previously fell through to json.loads("") and surfaced
-        # as an opaque "Expecting value: line 1 column 1 (char 0)" with no
-        # indication of what the model actually returned.
         raise ValueError(f"Empty JSON after fence-stripping (raw response was {raw_len} chars)")
-    return json.loads(text)
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError(f"Gemini response did not contain a JSON object (raw response was {raw_len} chars)")
+    parsed = json.loads(text[start:end + 1])
+    if not isinstance(parsed, dict):
+        raise ValueError("Gemini response JSON was not an object")
+    return parsed
+
+
+_ALLOWED_RESOURCE_TRIGGERS = {"show_microscope_diagram", "display_breakout_tracks"}
+
+
+def _normalize_turn_payload(payload: dict) -> dict:
+    """Coerce slightly-off Gemini JSON so a real evaluation isn't thrown away."""
+    data = dict(payload)
+    for key in ("evaluation", "recommended_action"):
+        if isinstance(data.get(key), str):
+            data[key] = data[key].strip().lower()
+    if isinstance(data.get("is_waiting_for_user"), str):
+        data["is_waiting_for_user"] = data["is_waiting_for_user"].strip().lower() in {"true", "1", "yes"}
+    if isinstance(data.get("resource_triggers"), str):
+        data["resource_triggers"] = [data["resource_triggers"]]
+    if isinstance(data.get("resource_triggers"), list):
+        data["resource_triggers"] = [
+            trigger for trigger in data["resource_triggers"] if trigger in _ALLOWED_RESOURCE_TRIGGERS
+        ]
+    message = data.get("adeline_message")
+    if isinstance(message, str) and len(message) > 4000:
+        data["adeline_message"] = message[:4000]
+    return data
+
+
+def _space_turn_llm():
+    model = os.getenv("ADELINE_SPACE_MODEL", GEMINI_MODEL)
+    kwargs: dict = {"max_tokens": 4096, "temperature": 0.2}
+    # JSON mode is Gemini-specific. Without it, Flash freely returns markdown
+    # fences or a fence with nothing inside — confirmed live on sourdough.
+    if (model or "").lower().startswith("gemini"):
+        kwargs["response_mime_type"] = "application/json"
+    return create_llm(model=model, **kwargs)
 
 
 async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
@@ -170,7 +229,7 @@ async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
     # "Unterminated string starting at..." from json.loads), which surfaced to
     # families as an intermittent "could not reach the service" -- it wasn't
     # network flakiness, just not enough room to finish the JSON object.
-    llm = create_llm(model=os.getenv("ADELINE_SPACE_MODEL", GEMINI_MODEL), max_tokens=4096)
+    llm = _space_turn_llm()
 
     last_error: Exception | None = None
     for attempt in range(3):
@@ -187,8 +246,9 @@ async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
             if attempt < 2:
                 await asyncio.sleep(1.5)
             continue
-        content = str(response.content or "")
-        if not content.strip():
+        content = response.content
+        raw_text = _message_text(content)
+        if not raw_text.strip():
             # Confirmed live: Gemini occasionally returns a fully empty
             # response (not truncated -- nothing at all). response_metadata
             # usually carries why (a finish_reason like SAFETY/RECITATION);
@@ -201,12 +261,12 @@ async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
             )
             continue
         try:
-            return _TurnEvaluation.model_validate(_parse_json_response(content))
+            return _TurnEvaluation.model_validate(_normalize_turn_payload(_parse_json_response(content)))
         except Exception as exc:  # malformed/truncated JSON is rare but not impossible even with headroom
             last_error = exc
             logger.warning(
                 "[Spaces] Turn evaluation parse failed (attempt %d/3): %s | raw_content=%r | metadata=%s",
-                attempt + 1, exc, content[:500], getattr(response, "response_metadata", None),
+                attempt + 1, exc, raw_text[:500], getattr(response, "response_metadata", None),
             )
 
     # Never leave the family stuck behind a dead end -- a genuine, honest
