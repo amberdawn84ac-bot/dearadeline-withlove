@@ -4,6 +4,7 @@ import { spaceTurnRequestSchema } from '@/lib/spaces/schema';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 const BRAIN_URL = (process.env.BRAIN_INTERNAL_URL || process.env.BRAIN_URL ||
   process.env.NEXT_PUBLIC_BRAIN_URL || 'https://dearadeline-withlove-production.up.railway.app').replace(/\/$/, '');

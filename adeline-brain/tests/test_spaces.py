@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock, patch
 
+import json
 import pytest
 
 from datetime import datetime, timezone
@@ -13,13 +14,17 @@ from app.api.spaces import (
     _concept_slug,
     _credit_off_plan_topic,
     _decoded,
+    _evaluate_turn,
     _learner_depth,
     _lesson_content,
     _lesson_for_block,
     _lesson_fully_completed,
     _newly_completed_lesson,
+    _normalize_turn_payload,
+    _parse_json_response,
     _proficiency_from_evaluations,
     _space_list_item,
+    _space_turn_llm,
     _state,
 )
 
@@ -247,3 +252,131 @@ def test_space_list_item_handles_missing_completed_blocks_and_updated_at():
     assert item["completed_blocks"] == 0
     assert item["total_blocks"] == 0
     assert item["updated_at"] is None
+
+
+_TURN_JSON = {
+    "adeline_message": "What did the starter smell like this morning?",
+    "evaluation": "not_answered",
+    "recommended_action": "stay",
+    "is_waiting_for_user": True,
+}
+
+
+def _space_state() -> dict:
+    return {
+        "status": "active",
+        "title": "Kitchen Chemistry: Sourdough",
+        "current_lesson": {"title": "Starter Culture"},
+        "current_block_index": 0,
+        "total_blocks": 3,
+        "current_block": {"block_id": "b1", "content": "Feed the starter and record what you see."},
+        "messages": [],
+    }
+
+
+def test_parse_json_response_extracts_object_from_prose_and_fences():
+    assert _parse_json_response('Here you go:\n{"adeline_message": "Hi", "evaluation": "partial"}')["evaluation"] == "partial"
+    fenced = '```json\n{"adeline_message": "Hi", "evaluation": "correct"}\n```'
+    assert _parse_json_response(fenced)["evaluation"] == "correct"
+
+
+def test_parse_json_response_decodes_langchain_content_blocks():
+    content = [{"type": "text", "text": '```json\n{"adeline_message": "Look closer.", "evaluation": "partial"}\n```'}]
+    assert _parse_json_response(content)["adeline_message"] == "Look closer."
+
+
+def test_parse_json_response_rejects_empty_fence_with_a_clear_error():
+    with pytest.raises(ValueError, match="Empty JSON after fence-stripping"):
+        _parse_json_response("```")
+
+
+def test_normalize_turn_payload_coerces_case_and_drops_unknown_triggers():
+    payload = _normalize_turn_payload({
+        "adeline_message": "Tell me more.",
+        "evaluation": "Partial",
+        "recommended_action": "STAY",
+        "is_waiting_for_user": "true",
+        "resource_triggers": ["show_microscope_diagram", "award_credit"],
+    })
+    assert payload["evaluation"] == "partial"
+    assert payload["recommended_action"] == "stay"
+    assert payload["is_waiting_for_user"] is True
+    assert payload["resource_triggers"] == ["show_microscope_diagram"]
+
+
+def test_space_turn_llm_requests_gemini_json_mode(monkeypatch):
+    captured = {}
+
+    def fake_create_llm(model=None, **kwargs):
+        captured["model"] = model
+        captured["kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setenv("ADELINE_SPACE_MODEL", "gemini-2.5-flash")
+    monkeypatch.setattr("app.api.spaces.create_llm", fake_create_llm)
+    _space_turn_llm()
+    assert captured["kwargs"]["response_mime_type"] == "application/json"
+    assert captured["kwargs"]["max_tokens"] == 4096
+
+
+class _FakeResponse:
+    def __init__(self, content, metadata=None):
+        self.content = content
+        self.response_metadata = metadata or {}
+
+
+class _FakeLLM:
+    def __init__(self, responses=None, errors=None):
+        self._responses = list(responses or [])
+        self._errors = list(errors or [])
+        self.calls = 0
+
+    async def ainvoke(self, _messages):
+        self.calls += 1
+        if self._errors:
+            raise self._errors.pop(0)
+        return self._responses.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_turn_recovers_from_empty_fence_then_parses_content_blocks(monkeypatch):
+    llm = _FakeLLM(responses=[
+        _FakeResponse("```"),
+        _FakeResponse([{"type": "text", "text": json.dumps(_TURN_JSON)}]),
+    ])
+    monkeypatch.setattr("app.api.spaces._space_turn_llm", lambda: llm)
+
+    result = await _evaluate_turn(_space_state(), "It smelled tangy and had bubbles.")
+
+    assert llm.calls == 2
+    assert result.adeline_message == _TURN_JSON["adeline_message"]
+    assert result.evaluation == "not_answered"
+    assert result.recommended_action == "stay"
+
+
+@pytest.mark.asyncio
+async def test_evaluate_turn_falls_back_instead_of_failing_the_family(monkeypatch):
+    llm = _FakeLLM(responses=[_FakeResponse(""), _FakeResponse("```"), _FakeResponse("not json")])
+    monkeypatch.setattr("app.api.spaces._space_turn_llm", lambda: llm)
+
+    result = await _evaluate_turn(_space_state(), "We mixed flour and water.")
+
+    assert llm.calls == 3
+    assert result.evaluation == "not_answered"
+    assert result.recommended_action == "stay"
+    assert "say that again" in result.adeline_message.lower()
+
+
+@pytest.mark.asyncio
+async def test_evaluate_turn_retries_rate_limit_then_succeeds(monkeypatch):
+    llm = _FakeLLM(
+        errors=[RuntimeError("429 Resource exhausted")],
+        responses=[_FakeResponse(json.dumps(_TURN_JSON))],
+    )
+    monkeypatch.setattr("app.api.spaces._space_turn_llm", lambda: llm)
+    monkeypatch.setattr("app.api.spaces.asyncio.sleep", AsyncMock())
+
+    result = await _evaluate_turn(_space_state(), "Ready.")
+
+    assert llm.calls == 2
+    assert result.adeline_message == _TURN_JSON["adeline_message"]
