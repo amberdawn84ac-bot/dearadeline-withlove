@@ -322,7 +322,7 @@ def test_normalize_turn_payload_turns_null_lists_and_empty_off_plan_into_default
     _TurnEvaluation.model_validate(payload)
 
 
-def test_space_turn_llm_requests_gemini_json_mode_without_thinking(monkeypatch):
+def test_space_turn_llm_uses_the_known_good_constructor(monkeypatch):
     captured = {}
 
     def fake_create_llm(model=None, **kwargs):
@@ -333,11 +333,23 @@ def test_space_turn_llm_requests_gemini_json_mode_without_thinking(monkeypatch):
     monkeypatch.setenv("ADELINE_SPACE_MODEL", "gemini-2.5-flash")
     monkeypatch.setattr("app.api.spaces.create_llm", fake_create_llm)
     _space_turn_llm()
-    assert captured["kwargs"]["response_mime_type"] == "application/json"
-    assert captured["kwargs"]["thinking_budget"] == 0
-    assert captured["kwargs"]["max_retries"] == 0
-    assert captured["kwargs"]["max_tokens"] == 4096
-    assert captured["kwargs"]["timeout"] == 30
+    assert captured["model"] == "gemini-2.5-flash"
+    assert captured["kwargs"] == {"max_tokens": 4096}
+
+
+@pytest.mark.asyncio
+async def test_evaluate_turn_falls_back_if_llm_constructor_fails(monkeypatch):
+    def boom():
+        raise TypeError("unexpected keyword argument 'thinking_budget'")
+
+    monkeypatch.setattr("app.api.spaces._space_turn_llm", boom)
+    monkeypatch.setattr("app.api.spaces.asyncio.sleep", AsyncMock())
+
+    result = await _evaluate_turn(_space_state(), "We mixed flour and water.")
+
+    assert result.evaluation == "not_answered"
+    assert result.recommended_action == "stay"
+    assert "say that again" in result.adeline_message.lower()
 
 
 class _FakeResponse:

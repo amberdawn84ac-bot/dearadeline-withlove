@@ -212,25 +212,14 @@ def _normalize_turn_payload(payload: dict) -> dict:
 
 
 def _space_turn_llm():
+    # Known-good constructor: this is how Space turns worked before JSON-mode
+    # and thinking_budget=0. Those extra Gemini kwargs are not used by Daily
+    # Bread or activities, and they 500 the whole turn if Railway's
+    # langchain-google-genai rejects them (create_llm used to sit outside the
+    # retry try/except). Keep the Daily Bread parser below; do not change the
+    # request shape that was already working for this family.
     model = os.getenv("ADELINE_SPACE_MODEL", GEMINI_MODEL)
-    kwargs: dict = {
-        "max_tokens": 4096,
-        "temperature": 0.2,
-        # Outer loop owns retries. LangChain's default max_retries=6 nested
-        # under three attempts burns the free-tier 20 req/min budget and
-        # overruns the Vercel proxy even at 60s.
-        "max_retries": 0,
-        "timeout": 30,
-    }
-    # JSON mode is Gemini-specific. Without it, Flash freely returns markdown
-    # fences or a fence with nothing inside — confirmed live on sourdough.
-    # thinking_budget=0 stops 2.5 Flash from spending the 4096 output budget
-    # on hidden thinking, which is what still produced empty bodies and
-    # mid-JSON truncation after the token ceiling was raised.
-    if (model or "").lower().startswith("gemini"):
-        kwargs["response_mime_type"] = "application/json"
-        kwargs["thinking_budget"] = 0
-    return create_llm(model=model, **kwargs)
+    return create_llm(model=model, max_tokens=4096)
 
 
 async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
@@ -247,11 +236,10 @@ async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
     # "Unterminated string starting at..." from json.loads), which surfaced to
     # families as an intermittent "could not reach the service" -- it wasn't
     # network flakiness, just not enough room to finish the JSON object.
-    llm = _space_turn_llm()
-
     last_error: Exception | None = None
     for attempt in range(3):
         try:
+            llm = _space_turn_llm()
             response = await llm.ainvoke(lc_messages)
         except Exception as exc:
             # Confirmed live: the Gemini API key is on the free tier (20
