@@ -359,14 +359,16 @@ def test_experiment_block_can_legitimately_satisfy_action_stage():
 
 # ── format-version floor: legacy content stays servable ────────────────────────
 
-def test_legacy_v10_and_current_v11_canonicals_are_both_servable():
+def test_format_version_floor_is_v12():
     v10_block = {"family_style": True, "canonical_format_version": 10}
     v11_block = {"family_style": True, "canonical_format_version": 11}
+    v12_block = {"family_style": True, "canonical_format_version": 12}
     pre_family_style_block = {"family_style": True, "canonical_format_version": 9}
 
-    assert CANONICAL_FORMAT_VERSION == 11
-    assert is_current_family_canonical([v10_block]), "legacy pre-flow canonicals must stay servable from cache"
-    assert is_current_family_canonical([v11_block])
+    assert CANONICAL_FORMAT_VERSION == 12
+    assert is_current_family_canonical([v12_block])
+    assert not is_current_family_canonical([v10_block]), "pre-v12 canonicals must regenerate"
+    assert not is_current_family_canonical([v11_block])
     assert not is_current_family_canonical([pre_family_style_block])
 
 
@@ -379,7 +381,7 @@ def test_contract_and_prompt_version_are_real_nonempty_strings():
 
 def test_prompt_teaches_flow_ownership_and_substance_requirements():
     prompt = CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT
-    assert "experience_design.flow is the actual order" in prompt
-    assert "never determines what content exists or its order" in prompt
-    assert "is not" in prompt and "meaningfully different from a lesson with no flow at all" in prompt
+    assert "experience_design.flow is the actual sequence the family experiences" in prompt
+    assert "Every authored block_id must appear in exactly one flow node" in prompt
+    assert "TEXT and NARRATIVE are supporting/connective blocks only" in prompt
     assert "skill_practice" in prompt

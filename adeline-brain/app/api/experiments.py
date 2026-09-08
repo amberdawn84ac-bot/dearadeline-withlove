@@ -12,16 +12,21 @@ POST /experiments/{experiment_id}/seal — Upload discovery + grant credit
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.api.middleware import require_role
 from app.schemas.api_models import (
     Experiment, ExperimentResponse, ExperimentStep,
     SocialMediaKit, CreationConnection,
-    ChaosLevel, ScienceCredit,
+    ChaosLevel, ScienceCredit, UserRole,
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/experiments", tags=["experiments"])
+router = APIRouter(
+    prefix="/experiments",
+    tags=["experiments"],
+    dependencies=[Depends(require_role(UserRole.STUDENT, UserRole.PARENT, UserRole.ADMIN))],
+)
 
 
 # ── In-memory experiment catalog (seeded below) ──────────────────────────────

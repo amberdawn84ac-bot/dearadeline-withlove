@@ -14,7 +14,8 @@ import {
 } from '../bookshelf-client';
 
 const STUDENT_ID = 'student-123';
-const BASE_URL = '/brain/api/bookshelf';
+const BOOKS_URL = '/brain/api/books';
+const SESSIONS_URL = '/brain/api/reading-session';
 
 describe('bookshelf-client', () => {
   beforeEach(() => {
@@ -53,11 +54,12 @@ describe('bookshelf-client', () => {
 
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
-      `${BASE_URL}/books`,
+      BOOKS_URL,
       expect.objectContaining({
         method: 'GET',
+        credentials: 'include',
         headers: expect.objectContaining({
-          'Authorization': `Bearer ${STUDENT_ID}`,
+          'Content-Type': 'application/json',
         }),
       })
     );
@@ -136,12 +138,12 @@ describe('bookshelf-client', () => {
 
     expect(result).toEqual(mockBook);
     expect(global.fetch).toHaveBeenCalledWith(
-      `${BASE_URL}/books/book-1`,
+      `${BOOKS_URL}/book-1`,
       expect.any(Object)
     );
   });
 
-  it('getBook: includes student ID in authorization header', async () => {
+  it('getBook: sends credentials so auth cookies go with the request', async () => {
     const mockBook = { id: 'book-1', title: 'Test', author: 'Author', track: 'ENGLISH_LITERATURE' as const, source_url: 'url' };
     (global.fetch as any).mockResolvedValue({
       ok: true,
@@ -153,9 +155,7 @@ describe('bookshelf-client', () => {
     expect(global.fetch).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        headers: expect.objectContaining({
-          'Authorization': `Bearer ${STUDENT_ID}`,
-        }),
+        credentials: 'include',
       })
     );
   });
@@ -257,7 +257,7 @@ describe('bookshelf-client', () => {
 
     expect(result).toEqual(mockShelf);
     expect(global.fetch).toHaveBeenCalledWith(
-      `${BASE_URL}/reading-session`,
+      `${SESSIONS_URL}`,
       expect.any(Object)
     );
   });
@@ -312,7 +312,7 @@ describe('bookshelf-client', () => {
 
     expect(result).toEqual(mockSession);
     expect(global.fetch).toHaveBeenCalledWith(
-      `${BASE_URL}/reading-session`,
+      `${SESSIONS_URL}`,
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
@@ -382,7 +382,7 @@ describe('bookshelf-client', () => {
 
     expect(result).toEqual(mockSession);
     expect(global.fetch).toHaveBeenCalledWith(
-      `${BASE_URL}/reading-session/session-1`,
+      `${SESSIONS_URL}/session-1`,
       expect.objectContaining({
         method: 'PATCH',
         body: JSON.stringify({
@@ -463,7 +463,7 @@ describe('bookshelf-client', () => {
 
     expect(result).toEqual(mockSession);
     expect(global.fetch).toHaveBeenCalledWith(
-      `${BASE_URL}/reading-session/session-1`,
+      `${SESSIONS_URL}/session-1`,
       expect.objectContaining({
         body: JSON.stringify({
           status: 'finished',
@@ -494,7 +494,7 @@ describe('bookshelf-client', () => {
     const result = await markComplete(STUDENT_ID, 'session-1');
 
     expect(global.fetch).toHaveBeenCalledWith(
-      `${BASE_URL}/reading-session/session-1`,
+      `${SESSIONS_URL}/session-1`,
       expect.objectContaining({
         body: JSON.stringify({
           status: 'finished',
@@ -528,7 +528,7 @@ describe('bookshelf-client', () => {
 
     expect(result.status).toBe('wishlist');
     expect(global.fetch).toHaveBeenCalledWith(
-      `${BASE_URL}/reading-session/session-1`,
+      `${SESSIONS_URL}/session-1`,
       expect.objectContaining({
         body: JSON.stringify({ status: 'wishlist' }),
       })
@@ -653,10 +653,10 @@ describe('bookshelf-client', () => {
   });
 
   // ──────────────────────────────────────────────────────────────────────────────
-  // Authorization Header
+  // Credentials (HttpOnly cookies, not Bearer)
   // ──────────────────────────────────────────────────────────────────────────────
 
-  it('injects Authorization header with Bearer token', async () => {
+  it('sends credentials so auth cookies go with the request', async () => {
     const studentId = 'student-unique-id-456';
 
     (global.fetch as any).mockResolvedValue({
@@ -669,9 +669,7 @@ describe('bookshelf-client', () => {
     expect(global.fetch).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        headers: expect.objectContaining({
-          'Authorization': `Bearer ${studentId}`,
-        }),
+        credentials: 'include',
       })
     );
   });
@@ -714,7 +712,7 @@ describe('bookshelf-client', () => {
   // API Base URL
   // ──────────────────────────────────────────────────────────────────────────────
 
-  it('uses /brain/api/bookshelf as base URL', async () => {
+  it('uses /brain/api/books as the catalog URL', async () => {
     (global.fetch as any).mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({ books: [], total: 0 }),
@@ -723,7 +721,8 @@ describe('bookshelf-client', () => {
     await getBooks(STUDENT_ID);
 
     const url = (global.fetch as any).mock.calls[0][0];
-    expect(url).toContain('/brain/api/bookshelf');
+    expect(url).toBe(BOOKS_URL);
+    expect(url).not.toContain('/books/books');
   });
 
   it('correctly constructs endpoint URLs', async () => {
@@ -735,7 +734,7 @@ describe('bookshelf-client', () => {
     await getBook(STUDENT_ID, 'book-123');
 
     expect(global.fetch).toHaveBeenCalledWith(
-      `${BASE_URL}/books/book-123`,
+      `${BOOKS_URL}/book-123`,
       expect.any(Object)
     );
   });
