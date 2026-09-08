@@ -48,6 +48,7 @@ async def test_completion_clears_the_matching_lane_without_deleting_the_plan():
     assert "{suggestions}" in query
     assert "{individual_skills}" in query
     assert "{family_investigation}" in query
+    assert "{family_investigations}" in query
     assert result == {
         "suggestions": [], "individual_skills": [], "family_investigation": None,
     }

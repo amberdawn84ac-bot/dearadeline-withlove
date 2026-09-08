@@ -97,30 +97,39 @@ class DailyPlanStore:
                    SET "planJson" = jsonb_set(
                          jsonb_set(
                            jsonb_set(
-                             "planJson",
-                             '{suggestions}',
+                             jsonb_set(
+                               "planJson",
+                               '{suggestions}',
+                               COALESCE((
+                                 SELECT jsonb_agg(item)
+                                 FROM jsonb_array_elements(COALESCE("planJson"->'suggestions', '[]'::jsonb)) AS item
+                                 WHERE item->>'title' <> $3 AND item->>'id' <> $3
+                               ), '[]'::jsonb),
+                               TRUE
+                             ),
+                             '{individual_skills}',
                              COALESCE((
                                SELECT jsonb_agg(item)
-                               FROM jsonb_array_elements(COALESCE("planJson"->'suggestions', '[]'::jsonb)) AS item
+                               FROM jsonb_array_elements(COALESCE("planJson"->'individual_skills', '[]'::jsonb)) AS item
                                WHERE item->>'title' <> $3 AND item->>'id' <> $3
                              ), '[]'::jsonb),
                              TRUE
                            ),
-                           '{individual_skills}',
-                           COALESCE((
-                             SELECT jsonb_agg(item)
-                             FROM jsonb_array_elements(COALESCE("planJson"->'individual_skills', '[]'::jsonb)) AS item
-                             WHERE item->>'title' <> $3 AND item->>'id' <> $3
-                           ), '[]'::jsonb),
+                           '{family_investigation}',
+                           CASE
+                             WHEN "planJson"->'family_investigation'->>'title' = $3
+                               OR "planJson"->'family_investigation'->>'id' = $3
+                             THEN 'null'::jsonb
+                             ELSE COALESCE("planJson"->'family_investigation', 'null'::jsonb)
+                           END,
                            TRUE
                          ),
-                         '{family_investigation}',
-                         CASE
-                           WHEN "planJson"->'family_investigation'->>'title' = $3
-                             OR "planJson"->'family_investigation'->>'id' = $3
-                           THEN 'null'::jsonb
-                           ELSE COALESCE("planJson"->'family_investigation', 'null'::jsonb)
-                         END,
+                         '{family_investigations}',
+                         COALESCE((
+                           SELECT jsonb_agg(item)
+                           FROM jsonb_array_elements(COALESCE("planJson"->'family_investigations', '[]'::jsonb)) AS item
+                           WHERE item->>'title' <> $3 AND item->>'id' <> $3
+                         ), '[]'::jsonb),
                          TRUE
                        ),
                        "updatedAt" = NOW()
