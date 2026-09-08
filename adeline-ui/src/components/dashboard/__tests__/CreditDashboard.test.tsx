@@ -11,41 +11,52 @@ const mockCreditDashboard = {
   currentProfile: "college_prep",
   buckets: [
     {
-      bucketKey: "standard_courses",
-      bucketLabel: "Standard Courses",
-      threshold: 120,
-      earnedHours: 45.5,
+      bucket: "Standard Courses",
+      hoursEarned: 45.5,
+      evidenceCount: 4,
+      masteryAverage: 0.8,
+      masteryGrade: "B",
+      creditEarned: null,
     },
     {
-      bucketKey: "electives",
-      bucketLabel: "Electives",
-      threshold: 120,
-      earnedHours: 120,
+      bucket: "Electives",
+      hoursEarned: 120,
+      evidenceCount: 8,
+      masteryAverage: 1,
+      masteryGrade: "A",
+      creditEarned: 1,
     },
   ],
   pendingProposals: [
     {
       proposalId: "prop-1",
-      courseName: "Biology Project",
-      track: "CREATION_SCIENCE",
-      artifactCount: 3,
+      bucket: "Science",
+      externalCourseName: "Biology Project",
+      hoursEarned: 30,
+      masteryPercentage: 90,
+      masteryGrade: "A",
+      isApproved: false,
+      proposedAt: "2026-01-01T00:00:00Z",
     },
   ],
   approvedCourses: [
     {
-      courseId: "course-1",
-      courseName: "Geometry Mastery",
-      track: "APPLIED_MATHEMATICS",
-      credits: 1.0,
-      gradeLetter: "A",
+      proposalId: "course-1",
+      bucket: "Mathematics",
+      externalCourseName: "Geometry Mastery",
+      hoursEarned: 1,
+      masteryPercentage: 95,
+      masteryGrade: "A",
+      isApproved: true,
+      proposedAt: "2026-01-01T00:00:00Z",
     },
   ],
 };
 
 const mockProfiles = [
-  { key: "flexible_homeschool", label: "Flexible Homeschool" },
-  { key: "college_prep", label: "College Prep" },
-  { key: "public_school_parity", label: "Public School Parity" },
+  { key: "flexible_homeschool", name: "Flexible Homeschool", description: "", oasOptional: true },
+  { key: "college_prep", name: "College Prep", description: "", oasOptional: false },
+  { key: "public_school_parity", name: "Public School Parity", description: "", oasOptional: false },
 ];
 
 describe("CreditDashboardComponent", () => {
@@ -80,21 +91,21 @@ describe("CreditDashboardComponent", () => {
     expect(screen.getByText("College Prep")).toBeDefined();
 
     // Check credit buckets
-    expect(screen.getByText("Credit Accumulation by Bucket")).toBeDefined();
+    expect(screen.getByText("Mastery Evidence by Bucket")).toBeDefined();
     expect(screen.getByText("Standard Courses")).toBeDefined();
     expect(screen.getByText("Electives")).toBeDefined();
-    expect(screen.getByText("45.5 / 120 hours")).toBeDefined();
-    expect(screen.getByText("120 / 120 hours")).toBeDefined();
+    expect(screen.getByText("45.5 conventional hours")).toBeDefined();
+    expect(screen.getByText("120.0 conventional hours")).toBeDefined();
 
     // Check pending proposals
     expect(screen.getByText("Pending Course Proposals")).toBeDefined();
     expect(screen.getByText("Biology Project")).toBeDefined();
-    expect(screen.getByText("CREATION_SCIENCE")).toBeDefined();
+    expect(screen.getByText("Science")).toBeDefined();
 
     // Check approved courses
     expect(screen.getByText("Official Transcript")).toBeDefined();
     expect(screen.getByText("Geometry Mastery")).toBeDefined();
-    expect(screen.getByText("1.0 credit")).toBeDefined();
+    expect(screen.getByText("1 conventional hours")).toBeDefined();
   });
 
   it("should handle approve proposal button click", async () => {
@@ -108,11 +119,14 @@ describe("CreditDashboardComponent", () => {
       approvedCourses: [
         ...mockCreditDashboard.approvedCourses,
         {
-          courseId: "course-2",
-          courseName: "Biology Project",
-          track: "CREATION_SCIENCE",
-          credits: 1.0,
-          gradeLetter: "A",
+          proposalId: "course-2",
+          bucket: "Science",
+          externalCourseName: "Biology Project",
+          hoursEarned: 30,
+          masteryPercentage: 90,
+          masteryGrade: "A",
+          isApproved: true,
+          proposedAt: "2026-01-01T00:00:00Z",
         },
       ],
     };

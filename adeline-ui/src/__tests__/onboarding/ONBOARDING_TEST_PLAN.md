@@ -1,3 +1,20 @@
+# Onboarding test plan
+
+Manual/behavioral checklist for the family onboarding path. Automated
+coverage lives in:
+
+- `src/components/onboarding/__tests__/WelcomeFlow.test.tsx` — COPPA gate
+  and complete-setup payload
+- `src/components/__tests__/OnboardingGate.test.tsx` — login redirect,
+  onboarding redirect, stay-on-dashboard
+
+This file used to be `e2e.test.ts`. Vitest picked it up as a suite with
+no tests ("No test suite found"), so it was renamed. Keep the scenarios
+below as the source of truth for Playwright or a later e2e pass; do not
+put `describe`/`it` blocks in this file.
+
+---
+
 /**
  * End-to-End Test Suite for Onboarding Feature
  *
