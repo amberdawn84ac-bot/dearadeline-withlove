@@ -139,11 +139,20 @@ def _turn_activity_mode(state: dict) -> str:
 
 
 def _parse_json_response(text: str) -> dict:
+    raw_len = len(text)
     text = text.strip()
     if text.startswith("```"):
         text = text.split("```")[1]
         if text.startswith("json"):
             text = text[4:]
+    text = text.strip()
+    if not text:
+        # A response consisting of only an opening/closing fence with nothing
+        # between (content == "```") strips down to empty here -- confirmed
+        # live, this previously fell through to json.loads("") and surfaced
+        # as an opaque "Expecting value: line 1 column 1 (char 0)" with no
+        # indication of what the model actually returned.
+        raise ValueError(f"Empty JSON after fence-stripping (raw response was {raw_len} chars)")
     return json.loads(text)
 
 
@@ -195,7 +204,10 @@ async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
             return _TurnEvaluation.model_validate(_parse_json_response(content))
         except Exception as exc:  # malformed/truncated JSON is rare but not impossible even with headroom
             last_error = exc
-            logger.warning("[Spaces] Turn evaluation parse failed (attempt %d/3): %s", attempt + 1, exc)
+            logger.warning(
+                "[Spaces] Turn evaluation parse failed (attempt %d/3): %s | raw_content=%r | metadata=%s",
+                attempt + 1, exc, content[:500], getattr(response, "response_metadata", None),
+            )
 
     # Never leave the family stuck behind a dead end -- a genuine, honest
     # in-character fallback beats a scary "could not reach the service" error
