@@ -13,6 +13,7 @@ import type {
   LessonBlockResponse, LessonRequest, LessonResponse, LessonSuggestion, SavedExperience,
 } from '@/lib/brain-client';
 import { useStudent } from '@/lib/useStudent';
+import { selectPlannedTask } from './select-planned-task';
 
 function lessonFromSaved(
   record: SavedExperience,
@@ -41,35 +42,28 @@ function lessonFromSaved(
   };
 }
 
-function selectPlannedTask(plan: Awaited<ReturnType<typeof getLearningPlan>>, requestedId: string) {
-  let selected = plan.suggestions.find((item) => item.id === requestedId);
-  let requiredStandardCodes: string[] = selected?.standard_code ? [selected.standard_code] : [];
-  if (!selected) {
-    const roadmapDay = plan.roadmap.months
-      .flatMap((month) => month.weeks)
-      .flatMap((week) => week.days)
-      .find((day) => day.lesson_id === requestedId);
-    if (roadmapDay) {
-      requiredStandardCodes = roadmapDay.standard_codes ?? [];
-      selected = {
-        id: roadmapDay.lesson_id, title: roadmapDay.title, track: roadmapDay.track,
-        description: roadmapDay.description, emoji: roadmapDay.emoji,
-        priority: 0.5, source: 'standard', canonical_ready: false,
-        mission_kind: 'learning_mission', success_criteria: [],
-        sequence_policy: roadmapDay.sequence_policy ?? 'SUPPORTED',
-        sequence_state: roadmapDay.sequence_state ?? 'BRIDGE_REQUIRED',
-        sequence_target_id: requiredStandardCodes[0],
-        prerequisite_readiness: 0,
-        prerequisite_concept_ids: [],
-        prerequisite_standard_ids: roadmapDay.prerequisite_standard_ids ?? [],
-        bridge_required: roadmapDay.bridge_required ?? true,
-        delivery_mode: 'FAMILY_INVESTIGATION',
-        shared_investigation_id: roadmapDay.lesson_id,
-        individual_skill_targets: [],
-      };
-    }
-  }
-  return { selected, requiredStandardCodes };
+function taskFromSavedExperience(record: SavedExperience, requestedId: string): LessonSuggestion {
+  return {
+    id: requestedId,
+    title: record.title || 'Learning Space',
+    track: record.track || 'CREATION_SCIENCE',
+    description: record.title || 'Learning Space',
+    emoji: '✦',
+    priority: 1,
+    source: 'family',
+    canonical_ready: true,
+    mission_kind: 'family_investigation',
+    success_criteria: [],
+    sequence_policy: 'OPEN',
+    sequence_state: 'OPEN',
+    prerequisite_readiness: 1,
+    prerequisite_concept_ids: [],
+    prerequisite_standard_ids: [],
+    bridge_required: false,
+    delivery_mode: 'FAMILY_INVESTIGATION',
+    shared_investigation_id: requestedId,
+    individual_skill_targets: [],
+  };
 }
 
 export function CanonicalExperiencePage({ view = 'lesson' }: { view?: 'lesson' | 'space' }) {
@@ -103,10 +97,29 @@ export function CanonicalExperiencePage({ view = 'lesson' }: { view?: 'lesson' |
       setStatus('Opening the saved learning experience…');
       try {
         const plan = await getSavedTodayPlan(student.id) ?? await getLearningPlan(student.id, 12);
-        const requestedId = decodeURIComponent(params.taskId);
-        const { selected, requiredStandardCodes } = selectPlannedTask(plan, requestedId);
+        const requestedId = decodeURIComponent(Array.isArray(params.taskId) ? params.taskId[0] : params.taskId);
+        let { selected, requiredStandardCodes } = selectPlannedTask(plan, requestedId);
+        if (!selected && view === 'space') {
+          const alreadySaved = await getSavedExperience(student.id, requestedId);
+          if (alreadySaved?.status === 'ready') {
+            selected = taskFromSavedExperience(alreadySaved, requestedId);
+            requiredStandardCodes = alreadySaved.metadata?.required_standard_codes ?? [];
+            if (cancelled) return;
+            const experienceRequest = lessonRequestFromSuggestion(
+              selected, student.id, plan.placement.working_grade, requiredStandardCodes,
+            );
+            setTask(selected);
+            setLesson(lessonFromSaved(alreadySaved, selected, experienceRequest));
+            setStatus('');
+            return;
+          }
+        }
         if (!selected) throw new Error('That experience is no longer in the current learning plan.');
-        if (selected.sequence_policy === 'HARD' && selected.sequence_state !== 'READY') {
+        if (
+          selected.delivery_mode !== 'FAMILY_INVESTIGATION'
+          && selected.sequence_policy === 'HARD'
+          && selected.sequence_state !== 'READY'
+        ) {
           throw new Error('This skill is waiting on a prerequisite. Open the prerequisite mission from Today first.');
         }
         if (cancelled) return;
@@ -192,7 +205,7 @@ export function CanonicalExperiencePage({ view = 'lesson' }: { view?: 'lesson' |
     })();
 
     return () => { cancelled = true; };
-  }, [params.taskId, retryVersion, student?.gradeLevel, student?.id]);
+  }, [params.taskId, retryVersion, student?.gradeLevel, student?.id, view]);
 
   if (studentLoading) return <div className="p-10 text-center text-[#2F4731]/60">Opening the learning experience…</div>;
   if (!student) return <div className="p-10 text-center text-[#2F4731]/60">Your session has ended. Please sign in again.</div>;
