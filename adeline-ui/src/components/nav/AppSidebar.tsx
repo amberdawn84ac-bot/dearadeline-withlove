@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useStudent } from '@/lib/useStudent';
 import { supabase } from '@/lib/supabase';
 import { clearStudentDataCaches } from '@/lib/brain-client';
+import { clearAuthCookie } from '@/lib/auth-cookies';
 import styles from './sites-dashboard.module.css';
 
 const NAV_ITEMS = [
@@ -46,7 +47,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
     clearStudentDataCaches();
     await Promise.allSettled([
       fetch('/api/student-auth', { method: 'DELETE' }),
-      fetch('/brain/auth/session', { method: 'DELETE', credentials: 'include' }),
+      clearAuthCookie(),
       supabase.auth.signOut(),
     ]);
     router.replace('/login');

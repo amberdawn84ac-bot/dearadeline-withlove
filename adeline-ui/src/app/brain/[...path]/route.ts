@@ -44,14 +44,17 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   request.nextUrl.searchParams.forEach((value, key) => upstreamUrl.searchParams.append(key, value));
 
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
+  // Buffer the request body. Passing request.body as a stream with duplex:
+  // 'half' often arrives empty at Railway (parent sign-in POSTed JSON and
+  // Brain saw no token). Lesson/SSE responses still stream below.
+  const body = hasBody ? await request.arrayBuffer() : undefined;
   const upstream = await fetch(upstreamUrl, {
     method: request.method,
     headers,
-    body: hasBody ? request.body : undefined,
+    body: body && body.byteLength > 0 ? body : undefined,
     cache: 'no-store',
     redirect: 'manual',
-    duplex: hasBody ? 'half' : undefined,
-  } as RequestInit & { duplex?: 'half' });
+  });
 
   const responseHeaders = new Headers();
   for (const name of RESPONSE_HEADERS) {
