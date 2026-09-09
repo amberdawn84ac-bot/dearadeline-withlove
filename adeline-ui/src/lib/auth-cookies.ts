@@ -1,23 +1,23 @@
 /**
  * Cookie-based authentication utilities for production-grade security.
- * 
+ *
  * These functions manage HttpOnly, Secure, SameSite cookies containing
- * Supabase JWT tokens. This eliminates localStorage-based token storage
- * which is vulnerable to XSS attacks.
- * 
- * Cookie properties (set by backend):
+ * JWT tokens. This eliminates localStorage-based token storage which is
+ * vulnerable to XSS attacks.
+ *
+ * Cookie properties (set by the Next.js session route, not the Brain proxy):
  * - HttpOnly: Prevents JavaScript access (XSS protection)
  * - Secure: HTTPS only
  * - SameSite=Lax: CSRF protection while allowing top-level navigation
- * - Path=/brain: Only sent to backend API routes
+ * - Path=/: Sent with both UI and /brain API requests
  * - Max-Age=7 days
  */
 
-const AUTH_COOKIE_ENDPOINT = '/brain/auth/session'
+const AUTH_COOKIE_ENDPOINT = '/api/auth-session'
 
 /**
  * Set auth cookie after successful Supabase login/signup.
- * 
+ *
  * @param token - Supabase JWT access token
  * @throws Error if cookie cannot be set
  */
@@ -33,7 +33,8 @@ export async function setAuthCookie(token: string): Promise<void> {
 
   if (!response.ok) {
     const error = await response.text()
-    throw new Error(`Failed to set auth cookie: ${error}`)
+    console.error('[Auth] Failed to set auth cookie', response.status, error)
+    throw new Error('Could not start your family session. Please try signing in again.')
   }
 }
 
@@ -49,7 +50,7 @@ export async function clearAuthCookie(): Promise<void> {
 
 /**
  * Check if user has valid session (via cookie).
- * 
+ *
  * @returns User ID if authenticated, null otherwise
  */
 export async function getSessionStatus(): Promise<string | null> {
