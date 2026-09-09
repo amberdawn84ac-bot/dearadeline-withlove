@@ -87,3 +87,39 @@ def test_explicit_learning_request_teaches_instead_of_grading_the_message():
     assert "Begin teaching in this response" in prompt
     assert "Do not classify the message for school credit" in prompt
     assert "never declare causation" in prompt
+
+
+def test_science_experiment_request_is_teaching_not_a_names_lecture():
+    from app.api.conversation import (
+        _build_conversation_prompt,
+        _is_experiment_request,
+        _is_explicit_learning_request,
+        _wants_outside_resource,
+    )
+
+    topic = "Can we do science experiments on the homestead?"
+    assert _is_experiment_request(topic)
+    assert _is_explicit_learning_request(topic)
+    assert _wants_outside_resource(topic)
+
+    prompt = _build_conversation_prompt(
+        topic=topic,
+        tracks=["CREATION_SCIENCE"],
+        grade_level="7",
+        zpd_directives="",
+    )
+    assert "EXPERIMENT REQUEST" in prompt
+    assert "Do not lecture about names" in prompt
+    assert "Assign a specific" in prompt
+
+
+def test_experiment_catalog_prefers_kitchen_work_for_middle_grades():
+    from app.api.experiments import experiment_as_block, experiments_for_grade
+
+    chosen = experiments_for_grade("7", limit=1)
+    assert chosen
+    assert chosen[0].chaos_level.value <= 2
+    block = experiment_as_block(chosen[0])
+    assert block["block_type"] == "EXPERIMENT"
+    assert block["experiment"]["materials"]
+    assert block["experiment"]["steps"]

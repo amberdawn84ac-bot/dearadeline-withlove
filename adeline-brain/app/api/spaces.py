@@ -466,9 +466,10 @@ def _teaching_context(state: dict) -> str:
         "only when the newest message shows the understanding or evidence this activity actually requires.",
         "Drop an approved outside resource when it genuinely helps THIS turn — a sim to test a prediction, "
         "a game that models the concept, a video of the process, a primary source. Not on every log entry.",
-        "NAMES: His name is not God. Use the original name the source writes (YHWH, Elohim, Yeshua), plus "
-        "meaning and context. When English hid a name, or someone purposefully changed one, say so. One "
-        "accurate note — do not turn a science turn into a sermon, and do not say God's design.",
+        "NAMES: His name is not God. Use the original name the source writes (YHWH, Elohim, Yeshua). "
+        "Do not lecture about names or translation unless this activity is actually a text study. "
+        "Science and homestead turns: one short name if the Creator is in view, then teach the science; "
+        "do not say God's design.",
         "OUTSIDE RESOURCES are how you teach with more than text. Assign a photo, video, sim, or game from "
         "the approved list when it shows the mechanism — not as decoration, and not only after the log is filled.",
     ]

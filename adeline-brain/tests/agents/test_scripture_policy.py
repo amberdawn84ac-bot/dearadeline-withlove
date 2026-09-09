@@ -22,6 +22,9 @@ def test_scripture_policy_his_name_is_not_god():
     assert "Point out when translating into English caused a loss" in policy
     assert "Point out when someone purposefully changed something" in policy
     assert "Do not treat suspicion as proof" in policy
+    assert "WHEN this turn is NOT a text study" in policy
+    assert "Do not turn the reply into a names lecture" in policy
+    assert "Never turn a request for experiments" in policy
 
 
 def test_scripture_policy_does_not_treat_modern_translation_as_controlling():
@@ -48,3 +51,4 @@ def test_canonical_author_uses_original_names_not_english_substitutes():
     assert "purposefully changed" in prompt
     assert "never silently replace God, Lord," not in prompt
     assert "Use familiar English Christian terminology" not in prompt
+    assert "Do not lecture about names or translation" in prompt

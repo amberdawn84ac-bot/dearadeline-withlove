@@ -535,6 +535,7 @@ def test_teaching_context_puts_grade_role_and_concepts_in_the_prompt():
     assert "His name is not God" in text
     assert "YHWH" in text
     assert "do not say God's design" in text
+    assert "Do not lecture about names" in text
     assert "OUTSIDE RESOURCES are how you teach" in text
 
 

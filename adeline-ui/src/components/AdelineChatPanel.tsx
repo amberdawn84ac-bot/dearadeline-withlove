@@ -16,6 +16,7 @@ import { useALUStream } from "@/hooks/useALUStream";
 import { StreamingGenUIRenderer } from "@/components/gen-ui/StreamingGenUIRenderer";
 import { parseDataStreamLine } from "@/lib/stream-protocol";
 import { isCompletedActivityReport, isExplicitLearningRequest } from "@/lib/chat-intent";
+import { LabGuide, type Experiment as LabExperiment } from "@/components/gen-ui/patterns/LabGuide";
 
 // Bootstrap-only fallback: block types that are loggable often enough to show
 // the (generic, editable-label) log form before Adeline has had a turn to
@@ -217,6 +218,53 @@ const BLOCK_CONFIGS: Record<string, { icon: string; bg: string; border: string; 
   NARRATIVE:            { icon: "📖", bg: "#FDF6E9", border: "#E7DAC3",  color: "#2F4731",  label: "Narrative" },
 };
 
+function asLabGuideExperiment(block: Record<string, unknown>): LabExperiment | null {
+  const raw = (block.experiment as Record<string, unknown> | undefined)
+    || (Array.isArray(block.materials) && Array.isArray(block.steps) ? block : null);
+  if (!raw || typeof raw.title !== "string" || !Array.isArray(raw.materials) || !Array.isArray(raw.steps)) {
+    return null;
+  }
+  const steps = raw.steps.map((step, index) => {
+    if (typeof step === "string") {
+      return { step_number: index + 1, instruction: step };
+    }
+    const item = step as Record<string, unknown>;
+    return {
+      step_number: typeof item.step_number === "number" ? item.step_number : index + 1,
+      instruction: String(item.instruction || item.content || ""),
+      tip: typeof item.tip === "string" ? item.tip : undefined,
+    };
+  }).filter((step) => step.instruction.trim());
+  if (!steps.length) return null;
+  const chaos = Number(raw.chaos_level);
+  const connection = (raw.creation_connection as Record<string, unknown> | undefined) || {};
+  const kit = (raw.social_media_kit as Record<string, unknown> | undefined) || {};
+  return {
+    id: String(raw.id || block.experiment_id || raw.title),
+    title: raw.title,
+    tagline: String(raw.tagline || block.content || ""),
+    chaos_level: chaos === 2 || chaos === 3 ? chaos : 1,
+    wow_factor: Number(raw.wow_factor) || 8,
+    scientific_concepts: Array.isArray(raw.scientific_concepts) ? raw.scientific_concepts.map(String) : [],
+    science_credits: Array.isArray(raw.science_credits) ? raw.science_credits.map(String) : [],
+    grade_band: String(raw.grade_band || "K-12"),
+    materials: raw.materials.map(String),
+    safety_requirements: Array.isArray(raw.safety_requirements) ? raw.safety_requirements.map(String) : [],
+    steps,
+    creation_connection: {
+      title: String(connection.title || "What this shows"),
+      scripture: String(connection.scripture || ""),
+      explanation: String(connection.explanation || ""),
+    },
+    social_media_kit: {
+      caption_template: String(kit.caption_template || ""),
+      filming_tips: Array.isArray(kit.filming_tips) ? kit.filming_tips.map(String) : [],
+      hashtags: Array.isArray(kit.hashtags) ? kit.hashtags.map(String) : [],
+    },
+    estimated_minutes: Number(raw.estimated_minutes) || 20,
+  };
+}
+
 function ConversationBlockCard({ block, onReflect, onLogSubmit, logFields }: {
   block: Record<string, unknown>;
   onReflect?: (prompt: string) => void;
@@ -229,11 +277,25 @@ function ConversationBlockCard({ block, onReflect, onLogSubmit, logFields }: {
 }) {
   const [sharedResource, setSharedResource] = useState<string | null>(null);
   const blockType = String(block.block_type ?? "NARRATIVE").toUpperCase();
+  const experiment = asLabGuideExperiment(block);
   const c = BLOCK_CONFIGS[blockType] ?? BLOCK_CONFIGS.NARRATIVE;
   const title   = block.title   as string | undefined;
   const content = block.content as string | undefined;
   const metadata = block.metadata as { resources?: Array<Record<string, unknown>> } | undefined;
   const resources = metadata?.resources ?? [];
+
+  if (experiment) {
+    return (
+      <div className="my-2">
+        <LabGuide
+          experiment={experiment}
+          onSeal={() => onReflect?.(
+            `We finished ${experiment.title}. Here's what we observed: `,
+          )}
+        />
+      </div>
+    );
+  }
 
   if (blockType === "NARRATIVE") {
     return (
