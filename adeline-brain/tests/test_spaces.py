@@ -10,11 +10,14 @@ from pydantic import ValidationError
 from app.api.spaces import (
     OffPlanTopic,
     _TurnEvaluation,
+    _attach_mastery_context,
+    _block_concept_ids,
     _concept_credits_for_lesson,
     _concept_slug,
     _credit_off_plan_topic,
     _decoded,
     _evaluate_turn,
+    _evaluation_to_bkt_correct,
     _learner_depth,
     _lesson_content,
     _lesson_for_block,
@@ -26,6 +29,9 @@ from app.api.spaces import (
     _space_list_item,
     _space_turn_llm,
     _state,
+    _teaching_context,
+    _turn_activity_mode,
+    _update_space_bkt,
 )
 
 
@@ -415,3 +421,152 @@ async def test_evaluate_turn_retries_rate_limit_then_succeeds(monkeypatch):
 
     assert llm.calls == 2
     assert result.adeline_message == _TURN_JSON["adeline_message"]
+
+
+def test_evaluation_to_bkt_correct_maps_and_skips_unanswered():
+    assert _evaluation_to_bkt_correct("correct") is True
+    assert _evaluation_to_bkt_correct("partial") is True
+    assert _evaluation_to_bkt_correct("incorrect") is False
+    assert _evaluation_to_bkt_correct("not_answered") is None
+
+
+def test_block_concept_ids_prefer_the_block_then_the_lesson():
+    block = {"concept_ids": ["block-c"]}
+    lesson = {"concept_ids": ["lesson-c"]}
+    assert _block_concept_ids({}, lesson, block) == ["block-c"]
+    assert _block_concept_ids({}, lesson, {}) == ["lesson-c"]
+    assert _block_concept_ids({}, {}, {}) == []
+
+
+def test_teaching_context_puts_grade_role_and_concepts_in_the_prompt():
+    state = {
+        "learner_depth": {
+            "grade": 7, "band": "middle", "tier": "analysis",
+            "assignment": "Graph rise over time and interpret the rate.",
+        },
+        "track_mastery": {"band": "DEVELOPING", "score": 0.4},
+        "current_lesson": {"concept_ids": ["c1"]},
+        "current_block": {},
+        "metadata": {"unit_plan": {"essential_concepts": [
+            {"concept_id": "c1", "concept": "Wild yeast fermentation"},
+        ]}},
+    }
+    text = _teaching_context(state)
+    assert "TEACH — do not clerk" in text
+    assert "grade 7" in text
+    assert "middle" in text
+    assert "Graph rise over time" in text
+    assert "Wild yeast fermentation" in text
+    assert "track mastery DEVELOPING" in text
+    assert "Never re-ask" in text
+
+
+def test_turn_activity_mode_includes_teaching_context_before_the_activity():
+    state = {
+        "status": "active",
+        "title": "Kitchen Chemistry: Sourdough",
+        "current_lesson": {"title": "Starter Culture", "concept_ids": ["c1"]},
+        "current_block_index": 0,
+        "total_blocks": 3,
+        "current_block": {"block_id": "b1", "content": "Feed the starter."},
+        "learner_depth": {"grade": 12, "band": "middle", "tier": "analysis", "assignment": ""},
+        "metadata": {"unit_plan": {"essential_concepts": [
+            {"concept_id": "c1", "concept": "Lactic acid vs wild yeast"},
+        ]}},
+    }
+    mode = _turn_activity_mode(state)
+    assert "TEACH — do not clerk" in mode
+    assert "grade 12" in mode
+    assert "Lactic acid vs wild yeast" in mode
+    assert "Kitchen Chemistry: Sourdough" in mode
+    assert "a filled log is evidence" in mode
+
+
+def test_state_exposes_track_and_learner_depth_for_the_turn_prompt():
+    session = {"id": "s", "studentId": "u", "planItemId": "p", "experienceId": "e",
+               "currentBlockIndex": 0, "completedBlockIds": [], "messagesJson": [],
+               "status": "active", "version": 1}
+    experience = {
+        "title": "Starter", "track": "CREATION_SCIENCE",
+        "blocks": [{"block_id": "b1", "family_roles": {"elementary": "Count the bubbles."}}],
+        "metadata": {"grade_level": "Grade 4"},
+    }
+    state = _state(session, experience)
+    assert state["track"] == "CREATION_SCIENCE"
+    assert state["learner_depth"]["grade"] == 4
+    assert state["learner_depth"]["assignment"] == "Count the bubbles."
+
+
+@pytest.mark.asyncio
+async def test_update_space_bkt_fires_for_each_concept_and_skips_unanswered(monkeypatch):
+    calls = []
+
+    async def fake_update_bkt(student_id, concept_id, track, correct):
+        calls.append((student_id, concept_id, track, correct))
+        return 0.4
+
+    monkeypatch.setattr("app.algorithms.bkt_tracker.update_bkt", fake_update_bkt)
+    lesson = {"concept_ids": ["c1", "c2"]}
+    await _update_space_bkt(
+        student_id="stu-1", track="CREATION_SCIENCE", metadata={},
+        lesson=lesson, block=None, evaluation="correct",
+    )
+    assert calls == [
+        ("stu-1", "c1", "CREATION_SCIENCE", True),
+        ("stu-1", "c2", "CREATION_SCIENCE", True),
+    ]
+
+    calls.clear()
+    await _update_space_bkt(
+        student_id="stu-1", track="CREATION_SCIENCE", metadata={},
+        lesson=lesson, block=None, evaluation="not_answered",
+    )
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_update_space_bkt_failure_is_swallowed(monkeypatch):
+    async def boom(*_args, **_kwargs):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr("app.algorithms.bkt_tracker.update_bkt", boom)
+    await _update_space_bkt(
+        student_id="stu-1", track="CREATION_SCIENCE", metadata={},
+        lesson={"concept_ids": ["c1"]}, block=None, evaluation="incorrect",
+    )
+
+
+@pytest.mark.asyncio
+async def test_attach_mastery_context_swallows_load_failures(monkeypatch):
+    async def boom(_student_id):
+        raise RuntimeError("redis down")
+
+    monkeypatch.setattr("app.models.student.load_student_state", boom)
+    state = {"student_id": "stu-1", "track": "CREATION_SCIENCE"}
+    assert await _attach_mastery_context(state) == state
+
+
+@pytest.mark.asyncio
+async def test_evaluate_turn_prompt_tells_adeline_to_teach(monkeypatch):
+    captured = {}
+
+    class CapturingLLM:
+        async def ainvoke(self, messages):
+            captured["system"] = messages[0].content
+            return _FakeResponse(json.dumps(_TURN_JSON))
+
+    monkeypatch.setattr("app.api.spaces._space_turn_llm", lambda: CapturingLLM())
+    state = {
+        **_space_state(),
+        "learner_depth": {"grade": 12, "band": "middle", "tier": "analysis", "assignment": ""},
+        "metadata": {"unit_plan": {"essential_concepts": [
+            {"concept_id": "c1", "concept": "Wild yeast capture"},
+        ]}},
+        "current_lesson": {"title": "Starter Culture", "concept_ids": ["c1"]},
+    }
+    await _evaluate_turn(state, "Yeasty, bubbly, mark is higher.")
+    assert "TEACH — do not clerk" in captured["system"]
+    assert "grade 12" in captured["system"]
+    assert "Wild yeast capture" in captured["system"]
+    assert "Do not use markdown" in captured["system"]
+
