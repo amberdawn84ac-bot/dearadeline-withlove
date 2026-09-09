@@ -29,7 +29,7 @@ export async function middleware(request: NextRequest) {
   ) {
     const canonicalUrl = request.nextUrl.clone();
     canonicalUrl.protocol = 'https:';
-    canonicalUrl.hostname = 'dearadeline.co';
+    canonicalUrl.hostname = 'www.dearadeline.co';
     canonicalUrl.port = '';
     return NextResponse.redirect(canonicalUrl, 308);
   }

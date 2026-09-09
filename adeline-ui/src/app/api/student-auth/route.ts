@@ -2,20 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import { coppaVerificationUrl, sendCoppaVerificationEmail } from '@/lib/server/coppa-email';
 import { resolveBrainBaseUrl } from '@/lib/server/brain-url';
+import { AUTH_COOKIE_NAME, sessionCookieOptions } from '@/lib/server/session-cookie';
 
 const BRAIN_URL = resolveBrainBaseUrl();
-const COOKIE_NAME = 'auth_token';
 const COOKIE_MAX_AGE = 30 * 24 * 60 * 60;
 
-function setSessionCookie(response: NextResponse, token: string) {
+function setSessionCookie(response: NextResponse, request: NextRequest, token: string) {
   response.cookies.set({
-    name: COOKIE_NAME,
+    ...sessionCookieOptions(request, COOKIE_MAX_AGE),
     value: token,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: COOKIE_MAX_AGE,
   });
 }
 
@@ -93,12 +88,12 @@ export async function POST(request: NextRequest) {
     student_id: data.student_id,
     user: data.user,
   });
-  setSessionCookie(response, data.token);
+  setSessionCookie(response, request, data.token);
   return response;
 }
 
 export async function GET(request: NextRequest) {
-  const token = request.cookies.get(COOKIE_NAME)?.value;
+  const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   if (!token) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
@@ -110,7 +105,10 @@ export async function GET(request: NextRequest) {
   });
   if (!session.ok) {
     const response = NextResponse.json({ ok: false }, { status: 401 });
-    response.cookies.delete(COOKIE_NAME);
+    response.cookies.set({
+      ...sessionCookieOptions(request, 0),
+      value: '',
+    });
     return response;
   }
 
@@ -154,16 +152,11 @@ export async function GET(request: NextRequest) {
   });
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   const response = NextResponse.json({ ok: true });
   response.cookies.set({
-    name: COOKIE_NAME,
+    ...sessionCookieOptions(request, 0),
     value: '',
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 0,
   });
   return response;
 }

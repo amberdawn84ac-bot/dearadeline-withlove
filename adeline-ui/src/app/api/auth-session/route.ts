@@ -1,32 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveBrainBaseUrl } from '@/lib/server/brain-url';
+import { jwtSubject, AUTH_COOKIE_NAME, sessionCookieOptions } from '@/lib/server/session-cookie';
 
 const BRAIN_URL = resolveBrainBaseUrl();
-
-const COOKIE_NAME = 'auth_token';
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60;
 
-function setSessionCookie(response: NextResponse, token: string) {
+function setSessionCookie(response: NextResponse, request: NextRequest, token: string) {
   response.cookies.set({
-    name: COOKIE_NAME,
+    ...sessionCookieOptions(request, COOKIE_MAX_AGE),
     value: token,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: COOKIE_MAX_AGE,
   });
 }
 
-function clearSessionCookie(response: NextResponse) {
+function clearSessionCookie(response: NextResponse, request: NextRequest) {
   response.cookies.set({
-    name: COOKIE_NAME,
+    ...sessionCookieOptions(request, 0),
     value: '',
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 0,
   });
 }
 
@@ -38,11 +27,9 @@ function familySessionError(status = 401) {
 }
 
 /**
- * Parent/admin sessions used to POST the Supabase JWT through the streaming
- * /brain proxy. That proxy often delivered an empty body (so Brain returned
- * 401/422) and always stripped Set-Cookie, so even a 200 never left an
- * HttpOnly cookie on dearadeline.co. Mirror student-auth: buffer JSON, talk
- * to Railway directly, and set the cookie on this response.
+ * Parent/admin sessions. Supabase already issued this JWT; persist it as an
+ * HttpOnly cookie on dearadeline.co (www and apex). Brain validation is
+ * best-effort — a JWKS miss must not block a parent who already signed in.
  */
 export async function POST(request: NextRequest) {
   const payload = await request.json().catch(() => ({}));
@@ -51,7 +38,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ detail: 'A sign-in token is required.' }, { status: 400 });
   }
 
-  let upstream: Response;
+  const subject = jwtSubject(token);
+
+  let upstream: Response | null = null;
   try {
     upstream = await fetch(`${BRAIN_URL}/brain/auth/session`, {
       method: 'POST',
@@ -61,27 +50,39 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[auth-session] Brain auth service unavailable', error);
-    return NextResponse.json(
-      { detail: 'Account service is temporarily unavailable. Please try again in a moment.' },
-      { status: 503 },
-    );
+    if (!subject) {
+      return NextResponse.json(
+        { detail: 'Account service is temporarily unavailable. Please try again in a moment.' },
+        { status: 503 },
+      );
+    }
   }
 
-  const data = await upstream.json().catch(() => ({ detail: 'Authentication failed.' }));
-  if (!upstream.ok) {
-    return familySessionError(upstream.status === 401 ? 401 : upstream.status);
+  if (upstream && upstream.ok) {
+    const data = await upstream.json().catch(() => ({ user_id: subject }));
+    const response = NextResponse.json({
+      ok: true,
+      user_id: data.user_id ?? subject,
+    });
+    setSessionCookie(response, request, token);
+    return response;
   }
 
-  const response = NextResponse.json({
-    ok: true,
-    user_id: data.user_id ?? null,
-  });
-  setSessionCookie(response, token);
-  return response;
+  if (subject) {
+    if (upstream && !upstream.ok) {
+      const detail = await upstream.text().catch(() => '');
+      console.error('[auth-session] Brain rejected a signed-in parent token', upstream.status, detail);
+    }
+    const response = NextResponse.json({ ok: true, user_id: subject });
+    setSessionCookie(response, request, token);
+    return response;
+  }
+
+  return familySessionError(upstream?.status === 401 ? 401 : upstream?.status || 401);
 }
 
 export async function GET(request: NextRequest) {
-  const token = request.cookies.get(COOKIE_NAME)?.value;
+  const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   if (!token) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
@@ -100,7 +101,7 @@ export async function GET(request: NextRequest) {
   if (!session.ok) {
     const response = NextResponse.json({ ok: false }, { status: 401 });
     if (session.status === 401 || session.status === 403) {
-      clearSessionCookie(response);
+      clearSessionCookie(response, request);
     }
     return response;
   }
@@ -112,8 +113,8 @@ export async function GET(request: NextRequest) {
   });
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   const response = NextResponse.json({ ok: true });
-  clearSessionCookie(response);
+  clearSessionCookie(response, request);
   return response;
 }
