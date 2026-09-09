@@ -48,11 +48,6 @@ const plan = {
     delivery_mode: 'FAMILY_INVESTIGATION', shared_investigation_id: 'family-1-history-0',
     individual_skill_targets: [], slot: 'history',
     driving_question: 'Who was allowed to put chemicals in food — and what evidence finally forced a federal law?',
-    source: 'family', mission_kind: 'family_investigation', success_criteria: [],
-    sequence_policy: 'OPEN', sequence_state: 'OPEN', prerequisite_readiness: 1,
-    prerequisite_concept_ids: [], prerequisite_standard_ids: [], bridge_required: false,
-    delivery_mode: 'FAMILY_INVESTIGATION', shared_investigation_id: 'family-1-history-0',
-    individual_skill_targets: [], slot: 'history',
   }, {
     id: 'math-1', title: 'Compare ratios', track: 'APPLIED_MATHEMATICS',
     description: 'Use ratios in a new example.', emoji: '📐', priority: 0.9,
