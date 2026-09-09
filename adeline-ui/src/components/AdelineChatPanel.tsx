@@ -11,6 +11,7 @@ import type {
 import { ProjectCatalog } from "@/components/projects/ProjectCard";
 import { ProjectGuide } from "@/components/projects/ProjectGuide";
 import { LogEntryForm } from "@/components/spaces/LogEntryForm";
+import { OfferedResourceCard } from "@/components/spaces/OfferedResourceCard";
 import { useALUStream } from "@/hooks/useALUStream";
 import { StreamingGenUIRenderer } from "@/components/gen-ui/StreamingGenUIRenderer";
 import { parseDataStreamLine } from "@/lib/stream-protocol";
@@ -262,7 +263,6 @@ function ConversationBlockCard({ block, onReflect, onLogSubmit, logFields }: {
             const url = (resource.editor_url || resource.embed_url || resource.source_url) as string | undefined;
             const title = (resource.title as string) || `Resource ${index + 1}`;
             const resourceId = (resource.id as string) || `${title}-${index}`;
-            const description = typeof resource.description === 'string' ? resource.description : '';
             const masteryPrompt = typeof resource.mastery_prompt === 'string' ? resource.mastery_prompt : '';
             async function shareWithFamily() {
               if (!url) return;
@@ -273,17 +273,10 @@ function ConversationBlockCard({ block, onReflect, onLogSubmit, logFields }: {
               if (response.ok) setSharedResource(resourceId);
             }
             return (
-              <div key={resourceId} className="rounded-lg border border-[#2F4731]/15 bg-white p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-bold text-[#2F4731]">{title}</p>
-                    <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#BD6809]">{String(resource.provider || '')} · {String(resource.resource_type || '').replaceAll('_', ' ')}</p>
-                  </div>
-                  {url && <a href={url} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-lg bg-[#2F4731] px-3 py-2 text-xs font-bold text-white no-underline">Open</a>}
-                </div>
-                {description && <p className="mt-2 text-xs leading-5 text-[#2F4731]/70">{description}</p>}
+              <div key={resourceId} className="space-y-2">
+                <OfferedResourceCard resource={resource} />
                 {masteryPrompt && onReflect && (
-                  <div className="mt-2 flex flex-wrap gap-3">
+                  <div className="flex flex-wrap gap-3 px-1">
                     <button type="button" onClick={() => onReflect(`I worked with ${title}. Here is what I built, tested, decided, or learned: `)} className="text-xs font-bold text-[#2F4731] underline underline-offset-4">I finished—talk with Adeline</button>
                     {url && <button type="button" onClick={() => void shareWithFamily()} className="text-xs font-bold text-[#BD6809] underline underline-offset-4">{sharedResource === resourceId ? 'Shared with family' : 'Invite my family'}</button>}
                   </div>

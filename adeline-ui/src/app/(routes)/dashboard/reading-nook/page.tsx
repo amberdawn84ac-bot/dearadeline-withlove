@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
-import { ExternalLink, Palette } from 'lucide-react';
+import { Palette } from 'lucide-react';
 import Bookshelf from '@/components/reading-nook/Bookshelf';
 import { AddBookDialog } from '@/components/reading-nook/AddBookDialog';
 import { useStudent } from '@/lib/useStudent';
@@ -75,17 +75,18 @@ export default function ReadingNookPage() {
                 {book.notes && <p className="text-[11px] text-[#2F4731]/50 mt-3 italic">{book.notes}</p>}
                 <div className="mt-auto pt-4 flex gap-2">
                   <button
+                    onClick={() => router.push(`/dashboard/reading-nook/${book.id}`)}
+                    className="rounded-lg bg-[#2F4731] px-3 py-2 text-xs font-bold text-white"
+                  >
+                    Read here
+                  </button>
+                  <button
                     onClick={() => void addClassicToList(book)}
                     disabled={addingClassic === book.id || !studentId}
-                    className="rounded-lg bg-[#2F4731] px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                    className="rounded-lg border border-[#2F4731] px-3 py-2 text-xs font-bold text-[#2F4731] disabled:opacity-50"
                   >
-                    {addingClassic === book.id ? 'Adding…' : 'Add to Reading List'}
+                    {addingClassic === book.id ? 'Adding…' : 'Add to list'}
                   </button>
-                  {book.readingUrl && (
-                    <a href={book.readingUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-[#BD6809] hover:text-[#2F4731]">
-                      Read edition <ExternalLink className="w-3 h-3" />
-                    </a>
-                  )}
                 </div>
               </article>
             ))}

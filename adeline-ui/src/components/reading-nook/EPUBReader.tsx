@@ -22,6 +22,7 @@ interface EPUBReaderProps {
     track: string;
     cover_url?: string;
   };
+  htmlUrl?: string;
   onComplete: () => void;
   onBack: () => void;
 }
@@ -31,6 +32,7 @@ export function EPUBReader({
   sessionId,
   studentId,
   book,
+  htmlUrl,
   onComplete,
   onBack,
 }: EPUBReaderProps) {
@@ -349,6 +351,25 @@ export function EPUBReader({
   }
 
   if (error) {
+    if (htmlUrl) {
+      return (
+        <div className="flex h-screen flex-col bg-[#FFFEF7]">
+          <div className="flex items-center justify-between border-b-2 border-[#E7DAC3] bg-white px-6 py-4">
+            <button onClick={onBack} className="flex items-center gap-2 text-[#2F4731]" type="button">
+              <X className="h-5 w-5" /> Close
+            </button>
+            <p className="font-bold text-[#2F4731]">{book.title}</p>
+            <span className="text-xs text-[#2F4731]/55">Public-domain edition</span>
+          </div>
+          <iframe title={book.title} src={htmlUrl} className="h-full w-full border-0 bg-white" />
+          <div className="border-t border-[#E7DAC3] bg-white px-6 py-3">
+            <a href={htmlUrl} target="_blank" rel="noreferrer" className="text-sm font-bold text-[#BD6809]">
+              Open the public-domain edition
+            </a>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center justify-center w-full h-screen bg-[#FFFEF7] gap-4">
         <p className="text-red-600 font-semibold">{error}</p>

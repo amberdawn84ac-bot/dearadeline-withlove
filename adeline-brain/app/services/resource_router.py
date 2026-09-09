@@ -129,7 +129,7 @@ async def _loc(query: ResourceQuery, client: httpx.AsyncClient) -> list[RoutedRe
 
 
 async def _nasa(query: ResourceQuery, client: httpx.AsyncClient) -> list[RoutedResource]:
-    if query.track not in {"CREATION_SCIENCE", "APPLIED_MATHEMATICS"}:
+    if query.track not in {"CREATION_SCIENCE", "APPLIED_MATHEMATICS", "HOMESTEADING"}:
         return []
     response = await client.get("https://images-api.nasa.gov/search", params={"q": query.topic, "media_type": "image"})
     response.raise_for_status()
@@ -607,7 +607,7 @@ class ResourceRouter:
     ]
 
     async def search(self, query: ResourceQuery) -> dict[str, Any]:
-        cache_key = "resource-router:v5:" + hashlib.sha256(
+        cache_key = "resource-router:v6:" + hashlib.sha256(
             json.dumps(asdict(query), sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
         try:
@@ -629,6 +629,15 @@ class ResourceRouter:
                 continue
             resources.extend(result)
         resources.extend(_curated_archive_evidence(query))
+        resources.extend(_youtube_resources(query))
+        unique: list[RoutedResource] = []
+        seen_ids: set[str] = set()
+        for item in resources:
+            if item.id in seen_ids:
+                continue
+            seen_ids.add(item.id)
+            unique.append(item)
+        resources = unique
         for item in resources:
             if query.commercial_context and item.license == "CC BY-NC 4.0":
                 item.use_mode = "LINK"

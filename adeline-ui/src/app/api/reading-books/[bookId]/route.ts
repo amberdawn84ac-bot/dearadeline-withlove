@@ -1,13 +1,53 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { resolveBrainBaseUrl } from '@/lib/server/brain-url';
+import { epubUrlsFromSource, findCuratedBook } from '@/lib/public-domain-books';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const BRAIN_URL = resolveBrainBaseUrl();
 
-const ALLOWED_BOOK_HOSTS = new Set(['www.gutenberg.org', 'gutenberg.org']);
+const ALLOWED_BOOK_HOSTS = new Set([
+  'www.gutenberg.org',
+  'gutenberg.org',
+  'standardebooks.org',
+  'www.standardebooks.org',
+]);
+
+function allowedEpubUrl(raw: string): URL | null {
+  try {
+    const source = new URL(raw);
+    if (source.protocol !== 'https:' || !ALLOWED_BOOK_HOSTS.has(source.hostname)) return null;
+    return source;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchFirstEpub(urls: string[]): Promise<Response | null> {
+  for (const url of urls) {
+    const allowed = allowedEpubUrl(url);
+    if (!allowed) continue;
+    const response = await fetch(allowed, { redirect: 'follow', cache: 'force-cache' });
+    const contentType = response.headers.get('content-type') || '';
+    if (response.ok && response.body && !contentType.includes('text/html')) {
+      return response;
+    }
+  }
+  return null;
+}
+
+function epubResponse(body: ReadableStream<Uint8Array> | ArrayBuffer, title: string, cache: string) {
+  const filename = `${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'book'}.epub`;
+  return new Response(body, {
+    headers: {
+      'Content-Type': 'application/epub+zip',
+      'Cache-Control': cache,
+      'Content-Disposition': `inline; filename="${filename}"`,
+    },
+  });
+}
 
 export async function GET(
   _request: Request,
@@ -17,20 +57,18 @@ export async function GET(
   const token = (await cookies()).get('auth_token')?.value;
   if (!token) return NextResponse.json({ message: 'Sign in required' }, { status: 401 });
 
-  // Books found through Search & Add are downloaded by the backend's
-  // Standard Ebooks → Gutenberg waterfall and stored as a safe EPUB copy.
   const storedResponse = await fetch(
     `${BRAIN_URL}/brain/bookshelf/${encodeURIComponent(bookId)}/download`,
     { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' },
   );
   if (storedResponse.ok && storedResponse.body) {
-    return new Response(storedResponse.body, {
-      headers: {
-        'Content-Type': 'application/epub+zip',
-        'Cache-Control': 'private, max-age=3600',
-        'Content-Disposition': 'inline; filename="book.epub"',
-      },
-    });
+    return epubResponse(storedResponse.body, 'book', 'private, max-age=3600');
+  }
+
+  const curated = findCuratedBook(bookId);
+  if (curated) {
+    const epub = await fetchFirstEpub(epubUrlsFromSource(curated.sourceUrl));
+    if (epub?.body) return epubResponse(epub.body, curated.title, 'public, max-age=86400, s-maxage=604800');
   }
 
   const metadataResponse = await fetch(
@@ -42,25 +80,10 @@ export async function GET(
   }
 
   const book = (await metadataResponse.json()) as { source_url?: string; title?: string };
-  if (!book.source_url) {
-    return NextResponse.json({ message: 'Readable edition unavailable' }, { status: 404 });
+  const epub = await fetchFirstEpub(epubUrlsFromSource(book.source_url || ''));
+  if (epub?.body) {
+    return epubResponse(epub.body, book.title || 'book', 'public, max-age=86400, s-maxage=604800');
   }
 
-  const source = new URL(book.source_url);
-  if (source.protocol !== 'https:' || !ALLOWED_BOOK_HOSTS.has(source.hostname)) {
-    return NextResponse.json({ message: 'Unsupported book source' }, { status: 422 });
-  }
-
-  const epubResponse = await fetch(source, { redirect: 'follow', cache: 'force-cache' });
-  if (!epubResponse.ok || !epubResponse.body) {
-    return NextResponse.json({ message: 'Edition is temporarily unavailable' }, { status: 502 });
-  }
-
-  return new Response(epubResponse.body, {
-    headers: {
-      'Content-Type': 'application/epub+zip',
-      'Cache-Control': 'public, max-age=86400, s-maxage=604800',
-      'Content-Disposition': `inline; filename="${(book.title || 'book').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.epub"`,
-    },
-  });
+  return NextResponse.json({ message: 'Readable edition unavailable' }, { status: 404 });
 }
