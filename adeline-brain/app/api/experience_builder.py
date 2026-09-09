@@ -84,19 +84,71 @@ async def _notify_repeated_authoring_failure(
 
 
 def shared_family_canonical_slug(request: LessonRequest) -> str:
-    return canonical_slug(request.topic, request.track.value)
+    from app.jobs.canonical_seeding import canonical_seed_for
+    seed = canonical_seed_for(request.topic, request.track.value)
+    topic = seed.topic if seed else request.topic
+    return canonical_slug(topic, request.track.value)
+
+
+def _request_for_catalog_seed(request: LessonRequest) -> LessonRequest:
+    """Short queue names ("Poison Squad") must author against the approved catalog topic."""
+    from app.jobs.canonical_seeding import canonical_seed_for
+    seed = canonical_seed_for(request.topic, request.track.value)
+    if not seed or seed.topic == request.topic:
+        return request
+    return request.model_copy(update={"topic": seed.topic})
+
+
+def _ready_draft_should_rebuild(record: dict, expected_slug: str) -> bool:
+    """Replace short-name mashups and empty shells, not a working unit."""
+    from app.jobs.canonical_seeding import canonical_seed_for
+
+    stored_slug = str(record.get("canonical_slug") or "")
+    if stored_slug and stored_slug != expected_slug:
+        return True
+    blocks = record.get("blocks") or []
+    if isinstance(blocks, str):
+        try:
+            blocks = json.loads(blocks)
+        except (TypeError, ValueError):
+            blocks = []
+    if not isinstance(blocks, list):
+        blocks = []
+    teaching = [
+        block for block in blocks
+        if isinstance(block, dict)
+        and str(block.get("block_type") or "").upper() not in {"RESOURCE_COLLECTION"}
+        and str(block.get("content") or "").strip()
+    ]
+    if len(teaching) < 3:
+        return True
+    topic = str((record.get("metadata") or {}).get("topic") or record.get("title") or "")
+    track = str(record.get("track") or "")
+    seed = canonical_seed_for(topic, track) if topic and track else None
+    if seed and seed.family_summary.strip():
+        dump = seed.family_summary.strip()
+        title = str(record.get("title") or "")
+        blob = " ".join(str(block.get("content") or "") for block in teaching[:2])
+        if dump[:48] in title or dump[:80] in blob:
+            return True
+    return False
 
 
 def canonical_resource_query(request: LessonRequest) -> ResourceQuery:
     """Ask for item-level primary evidence first when authoring true history."""
+    from app.jobs.canonical_seeding import canonical_seed_for
+
     requires_primary = request.track.value in {"TRUTH_HISTORY", "JUSTICE_CHANGEMAKING"}
     is_history = request.track.value == "TRUTH_HISTORY"
-    # Archive APIs search literal metadata. Keep the historical subjects while
-    # removing Dear Adeline's framing question, which can otherwise turn a
-    # strong topic into a zero-result exact-ish query.
-    archive_topic = re.split(r"[:?]", request.topic, maxsplit=1)[0].strip()
+    seed = canonical_seed_for(request.topic, request.track.value)
+    if seed and seed.archive_query.strip():
+        search_topic = seed.archive_query.strip()
+    elif is_history:
+        search_topic = re.split(r"[:?]", request.topic, maxsplit=1)[0].strip() or request.topic
+    else:
+        search_topic = request.topic
     return ResourceQuery(
-        topic=archive_topic if is_history and archive_topic else request.topic,
+        topic=search_topic,
         track=request.track.value,
         grade_level=request.grade_level,
         resource_types=("PRIMARY_SOURCE",) if requires_primary else (),
@@ -564,11 +616,21 @@ async def _author(
 
 async def _stream(request: LessonRequest):
     stream_started = time.perf_counter()
+    request = _request_for_catalog_seed(request)
     slug = shared_family_canonical_slug(request)
     plan_item_id = request.plan_item_id or f"canonical:{slug}"
     yield _sse({"type": "status", "message": "Opening today's planned experience…"})
 
     claim = await student_experience_store.claim(request.student_id, plan_item_id, slug)
+    if claim.state == "ready" and claim.record and _ready_draft_should_rebuild(claim.record, slug):
+        # A short-name authoring (e.g. queue topic "Poison Squad") missed the
+        # approved catalog unit, or saved a shell with the Harvey Wiley brief
+        # pasted in as the lesson. Rebuild; do not keep the mashup.
+        await student_experience_store.invalidate_ready(
+            request.student_id, plan_item_id,
+            "Replaced a short-name or empty draft with the approved catalog unit.",
+        )
+        claim = await student_experience_store.claim(request.student_id, plan_item_id, slug)
     if claim.state == "ready" and claim.record:
         async for event in _emit_persisted(request, claim.record):
             yield event
@@ -720,8 +782,11 @@ async def _stream(request: LessonRequest):
             "individual_skill_targets": request.individual_skill_targets,
             "learner_progression_targets": request.learner_progression_targets,
         }
+        from app.jobs.canonical_seeding import canonical_seed_for as _seed_for
+        catalog = _seed_for(request.topic, request.track.value)
         record = await student_experience_store.save_ready(
-            request.student_id, plan_item_id, title=canonical.get("title") or request.topic,
+            request.student_id, plan_item_id,
+            title=(catalog.learner_title if catalog else "") or canonical.get("title") or request.topic,
             track=request.track.value, blocks=blocks, metadata=metadata,
         )
         logger.info(

@@ -65,6 +65,13 @@ export default function SpacePlayer({ lesson, studentId, planItemId }: {
 
   if (error && !space) return <p className="rounded-2xl bg-red-50 p-5 text-red-700" role="alert">{error}</p>;
   if (!space) return <p className="rounded-2xl border border-[#E7DAC3] bg-[#FDF6E9] p-5 italic text-[#2F4731]/70">Opening your saved Space…</p>;
+  if (!space.total_blocks) {
+    return (
+      <p className="rounded-2xl border border-[#E7DAC3] bg-[#FDF6E9] p-5 text-sm leading-6 text-[#2F4731]" role="status">
+        This investigation is still being prepared from the approved unit. Go back to Today and open it again in a moment.
+      </p>
+    );
+  }
   const progress = space.total_blocks ? Math.round((space.completed_block_ids.length / space.total_blocks) * 100) : 0;
 
   return <div className="space-y-6">
@@ -78,7 +85,7 @@ export default function SpacePlayer({ lesson, studentId, planItemId }: {
 
     {space.breakout_data && <BreakoutTracks data={space.breakout_data} />}
     {space.status === 'active' && <p className="rounded-2xl border border-[#D8C9AB] bg-[#FDF6E9] px-5 py-4 text-sm font-semibold text-[#2F4731]">
-      💬 Talk with Adeline in the chat at the bottom right to continue this Space.
+      💬 Talk with Adeline in the chat below to continue this Space.
     </p>}
     {space.status === 'completed' && <div className="rounded-2xl border border-[#D8C9AB] bg-[#FDF6E9] p-5">
         <p className="font-bold text-[#2F5A3A]">You reached the end of this unit Space.</p>

@@ -126,6 +126,7 @@ class LessonSuggestion(BaseModel):
     # Which family-investigation slot ("science" | "history") this came from —
     # only set for delivery_mode="FAMILY_INVESTIGATION" suggestions.
     slot: Optional[str] = None
+    driving_question: Optional[str] = None
     success_criteria: list[str] = Field(default_factory=list)
     portfolio_prompt: Optional[str] = None
     next_action: Optional[str] = None
@@ -327,9 +328,9 @@ class UpcomingInvestigation(BaseModel):
 
 
 class LearningPlanResponse(BaseModel):
-    # Version 9 invalidates plans that exposed broad seed labels and unplaced
-    # starter topics as if they were ready learner work.
-    plan_version: int = 9
+    # Version 10 replaces authoring-brief dumps on family cards with learner-facing
+    # titles and questions (Poison Squad was showing Harvey Wiley prompt text).
+    plan_version: int = 10
     student_id: str
     suggestions: list[LessonSuggestion]
     family_investigation: Optional[LessonSuggestion] = None
@@ -930,6 +931,7 @@ async def _family_investigation_suggestion_for_slot(
     activities are actually completed, however long that takes.
     """
     import hashlib
+    from app.jobs.canonical_seeding import canonical_seed_for
     household_key = hashlib.sha256(household_id.encode("utf-8")).hexdigest()[:12]
 
     for _ in range(25):  # defensive bound; a real queue is never this deep in one read
@@ -948,12 +950,19 @@ async def _family_investigation_suggestion_for_slot(
         if not completed:
             track = current["track"]
             canonical_topic = current["canonical_topic"]
+            seed = canonical_seed_for(canonical_topic, track)
+            title = seed.learner_title if seed else canonical_topic
+            description = (
+                (seed.card_description() if seed else "")
+                or personalized_curriculum_planner.TRACK_LABELS.get(track, canonical_topic)
+            )
+            driving_question = seed.resolved_driving_question() if seed else None
             sequence = build_sequence_contract(source="family")
             return LessonSuggestion(
                 id=shared_id,
-                title=canonical_topic,
+                title=title,
                 track=track,
-                description=personalized_curriculum_planner.TRACK_LABELS.get(track, canonical_topic),
+                description=description,
                 emoji=TRACK_EMOJI.get(track, "✦"),
                 priority=1.0,
                 source="family",
@@ -963,6 +972,7 @@ async def _family_investigation_suggestion_for_slot(
                 canonical_topic=canonical_topic,
                 mission_kind="family_investigation",
                 slot=slot,
+                driving_question=driving_question or None,
                 success_criteria=[
                     "Work from real observations, records, sources, measurements, or results.",
                     "Let each learner make one meaningful contribution without dividing the family into separate lessons.",
@@ -1878,7 +1888,7 @@ async def get_learning_plan(
     if not refresh:
         try:
             persisted = await daily_plan_store.get(student_id, plan_date)
-            if persisted and persisted.get("plan_version") == 9:
+            if persisted and persisted.get("plan_version") == 10:
                 logger.info("[LearningPlan] Persistent HIT for student=%s date=%s", student_id, plan_date)
                 return LearningPlanResponse(**persisted)
         except Exception as e:
@@ -2251,6 +2261,6 @@ async def get_saved_today_plan(
     response.headers["Pragma"] = "no-cache"
     plan_date = datetime.now(ZoneInfo("America/Chicago")).date()
     persisted = await daily_plan_store.get(student_id, plan_date)
-    if not persisted or persisted.get("plan_version") != 9:
+    if not persisted or persisted.get("plan_version") != 10:
         raise HTTPException(status_code=404, detail="Today's plan has not been created yet")
     return LearningPlanResponse(**persisted)

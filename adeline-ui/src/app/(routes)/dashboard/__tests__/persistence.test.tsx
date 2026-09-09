@@ -29,7 +29,7 @@ vi.mock('@/lib/brain-client', async () => {
 });
 
 const plan = {
-  plan_version: 9,
+  plan_version: 10,
   student_id: 'student-1',
   suggestions: [{
     id: 'today-1', title: 'Creek evidence', track: 'CREATION_SCIENCE',
@@ -38,7 +38,21 @@ const plan = {
     sequence_policy: 'HARD', sequence_state: 'READY', prerequisite_readiness: 1,
     prerequisite_concept_ids: [], prerequisite_standard_ids: [], bridge_required: false,
     delivery_mode: 'FAMILY_INVESTIGATION', shared_investigation_id: 'family-1-week-1',
-    individual_skill_targets: [],
+    individual_skill_targets: [], slot: 'science',
+  }, {
+    id: 'history-1', title: 'The Poison Squad: Who Was Allowed to Poison Your Food?', track: 'TRUTH_HISTORY',
+    description: 'Volunteers ate food with hidden chemicals.', emoji: '📜', priority: 1,
+    source: 'family', mission_kind: 'family_investigation', success_criteria: [],
+    sequence_policy: 'OPEN', sequence_state: 'OPEN', prerequisite_readiness: 1,
+    prerequisite_concept_ids: [], prerequisite_standard_ids: [], bridge_required: false,
+    delivery_mode: 'FAMILY_INVESTIGATION', shared_investigation_id: 'family-1-history-0',
+    individual_skill_targets: [], slot: 'history',
+    driving_question: 'Who was allowed to put chemicals in food — and what evidence finally forced a federal law?',
+    source: 'family', mission_kind: 'family_investigation', success_criteria: [],
+    sequence_policy: 'OPEN', sequence_state: 'OPEN', prerequisite_readiness: 1,
+    prerequisite_concept_ids: [], prerequisite_standard_ids: [], bridge_required: false,
+    delivery_mode: 'FAMILY_INVESTIGATION', shared_investigation_id: 'family-1-history-0',
+    individual_skill_targets: [], slot: 'history',
   }, {
     id: 'math-1', title: 'Compare ratios', track: 'APPLIED_MATHEMATICS',
     description: 'Use ratios in a new example.', emoji: '📐', priority: 0.9,
@@ -48,6 +62,7 @@ const plan = {
     delivery_mode: 'INDIVIDUAL_SKILL', individual_skill_targets: [],
   }],
   family_investigation: undefined,
+  family_investigations: undefined,
   individual_skills: [],
   family_context: { household_id: 'family-1', shared_with_siblings: false, sibling_count: 0 },
   placement: { declared_level: '8', working_grade: '8', placement_required: false, subject_levels: {} },
@@ -72,11 +87,11 @@ describe('durable Today and experience reopening', () => {
 
   it('reopens Today from the saved plan with zero planner-generation calls', async () => {
     const first = render(<TodayPage />);
-    await screen.findByText('🔬 Creek evidence');
+    await screen.findByText('Creek evidence');
     first.unmount();
 
     render(<TodayPage />);
-    await screen.findByText('🔬 Creek evidence');
+    await screen.findByText('Creek evidence');
 
     expect(brain.getSavedTodayPlan).toHaveBeenCalledTimes(2);
     expect(brain.getLearningPlan).not.toHaveBeenCalled();
@@ -85,11 +100,15 @@ describe('durable Today and experience reopening', () => {
   it('keeps the learner skill path separate and openable', async () => {
     render(<TodayPage />);
 
-    await screen.findByText('🔬 Creek evidence');
-    expect(screen.getByRole('heading', { name: 'Math & Literacy' })).toBeInTheDocument();
+    await screen.findByText('Creek evidence');
+    expect(screen.getByRole('heading', { name: 'Science together' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'History together' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Poison Squad/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Math & reading practice' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Practice →' })).toHaveAttribute(
       'href', '/dashboard/lesson/math-1',
     );
+    expect(screen.getAllByRole('link', { name: /Start this investigation/ }).length).toBeGreaterThan(0);
   });
 
   it('reopens a ready experience with zero build/author requests', async () => {

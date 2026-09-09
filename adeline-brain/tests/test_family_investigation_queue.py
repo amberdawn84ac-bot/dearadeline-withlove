@@ -100,6 +100,15 @@ async def test_both_slots_present_and_independent_of_each_others_completion():
     assert topics == {"Sourdough", "Poison Squad"}
     tracks = {item.track for item in results}
     assert tracks == {"CREATION_SCIENCE", "TRUTH_HISTORY"}
+    titles = {item.title for item in results}
+    assert any("Poison Squad" in title and title != "Poison Squad" for title in titles)
+    assert any("Sourdough" in title for title in titles)
+    history = next(item for item in results if item.track == "TRUTH_HISTORY")
+    assert not history.description.lower().startswith("open harvey")
+    assert "Harvey Wiley" not in history.description
+    assert history.driving_question
+    assert "food" in history.driving_question.lower() or "chemical" in history.driving_question.lower()
+    assert len(history.description) < 220
 
 
 @pytest.mark.asyncio

@@ -1049,7 +1049,16 @@ async def _load_or_create(student_id: str, plan_item_id: str) -> tuple[dict, dic
                       "blocks": _decoded(row["blocksJson"], []), "metadata": _decoded(row["metadataJson"], {})}
         session_row = await conn.fetchrow(
             'INSERT INTO "SpaceSession" ("studentId","planItemId","experienceId") VALUES ($1,$2,$3::text) '
-            'ON CONFLICT ("studentId","planItemId") DO UPDATE SET "experienceId"=EXCLUDED."experienceId" '
+            'ON CONFLICT ("studentId","planItemId") DO UPDATE SET '
+            '"experienceId"=EXCLUDED."experienceId", '
+            '"currentBlockIndex"=CASE WHEN "SpaceSession"."experienceId" IS DISTINCT FROM EXCLUDED."experienceId" THEN 0 ELSE "SpaceSession"."currentBlockIndex" END, '
+            '"completedBlockIds"=CASE WHEN "SpaceSession"."experienceId" IS DISTINCT FROM EXCLUDED."experienceId" THEN ARRAY[]::text[] ELSE "SpaceSession"."completedBlockIds" END, '
+            '"messagesJson"=CASE WHEN "SpaceSession"."experienceId" IS DISTINCT FROM EXCLUDED."experienceId" THEN \'[]\'::jsonb ELSE "SpaceSession"."messagesJson" END, '
+            '"blockEvaluations"=CASE WHEN "SpaceSession"."experienceId" IS DISTINCT FROM EXCLUDED."experienceId" THEN \'{}\'::jsonb ELSE "SpaceSession"."blockEvaluations" END, '
+            '"creditedLessonIds"=CASE WHEN "SpaceSession"."experienceId" IS DISTINCT FROM EXCLUDED."experienceId" THEN ARRAY[]::text[] ELSE "SpaceSession"."creditedLessonIds" END, '
+            'status=CASE WHEN "SpaceSession"."experienceId" IS DISTINCT FROM EXCLUDED."experienceId" THEN \'active\' ELSE "SpaceSession".status END, '
+            'version=CASE WHEN "SpaceSession"."experienceId" IS DISTINCT FROM EXCLUDED."experienceId" THEN 0 ELSE "SpaceSession".version END, '
+            '"updatedAt"=NOW() '
             'RETURNING id::text, "studentId", "planItemId", "experienceId", "currentBlockIndex", '
             '"completedBlockIds", "messagesJson", status, version', student_id, plan_item_id, row["id"],
         )

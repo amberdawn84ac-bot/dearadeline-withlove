@@ -57,7 +57,8 @@ class StudentExperienceStore:
                       "blocksJson", "metadataJson", "createdAt", "updatedAt")
                    VALUES ($1, $2, $3, $4, 'generating', '[]'::jsonb, '{}'::jsonb, NOW(), NOW())
                    ON CONFLICT ("studentId", "planItemId") DO UPDATE SET
-                     status = 'generating', "errorMessage" = NULL, "updatedAt" = NOW()
+                     status = 'generating', "errorMessage" = NULL, "updatedAt" = NOW(),
+                     "canonicalSlug" = EXCLUDED."canonicalSlug"
                    WHERE "StudentExperience".status = 'failed'
                       OR ("StudentExperience".status = 'generating'
                           AND "StudentExperience"."updatedAt" < NOW() - INTERVAL '3 minutes')
@@ -83,16 +84,33 @@ class StudentExperienceStore:
                          track: str, blocks: list[dict], metadata: dict) -> dict:
         conn = await get_db_conn()
         try:
+            slug = str((metadata or {}).get("canonical_slug") or "")
             row = await conn.fetchrow(
                 '''UPDATE "StudentExperience" SET status = 'ready', title = $3,
                      track = $4, "blocksJson" = $5::jsonb, "metadataJson" = $6::jsonb,
+                     "canonicalSlug" = COALESCE(NULLIF($7, ''), "canonicalSlug"),
                      "errorMessage" = NULL, "failureCount" = 0, "updatedAt" = NOW()
                    WHERE "studentId" = $1 AND "planItemId" = $2
                    RETURNING id, status, title, track, "blocksJson", "metadataJson",
                              "errorMessage", "canonicalSlug", "failureCount"''',
-                student_id, plan_item_id, title, track, json.dumps(blocks), json.dumps(metadata),
+                student_id, plan_item_id, title, track, json.dumps(blocks), json.dumps(metadata), slug,
             )
             return self._record(row)
+        finally:
+            await conn.close()
+
+    async def invalidate_ready(self, student_id: str, plan_item_id: str, reason: str) -> bool:
+        """Mark a ready experience failed so claim() can rebuild it from a better canonical."""
+        conn = await get_db_conn()
+        try:
+            row = await conn.fetchrow(
+                '''UPDATE "StudentExperience" SET status = 'failed',
+                     "errorMessage" = $3, "updatedAt" = NOW()
+                   WHERE "studentId" = $1 AND "planItemId" = $2 AND status = 'ready'
+                   RETURNING id''',
+                student_id, plan_item_id, reason[:500],
+            )
+            return bool(row)
         finally:
             await conn.close()
 

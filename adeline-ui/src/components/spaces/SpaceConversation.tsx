@@ -16,6 +16,7 @@ export default function SpaceConversation({
       studentId={studentId}
       gradeLevel={gradeLevel}
       planItemId={planItemId}
+      heightClass="h-[420px] min-h-[360px]"
       label="Unit Space with Adeline"
     />
   );

@@ -6,6 +6,7 @@ from app.agents.adapter import AdaptationRequest, adapt_canonical_for_student
 from app.jobs.canonical_seeding import (
     CANONICAL_SEED_CATALOG,
     CanonicalSeed,
+    canonical_seed_for,
     canonical_seeding_enabled,
     configured_batch_size,
     replenish_canonical_library,
@@ -41,6 +42,38 @@ def test_batch_size_is_bounded(monkeypatch):
     assert configured_batch_size() == 50
     monkeypatch.setenv("CANONICAL_SEED_BATCH_SIZE", "not-a-number")
     assert configured_batch_size() == 6
+
+
+def test_short_queue_names_resolve_to_the_approved_catalog_unit():
+    poison = canonical_seed_for("Poison Squad", "TRUTH_HISTORY")
+    assert poison is not None
+    assert poison.topic.startswith("The Poison Squad")
+    sourdough = canonical_seed_for("Sourdough", "CREATION_SCIENCE")
+    assert sourdough is not None
+    assert "Sourdough" in sourdough.topic
+    assert canonical_seed_for("The Poison Squad: Formaldehyde Milk and the Fight for Food Safety", "TRUTH_HISTORY") is poison
+
+
+def test_poison_squad_today_card_is_a_question_not_the_authoring_brief():
+    poison = canonical_seed_for("Poison Squad", "TRUTH_HISTORY")
+    assert poison is not None
+    assert poison.learner_title.startswith("The Poison Squad")
+    assert not poison.card_description().lower().startswith("open harvey")
+    assert "Bureau of Chemistry" not in poison.card_description()
+    assert len(poison.card_description()) < 180
+    assert "food" in poison.resolved_driving_question().lower()
+
+
+def test_sourdough_card_keeps_the_kitchen_hook():
+    sourdough = canonical_seed_for("Sourdough", "CREATION_SCIENCE")
+    assert sourdough is not None
+    assert "Sourdough" in sourdough.learner_title
+    assert "yeast" in sourdough.card_description().lower()
+
+
+def test_generic_single_words_do_not_steal_a_catalog_unit():
+    assert canonical_seed_for("History", "TRUTH_HISTORY") is None
+    assert canonical_seed_for("Poison Squad", "CREATION_SCIENCE") is None
 
 
 def test_launch_catalog_includes_power_and_nation_building_investigation():

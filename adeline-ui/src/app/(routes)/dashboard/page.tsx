@@ -11,7 +11,6 @@ import styles from '@/components/nav/sites-dashboard.module.css';
 export default function TodayPage() {
   const { student, loading: studentLoading } = useStudent();
   const [todayInvestigations, setTodayInvestigations] = useState<LessonSuggestion[]>([]);
-  const [weekTheme, setWeekTheme] = useState('');
   const [sharedWithSiblings, setSharedWithSiblings] = useState(false);
   const [comingUp, setComingUp] = useState<LessonSuggestion[]>([]);
   const [finished, setFinished] = useState<TranscriptEntry[]>([]);
@@ -32,7 +31,6 @@ export default function TodayPage() {
       ? plan.individual_skills
       : lineup.filter((item) => item.delivery_mode === 'INDIVIDUAL_SKILL');
     setTodayInvestigations(families);
-    setWeekTheme(families.map((item) => item.title).join(' + ') || 'Family investigations');
     setSharedWithSiblings(plan.family_context.shared_with_siblings);
     setComingUp(skills.slice(0, 4));
     setIsNextSchoolDay(false);
@@ -64,15 +62,24 @@ export default function TodayPage() {
 
   useEffect(() => { void loadToday(); }, [loadToday]);
 
-  if (studentLoading || planLoading) return <div className={styles.loading}>Adeline is arranging today&apos;s work…</div>;
+  if (studentLoading || planLoading) return <div className={styles.loading}>Adeline is arranging today's work…</div>;
   if (!student) return <div className={styles.loading}>Your session has ended. Please sign in again.</div>;
+
+  const scienceInvestigations = todayInvestigations.filter((item) => (item.slot || '').toLowerCase() === 'science'
+    || (!item.slot && item.track !== 'TRUTH_HISTORY' && item.track !== 'JUSTICE_CHANGEMAKING'));
+  const historyInvestigations = todayInvestigations.filter((item) => (item.slot || '').toLowerCase() === 'history'
+    || (!item.slot && (item.track === 'TRUTH_HISTORY' || item.track === 'JUSTICE_CHANGEMAKING')));
 
   return (
     <div className={styles.todayWorkspace}>
       <header className={styles.todayTitle}>
         <p>{isNextSchoolDay ? 'Your next school day' : 'Ready when you are'}</p>
         <h1>{isNextSchoolDay ? 'Coming up next' : 'Today'}</h1>
-        <span>{weekTheme} · {sharedWithSiblings ? 'Shared living investigation; it takes as long as the question needs, while each learner’s work and credits remain individual.' : 'This view changes whenever the living learning plan changes.'}</span>
+        <span>
+          {sharedWithSiblings
+            ? 'Two family investigations run side by side — science in the kitchen and field, history from real records. Each child keeps their own work and credits.'
+            : 'Two family investigations run side by side — science in the kitchen and field, history from real records.'}
+        </span>
       </header>
 
       {error && <p className={styles.error} role="alert">{error}</p>}
@@ -88,25 +95,17 @@ export default function TodayPage() {
 
       <section className={styles.kanban} aria-label="Today's learning board">
         <div className={`${styles.kanbanColumn} ${styles.kanbanToday}`}>
-          <header><span>1</span><div><small>Right now</small><h2>Today</h2></div></header>
-          {todayInvestigations.length ? todayInvestigations.map((investigation) => <article key={investigation.id} className={styles.kanbanCard}>
-            <small>{investigation.track.replace(/_/g, ' ')}</small>
-            <h3>{investigation.emoji} {investigation.title}</h3>
-            <p>{investigation.description}</p>
-            <small>{investigation.sequence_policy === 'HARD' ? 'Prerequisites demonstrated' : investigation.bridge_required ? 'Foundation bridge included' : 'Open exploration'}</small>
-            <Link href={`/dashboard/spaces/${encodeURIComponent(investigation.id)}`}>Open unit Space →</Link>
-          </article>) : <EmptyCard text="The next plan is being arranged." />}
+          <header><span>1</span><div><small>In the kitchen and the field</small><h2>Science together</h2></div></header>
+          {scienceInvestigations.length
+            ? scienceInvestigations.map((investigation) => <InvestigationCard key={investigation.id} investigation={investigation} />)
+            : <EmptyCard text="No science investigation is open yet." />}
         </div>
 
-        <div className={styles.kanbanColumn}>
-          <header><span>2</span><div><small>At this learner&apos;s level</small><h2>Math &amp; Literacy</h2></div></header>
-          {comingUp.map((mission) => <article key={mission.id} className={styles.kanbanCard}>
-            <small>{mission.track.replace(/_/g, ' ')}</small><h3>{mission.emoji} {mission.title}</h3>
-            <p>{mission.description}</p>
-            <small>{mission.sequence_policy === 'HARD' ? 'Prerequisites demonstrated' : mission.bridge_required ? 'Foundation bridge included' : 'Open exploration'}</small>
-            <Link href={`/dashboard/lesson/${encodeURIComponent(mission.id)}`}>Practice →</Link>
-          </article>)}
-          {!comingUp.length && <EmptyCard text="No separate math or literacy target is ready yet; the family investigation can still begin." />}
+        <div className={`${styles.kanbanColumn} ${styles.kanbanToday}`}>
+          <header><span>2</span><div><small>A real case from the records</small><h2>History together</h2></div></header>
+          {historyInvestigations.length
+            ? historyInvestigations.map((investigation) => <InvestigationCard key={investigation.id} investigation={investigation} />)
+            : <EmptyCard text="No history investigation is open yet." />}
         </div>
 
         <div className={styles.kanbanColumn}>
@@ -118,12 +117,46 @@ export default function TodayPage() {
           {!finished.length && <EmptyCard text="Completed lessons appear here after evidence is recorded." />}
         </div>
       </section>
+      {comingUp.length > 0 && (
+        <section className={styles.practiceStrip} aria-label="Math and reading practice">
+          <header>
+            <p>At this learner's level</p>
+            <h2>Math & reading practice</h2>
+            <span>Separate from the family investigations — only what this learner is ready for.</span>
+          </header>
+          <div className={styles.practiceCards}>
+            {comingUp.map((mission) => (
+              <article key={mission.id} className={styles.kanbanCard}>
+                <small>{mission.track.replace(/_/g, ' ')}</small>
+                <h3>{mission.emoji} {mission.title}</h3>
+                <p>{mission.description}</p>
+                <Link href={`/dashboard/lesson/${encodeURIComponent(mission.id)}`}>Practice →</Link>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
       <p className={styles.planFootnote}>
         <Link href="/dashboard/spaces">Browse all your Spaces →</Link>
         {' · '}
         <Link href="/dashboard/portfolio">See what you have made and learned →</Link>
       </p>
     </div>
+  );
+}
+
+function InvestigationCard({ investigation }: { investigation: LessonSuggestion }) {
+  const question = (investigation.driving_question || '').trim();
+  const hook = (investigation.description || '').trim();
+  const showHook = hook && hook.length <= 220 && hook !== question;
+  return (
+    <article className={styles.kanbanCard}>
+      <small>{investigation.track.replace(/_/g, ' ')}</small>
+      <h3>{investigation.title}</h3>
+      {question ? <p><strong>The question:</strong> {question}</p> : null}
+      {showHook ? <p>{hook}</p> : null}
+      <Link href={`/dashboard/spaces/${encodeURIComponent(investigation.id)}`}>Start this investigation →</Link>
+    </article>
   );
 }
 

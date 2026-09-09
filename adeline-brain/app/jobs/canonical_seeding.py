@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import uuid
 from dataclasses import dataclass, replace
 from typing import Iterable
@@ -29,10 +30,36 @@ class CanonicalSeed:
     family_summary: str = ""
     authoring_brief: str = ""
     content_revision: str = ""
+    learner_hook: str = ""
+    driving_question: str = ""
 
     @property
     def learner_title(self) -> str:
         return self.display_title.strip() or self.topic
+
+    def resolved_driving_question(self) -> str:
+        """Learner-facing question for Today cards and Space headers."""
+        if self.driving_question.strip():
+            return " ".join(self.driving_question.split())
+        match = re.search(
+            r"DRIVING QUESTION:\s*(.+?)(?:\s+(?:OPENING ENCOUNTER|SHARED OUTCOME|"
+            r"MISSION FRAME|DOCUMENTED STARTING POINT|CROSS-TRACK|CORRECTNESS):|\Z)",
+            self.authoring_brief,
+            re.S,
+        )
+        if not match:
+            return ""
+        return " ".join(match.group(1).split()).strip()
+
+    def card_description(self) -> str:
+        """Short copy for Today. Never dump the authoring brief onto the card."""
+        hook = " ".join(self.learner_hook.split())
+        if hook:
+            return hook
+        question = self.resolved_driving_question()
+        if question and len(question) <= 200:
+            return question
+        return ""
 
     @property
     def quality_approved(self) -> bool:
@@ -257,11 +284,17 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
         "Kitchen Chemistry: The Science of Sourdough",
         "CREATION_SCIENCE",
         True,
-        display_title="Kitchen Chemistry: Capturing Wild Yeast for Sourdough",
+        display_title="Kitchen Chemistry: The Science of Sourdough",
         family_summary=(
             "Capture and feed a wild sourdough starter, observe the wild yeast and lactic-acid bacteria "
             "living in it, track its rise and sour flavor over days, and preserve a tested, working starter "
             "and bread formula with evidence explaining why each step matters."
+        ),
+        learner_hook=(
+            "Capture wild yeast from flour and air, feed a starter, and watch bread rise without a packet of store yeast."
+        ),
+        driving_question=(
+            "What wild organisms live in flour and air, and how do they leaven bread without commercial yeast?"
         ),
         authoring_brief=(
             "MISSION FRAME: this is a multi-day living-culture investigation, not a single-session recipe. "
@@ -320,6 +353,12 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
             "political resistance from affected industries led to the first federal food-safety law, then "
             "connect that history to a real question about food safety and regulation today."
         ),
+        learner_hook=(
+            "Volunteers ate food with hidden chemicals so the country could prove what was being sold as milk."
+        ),
+        driving_question=(
+            "Who was allowed to put chemicals in food — and what evidence finally forced a federal law?"
+        ),
         authoring_brief=(
             "MISSION FRAME: preserve a primary-source historical-investigation energy, not a simple biography "
             "of Wiley. DOCUMENTED STARTING POINT: in 1902 USDA chemist Harvey Washington Wiley recruited young "
@@ -360,18 +399,44 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
 
 
 def canonical_seed_for(topic: str, track: str) -> CanonicalSeed | None:
-    """Resolve the approved design brief for an exact catalog topic."""
-    normalized_topic = topic.strip().casefold()
-    normalized_track = track.strip().upper()
-    return next(
-        (
-            seed for seed in CANONICAL_SEED_CATALOG
-            if seed.topic.strip().casefold() == normalized_topic
-            and seed.track.upper() == normalized_track
-            and seed.quality_approved
-        ),
-        None,
-    )
+    """Resolve the approved design brief for a catalog topic.
+
+    Queue rows and Today cards often store a short name ("Poison Squad")
+    while the catalog entry is the full investigation title. Exact match
+    first, then a conservative alias match so opening a Space hits the
+    approved unit instead of authoring a mixed generic lesson.
+    """
+    needle = topic.strip().casefold()
+    track_key = track.strip().upper()
+    if not needle or not track_key:
+        return None
+    approved = [
+        seed for seed in CANONICAL_SEED_CATALOG
+        if seed.track.upper() == track_key and seed.quality_approved
+    ]
+
+    def texts(seed: CanonicalSeed) -> tuple[str, str]:
+        return seed.topic.strip().casefold(), seed.learner_title.strip().casefold()
+
+    for seed in approved:
+        if needle in texts(seed):
+            return seed
+
+    words = [part for part in needle.replace(":", " ").replace("?", " ").split() if part]
+    multi_word = len(words) >= 2
+    distinctive_single = len(words) == 1 and len(words[0]) >= 8
+    if not (multi_word or distinctive_single):
+        return None
+
+    hits = [
+        seed for seed in approved
+        if any(needle in text for text in texts(seed))
+    ]
+    if len(hits) == 1:
+        return hits[0]
+    if multi_word and hits:
+        return hits[0]
+    return None
 
 
 def canonical_seeding_enabled() -> bool:
