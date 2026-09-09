@@ -70,6 +70,7 @@ interface SpaceChatState {
   total_blocks: number;
   status: "active" | "completed";
   current_block?: Record<string, unknown> | null;
+  resource_block?: Record<string, unknown> | null;
   messages?: Array<{ role: "user" | "assistant"; content: string }>;
   suggested_replies?: string[];
   log_fields?: string[];
@@ -514,6 +515,11 @@ export function AdelineChatPanel({
             content: nextState.messages?.findLast((item) => item.role === "assistant")?.content
               || "Let’s continue with the next part.",
           });
+          if (nextState.resource_block) {
+            addMessage({
+              ...spaceBlockMessage(nextState.resource_block),
+            });
+          }
           if (
             nextState.current_block
             && nextState.current_block_index !== priorIndex
