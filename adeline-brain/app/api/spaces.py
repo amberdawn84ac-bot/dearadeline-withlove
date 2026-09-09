@@ -217,6 +217,29 @@ def _normalize_turn_payload(payload: dict) -> dict:
     return data
 
 
+def _salvage_spoken_turn(raw_text: str) -> _TurnEvaluation | None:
+    """Keep a real spoken lesson if Gemini ignored the JSON contract.
+
+    Confirmed live 2026-09-09 on the sourdough Space: gemini-2.5-flash
+    taught ("when yeast eats sugar, what do you think it produces...")
+    as prose. We logged a parse miss, retried, and the family waited
+    ~18s for a JSON rewrite of a lesson we already had.
+    """
+    text = (raw_text or "").strip()
+    if len(text) < 40:
+        return None
+    if text.startswith("{") or text.startswith("```"):
+        return None
+    if not re.search(r"[A-Za-z]", text):
+        return None
+    return _TurnEvaluation(
+        adeline_message=text[:4000],
+        evaluation="partial",
+        recommended_action="stay",
+        is_waiting_for_user=True,
+    )
+
+
 def _space_turn_llm():
     # Known-good constructor: this is how Space turns worked before JSON-mode
     # and thinking_budget=0. Those extra Gemini kwargs are not used by Daily
@@ -282,6 +305,10 @@ async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
                 "[Spaces] Turn evaluation parse failed (attempt %d/3): %s | raw_content=%r | metadata=%s",
                 attempt + 1, exc, raw_text[:500], getattr(response, "response_metadata", None),
             )
+            salvaged = _salvage_spoken_turn(raw_text)
+            if salvaged is not None:
+                logger.info("[Spaces] Salvaged spoken turn after JSON miss (attempt %d/3)", attempt + 1)
+                return salvaged
             if attempt < 2:
                 await asyncio.sleep(0.8)
 
