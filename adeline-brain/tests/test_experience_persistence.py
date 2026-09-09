@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 from app.api.experience_builder import (
     EXPERIENCE_FAILURE_ESCALATION_THRESHOLD,
     _emit_persisted,
+    _ready_draft_should_rebuild,
     _run_with_progress,
     _stream,
     sequence_bridge_block,
@@ -25,6 +26,25 @@ def _request() -> LessonRequest:
         grade_level="8",
         required_standard_codes=["OAS.SCI.8.1"],
     )
+
+
+def test_thin_poison_squad_shell_is_marked_for_rebuild():
+    from app.connections.canonical_store import canonical_slug
+    expected = canonical_slug(
+        "The Poison Squad: Formaldehyde Milk and the Fight for Food Safety",
+        "TRUTH_HISTORY",
+    )
+    shell = {
+        "title": "The Poison Squad: Harvey Wiley's Crusade for Food Safety",
+        "track": "TRUTH_HISTORY",
+        "canonical_slug": expected,
+        "metadata": {"topic": "Poison Squad"},
+        "blocks": [{
+            "block_id": "b0", "block_type": "NARRATIVE",
+            "content": "Open Harvey Wiley's Bureau of Chemistry records, the volunteer 'Poison Squad' experiments on food preservatives, and the 1906 Pure Food and Drug Act.",
+        }],
+    }
+    assert _ready_draft_should_rebuild(shell, expected) is True
 
 
 def test_supported_mission_gets_a_real_readiness_bridge():
@@ -116,6 +136,42 @@ async def test_reopening_ready_experience_makes_zero_author_or_resource_calls():
     assert first == second
     author.assert_not_awaited()
     resource_search.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_short_name_draft_is_rebuilt_from_the_approved_catalog_slug():
+    stale = {
+        "id": "experience-stale",
+        "status": "ready",
+        "title": "The Poison Squad: Harvey Wiley's Crusade for Food Safety",
+        "track": "TRUTH_HISTORY",
+        "canonical_slug": "short-name-slug",
+        "blocks": [{"block_id": "stale-0", "block_type": "NARRATIVE", "content": "Open Harvey Wiley's Bureau of Chemistry records, the volunteer 'Poison Squad' experiments on food preservatives."}],
+        "metadata": {"canonical_slug": "short-name-slug"},
+    }
+    invalidate = AsyncMock(return_value=True)
+    claim = AsyncMock(side_effect=[
+        GenerationClaim("ready", False, stale),
+        GenerationClaim("generating", True, {"id": "experience-new", "failure_count": 0}),
+    ])
+    request = LessonRequest(
+        student_id="student-1", plan_item_id="family-history-0",
+        topic="Poison Squad", track=Track.TRUTH_HISTORY, grade_level="8",
+    )
+    with (
+        patch("app.api.experience_builder.student_experience_store.claim", new=claim),
+        patch("app.api.experience_builder.student_experience_store.invalidate_ready", new=invalidate),
+        patch("app.api.experience_builder.canonical_store.get", new=AsyncMock(return_value=None)),
+        patch("app.api.experience_builder.resource_router.search", new=AsyncMock(side_effect=RuntimeError("stop-after-invalidate"))),
+        patch("app.api.experience_builder.student_experience_store.mark_failed", new=AsyncMock(return_value=1)),
+        patch("app.api.experience_builder._notify_repeated_authoring_failure", new=AsyncMock()),
+    ):
+        events = [frame async for frame in _stream(request)]
+
+    invalidate.assert_awaited_once()
+    assert claim.await_count == 2
+    assert not any("Exact saved text" in frame for frame in events)
+    assert any("please retry" in frame.lower() or "could not" in frame.lower() or "flagged" in frame.lower() or "error" in frame.lower() for frame in events)
 
 
 @pytest.mark.asyncio

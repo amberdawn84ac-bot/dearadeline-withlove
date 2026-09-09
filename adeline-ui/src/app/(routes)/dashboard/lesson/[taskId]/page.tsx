@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import FamilyCanonicalLesson from '@/components/lessons/FamilyCanonicalLesson';
 import SpaceConversation from '@/components/spaces/SpaceConversation';
+import SpacePlayer from '@/components/spaces/SpacePlayer';
 import {
   buildExperience, getLearningPlan, getSavedExperience, getSavedTodayPlan,
   lessonRequestFromSuggestion,
@@ -219,17 +220,72 @@ export function CanonicalExperiencePage({ view = 'lesson' }: { view?: 'lesson' |
       {task && !lesson && (
         <header className="mb-5 rounded-[24px] border border-[#E7DAC3] bg-white/80 p-6">
           <p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">{task.delivery_mode === 'INDIVIDUAL_SKILL' ? 'This learner’s skill path' : 'One shared family experience'}</p>
-          <h1 className="mt-2 text-3xl text-[#2F4731]" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>{task.title}</h1>
-          <p className="mt-2 text-sm leading-6 text-[#2F4731]/65">{task.description}</p>
+          <h1 className="mt-2 text-3xl text-[#2F4731]" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>{shortTitle(task.title)}</h1>
+          {shortCopy(task.driving_question || task.description) && (
+            <p className="mt-2 text-sm leading-6 text-[#2F4731]/65">{shortCopy(task.driving_question || task.description)}</p>
+          )}
         </header>
       )}
 
       {status && <p className="rounded-2xl border border-[#E7DAC3] bg-[#FDF6E9] p-5 text-sm italic text-[#2F4731]/70" role="status">{status}</p>}
       {error && <div className="rounded-2xl bg-red-50 p-5 text-sm text-red-700" role="alert"><p>{error}</p><div className="mt-3 flex flex-wrap gap-4">{canRetry && <button type="button" onClick={() => setRetryVersion((value) => value + 1)} className="font-bold underline">Retry safely</button>}<Link href="/dashboard" className="font-bold underline">Return to today</Link></div></div>}
       {lesson && task && (view === 'space'
-        ? <SpaceConversation studentId={student.id} gradeLevel={student.gradeLevel ?? '8'} planItemId={task.id} />
+        ? (
+          <div className="space-y-6">
+            <SpaceHeader task={task} lesson={lesson} />
+            <SpacePlayer lesson={lesson} studentId={student.id} planItemId={task.id} />
+            <SpaceConversation studentId={student.id} gradeLevel={student.gradeLevel ?? '8'} planItemId={task.id} />
+          </div>
+        )
         : <FamilyCanonicalLesson lesson={lesson} studentId={student.id} />)}
     </div>
+  );
+}
+
+function shortTitle(value: string | undefined) {
+  const text = (value || '').trim();
+  if (!text) return 'Family investigation';
+  if (/^open harvey/i.test(text) || (text.length > 90 && text.includes('. '))) return 'Family investigation';
+  return text;
+}
+
+function shortCopy(value: string | undefined) {
+  const text = (value || '').trim();
+  if (!text || text.length > 220 || /^open harvey/i.test(text)) return '';
+  return text;
+}
+
+function SpaceHeader({ task, lesson }: { task: LessonSuggestion; lesson: LessonResponse }) {
+  const design = (lesson.metadata?.experience_design || {}) as { central_question?: string };
+  const question = shortCopy(
+    task.driving_question || design.central_question || '',
+  );
+  const hook = shortCopy(task.description);
+  const slotLabel = task.slot === 'history'
+    ? 'History together'
+    : task.slot === 'science'
+      ? 'Science together'
+      : 'Family investigation';
+  return (
+    <header className="overflow-hidden rounded-[24px] border border-[#E7DAC3] bg-white/80 p-6 md:p-8">
+      <div className="grid gap-6 md:grid-cols-[1.15fr_.85fr]">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">{slotLabel}</p>
+          <h1 className="mt-2 text-3xl text-[#2F4731] md:text-4xl" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>
+            {shortTitle(lesson.title || task.title)}
+          </h1>
+          {hook && hook !== question && (
+            <p className="mt-3 text-sm leading-6 text-[#2F4731]/70">{hook}</p>
+          )}
+        </div>
+        {question && (
+          <div className="self-center border-l-4 border-[#BD6809] pl-5">
+            <p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">The question</p>
+            <p className="mt-2 font-semibold leading-7 text-[#2F4731]">{question}</p>
+          </div>
+        )}
+      </div>
+    </header>
   );
 }
 

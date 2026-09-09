@@ -314,6 +314,7 @@ export function AdelineChatPanel({
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [spaceState, setSpaceState] = useState<SpaceChatState | null>(null);
   const [suggestedReplies, setSuggestedReplies] = useState<string[]>([]);
+  const [spaceOpenError, setSpaceOpenError] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [photoAttached, setPhotoAttached] = useState(false);
@@ -395,6 +396,7 @@ export function AdelineChatPanel({
   useEffect(() => {
     if (!spacePlanItemId) {
       setSpaceState(null);
+      setSpaceOpenError("");
       return;
     }
     let cancelled = false;
@@ -411,6 +413,7 @@ export function AdelineChatPanel({
     void openSpace()
       .then((state) => {
         if (cancelled) return;
+        setSpaceOpenError("");
         setSpaceState(state);
         setSuggestedReplies(blockSuggestedReplies(state.current_block));
         const history: Message[] = state.messages?.length
@@ -428,7 +431,16 @@ export function AdelineChatPanel({
         }
         setMessages(history);
       })
-      .catch(() => { if (!cancelled) setSpaceState(null); });
+      .catch((reason) => {
+        if (cancelled) return;
+        setSpaceState(null);
+        setSpaceOpenError(reason instanceof Error ? reason.message : "This Space could not open yet.");
+        setMessages([{
+          id: "space-open-error",
+          role: "adeline",
+          content: "This Space is still being prepared. Give it a moment, then reopen it from Today.",
+        }]);
+      });
     return () => { cancelled = true; };
   }, [spacePlanItemId, studentId]);
 
@@ -713,6 +725,9 @@ export function AdelineChatPanel({
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        {spaceOpenError && (
+          <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{spaceOpenError}</p>
+        )}
         {messages.map((msg) => (
           <div
             key={msg.id}

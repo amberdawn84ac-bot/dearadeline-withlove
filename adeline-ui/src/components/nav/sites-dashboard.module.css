@@ -80,6 +80,11 @@
 .kanbanCard a { display:flex; justify-content:center; margin-top:14px; padding:11px 14px; border-radius:12px; background:var(--forest); color:white; text-decoration:none; font-size:12px; font-weight:900; }
 .finishedCard { background:#f1f6ed; }
 .emptyKanban { border-style:dashed; background:rgba(255,255,255,.5); box-shadow:none; }
+.practiceStrip { padding:18px; border:1px solid #e2d8c6; border-radius:24px; background:rgba(255,255,255,.7); }
+.practiceStrip header p { margin:0; color:var(--coral); font-size:8px; font-weight:900; text-transform:uppercase; letter-spacing:.12em; }
+.practiceStrip header h2 { margin:4px 0 0; color:var(--forest); font-size:19px; }
+.practiceStrip header span { display:block; margin-top:4px; color:var(--muted); font-size:12px; }
+.practiceCards { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-top:14px; }
 .agendaCard > button,.agendaCard > a,.backButton { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:0 16px; border:0; border-radius:14px; background:var(--forest); color:white; text-decoration:none; font-weight:900; cursor:pointer; white-space:nowrap; }
 .hero { width:100%; min-height:390px; display:grid; grid-template-columns:40% 60%; align-items:center; overflow:hidden; border:1px solid rgba(41,76,53,.12); border-radius:34px 34px 0 0; background:linear-gradient(135deg,#e3ecdd,#f7ead2); }
 .adelineArt { position:relative; height:390px; overflow:hidden; }

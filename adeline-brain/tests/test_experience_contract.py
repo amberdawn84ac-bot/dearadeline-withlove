@@ -54,6 +54,17 @@ def test_siblings_share_canonical_but_keep_individual_standards():
     assert first.required_standard_codes != older.required_standard_codes
 
 
+def test_poison_squad_queue_name_shares_the_approved_catalog_slug():
+    from app.connections.canonical_store import canonical_slug
+    short = LessonRequest(student_id="kid", track=Track.TRUTH_HISTORY, topic="Poison Squad", grade_level="8")
+    full = LessonRequest(
+        student_id="kid", track=Track.TRUTH_HISTORY,
+        topic="The Poison Squad: Formaldehyde Milk and the Fight for Food Safety", grade_level="8",
+    )
+    assert shared_family_canonical_slug(short) == shared_family_canonical_slug(full)
+    assert shared_family_canonical_slug(short) == canonical_slug(full.topic, "TRUTH_HISTORY")
+
+
 def test_truth_history_requests_and_requires_item_level_primary_sources():
     request = LessonRequest(
         student_id="historian",
@@ -80,7 +91,7 @@ def test_truth_history_requests_and_requires_item_level_primary_sources():
     assert has_verified_history_source(curated_item) is True
 
 
-def test_truth_history_archive_query_removes_framing_question():
+def test_truth_history_archive_query_uses_catalog_records_query():
     request = LessonRequest(
         student_id="historian",
         track=Track.TRUTH_HISTORY,
@@ -88,7 +99,13 @@ def test_truth_history_archive_query_removes_framing_question():
         grade_level="9",
     )
 
-    assert canonical_resource_query(request).topic == "Railroads, Oil, and the Robber Barons"
+    assert canonical_resource_query(request).topic == "railroads monopoly Standard Oil"
+
+
+def test_poison_squad_archive_query_uses_wiley_records_not_the_title():
+    short = LessonRequest(student_id="kid", track=Track.TRUTH_HISTORY, topic="Poison Squad", grade_level="8")
+    assert "Wiley" in canonical_resource_query(short).topic
+    assert "Bureau of Chemistry" in canonical_resource_query(short).topic
 
 
 def test_justice_investigation_also_requires_supplied_primary_records():
