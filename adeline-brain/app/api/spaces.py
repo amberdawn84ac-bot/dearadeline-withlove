@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
+from app.agents.persona import SCRIPTURE_TRANSLATION_POLICY
 from app.api.middleware import require_internal_key, verify_student_access
 from app.api.realtime import connection_manager
 from app.config import GEMINI_MODEL, create_llm, get_db_conn
@@ -90,6 +91,8 @@ Offer zero to four suggested_replies. Use them for natural short answers such as
 set of genuine choices. Do not offer them when the learner needs to explain reasoning, show evidence, or write freely.
 Use display_breakout_tracks only when subject-specific work is useful now, and show_microscope_diagram only when microscopy is relevant.
 Write adeline_message as spoken prose. Do not use markdown (no **bold**, no * bullets).
+
+""" + SCRIPTURE_TRANSLATION_POLICY + """
 
 {activity_mode}
 
@@ -463,6 +466,9 @@ def _teaching_context(state: dict) -> str:
         "only when the newest message shows the understanding or evidence this activity actually requires.",
         "Drop an approved outside resource when it genuinely helps THIS turn — a sim to test a prediction, "
         "a game that models the concept, a video of the process, a primary source. Not on every log entry.",
+        "NAMES: His name is not God. Use the original name the source writes (YHWH, Elohim, Yeshua), plus "
+        "meaning and context. When English hid a name, or someone purposefully changed one, say so. One "
+        "accurate note — do not turn a science turn into a sermon, and do not say God's design.",
     ]
     learner_bits = []
     if grade is not None and grade != "":
