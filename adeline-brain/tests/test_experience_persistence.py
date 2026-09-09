@@ -129,6 +129,10 @@ async def test_reopening_ready_experience_makes_zero_author_or_resource_calls():
         )),
         patch("app.api.experience_builder._author", new=author),
         patch("app.api.experience_builder.resource_router.search", new=resource_search),
+        patch(
+            "app.api.experience_builder.student_experience_store.invalidate_ready",
+            new=AsyncMock(return_value=False),
+        ),
     ):
         first = [frame async for frame in _stream(_request())]
         second = [frame async for frame in _stream(_request())]

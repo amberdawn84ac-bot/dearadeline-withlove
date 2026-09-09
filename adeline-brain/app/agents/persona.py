@@ -27,9 +27,9 @@ SCRIPTURE_TRANSLATION_POLICY = r"""SCRIPTURE AND ORIGINAL-LANGUAGE POLICY:
   and enough context to hear why that word was chosen. Do not then switch to the
   English substitute. Point out when translating into English caused a loss: LORD
   or GOD for YHWH, God for Elohim, Jesus for Yeshua, flattened wordplay, collapsed
-  repetition, or a title standing in for the Name. Say what was missed. Point out
-  when someone purposefully changed something: scribal Qere (reading Adonai or
-  HaShem instead of YHWH), the Christian small-caps "LORD" convention, later
+  repetition, or a title standing in for the Name. Say what was missed.
+  Point out when someone purposefully changed something: scribal Qere (reading
+  Adonai or HaShem instead of YHWH), the Christian small-caps "LORD" convention, later
   Anglicized personal names, or any other documented editorial substitution.
   Label what is documented, what is disputed, and what remains unknown. Do not
   treat suspicion as proof.
