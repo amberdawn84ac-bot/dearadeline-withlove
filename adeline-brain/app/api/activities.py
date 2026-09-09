@@ -167,6 +167,11 @@ LIFE_TO_CREDIT: dict[str, dict] = {
         "tracks":      [Track.TRUTH_HISTORY, Track.GOVERNMENT_ECONOMICS],
         "credit_type": "CORE",
     },
+    "science_experiment": {
+        "subjects":    ["Laboratory Science: Observation & Mechanism", "Chemistry: Change of Matter"],
+        "tracks":      [Track.CREATION_SCIENCE, Track.APPLIED_MATHEMATICS],
+        "credit_type": "CORE",
+    },
 }
 
 
@@ -183,7 +188,8 @@ categories from the life_to_credit table.
 Available activity categories:
 baking, cooking, gardening, building, woodworking, sewing, coding, reading, writing,
 volunteering, animals, soap_making, debate, farming, canning, animal_care, drawing,
-music, nature_study, research, entrepreneurship, health_wellness, field_trip
+music, nature_study, research, entrepreneurship, health_wellness, field_trip,
+science_experiment
 
 Available tracks:
 CREATION_SCIENCE, HEALTH_NATUROPATHY, HOMESTEADING, GOVERNMENT_ECONOMICS,
@@ -223,6 +229,10 @@ _LOCAL_ACTIVITY_HINTS: dict[str, tuple[str, ...]] = {
     "music": ("music", "guitar", "piano", "sang", "practiced"),
     "research": ("research", "investigated", "looked up", "compared sources"),
     "entrepreneurship": ("sold", "business", "customer", "profit", "budget"),
+    "science_experiment": (
+        "experiment", "elephant toothpaste", "oobleck", "mentos", "dry ice",
+        "yeast balloon", "cabbage pH", "hydrogen peroxide", "fire tornado",
+    ),
 }
 
 
@@ -236,6 +246,17 @@ def _map_activity_locally(description: str, *, allow_generic: bool = False) -> O
     ][:3]
     if not categories and not allow_generic:
         return None
+
+    if "science_experiment" in categories:
+        return {
+            "categories": categories,
+            "course_title": "Laboratory Science: Hands-On Investigation",
+            "activity_description": (
+                "Ran a hands-on experiment, recorded observations, and explained "
+                "the mechanism from what they saw."
+            ),
+            "primary_track": "CREATION_SCIENCE",
+        }
 
     if "baking" in categories:
         return {

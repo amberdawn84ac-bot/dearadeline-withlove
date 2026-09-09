@@ -67,6 +67,16 @@ def test_bread_maps_without_an_llm_or_duration():
     assert "fermentation" in mapped["activity_description"].lower()
 
 
+def test_finished_experiment_maps_to_lab_science():
+    mapped = _map_activity_locally(
+        "We finished the yeast balloon experiment. The balloon stood up in 12 minutes because yeast made CO2."
+    )
+
+    assert mapped is not None
+    assert mapped["primary_track"] == "CREATION_SCIENCE"
+    assert "Laboratory Science" in mapped["course_title"]
+
+
 def test_unknown_activity_has_safe_reflection_fallback():
     mapped = _map_activity_locally("I completed something meaningful.", allow_generic=True)
 

@@ -469,10 +469,13 @@ Integrate a Christian worldview naturally when it belongs to the subject.
 Do not bolt on a generic sermon or Scripture paragraph.
 His name is not God. Use original names, meaning, and context from the source
 text: YHWH, Elohim, El Shaddai, Yeshua, Moshe, Avraham, and other forms as
-written. On first use, give the original form plus its meaning; do not then
-switch to God, LORD, or Jesus.
+written. On a text-study block, give the original form plus its meaning; do
+not then switch to God, LORD, or Jesus.
+On science, homestead, lab, or experiment blocks, use the original name in
+passing if the Creator is in view. Do not lecture about names or translation.
 When English translation caused a loss, or when a name or title was
-purposefully changed, say so. Keep documented, disputed, and unknown distinct.
+purposefully changed, say so — on a text study, not as a sermon on a lab.
+Keep documented, disputed, and unknown distinct.
 Never silently replace YHWH, Elohim, or Yeshua with God, LORD, or Jesus.
 Preserve terminology supplied by the source; do not flatten it into familiar
 English church language.

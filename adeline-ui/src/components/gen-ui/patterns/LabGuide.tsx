@@ -9,8 +9,8 @@
  *   - Bold, readable steps (viewable from across the yard)
  *   - Safety callouts
  *   - "Film This" social media toolkit
- *   - "God's Creation" connection pop-up
- *   - "Upload Discovery" seal button
+ *   - "Creation Connection" pop-up
+ *   - "Record what you saw" seal button
  */
 import { useState } from "react";
 
@@ -325,7 +325,7 @@ export function LabGuide({ experiment, onSeal, onMaterialsReady }: LabGuideProps
             className="w-full py-3 rounded-xl border-2 text-sm font-bold transition-all hover:scale-[1.01]"
             style={{ borderColor: "#9A3F4A", color: "#9A3F4A", background: showCreation ? "#FEF2F2" : "#fff" }}
           >
-            ✝️ God's Creation Connection
+            ✝️ Creation Connection
           </button>
 
           {showCreation && (
@@ -348,7 +348,7 @@ export function LabGuide({ experiment, onSeal, onMaterialsReady }: LabGuideProps
             className="w-full py-4 rounded-2xl text-sm font-black uppercase tracking-widest text-white transition-all hover:brightness-110"
             style={{ background: "#166534" }}
           >
-            📤 Upload Discovery Video & Seal Credit
+            Tell me what you saw — then we record the credit
           </button>
 
           <p className="text-xs text-[#2F4731]/40">

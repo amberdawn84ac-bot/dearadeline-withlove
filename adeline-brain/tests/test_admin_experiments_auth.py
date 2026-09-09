@@ -60,3 +60,12 @@ def test_signed_in_student_can_list_experiments():
     body = response.json()
     assert isinstance(body, list)
     assert any(item.get("id") == "exp-elephant-toothpaste" for item in body)
+    assert any(item.get("id") == "exp-yeast-balloon" for item in body)
+
+
+def test_experiments_seal_requires_auth():
+    response = client.post(
+        "/experiments/exp-yeast-balloon/seal",
+        json={"student_id": "student-123", "reflection": "The balloon stood up because yeast made CO2."},
+    )
+    assert response.status_code == 401

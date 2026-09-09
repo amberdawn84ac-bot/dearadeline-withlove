@@ -52,6 +52,10 @@ _ADELINE_BASE = (
 - Do not keep a conversation alive merely by asking another connection question.
 - Questions are diagnostic tools, not the product. Once you understand enough, teach or act.
 - Keep responses focused: 3–6 sentences unless teaching complex material.
+- If the family asked for science experiments, assign a specific hands-on experiment
+  in this reply. Materials, steps, safety, what to observe. Do not ask a vague
+  "what process have you observed" question instead. Do not lecture about names
+  or translation. When they come back with what they saw, that work can be credited.
 
 BLOCK INJECTION:
 When you want to show the student a primary source, lab guide, quiz, timeline, mind map,
@@ -124,7 +128,18 @@ class ConversationRequest(BaseModel):
 _EXPLICIT_LEARNING_REQUEST_RE = re.compile(
     r"\b(i\s+(?:want|would like|need)\s+to\s+(?:learn|understand|know|explore)|"
     r"teach me|help me (?:learn|understand)|explain|how does|how do|why does|why do|"
-    r"what (?:is|are|causes|caused)|can (?:we|you) (?:learn|study|investigate|explore))\b",
+    r"what (?:is|are|causes|caused)|can (?:we|you) (?:learn|study|investigate|explore)|"
+    r"science experiments?|hands-?on experiments?|"
+    r"(?:give me|can we (?:do|try)|let'?s do).{0,40}experiments?|"
+    r"do (?:an |some )?experiments?)\b",
+    re.IGNORECASE,
+)
+
+_EXPERIMENT_REQUEST_RE = re.compile(
+    r"\b(science experiments?|hands-?on experiments?|"
+    r"(?:give me|can we (?:do|try)|let'?s do|i want).{0,40}experiments?|"
+    r"experiments? (?:we can|to) (?:do|try)|"
+    r"do (?:an |some )?experiments?)\b",
     re.IGNORECASE,
 )
 
@@ -132,6 +147,10 @@ _EXPLICIT_LEARNING_REQUEST_RE = re.compile(
 def _is_explicit_learning_request(message: str) -> bool:
     """Distinguish a request for teaching from a report of completed work."""
     return bool(_EXPLICIT_LEARNING_REQUEST_RE.search(message))
+
+
+def _is_experiment_request(message: str) -> bool:
+    return bool(_EXPERIMENT_REQUEST_RE.search(message))
 
 
 def _build_conversation_prompt(
@@ -181,7 +200,15 @@ def _build_conversation_prompt(
     mode_section = get_mode_directives(tracks)
     tracks_str = ", ".join(t.replace("_", " ").title() for t in tracks) if tracks else "General"
 
-    if _is_explicit_learning_request(topic):
+    if _is_experiment_request(topic):
+        progression = (
+            "EXPERIMENT REQUEST: The family asked for science experiments. Assign a specific "
+            "hands-on experiment in this response — materials, steps, safety, what to observe. "
+            "Do not ask a vague observation question instead of giving the experiment. Do not "
+            "lecture about names, Hebrew, or translation. When they finish, they should tell you "
+            "what they saw so the work can be credited. Inject an EXPERIMENT or LAB_GUIDE block."
+        )
+    elif _is_explicit_learning_request(topic):
         progression = (
             "TEACHING REQUEST: The learner explicitly asked to learn. Begin teaching in this response. "
             "Do not classify the message for school credit, ask what they already figured out, or answer "
@@ -258,6 +285,8 @@ def _infer_tracks(message: str, explicit_track: Optional[str]) -> list[str]:
 
 def _wants_outside_resource(message: str) -> bool:
     normalized = message.lower()
+    if _is_experiment_request(message):
+        return True
     return any(term in normalized for term in (
         "play a game", "find a game", "learning game", "learn coding", "learn to code",
         "makecode", "arcade", "simulation", "interactive", "outside resource",
@@ -404,6 +433,16 @@ async def _conversation_sse(
             except Exception:
                 logger.exception("[/conversation/stream] Resource Router failed")
 
+        catalog_experiment_titles: list[str] = []
+        if _is_experiment_request(message):
+            try:
+                from app.api.experiments import experiment_as_block, experiments_for_grade
+                for exp in experiments_for_grade(grade_level, limit=1):
+                    yield _sse("block", experiment_as_block(exp))
+                    catalog_experiment_titles.append(exp.title)
+            except Exception:
+                logger.exception("[/conversation/stream] Experiment catalog failed")
+
         system_prompt = _build_conversation_prompt(
             topic=message[:120],
             tracks=tracks,
@@ -418,6 +457,13 @@ async def _conversation_sse(
                 f"\n\nRESOURCE ROUTER: {routed_resource_count} approved options have already been shown. "
                 "Briefly explain how the learner should use one as a curricular experience. Tell them to return "
                 "and explain what they built, tested, decided, or understood; opening or playing alone earns no credit."
+            )
+        if catalog_experiment_titles:
+            titles = ", ".join(catalog_experiment_titles)
+            system_prompt += (
+                f"\n\nEXPERIMENT CARD ALREADY SHOWN: {titles}. Teach from that card. "
+                "Tell them to gather the materials, run the steps, then come back with what they saw "
+                "(height, color, smell, time, surprise) so it can be credited. Opening the card is not mastery."
             )
 
         # Build message list (cap history at last 10 turns)

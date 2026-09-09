@@ -17,5 +17,12 @@ describe('Adeline chat intent', () => {
   it('still recognizes real completed work and completed reading', () => {
     expect(isCompletedActivityReport('I baked bread and compared how the dough rose.')).toBe(true);
     expect(isCompletedActivityReport('I read a chapter of my biology textbook.')).toBe(true);
+    expect(isCompletedActivityReport('We finished the yeast balloon experiment and the balloon stood up.')).toBe(true);
+  });
+
+  it('treats a request for science experiments as teaching, not credit', () => {
+    const message = 'Can we do science experiments on the homestead?';
+    expect(isExplicitLearningRequest(message)).toBe(true);
+    expect(isCompletedActivityReport(message)).toBe(false);
   });
 });

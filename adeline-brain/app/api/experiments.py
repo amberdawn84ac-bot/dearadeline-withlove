@@ -13,8 +13,9 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
-from app.api.middleware import require_role
+from app.api.middleware import get_current_user_id, require_role, verify_student_access_for_user
 from app.schemas.api_models import (
     Experiment, ExperimentResponse, ExperimentStep,
     SocialMediaKit, CreationConnection,
@@ -73,7 +74,7 @@ _register(Experiment(
     creation_connection=CreationConnection(
         title="Catalysts in the Human Body",
         scripture="Psalm 139:14 — I praise you because I am fearfully and wonderfully made.",
-        explanation="The yeast acts as a catalyst — it speeds up the breakdown of hydrogen peroxide without being consumed. Your body uses thousands of enzymes as catalysts every second. Digestion, breathing, even thinking all depend on God's precision-engineered catalysts inside your cells.",
+        explanation="The yeast acts as a catalyst — it speeds up the breakdown of hydrogen peroxide without being consumed. Your body uses thousands of enzymes as catalysts every second. Digestion, breathing, even thinking all depend on precision-engineered catalysts inside your cells.",
     ),
     social_media_kit=SocialMediaKit(
         caption_template="Adeline taught us THIS today. Chemistry is loud. 🧪🔥 #DearAdeline",
@@ -113,7 +114,7 @@ _register(Experiment(
     creation_connection=CreationConnection(
         title="Nucleation in Nature",
         scripture="Job 37:5-6 — He says to the snow, 'Fall on the earth,' and to the rain shower, 'Be a mighty downpour.'",
-        explanation="Every Mentos has thousands of tiny pits on its surface. CO2 molecules gather at these pits — that is nucleation. Rain forms the same way: water vapor nucleates around dust particles in the sky. God designed these physical laws so that water can cycle from ocean to cloud to rain to river — sustaining all life.",
+        explanation="Every Mentos has thousands of tiny pits on its surface. CO2 molecules gather at these pits — that is nucleation. Rain forms the same way: water vapor nucleates around dust particles in the sky. These physical laws let water cycle from ocean to cloud to rain to river — sustaining all life.",
     ),
     social_media_kit=SocialMediaKit(
         caption_template="We just launched a soda rocket 50 feet into the air. This is school. 🚀 #DearAdeline",
@@ -151,9 +152,9 @@ _register(Experiment(
         ExperimentStep(step_number=5, instruction="Try placing a heavy object on the surface gently vs. dropping it.", tip="This shows the difference between slow and fast force."),
     ],
     creation_connection=CreationConnection(
-        title="States of Matter and God's Design",
+        title="States of Matter",
         scripture="Proverbs 8:29 — When He gave the sea its boundary so the waters would not overstep His command.",
-        explanation="Oobleck is a shear-thickening fluid — it gets harder when force is applied quickly. Your body uses this same principle: synovial fluid in your joints thickens under impact to protect your bones. God engineered shock absorption into your very skeleton.",
+        explanation="Oobleck is a shear-thickening fluid — it gets harder when force is applied quickly. Your body uses this same principle: synovial fluid in your joints thickens under impact to protect your bones. Shock absorption is engineered into the skeleton itself.",
     ),
     social_media_kit=SocialMediaKit(
         caption_template="We walked on water today. Well... cornstarch water. 🏃‍♂️💨 #DearAdeline",
@@ -195,7 +196,7 @@ _register(Experiment(
     creation_connection=CreationConnection(
         title="Sublimation — Skipping a Step",
         scripture="Isaiah 55:9 — As the heavens are higher than the earth, so are my ways higher than your ways.",
-        explanation="Dry ice goes directly from solid to gas — skipping the liquid phase entirely. This is called sublimation. God designed matter with these phase transitions so that the water cycle, weather patterns, and even the preservation of food can work. The same CO2 gas in your bubbles is what plants breathe in to make oxygen for you.",
+        explanation="Dry ice goes directly from solid to gas — skipping the liquid phase entirely. This is called sublimation. These phase transitions make the water cycle, weather, and even food preservation work. The same CO2 gas in your bubbles is what plants take in to make oxygen for you.",
     ),
     social_media_kit=SocialMediaKit(
         caption_template="Giant fog bubbles. Science is magic you can explain. ☁️🫧 #DearAdeline",
@@ -239,7 +240,7 @@ _register(Experiment(
     creation_connection=CreationConnection(
         title="Convection and the Atmosphere",
         scripture="Nahum 1:3 — His way is in the whirlwind and the storm.",
-        explanation="The fire tornado forms because spinning air creates a low-pressure core that stretches the flame upward. Real tornadoes form the same way — warm air rises (convection), wind shear adds rotation, and the vortex tightens. God placed these forces in the atmosphere to drive weather, distribute heat, and sustain the global climate. Understanding them is how we protect our families and steward the land.",
+        explanation="The fire tornado forms because spinning air creates a low-pressure core that stretches the flame upward. Real tornadoes form the same way — warm air rises (convection), wind shear adds rotation, and the vortex tightens. These forces drive weather, distribute heat, and sustain the global climate. Understanding them is how we protect our families and steward the land.",
     ),
     social_media_kit=SocialMediaKit(
         caption_template="We built a FIRE TORNADO today. Sovereign-level science. 🔥🌪️ #DearAdeline",
@@ -248,6 +249,133 @@ _register(Experiment(
     ),
     estimated_minutes=40,
 ))
+
+_register(Experiment(
+    id="exp-yeast-balloon",
+    title="Yeast Balloon",
+    tagline="Watch yeast breathe — the same workers that raise sourdough",
+    chaos_level=ChaosLevel.SPROUT,
+    wow_factor=8,
+    scientific_concepts=["fermentation", "carbon dioxide", "yeast metabolism", "sugar as fuel"],
+    science_credits=[ScienceCredit.BIOLOGY, ScienceCredit.CHEMISTRY],
+    grade_band="K-12",
+    materials=[
+        "Empty plastic bottle (water-bottle size)",
+        "1 packet dry yeast",
+        "1 tsp sugar",
+        "Warm water (about 100 F — bath-warm, not hot)",
+        "1 balloon",
+    ],
+    safety_requirements=[
+        "Warm water, not boiling — hot water kills the yeast",
+        "Do this at the table; the balloon will inflate, it will not pop from this",
+    ],
+    steps=[
+        ExperimentStep(step_number=1, instruction="Stretch the balloon a few times so it inflates easily."),
+        ExperimentStep(step_number=2, instruction="Pour about 1 cup of warm water into the bottle. Add the sugar and swirl."),
+        ExperimentStep(step_number=3, instruction="Add the yeast, swirl once, then immediately stretch the balloon over the bottle mouth.", tip="Work quickly so the gas does not escape before the balloon is on."),
+        ExperimentStep(step_number=4, instruction="Watch for 10–20 minutes. The balloon should stand up as yeast eats the sugar and releases CO2."),
+        ExperimentStep(step_number=5, instruction="Write what you saw: how long until it moved, how tall it got, and what you think the yeast was doing.", tip="This is the same gas that lifts sourdough. Compare it to a jar of starter if you have one."),
+    ],
+    creation_connection=CreationConnection(
+        title="Living yeast, living dough",
+        scripture="Genesis 1:11 — Elohim said, Let the earth sprout sproutage.",
+        explanation="Yeast is alive. It eats sugar and breathes out carbon dioxide, the same gas that raises bread. This is fermentation — a living process, not a recipe trick. The same workers in this bottle are in a sourdough starter.",
+    ),
+    social_media_kit=SocialMediaKit(
+        caption_template="Yeast inflated a balloon in 15 minutes. That is the same gas that raises our bread. #DearAdeline",
+        filming_tips=["Time-lapse the balloon", "Set a ruler behind the bottle for height", "Film a starter jar next to it"],
+        hashtags=["#DearAdeline", "#YeastBalloon", "#KitchenScience"],
+    ),
+    estimated_minutes=25,
+))
+
+_register(Experiment(
+    id="exp-cabbage-ph",
+    title="Red Cabbage pH Rainbow",
+    tagline="A kitchen indicator that shows acid and base by color",
+    chaos_level=ChaosLevel.SPROUT,
+    wow_factor=8,
+    scientific_concepts=["acids and bases", "pH", "indicators", "anthocyanins"],
+    science_credits=[ScienceCredit.CHEMISTRY],
+    grade_band="K-12",
+    materials=[
+        "1/2 small red cabbage",
+        "Hot water",
+        "Clear cups or jars (4 or more)",
+        "Kitchen testers: lemon juice or vinegar, baking soda, soap water, milk if you have it",
+        "Spoon",
+    ],
+    safety_requirements=[
+        "Adult handles the hot water",
+        "Do not drink the indicator mix after testing",
+        "Keep soap and vinegar away from eyes",
+    ],
+    steps=[
+        ExperimentStep(step_number=1, instruction="Chop the cabbage. Cover it with hot water in a bowl. Steep 10 minutes until the water is deep purple. Strain into a pitcher."),
+        ExperimentStep(step_number=2, instruction="Pour a little purple liquid into each clear cup."),
+        ExperimentStep(step_number=3, instruction="Add a spoon of a different kitchen tester to each cup. Watch the color shift.", tip="Acid goes pink/red. Base goes blue/green. Record the color next to the tester name."),
+        ExperimentStep(step_number=4, instruction="Line the cups up from most pink to most green. That is a homemade pH scale."),
+        ExperimentStep(step_number=5, instruction="Predict one more tester (pickle brine, soda, dirt water) before you pour, then check."),
+    ],
+    creation_connection=CreationConnection(
+        title="Color as evidence",
+        scripture="",
+        explanation="Anthocyanins in red cabbage change shape when they meet acid or base, and the new shape reflects different light. The color is the measurement. Food chemists used indicators like this to catch adulterated milk — the same fight as the Poison Squad.",
+    ),
+    social_media_kit=SocialMediaKit(
+        caption_template="Cabbage juice turned into a pH rainbow on our table. #DearAdeline",
+        filming_tips=["Film the pour from above", "Hold a white card behind the cups", "Show the lineup from pink to green"],
+        hashtags=["#DearAdeline", "#KitchenChemistry", "#pHRainbow"],
+    ),
+    estimated_minutes=30,
+))
+
+
+def _grade_number(grade: str) -> int:
+    g = str(grade or "").strip().upper()
+    if not g or g.startswith("K"):
+        return 0
+    try:
+        return max(0, min(12, int(g.split("-")[0])))
+    except (TypeError, ValueError):
+        return 8
+
+
+def grade_in_band(grade: str, band: str) -> bool:
+    parts = (band or "K-12").split("-")
+    low = 0 if parts[0] == "K" else int(parts[0])
+    high = int(parts[1]) if len(parts) > 1 else low
+    return low <= _grade_number(grade) <= high
+
+
+def experiments_for_grade(grade: str, limit: int = 1) -> list[Experiment]:
+    """Kitchen-first for younger grades; spectacle-first for high school."""
+    matching = [exp for exp in EXPERIMENTS.values() if grade_in_band(grade, exp.grade_band)]
+    gn = _grade_number(grade)
+    if gn <= 8:
+        matching.sort(key=lambda exp: (exp.chaos_level.value, -exp.wow_factor))
+    else:
+        matching.sort(key=lambda exp: (-exp.wow_factor, exp.chaos_level.value))
+    return matching[: max(1, limit)]
+
+
+def experiment_as_block(exp: Experiment) -> dict:
+    """Shape a catalog experiment as a conversation EXPERIMENT block."""
+    data = exp.model_dump(mode="json")
+    steps = "\n".join(
+        f"{item['step_number']}. {item['instruction']}"
+        for item in data.get("steps") or []
+    )
+    materials = ", ".join((data.get("materials") or [])[:8])
+    return {
+        "block_type": "EXPERIMENT",
+        "title": exp.title,
+        "content": f"{exp.tagline}\n\nMaterials: {materials}\n\n{steps}",
+        "experiment_id": exp.id,
+        "experiment": data,
+        "scientific_concepts": list(exp.scientific_concepts),
+    }
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -264,13 +392,7 @@ async def list_experiments(
         experiments = [e for e in experiments if e.chaos_level.value == chaos_level]
 
     if grade is not None:
-        def _grade_in_band(g: str, band: str) -> bool:
-            parts = band.split("-")
-            low = 0 if parts[0] == "K" else int(parts[0])
-            high = int(parts[1]) if len(parts) > 1 else low
-            gn = 0 if g == "K" else int(g)
-            return low <= gn <= high
-        experiments = [e for e in experiments if _grade_in_band(grade, e.grade_band)]
+        experiments = [e for e in experiments if grade_in_band(grade, e.grade_band)]
 
     return sorted(experiments, key=lambda e: e.wow_factor, reverse=True)
 
@@ -297,4 +419,64 @@ async def start_experiment(experiment_id: str, student_id: str = ""):
     return ExperimentResponse(
         experiment=exp,
         student_materials_ready=True,
+    )
+
+
+class SealExperimentRequest(BaseModel):
+    student_id: str
+    reflection: str = Field(min_length=12, max_length=4000)
+    artifact_refs: list[str] = Field(default_factory=list, max_length=20)
+
+
+class SealExperimentResponse(BaseModel):
+    sealed: bool
+    experiment_id: str
+    title: str
+    learning_status: str
+    concepts: list[str] = Field(default_factory=list)
+
+
+@router.post("/{experiment_id}/seal", response_model=SealExperimentResponse)
+async def seal_experiment(
+    experiment_id: str,
+    body: SealExperimentRequest,
+    current_user_id: str = Depends(get_current_user_id),
+):
+    """Credit a completed experiment from the family's observation, not from clicking Done."""
+    exp = EXPERIMENTS.get(experiment_id)
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    await verify_student_access_for_user(current_user_id, body.student_id)
+
+    from app.services.mastery_credit import ConceptCredit, record_mastery_credit
+
+    reflection = body.reflection.strip()
+    credits = [
+        ConceptCredit(concept_id=f"exp:{exp.id}:{index}", concept_name=name, quality=3)
+        for index, name in enumerate(exp.scientific_concepts)
+    ]
+    evidence = [{"type": "learner_reflection", "content": reflection}]
+    evidence.extend({"type": "artifact", "url": ref} for ref in body.artifact_refs)
+    try:
+        await record_mastery_credit(
+            student_id=body.student_id,
+            track=exp.track.value,
+            lesson_id=f"experiment:{exp.id}",
+            completed_blocks=len(exp.steps),
+            proficiency="UNDERSTANDING",
+            evidence_sources=evidence,
+            concept_credits=credits,
+        )
+    except Exception as exc:
+        logger.exception("[Experiments] seal credit failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not record this experiment; retrying is safe: {exc}",
+        ) from exc
+    return SealExperimentResponse(
+        sealed=True,
+        experiment_id=exp.id,
+        title=exp.title,
+        learning_status="UNDERSTANDING",
+        concepts=list(exp.scientific_concepts),
     )
