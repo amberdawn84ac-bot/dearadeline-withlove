@@ -13,6 +13,7 @@ type SpaceState = {
   current_lesson: { index: number; count: number; title: string; purpose?: string };
   learner_depth: { grade: number; band: string; tier: string; assignment: string };
   messages: Message[]; resource_triggers?: string[];
+  resource_block?: { title?: string; content?: string; metadata?: Record<string, unknown> } | null;
   breakout_data?: Record<string, Standard[]> | null;
   credited_this_session?: string[];
 };
@@ -68,6 +69,8 @@ export default function SpacePlayer({ lesson, studentId, planItemId }: {
   return <div className="space-y-6">
     {space.current_block && <section className="rounded-[28px] border border-[#E7DAC3] bg-white p-4 sm:p-6"><GenUIRenderer lessonId={lesson.lesson_id} blocks={[space.current_block]} isHomestead={lesson.track === 'HOMESTEADING'} oasStandards={lesson.oas_standards} agentName={lesson.agent_name} studentId={studentId} /></section>}
 
+    {space.resource_block && <OfferedResources block={space.resource_block} />}
+
     <div className="px-1" aria-label={`${progress}% of this unit explored`}>
       <div className="h-1.5 overflow-hidden rounded-full bg-[#E9E1D2]"><div className="h-full bg-[#2F5A3A] transition-all" style={{ width: `${progress}%` }} /></div>
     </div>
@@ -83,6 +86,35 @@ export default function SpacePlayer({ lesson, studentId, planItemId }: {
         <p className="mt-2 text-xs italic text-[#2F4731]/60">This Space stays open. Use the Adeline chat above if you have more questions or want to explore further.</p>
       </div>}
   </div>;
+}
+
+function OfferedResources({ block }: { block: { title?: string; content?: string; metadata?: Record<string, unknown> } }) {
+  const resources = Array.isArray(block.metadata?.resources) ? block.metadata.resources : [];
+  if (!resources.length) return null;
+  return (
+    <section className="rounded-[28px] border border-[#D9CFBC] bg-[#F0FDF4] p-5">
+      <h2 className="text-2xl text-[#2F4731]" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>
+        {block.title || 'Try this'}
+      </h2>
+      <p className="mt-1 text-sm text-[#2F4731]/70">
+        {block.content || 'Adeline picked an approved outside resource for this turn. Opening it is not mastery — come back and explain what you noticed, built, or tested.'}
+      </p>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {resources.map((resource, index) => {
+          const item = resource as Record<string, unknown>;
+          const url = String(item.editor_url || item.embed_url || item.source_url || '');
+          return (
+            <article key={String(item.id || index)} className="rounded-2xl border border-[#D9CFBC] bg-white p-4">
+              <p className="text-xs font-black uppercase tracking-wider text-[#BD6809]">{String(item.provider || '')}</p>
+              <h3 className="mt-2 font-bold text-[#2F4731]">{String(item.title || 'Resource')}</h3>
+              {item.description ? <p className="mt-1 text-sm leading-6 text-[#2F4731]/65">{String(item.description)}</p> : null}
+              {url ? <a href={url} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-11 items-center rounded-xl bg-[#2F4731] px-4 py-2 text-sm font-bold text-white no-underline">Open</a> : null}
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function BreakoutTracks({ data }: { data: Record<string, Standard[]> }) {

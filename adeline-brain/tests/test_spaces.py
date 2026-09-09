@@ -10,6 +10,8 @@ from pydantic import ValidationError
 from app.api.spaces import (
     OffPlanTopic,
     _TurnEvaluation,
+    _approved_resources_prompt,
+    _attach_approved_resources,
     _attach_mastery_context,
     _block_concept_ids,
     _concept_credits_for_lesson,
@@ -18,20 +20,25 @@ from app.api.spaces import (
     _decoded,
     _evaluate_turn,
     _evaluation_to_bkt_correct,
+    _hydrate_offered_resources,
     _learner_depth,
     _lesson_content,
     _lesson_for_block,
     _lesson_fully_completed,
+    _merge_resources,
     _newly_completed_lesson,
     _normalize_turn_payload,
     _parse_json_response,
     _proficiency_from_evaluations,
+    _resource_block_for_offered,
     _space_list_item,
+    _space_resource_topic,
     _space_turn_llm,
     _state,
     _teaching_context,
     _turn_activity_mode,
     _update_space_bkt,
+    _wants_math_tools,
 )
 
 
@@ -319,11 +326,13 @@ def test_normalize_turn_payload_turns_null_lists_and_empty_off_plan_into_default
         "resource_triggers": None,
         "suggested_replies": None,
         "log_fields": None,
+        "offered_resource_ids": None,
         "off_plan_topic": {},
     })
     assert payload["resource_triggers"] == []
     assert payload["suggested_replies"] == []
     assert payload["log_fields"] == []
+    assert payload["offered_resource_ids"] == []
     assert payload["off_plan_topic"] is None
     _TurnEvaluation.model_validate(payload)
 
@@ -569,4 +578,147 @@ async def test_evaluate_turn_prompt_tells_adeline_to_teach(monkeypatch):
     assert "grade 12" in captured["system"]
     assert "Wild yeast capture" in captured["system"]
     assert "Do not use markdown" in captured["system"]
+    assert "OUTSIDE RESOURCES: none approved" in captured["system"]
+    assert "offered_resource_ids" in captured["system"]
+
+
+def test_turn_evaluation_offered_resource_ids_default_empty_and_can_be_chosen():
+    base = {
+        "adeline_message": "Open the simulation and change one variable.",
+        "evaluation": "not_answered", "recommended_action": "stay", "is_waiting_for_user": True,
+    }
+    assert _TurnEvaluation.model_validate(base).offered_resource_ids == []
+    chosen = _TurnEvaluation.model_validate({**base, "offered_resource_ids": ["phet:search", "makecode:arcade"]})
+    assert chosen.offered_resource_ids == ["phet:search", "makecode:arcade"]
+
+
+def test_normalize_caps_offered_resource_ids_at_two_and_accepts_a_string():
+    payload = _normalize_turn_payload({
+        "adeline_message": "Try this.", "evaluation": "partial", "recommended_action": "stay",
+        "is_waiting_for_user": True, "offered_resource_ids": ["phet:search", "geogebra:math", "khan:practice"],
+    })
+    assert payload["offered_resource_ids"] == ["phet:search", "geogebra:math"]
+    single = _normalize_turn_payload({
+        "adeline_message": "Try this.", "evaluation": "partial", "recommended_action": "stay",
+        "is_waiting_for_user": True, "offered_resource_ids": "makecode:arcade",
+    })
+    assert single["offered_resource_ids"] == ["makecode:arcade"]
+
+
+def test_hydrate_offered_resources_keeps_only_approved_ids_in_order():
+    catalog = [
+        {"id": "phet:search", "title": "PhET"},
+        {"id": "makecode:arcade", "title": "Arcade"},
+        {"id": "geogebra:math", "title": "GeoGebra"},
+    ]
+    assert _hydrate_offered_resources(catalog, ["makecode:arcade", "invented", "phet:search"]) == [
+        {"id": "makecode:arcade", "title": "Arcade"},
+        {"id": "phet:search", "title": "PhET"},
+    ]
+    assert _hydrate_offered_resources(catalog, ["nope"]) == []
+
+
+def test_merge_resources_dedupes_by_id_and_keeps_first():
+    merged = _merge_resources(
+        [{"id": "phet:search", "title": "A"}],
+        [{"id": "phet:search", "title": "B"}, {"id": "geogebra:math", "title": "G"}],
+    )
+    assert merged == [{"id": "phet:search", "title": "A"}, {"id": "geogebra:math", "title": "G"}]
+
+
+def test_space_resource_topic_joins_unit_lesson_and_concepts():
+    state = {
+        "title": "Kitchen Chemistry: Sourdough",
+        "current_lesson": {"title": "Starter Culture", "concept_ids": ["c1"]},
+        "current_block": {"title": "Daily log"},
+        "metadata": {"unit_plan": {"essential_concepts": [{"concept_id": "c1", "concept": "Wild yeast"}]}},
+    }
+    topic = _space_resource_topic(state)
+    assert "Sourdough" in topic
+    assert "Starter Culture" in topic
+    assert "Wild yeast" in topic
+
+
+def test_wants_math_tools_when_the_activity_is_quantitative():
+    assert _wants_math_tools({
+        "title": "Sourdough",
+        "current_lesson": {},
+        "current_block": {"content": "Graph the rise height as a ratio."},
+        "learner_depth": {"assignment": "Measure and graph"},
+        "metadata": {},
+    }) is True
+    assert _wants_math_tools({
+        "title": "Sourdough",
+        "current_lesson": {},
+        "current_block": {"content": "Smell the starter."},
+        "learner_depth": {"assignment": ""},
+        "metadata": {},
+    }) is False
+
+
+def test_approved_resources_prompt_lists_ids_adeline_may_offer():
+    text = _approved_resources_prompt({
+        "approved_resources": [
+            {"id": "makecode:arcade", "provider": "Microsoft MakeCode",
+             "resource_type": "GAME_BUILDER", "title": "Build a fermentation game"},
+        ],
+    })
+    assert "makecode:arcade" in text
+    assert "Microsoft MakeCode" in text
+    assert "Never invent a URL" in text
+
+
+def test_resource_block_for_offered_is_a_collection_the_chat_already_knows_how_to_render():
+    catalog = [{
+        "id": "phet:search", "title": "PhET", "provider": "PhET",
+        "resource_type": "SIMULATION", "source_url": "https://phet.colorado.edu/",
+    }]
+    block = _resource_block_for_offered(catalog, ["phet:search"], "CREATION_SCIENCE")
+    assert block["block_type"] == "RESOURCE_COLLECTION"
+    assert block["metadata"]["resources"][0]["id"] == "phet:search"
+    assert _resource_block_for_offered(catalog, ["invented"], "CREATION_SCIENCE") is None
+
+
+@pytest.mark.asyncio
+async def test_attach_approved_resources_swallows_router_failures(monkeypatch):
+    async def boom(*_args, **_kwargs):
+        raise RuntimeError("router down")
+
+    monkeypatch.setattr("app.api.spaces._search_approved_resources", boom)
+    state = {
+        "student_id": "stu-1", "track": "CREATION_SCIENCE", "title": "Sourdough",
+        "current_lesson": {}, "current_block": {}, "learner_depth": {"grade": 7},
+        "metadata": {},
+    }
+    attached = await _attach_approved_resources(state)
+    assert attached["approved_resources"] == []
+
+
+@pytest.mark.asyncio
+async def test_evaluate_turn_prompt_includes_approved_arcade_and_geogebra(monkeypatch):
+    captured = {}
+
+    class CapturingLLM:
+        async def ainvoke(self, messages):
+            captured["system"] = messages[0].content
+            return _FakeResponse(json.dumps({
+                **_TURN_JSON,
+                "offered_resource_ids": ["makecode:arcade"],
+            }))
+
+    monkeypatch.setattr("app.api.spaces._space_turn_llm", lambda: CapturingLLM())
+    state = {
+        **_space_state(),
+        "approved_resources": [
+            {"id": "makecode:arcade", "provider": "Microsoft MakeCode",
+             "resource_type": "GAME_BUILDER", "title": "Build a yeast game"},
+            {"id": "geogebra:math", "provider": "GeoGebra",
+             "resource_type": "INTERACTIVE", "title": "Graph the rise"},
+        ],
+    }
+    result = await _evaluate_turn(state, "The mark is higher.")
+    assert "makecode:arcade" in captured["system"]
+    assert "geogebra:math" in captured["system"]
+    assert result.offered_resource_ids == ["makecode:arcade"]
+
 

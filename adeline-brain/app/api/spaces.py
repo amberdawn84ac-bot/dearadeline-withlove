@@ -80,6 +80,7 @@ class _TurnEvaluation(BaseModel):
     off_plan_topic: OffPlanTopic | None = None
     suggested_replies: list[str] = Field(default_factory=list)
     log_fields: list[str] = Field(default_factory=list)
+    offered_resource_ids: list[str] = Field(default_factory=list)
 
 
 _TURN_SYSTEM_PROMPT = """You are Adeline, a warm but rigorous learning companion guiding one family through a unit Space.
@@ -108,14 +109,16 @@ Respond with ONLY a JSON object (no markdown fences, no commentary) matching exa
   "recommended_action": "stay"|"advance"|"complete_unit", "is_waiting_for_user": boolean,
   "resource_triggers": ["show_microscope_diagram"|"display_breakout_tracks", ...] (0-2 items),
   "off_plan_topic": null | {{"concept_name": string, "track": string|null, "tier": "encountered"|"demonstrated"}},
-  "suggested_replies": [string, ...] (0-4 items), "log_fields": [string, ...] (0-5 items)}}"""
+  "suggested_replies": [string, ...] (0-4 items), "log_fields": [string, ...] (0-5 items),
+  "offered_resource_ids": [string, ...] (0-2 ids from the approved list, else empty)}}"""
 
 
 def _turn_activity_mode(state: dict) -> str:
     teaching = _teaching_context(state)
+    resources = _approved_resources_prompt(state)
     if state["status"] == "completed":
         return (
-            f"{teaching}\n\n"
+            f"{teaching}\n\n{resources}\n\n"
             "This unit's planned activities are already finished — you're in open conversation mode now. The family may "
             "ask follow-up questions, revisit something, or wander into a new question entirely. Answer genuinely and "
             "substantively; there is no \"next activity\" to advance to, so \"recommended_action\" should stay \"stay\" "
@@ -124,7 +127,7 @@ def _turn_activity_mode(state: dict) -> str:
             f"{json.dumps(state.get('current_block'))}"
         )
     return (
-        f"{teaching}\n\n"
+        f"{teaching}\n\n{resources}\n\n"
         "The server has selected exactly one current activity. Teach that activity and evaluate only evidence in the "
         "learner's newest message. Never skip ahead. Recommend \"advance\" only when the learner has supplied the "
         "evidence or answer this current activity explicitly requires — a filled log is evidence, not by itself the "
@@ -190,7 +193,7 @@ def _normalize_turn_payload(payload: dict) -> dict:
             data[key] = data[key].strip().lower()
     if isinstance(data.get("is_waiting_for_user"), str):
         data["is_waiting_for_user"] = data["is_waiting_for_user"].strip().lower() in {"true", "1", "yes"}
-    for key in ("resource_triggers", "suggested_replies", "log_fields"):
+    for key in ("resource_triggers", "suggested_replies", "log_fields", "offered_resource_ids"):
         if data.get(key) is None:
             data[key] = []
     if isinstance(data.get("resource_triggers"), str):
@@ -199,6 +202,12 @@ def _normalize_turn_payload(payload: dict) -> dict:
         data["resource_triggers"] = [
             trigger for trigger in data["resource_triggers"] if trigger in _ALLOWED_RESOURCE_TRIGGERS
         ]
+    if isinstance(data.get("offered_resource_ids"), str):
+        data["offered_resource_ids"] = [data["offered_resource_ids"]]
+    if isinstance(data.get("offered_resource_ids"), list):
+        data["offered_resource_ids"] = [
+            str(item).strip() for item in data["offered_resource_ids"] if str(item).strip()
+        ][:2]
     off_plan = data.get("off_plan_topic")
     if not isinstance(off_plan, dict) or not str(off_plan.get("concept_name") or "").strip():
         data["off_plan_topic"] = None
@@ -375,6 +384,8 @@ def _teaching_context(state: dict) -> str:
         "mechanism, prediction; high school = competing explanations, tradeoffs, quantitative reasoning.",
         "Filling a log without engaging the concept is at most \"partial\" and \"stay\". Use \"correct\" "
         "only when the newest message shows the understanding or evidence this activity actually requires.",
+        "Drop an approved outside resource when it genuinely helps THIS turn — a sim to test a prediction, "
+        "a game that models the concept, a video of the process, a primary source. Not on every log entry.",
     ]
     learner_bits = []
     if grade:
@@ -397,6 +408,144 @@ def _teaching_context(state: dict) -> str:
             "(mechanism, measurement, prediction) — do not reduce the turn to data entry."
         )
     return "\n".join(lines)
+
+
+_QUANTITATIVE_TERMS = frozenset({
+    "ratio", "percent", "percentage", "graph", "measure", "measurement", "height",
+    "hydration", "doubling", "algebra", "geometry", "angle", "statistics",
+})
+
+
+def _space_resource_topic(state: dict) -> str:
+    lesson = state.get("current_lesson") or {}
+    block = state.get("current_block") or {}
+    names = _concept_names(
+        state.get("metadata") or {},
+        _block_concept_ids(state.get("metadata") or {}, lesson, block),
+    )
+    parts = [
+        str(state.get("title") or ""),
+        str(lesson.get("title") or ""),
+        str(block.get("title") or ""),
+        " ".join(names),
+    ]
+    return " ".join(part for part in parts if part).strip()[:240] or "family investigation"
+
+
+def _authored_block_resources(state: dict) -> list[dict]:
+    metadata = (state.get("current_block") or {}).get("metadata") or {}
+    resources = metadata.get("resources") if isinstance(metadata, dict) else None
+    if not isinstance(resources, list):
+        return []
+    return [item for item in resources if isinstance(item, dict) and item.get("id")]
+
+
+def _merge_resources(*groups: list[dict]) -> list[dict]:
+    merged: list[dict] = []
+    seen: set[str] = set()
+    for group in groups:
+        for item in group:
+            rid = str(item.get("id") or "").strip()
+            if not rid or rid in seen:
+                continue
+            seen.add(rid)
+            merged.append(item)
+    return merged
+
+
+def _wants_math_tools(state: dict) -> bool:
+    depth = state.get("learner_depth") or {}
+    haystack = " ".join([
+        _space_resource_topic(state),
+        str(depth.get("assignment") or ""),
+        str((state.get("current_block") or {}).get("content") or ""),
+    ])
+    words = {word.strip(".,:;!?()[]{}\"'").lower() for word in haystack.split() if word}
+    return bool(words & _QUANTITATIVE_TERMS)
+
+
+def _approved_resources_prompt(state: dict) -> str:
+    items = state.get("approved_resources") or []
+    if not items:
+        return (
+            "OUTSIDE RESOURCES: none approved for this activity right now. "
+            "Do not invent a URL or tool. Leave offered_resource_ids empty."
+        )
+    lines = [
+        "OUTSIDE RESOURCES: you teach; these approved tools are the lab, game, video, or archive. "
+        "Offer 0-2 by id only when THIS turn the learner should actually open, play, watch, measure, or build. "
+        "Empty list on a routine log acknowledgment. Never invent a URL. Opening a link is not mastery.",
+        "Set offered_resource_ids to ids from this list only:",
+    ]
+    for item in items[:8]:
+        rid = item.get("id") or ""
+        provider = item.get("provider") or ""
+        rtype = str(item.get("resource_type") or "").replace("_", " ")
+        title = item.get("title") or ""
+        lines.append(f"- {rid} — {provider} ({rtype}): {title}")
+    return "\n".join(lines)
+
+
+def _hydrate_offered_resources(catalog: list[dict], offered_ids: list[str]) -> list[dict]:
+    by_id = {str(item.get("id")): item for item in catalog if item.get("id")}
+    chosen: list[dict] = []
+    seen: set[str] = set()
+    for rid in offered_ids:
+        key = str(rid).strip()
+        item = by_id.get(key)
+        if not item or key in seen:
+            continue
+        seen.add(key)
+        chosen.append(item)
+        if len(chosen) == 2:
+            break
+    return chosen
+
+
+def _resource_block_for_offered(catalog: list[dict], offered_ids: list[str], track: str) -> dict | None:
+    chosen = _hydrate_offered_resources(catalog, offered_ids)
+    if not chosen:
+        return None
+    is_math = track == "APPLIED_MATHEMATICS"
+    return {
+        "block_type": "RESOURCE_COLLECTION",
+        "experience_stage": "RESOURCE",
+        "title": "Play with the idea, then prove it" if is_math else "Try this",
+        "content": (
+            "Choose the game, puzzle, or model matched to this idea. Change something, notice the pattern, then explain why. Time played is not mastery."
+            if is_math else
+            "Adeline remains the teacher. Open the resource, then come back and explain what you noticed, built, tested, or understood. Opening the link is not mastery."
+        ),
+        "metadata": {"resources": chosen, "requires_evidence": is_math},
+        "family_style": True,
+    }
+
+
+async def _search_approved_resources(topic: str, track: str, grade_level: str, limit: int = 6) -> list[dict]:
+    from app.services.resource_router import ResourceQuery, resource_router
+    packet = await resource_router.search(ResourceQuery(
+        topic=topic, track=track, grade_level=grade_level,
+        interactive_preferred=True, limit=limit,
+    ))
+    return [item for item in (packet.get("resources") or []) if isinstance(item, dict)]
+
+
+async def _attach_approved_resources(state: dict) -> dict:
+    """Best-effort approved catalog for this activity. Never fails the turn."""
+    topic = _space_resource_topic(state)
+    grade = str((state.get("learner_depth") or {}).get("grade") or 8)
+    track = state.get("track") or ""
+    catalog = _authored_block_resources(state)
+    try:
+        catalog = _merge_resources(catalog, await _search_approved_resources(topic, track, grade))
+        if _wants_math_tools(state) and track != "APPLIED_MATHEMATICS":
+            catalog = _merge_resources(
+                catalog,
+                await _search_approved_resources(topic, "APPLIED_MATHEMATICS", grade, limit=4),
+            )
+    except Exception:
+        logger.warning("[Spaces] resource catalog skipped (non-fatal) student=%s", state.get("student_id"), exc_info=True)
+    return {**state, "approved_resources": catalog[:8]}
 
 
 async def _update_space_bkt(
@@ -913,7 +1062,7 @@ async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
     be a Next.js route calling out to Vercel's AI Gateway plus two more HTTP
     calls back into this same backend."""
     session, experience = await _load_or_create(student_id, plan_item_id)
-    state = await _attach_mastery_context(_state(session, experience))
+    state = await _attach_approved_resources(await _attach_mastery_context(_state(session, experience)))
 
     try:
         evaluation = await _evaluate_turn(state, body.user_message)
@@ -945,6 +1094,15 @@ async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
         result["breakout_data"] = None
     result["suggested_replies"] = evaluation.suggested_replies
     result["log_fields"] = evaluation.log_fields
+    try:
+        result["resource_block"] = _resource_block_for_offered(
+            state.get("approved_resources") or [],
+            evaluation.offered_resource_ids,
+            state.get("track") or "",
+        )
+    except Exception:
+        logger.warning("[Spaces] resource block skipped (non-fatal) student=%s", student_id, exc_info=True)
+        result["resource_block"] = None
     return result
 
 
