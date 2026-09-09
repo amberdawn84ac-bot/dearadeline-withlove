@@ -11,13 +11,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { coppaVerificationUrl, sendCoppaVerificationEmail } from '@/lib/server/coppa-email';
+import { resolveBrainBaseUrl } from '@/lib/server/brain-url';
 
-const BRAIN_URL = (
-  process.env.BRAIN_INTERNAL_URL ||
-  process.env.BRAIN_URL ||
-  process.env.NEXT_PUBLIC_BRAIN_URL ||
-  'http://localhost:8000'
-).replace(/\/$/, '');
+const BRAIN_URL = resolveBrainBaseUrl();
 
 // ── POST — request parent verification ───────────────────────────────────────
 export async function POST(req: NextRequest): Promise<NextResponse> {
