@@ -332,18 +332,64 @@ def _lesson_for_block(metadata: dict, block_id: str, block_index: int) -> dict:
             "title": f"Activity {block_index + 1}", "block_ids": [block_id]}
 
 
+def _grade_from_text(value) -> int:
+    text = str(value or "").strip()
+    if not text:
+        return 8
+    upper = text.upper()
+    if upper in {"K", "KG", "KINDERGARTEN"} or upper.startswith("K-") or upper.startswith("K "):
+        return 0
+    return next((int(part) for part in text.replace("-", " ").split() if part.isdigit()), 8)
+
+
 def _grade_from_metadata(metadata: dict) -> int:
-    grade_text = str((metadata or {}).get("grade_level") or "8")
-    return next((int(part) for part in grade_text.replace("-", " ").split() if part.isdigit()), 8)
+    return _grade_from_text((metadata or {}).get("grade_level"))
 
 
-def _learner_depth(metadata: dict, block: dict | None) -> dict:
-    grade = _grade_from_metadata(metadata)
-    band = "elementary" if grade <= 5 else "middle" if grade <= 8 else "high_school"
-    tier = "foundation" if band == "elementary" else "analysis" if band == "middle" else "synthesis"
+def _band_for_grade(grade: int) -> str:
+    return "elementary" if grade <= 5 else "middle" if grade <= 8 else "high_school"
+
+
+def _tier_for_band(band: str) -> str:
+    return "foundation" if band == "elementary" else "analysis" if band == "middle" else "synthesis"
+
+
+def _first_name(name: str | None) -> str:
+    token = str(name or "").strip().split()[0] if str(name or "").strip() else "this learner"
+    return token[:40]
+
+
+def _assignment_for_band(block: dict | None, band: str) -> str:
     roles = (block or {}).get("family_roles") or {}
-    return {"grade": grade, "band": band, "tier": tier, "assignment": roles.get(band) or ""}
+    return str(roles.get(band) or "").strip()
 
+
+def _learner_depth(metadata: dict, block: dict | None, student_grade: int | None = None) -> dict:
+    """THIS speaker's depth. Prefer the child's User.gradeLevel over the unit's."""
+    grade = student_grade if student_grade is not None else _grade_from_metadata(metadata)
+    band = _band_for_grade(grade)
+    return {
+        "grade": grade,
+        "band": band,
+        "tier": _tier_for_band(band),
+        "assignment": _assignment_for_band(block, band),
+    }
+
+
+def _learner_profile(row, block: dict | None, speaker_id: str | None = None) -> dict:
+    data = dict(row)
+    grade = _grade_from_text(data.get("gradeLevel"))
+    band = _band_for_grade(grade)
+    student_id = str(data.get("id") or "")
+    return {
+        "id": student_id,
+        "name": _first_name(data.get("name")),
+        "grade": grade,
+        "band": band,
+        "tier": _tier_for_band(band),
+        "assignment": _assignment_for_band(block, band),
+        "is_speaker": bool(speaker_id) and student_id == speaker_id,
+    }
 
 def _evaluation_to_bkt_correct(evaluation: str) -> bool | None:
     """Map a Space-turn evaluation onto BKT's boolean evidence.
@@ -388,7 +434,8 @@ def _teaching_context(state: dict) -> str:
     """Grade, role, concepts, and the teach-from-evidence rule for the turn prompt.
 
     learner_depth is already computed on state; without this block the LLM
-    only saw the activity JSON and collapsed into log-clerking.
+    only saw the activity JSON and collapsed into log-clerking. Family Spaces
+    must teach THIS kid, not the unit's authored grade.
     """
     depth = state.get("learner_depth") or {}
     grade = depth.get("grade")
@@ -400,6 +447,7 @@ def _teaching_context(state: dict) -> str:
     block = state.get("current_block") or {}
     names = _concept_names(metadata, _block_concept_ids(metadata, lesson, block))
     mastery = state.get("track_mastery") or {}
+    household = [item for item in (state.get("household_learners") or []) if isinstance(item, dict)]
 
     lines = [
         "TEACH — do not clerk. A log is evidence for a science lesson (and math where the observations "
@@ -409,13 +457,15 @@ def _teaching_context(state: dict) -> str:
         "they already answered this turn.",
         "Grade bands: elementary = concrete count, measure, simple why; middle = ratio, comparison, "
         "mechanism, prediction; high school = competing explanations, tradeoffs, quantitative reasoning.",
+        "Adapt to THIS speaker's grade. Siblings sharing the investigation get different asks at their "
+        "own bands — never clone the same question for every child.",
         "Filling a log without engaging the concept is at most \"partial\" and \"stay\". Use \"correct\" "
         "only when the newest message shows the understanding or evidence this activity actually requires.",
         "Drop an approved outside resource when it genuinely helps THIS turn — a sim to test a prediction, "
         "a game that models the concept, a video of the process, a primary source. Not on every log entry.",
     ]
     learner_bits = []
-    if grade:
+    if grade is not None and grade != "":
         learner_bits.append(f"grade {grade}")
     if band:
         learner_bits.append(band)
@@ -427,6 +477,27 @@ def _teaching_context(state: dict) -> str:
         lines.append("LEARNER: " + ", ".join(learner_bits) + ".")
     if assignment:
         lines.append(f"THIS LEARNER'S ROLE ON THIS ACTIVITY: {assignment}")
+    if household:
+        lines.append("FAMILY LEARNERS (shared investigation — different asks, not cloned work):")
+        for item in household:
+            role = str(item.get("assignment") or "").strip()
+            label = (
+                f"- {item.get('name')}, grade {item.get('grade')}, {item.get('band')} "
+                f"({item.get('tier')})"
+            )
+            lines.append(f"{label}: {role}" if role else label)
+        speaker = next((item for item in household if item.get("is_speaker")), None)
+        if speaker:
+            lines.append(
+                f"THIS SPEAKER: {speaker.get('name')} (grade {speaker.get('grade')}, {speaker.get('band')}). "
+                "Pitch the one question at THEIR level. You may name another sibling only with a different "
+                "ask at that sibling's band."
+            )
+        else:
+            lines.append(
+                "THIS SPEAKER: the family. Address the kids by name at their own levels. One spoken turn "
+                "may hold two different asks. Never give every child the same worksheet."
+            )
     if names:
         lines.append("CONCEPTS THIS ACTIVITY MUST TEACH: " + "; ".join(names) + ".")
     else:
@@ -617,6 +688,65 @@ async def _attach_mastery_context(state: dict) -> dict:
     except Exception:
         logger.warning("[Spaces] mastery context skipped (non-fatal) student=%s", student_id, exc_info=True)
     return state
+
+
+async def _attach_household_learners(state: dict) -> dict:
+    """Load this child and siblings so the turn teaches each kid's grade.
+
+    Family Spaces used the unit's grade_level, so siblings got the same
+    question. User.gradeLevel is the child's actual grade. A lookup miss
+    must never 500 the family — fall back to unit depth.
+    """
+    student_id = str(state.get("student_id") or "")
+    if not student_id:
+        return state
+    role = ""
+    members: list = []
+    try:
+        conn = await get_db_conn()
+        try:
+            row = await conn.fetchrow(
+                'SELECT id, name, role, "gradeLevel", "parentId" FROM "User" WHERE id = $1',
+                student_id,
+            )
+            if not row:
+                return state
+            role = str(row["role"] or "").upper()
+            parent_id = student_id if role == "PARENT" else row["parentId"]
+            members = []
+            if parent_id:
+                members = await conn.fetch(
+                    '''SELECT id, name, role, "gradeLevel" FROM "User"
+                       WHERE (id = $1 OR "parentId" = $1) AND role = 'STUDENT'
+                       ORDER BY name''',
+                    parent_id,
+                )
+            if not members and role == "STUDENT":
+                members = [row]
+        finally:
+            await conn.close()
+    except Exception:
+        logger.warning("[Spaces] household learners skipped (non-fatal) student=%s", student_id, exc_info=True)
+        return state
+
+    block = state.get("current_block")
+    speaker_id = student_id if role == "STUDENT" else None
+    learners = [_learner_profile(member, block, speaker_id) for member in members]
+    learners = [item for item in learners if item.get("id")]
+    if not learners:
+        return state
+
+    speaker = next((item for item in learners if item.get("is_speaker")), None)
+    depth = dict(state.get("learner_depth") or {})
+    if speaker:
+        depth = {
+            "grade": speaker["grade"],
+            "band": speaker["band"],
+            "tier": speaker["tier"],
+            "assignment": speaker["assignment"],
+            "name": speaker["name"],
+        }
+    return {**state, "household_learners": learners, "learner_depth": depth}
 
 
 def _state(session: dict, experience: dict) -> dict:
@@ -1089,7 +1219,9 @@ async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
     be a Next.js route calling out to Vercel's AI Gateway plus two more HTTP
     calls back into this same backend."""
     session, experience = await _load_or_create(student_id, plan_item_id)
-    state = await _attach_approved_resources(await _attach_mastery_context(_state(session, experience)))
+    state = await _attach_approved_resources(
+        await _attach_mastery_context(await _attach_household_learners(_state(session, experience)))
+    )
 
     try:
         evaluation = await _evaluate_turn(state, body.user_message)
