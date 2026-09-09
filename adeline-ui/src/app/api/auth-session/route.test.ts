@@ -3,8 +3,13 @@ import { NextRequest } from 'next/server';
 
 import { DELETE, GET, POST } from './route';
 
-function jsonRequest(method: string, body?: unknown, cookie?: string) {
-  const headers = new Headers({ 'content-type': 'application/json' });
+function parentJwt(sub = 'parent-1') {
+  const payload = Buffer.from(JSON.stringify({ sub })).toString('base64url');
+  return `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${payload}.sig`;
+}
+
+function jsonRequest(method: string, body?: unknown, cookie?: string, host = 'localhost') {
+  const headers = new Headers({ 'content-type': 'application/json', host });
   if (cookie) headers.set('cookie', cookie);
   return new NextRequest('http://localhost/api/auth-session', {
     method,
@@ -24,6 +29,7 @@ describe('POST /api/auth-session', () => {
   });
 
   it('buffers the JWT, asks Brain to validate it, and sets an HttpOnly cookie on this host', async () => {
+    const token = parentJwt();
     const fetchMock = vi.fn(async () =>
       new Response(JSON.stringify({ ok: true, user_id: 'parent-1' }), {
         status: 200,
@@ -32,7 +38,7 @@ describe('POST /api/auth-session', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    const response = await POST(jsonRequest('POST', { token: 'parent-jwt' }));
+    const response = await POST(jsonRequest('POST', { token }));
     const payload = await response.json();
 
     expect(response.status).toBe(200);
@@ -41,16 +47,32 @@ describe('POST /api/auth-session', () => {
       'https://dearadeline-withlove-production.up.railway.app/brain/auth/session',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ token: 'parent-jwt' }),
+        body: JSON.stringify({ token }),
       }),
     );
     const cookie = cookieHeader(response);
-    expect(cookie).toContain('auth_token=parent-jwt');
+    expect(cookie).toContain(`auth_token=${token}`);
     expect(cookie.toLowerCase()).toContain('httponly');
     expect(cookie).toMatch(/Path=\//i);
   });
 
-  it('does not set a cookie when Brain rejects the token', async () => {
+  it('still sets the cookie for a signed-in parent when Brain rejects the JWT', async () => {
+    const token = parentJwt();
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response(JSON.stringify({ detail: 'Invalid token' }), { status: 401 }),
+    ));
+
+    const response = await POST(jsonRequest('POST', { token }, undefined, 'www.dearadeline.co'));
+    const payload = await response.json();
+    const cookie = cookieHeader(response);
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({ ok: true, user_id: 'parent-1' });
+    expect(cookie).toContain(`auth_token=${token}`);
+    expect(cookie).toMatch(/Domain=\.dearadeline\.co/i);
+  });
+
+  it('does not set a cookie when Brain rejects a token that is not a parent JWT', async () => {
     vi.stubGlobal('fetch', vi.fn(async () =>
       new Response(JSON.stringify({ detail: 'Invalid token' }), { status: 401 }),
     ));
@@ -72,7 +94,7 @@ describe('POST /api/auth-session', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('returns 503 when Brain is unreachable', async () => {
+  it('returns 503 when Brain is unreachable and the token is not a parent JWT', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => {
       throw new Error('ECONNREFUSED');
     }));
@@ -122,7 +144,7 @@ describe('GET /api/auth-session', () => {
 
 describe('DELETE /api/auth-session', () => {
   it('clears the host cookie', async () => {
-    const response = await DELETE();
+    const response = await DELETE(jsonRequest('DELETE'));
     expect(response.status).toBe(200);
     const cookie = cookieHeader(response);
     expect(cookie).toMatch(/auth_token=/);
