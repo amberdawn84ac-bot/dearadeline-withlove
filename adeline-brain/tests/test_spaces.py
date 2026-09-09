@@ -12,6 +12,7 @@ from app.api.spaces import (
     _TurnEvaluation,
     _approved_resources_prompt,
     _attach_approved_resources,
+    _attach_household_learners,
     _attach_mastery_context,
     _block_concept_ids,
     _concept_credits_for_lesson,
@@ -20,6 +21,7 @@ from app.api.spaces import (
     _decoded,
     _evaluate_turn,
     _evaluation_to_bkt_correct,
+    _grade_from_text,
     _hydrate_offered_resources,
     _learner_depth,
     _lesson_content,
@@ -91,6 +93,27 @@ def test_depth_assignment_uses_saved_learner_grade_and_family_role():
     depth = _learner_depth({"grade_level": "Grade 7"}, block)
     assert depth == {"grade": 7, "band": "middle", "tier": "analysis",
                      "assignment": "Graph rise over time and interpret the rate."}
+
+
+def test_learner_depth_prefers_the_child_grade_over_the_unit():
+    block = {
+        "family_roles": {
+            "elementary": "Count the bubbles.",
+            "middle": "Measure the rise as a ratio.",
+            "high_school": "Which population is winning, yeast or LAB?",
+        }
+    }
+    depth = _learner_depth({"grade_level": "Grade 12"}, block, student_grade=7)
+    assert depth["grade"] == 7
+    assert depth["band"] == "middle"
+    assert depth["assignment"] == "Measure the rise as a ratio."
+
+
+def test_grade_from_text_reads_k_and_numbered_grades():
+    assert _grade_from_text("K") == 0
+    assert _grade_from_text("K-2") == 0
+    assert _grade_from_text("Grade 10") == 10
+    assert _grade_from_text("") == 8
 
 
 def test_decoded_parses_raw_jsonb_text_returned_by_asyncpg():
@@ -530,6 +553,40 @@ def test_turn_activity_mode_includes_teaching_context_before_the_activity():
     assert "a filled log is evidence" in mode
 
 
+def test_teaching_context_lists_each_child_at_their_own_grade():
+    state = {
+        "learner_depth": {
+            "grade": 7, "band": "middle", "tier": "analysis",
+            "assignment": "Measure the rise as a ratio.", "name": "Cash",
+        },
+        "current_block": {"family_roles": {
+            "elementary": "Count the bubbles.",
+            "middle": "Measure the rise as a ratio.",
+            "high_school": "Which population is winning, yeast or LAB?",
+        }},
+        "household_learners": [
+            {"id": "e", "name": "Elliot", "grade": 5, "band": "elementary",
+             "tier": "foundation", "assignment": "Count the bubbles.", "is_speaker": False},
+            {"id": "c", "name": "Cash", "grade": 7, "band": "middle",
+             "tier": "analysis", "assignment": "Measure the rise as a ratio.", "is_speaker": True},
+            {"id": "a", "name": "Addie", "grade": 10, "band": "high_school",
+             "tier": "synthesis", "assignment": "Which population is winning, yeast or LAB?",
+             "is_speaker": False},
+        ],
+        "metadata": {},
+        "current_lesson": {},
+    }
+    text = _teaching_context(state)
+    assert "Elliot, grade 5, elementary" in text
+    assert "Cash, grade 7, middle" in text
+    assert "Addie, grade 10, high_school" in text
+    assert "THIS SPEAKER: Cash (grade 7, middle)" in text
+    assert "never clone" in text
+    assert "Count the bubbles." in text
+    assert "Which population is winning, yeast or LAB?" in text
+    assert "LEARNER: grade 7, middle, tier=analysis." in text
+
+
 def test_state_exposes_track_and_learner_depth_for_the_turn_prompt():
     session = {"id": "s", "studentId": "u", "planItemId": "p", "experienceId": "e",
                "currentBlockIndex": 0, "completedBlockIds": [], "messagesJson": [],
@@ -592,6 +649,65 @@ async def test_attach_mastery_context_swallows_load_failures(monkeypatch):
     monkeypatch.setattr("app.models.student.load_student_state", boom)
     state = {"student_id": "stu-1", "track": "CREATION_SCIENCE"}
     assert await _attach_mastery_context(state) == state
+
+
+class _HouseholdConn:
+    def __init__(self, speaker, members):
+        self.speaker = speaker
+        self.members = members
+
+    async def fetchrow(self, _sql, *_args):
+        return self.speaker
+
+    async def fetch(self, _sql, *_args):
+        return self.members
+
+    async def close(self):
+        return None
+
+
+@pytest.mark.asyncio
+async def test_attach_household_learners_teaches_the_speaking_child(monkeypatch):
+    speaker = {"id": "cash", "name": "Cash Renfroe", "role": "STUDENT",
+               "gradeLevel": "7", "parentId": "mom"}
+    members = [
+        {"id": "addie", "name": "Addie", "role": "STUDENT", "gradeLevel": "10"},
+        {"id": "cash", "name": "Cash Renfroe", "role": "STUDENT", "gradeLevel": "7"},
+        {"id": "elliot", "name": "Elliot", "role": "STUDENT", "gradeLevel": "5"},
+    ]
+    monkeypatch.setattr(
+        "app.api.spaces.get_db_conn",
+        AsyncMock(return_value=_HouseholdConn(speaker, members)),
+    )
+    state = {
+        "student_id": "cash",
+        "learner_depth": {"grade": 12, "band": "high_school", "tier": "synthesis", "assignment": ""},
+        "current_block": {"family_roles": {
+            "elementary": "Count the bubbles.",
+            "middle": "Measure the rise as a ratio.",
+            "high_school": "Which population is winning?",
+        }},
+    }
+    result = await _attach_household_learners(state)
+    assert result["learner_depth"]["grade"] == 7
+    assert result["learner_depth"]["band"] == "middle"
+    assert result["learner_depth"]["name"] == "Cash"
+    assert result["learner_depth"]["assignment"] == "Measure the rise as a ratio."
+    names = {item["name"]: item for item in result["household_learners"]}
+    assert names["Addie"]["grade"] == 10
+    assert names["Addie"]["is_speaker"] is False
+    assert names["Cash"]["is_speaker"] is True
+    assert names["Elliot"]["grade"] == 5
+
+
+@pytest.mark.asyncio
+async def test_attach_household_learners_swallows_lookup_failures(monkeypatch):
+    async def boom():
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr("app.api.spaces.get_db_conn", boom)
+    state = {"student_id": "cash", "learner_depth": {"grade": 12}}
+    assert await _attach_household_learners(state) == state
 
 
 @pytest.mark.asyncio
