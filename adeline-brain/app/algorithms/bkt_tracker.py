@@ -17,6 +17,7 @@ This module replaces that proxy with actual per-concept BKT state.
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -137,14 +138,14 @@ async def update_bkt(
         await conn.execute(
             """
             INSERT INTO "SpacedRepetitionCard"
-                ("studentId", "conceptId", "conceptName", "track", "masteryLevel", "updatedAt")
-            VALUES ($1, $2, $3, $4, $5, now())
+                (id, "studentId", "conceptId", "conceptName", "track", "masteryLevel", "updatedAt")
+            VALUES ($1, $2, $3, $4, $5, $6, now())
             ON CONFLICT ("studentId", "conceptId")
             DO UPDATE SET
                 "masteryLevel" = EXCLUDED."masteryLevel",
                 "updatedAt"    = now()
             """,
-            student_id, concept_id, concept_id, track, new_pL,
+            str(uuid.uuid4()), student_id, concept_id, concept_id, track, new_pL,
         )
         await conn.close()
 
@@ -304,9 +305,9 @@ async def update_card_after_lesson(
             await conn.execute(
                 """
                 INSERT INTO "SpacedRepetitionCard"
-                    ("studentId","conceptId","conceptName","track","masteryLevel",
+                    (id, "studentId","conceptId","conceptName","track","masteryLevel",
                      "easeFactor","repetitions","interval","dueAt","lastQuality","lastReviewedAt")
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now())
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now())
                 ON CONFLICT ("studentId","conceptId") DO UPDATE SET
                     "masteryLevel"   = EXCLUDED."masteryLevel",
                     "easeFactor"     = EXCLUDED."easeFactor",
@@ -317,7 +318,7 @@ async def update_card_after_lesson(
                     "lastReviewedAt" = now(),
                     "updatedAt"      = now()
                 """,
-                student_id, concept_id, concept_name, track, new_pL,
+                str(uuid.uuid4()), student_id, concept_id, concept_name, track, new_pL,
                 sm2_result.ease_factor, sm2_result.repetitions, sm2_result.interval,
                 due_at, quality,
             )

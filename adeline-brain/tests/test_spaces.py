@@ -31,6 +31,7 @@ from app.api.spaces import (
     _parse_json_response,
     _proficiency_from_evaluations,
     _resource_block_for_offered,
+    _salvage_spoken_turn,
     _space_list_item,
     _space_resource_topic,
     _space_turn_llm,
@@ -430,6 +431,44 @@ async def test_evaluate_turn_retries_rate_limit_then_succeeds(monkeypatch):
 
     assert llm.calls == 2
     assert result.adeline_message == _TURN_JSON["adeline_message"]
+
+
+_LIVE_SPOKEN_TURN = (
+    "That's a very insightful thought! You're on to something important there. "
+    "The yeast in your starter does indeed feed on the sugars present in the flour. "
+    "And when yeast eats sugar, what do you think it produces that makes your starter "
+    "bubbly and causes it to rise?"
+)
+
+
+def test_salvage_spoken_turn_keeps_the_live_co2_lesson():
+    salvaged = _salvage_spoken_turn(_LIVE_SPOKEN_TURN)
+    assert salvaged is not None
+    assert "what do you think it produces" in salvaged.adeline_message
+    assert salvaged.evaluation == "partial"
+    assert salvaged.recommended_action == "stay"
+    assert salvaged.is_waiting_for_user is True
+
+
+def test_salvage_spoken_turn_rejects_short_or_broken_json():
+    assert _salvage_spoken_turn("not json") is None
+    assert _salvage_spoken_turn("```") is None
+    assert _salvage_spoken_turn('{"adeline_message": "Hi"') is None
+    assert _salvage_spoken_turn("") is None
+
+
+@pytest.mark.asyncio
+async def test_evaluate_turn_uses_spoken_prose_instead_of_retrying(monkeypatch):
+    llm = _FakeLLM(responses=[_FakeResponse(_LIVE_SPOKEN_TURN), _FakeResponse(json.dumps(_TURN_JSON))])
+    monkeypatch.setattr("app.api.spaces._space_turn_llm", lambda: llm)
+    monkeypatch.setattr("app.api.spaces.asyncio.sleep", AsyncMock())
+
+    result = await _evaluate_turn(_space_state(), "The yeast is eating the sugar.")
+
+    assert llm.calls == 1
+    assert result.adeline_message == _LIVE_SPOKEN_TURN
+    assert result.evaluation == "partial"
+    assert result.recommended_action == "stay"
 
 
 def test_evaluation_to_bkt_correct_maps_and_skips_unanswered():
