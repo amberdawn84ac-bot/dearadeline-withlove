@@ -40,6 +40,7 @@ from app.api.spaces import (
     _state,
     _teaching_context,
     _turn_activity_mode,
+    _TURN_SYSTEM_PROMPT,
     _update_space_bkt,
     _wants_math_tools,
 )
@@ -530,6 +531,19 @@ def test_teaching_context_puts_grade_role_and_concepts_in_the_prompt():
     assert "Wild yeast fermentation" in text
     assert "track mastery DEVELOPING" in text
     assert "Never re-ask" in text
+    assert "His name is not God" in text
+    assert "YHWH" in text
+    assert "do not say God's design" in text
+
+
+def test_turn_system_prompt_carries_original_name_policy():
+    from app.agents.persona import SCRIPTURE_TRANSLATION_POLICY
+
+    assert SCRIPTURE_TRANSLATION_POLICY in _TURN_SYSTEM_PROMPT
+    filled = _TURN_SYSTEM_PROMPT.format(activity_mode="ACTIVITY_MODE_SENTINEL")
+    assert "ACTIVITY_MODE_SENTINEL" in filled
+    assert 'His name is not "God."' in filled
+    assert "LOG FIELDS:" in filled
 
 
 def test_turn_activity_mode_includes_teaching_context_before_the_activity():
@@ -551,6 +565,7 @@ def test_turn_activity_mode_includes_teaching_context_before_the_activity():
     assert "Lactic acid vs wild yeast" in mode
     assert "Kitchen Chemistry: Sourdough" in mode
     assert "a filled log is evidence" in mode
+    assert "His name is not God" in mode
 
 
 def test_teaching_context_lists_each_child_at_their_own_grade():

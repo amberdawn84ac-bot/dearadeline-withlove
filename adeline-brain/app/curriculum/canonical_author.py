@@ -25,7 +25,7 @@ EXPERIENCE_LAYOUTS = frozenset({
 # validation rules a canonical satisfied; PROMPT_VERSION tracks which exact
 # system prompt produced it.
 CONTRACT_VERSION = "2026-09-03.1"
-PROMPT_VERSION = "v13-complete-family-unit-2026-09-03"
+PROMPT_VERSION = "v14-original-names-2026-09-09"
 
 EVIDENCE_CAPABLE_TYPES = frozenset({"PRIMARY_SOURCE", "RESEARCH_MISSION"})
 
@@ -465,12 +465,17 @@ A PRIMARY_SOURCE must use actual routed items, never an archive search page.
 A source label without a real routed record does not count as evidence.
 
 WORLDVIEW:
-Integrate the appropriate Christian worldview naturally into the relevant
-experience. Do not bolt on a generic sermon or Scripture paragraph.
-Use familiar English Christian terminology unless the lesson is explicitly
-examining an original-language Biblical text. Preserve terminology supplied by
-the source or approved investigation brief; never silently replace God, Lord,
-or Jesus with HaShem, YHWH, or another term.
+Integrate a Christian worldview naturally when it belongs to the subject.
+Do not bolt on a generic sermon or Scripture paragraph.
+His name is not God. Use original names, meaning, and context from the source
+text: YHWH, Elohim, El Shaddai, Yeshua, Moshe, Avraham, and other forms as
+written. On first use, give the original form plus its meaning; do not then
+switch to God, LORD, or Jesus.
+When English translation caused a loss, or when a name or title was
+purposefully changed, say so. Keep documented, disputed, and unknown distinct.
+Never silently replace YHWH, Elohim, or Yeshua with God, LORD, or Jesus.
+Preserve terminology supplied by the source; do not flatten it into familiar
+English church language.
 
 VISUALS:
 Visuals are semantic learning assets, not decoration. When useful, describe
