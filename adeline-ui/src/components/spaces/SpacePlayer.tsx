@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import GenUIRenderer from '@/components/GenUIRenderer';
+import { OfferedResourceCard } from '@/components/spaces/OfferedResourceCard';
 import type { LessonBlockResponse, LessonResponse } from '@/lib/brain-client';
 
 type Message = { role: 'user' | 'assistant'; content: string };
@@ -100,18 +101,12 @@ function OfferedResources({ block }: { block: { title?: string; content?: string
         {block.content || 'Adeline picked an approved outside resource for this turn. Opening it is not mastery — come back and explain what you noticed, built, or tested.'}
       </p>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
-        {resources.map((resource, index) => {
-          const item = resource as Record<string, unknown>;
-          const url = String(item.editor_url || item.embed_url || item.source_url || '');
-          return (
-            <article key={String(item.id || index)} className="rounded-2xl border border-[#D9CFBC] bg-white p-4">
-              <p className="text-xs font-black uppercase tracking-wider text-[#BD6809]">{String(item.provider || '')}</p>
-              <h3 className="mt-2 font-bold text-[#2F4731]">{String(item.title || 'Resource')}</h3>
-              {item.description ? <p className="mt-1 text-sm leading-6 text-[#2F4731]/65">{String(item.description)}</p> : null}
-              {url ? <a href={url} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-11 items-center rounded-xl bg-[#2F4731] px-4 py-2 text-sm font-bold text-white no-underline">Open</a> : null}
-            </article>
-          );
-        })}
+        {resources.map((resource, index) => (
+          <OfferedResourceCard
+            key={String((resource as Record<string, unknown>).id || index)}
+            resource={resource as Record<string, unknown>}
+          />
+        ))}
       </div>
     </section>
   );

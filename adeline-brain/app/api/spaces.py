@@ -113,7 +113,7 @@ Respond with ONLY a JSON object (no markdown fences, no commentary) matching exa
   "resource_triggers": ["show_microscope_diagram"|"display_breakout_tracks", ...] (0-2 items),
   "off_plan_topic": null | {{"concept_name": string, "track": string|null, "tier": "encountered"|"demonstrated"}},
   "suggested_replies": [string, ...] (0-4 items), "log_fields": [string, ...] (0-5 items),
-  "offered_resource_ids": [string, ...] (0-2 ids from the approved list, else empty)}}"""
+  "offered_resource_ids": [string, ...] (usually 1 id from the approved list; empty only if none fit)}}"""
 
 
 def _turn_activity_mode(state: dict) -> str:
@@ -469,6 +469,8 @@ def _teaching_context(state: dict) -> str:
         "NAMES: His name is not God. Use the original name the source writes (YHWH, Elohim, Yeshua), plus "
         "meaning and context. When English hid a name, or someone purposefully changed one, say so. One "
         "accurate note — do not turn a science turn into a sermon, and do not say God's design.",
+        "OUTSIDE RESOURCES are how you teach with more than text. Assign a photo, video, sim, or game from "
+        "the approved list when it shows the mechanism — not as decoration, and not only after the log is filled.",
     ]
     learner_bits = []
     if grade is not None and grade != "":
@@ -576,9 +578,11 @@ def _approved_resources_prompt(state: dict) -> str:
             "Do not invent a URL or tool. Leave offered_resource_ids empty."
         )
     lines = [
-        "OUTSIDE RESOURCES: you teach; these approved tools are the lab, game, video, or archive. "
-        "Offer 0-2 by id only when THIS turn the learner should actually open, play, watch, measure, or build. "
-        "Empty list on a routine log acknowledgment. Never invent a URL. Opening a link is not mastery.",
+        "OUTSIDE RESOURCES: you teach with these. They are the lab, photograph, video, game, or assignment — "
+        "not optional extra credit. Most teaching turns, offer 1 (sometimes 2) by id.",
+        "Assign one as this turn's work when it shows the mechanism: open this photo/video/sim/game, then come "
+        "back and tell me what you noticed. Do not leave offered_resource_ids empty just because they filled a log.",
+        "Prefer a photograph, video, or simulation over another paragraph. Never invent a URL. Opening a link is not mastery.",
         "Set offered_resource_ids to ids from this list only:",
     ]
     for item in items[:8]:
@@ -606,6 +610,28 @@ def _hydrate_offered_resources(catalog: list[dict], offered_ids: list[str]) -> l
     return chosen
 
 
+def _default_offered_resource_ids(catalog: list[dict], offered_ids: list[str] | None = None) -> list[str]:
+    """If Adeline forgot to pick a tool, still put one visual/interactive in front of the family."""
+    chosen = _hydrate_offered_resources(catalog, offered_ids or [])
+    if chosen:
+        return [str(item.get("id")) for item in chosen if item.get("id")]
+    visual = (
+        "IMAGE", "VIDEO", "SIMULATION", "GAME", "GAME_BUILDER", "INTERACTIVE",
+        "ARTIFACT_3D", "MANIPULATIVE", "PRIMARY_SOURCE", "DATASET", "EXPERIMENT",
+    )
+    ranked = sorted(
+        [item for item in catalog if isinstance(item, dict) and item.get("id")],
+        key=lambda item: (
+            str(item.get("resource_type") or "") not in visual,
+            not item.get("thumbnail_url"),
+            str(item.get("resource_type") or "") not in {"IMAGE", "VIDEO"},
+        ),
+    )
+    if not ranked:
+        return []
+    return [str(ranked[0]["id"])]
+
+
 def _resource_block_for_offered(catalog: list[dict], offered_ids: list[str], track: str) -> dict | None:
     chosen = _hydrate_offered_resources(catalog, offered_ids)
     if not chosen:
@@ -625,7 +651,7 @@ def _resource_block_for_offered(catalog: list[dict], offered_ids: list[str], tra
     }
 
 
-async def _search_approved_resources(topic: str, track: str, grade_level: str, limit: int = 6) -> list[dict]:
+async def _search_approved_resources(topic: str, track: str, grade_level: str, limit: int = 8) -> list[dict]:
     from app.services.resource_router import ResourceQuery, resource_router
     packet = await resource_router.search(ResourceQuery(
         topic=topic, track=track, grade_level=grade_level,
@@ -1262,7 +1288,10 @@ async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
     try:
         result["resource_block"] = _resource_block_for_offered(
             state.get("approved_resources") or [],
-            evaluation.offered_resource_ids,
+            _default_offered_resource_ids(
+                state.get("approved_resources") or [],
+                evaluation.offered_resource_ids,
+            ),
             state.get("track") or "",
         )
     except Exception:

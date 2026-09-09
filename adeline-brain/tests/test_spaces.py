@@ -19,6 +19,7 @@ from app.api.spaces import (
     _concept_slug,
     _credit_off_plan_topic,
     _decoded,
+    _default_offered_resource_ids,
     _evaluate_turn,
     _evaluation_to_bkt_correct,
     _grade_from_text,
@@ -534,6 +535,7 @@ def test_teaching_context_puts_grade_role_and_concepts_in_the_prompt():
     assert "His name is not God" in text
     assert "YHWH" in text
     assert "do not say God's design" in text
+    assert "OUTSIDE RESOURCES are how you teach" in text
 
 
 def test_turn_system_prompt_carries_original_name_policy():
@@ -836,6 +838,24 @@ def test_approved_resources_prompt_lists_ids_adeline_may_offer():
     assert "makecode:arcade" in text
     assert "Microsoft MakeCode" in text
     assert "Never invent a URL" in text
+    assert "Assign one as this turn's work" in text
+    assert "Empty list on a routine log acknowledgment" not in text
+
+
+def test_default_offered_resource_ids_prefers_a_picture_when_adeline_forgets():
+    catalog = [
+        {"id": "khan:practice", "resource_type": "PRACTICE"},
+        {"id": "nasa:yeast", "resource_type": "IMAGE", "thumbnail_url": "https://images.nasa.gov/yeast.jpg"},
+        {"id": "phet:search", "resource_type": "SIMULATION"},
+    ]
+    assert _default_offered_resource_ids(catalog, ["phet:search"]) == ["phet:search"]
+    assert _default_offered_resource_ids(catalog, []) == ["nasa:yeast"]
+    assert _default_offered_resource_ids([], []) == []
+    inat_only = [
+        {"id": "khan:practice", "resource_type": "PRACTICE"},
+        {"id": "inat:1", "resource_type": "DATASET", "thumbnail_url": "https://inaturalist.org/p.jpg"},
+    ]
+    assert _default_offered_resource_ids(inat_only, []) == ["inat:1"]
 
 
 def test_resource_block_for_offered_is_a_collection_the_chat_already_knows_how_to_render():

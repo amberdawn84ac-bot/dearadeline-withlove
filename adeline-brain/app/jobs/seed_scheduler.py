@@ -7,6 +7,7 @@ from app.jobs.canonical_seeding import (
     canonical_seeding_enabled,
     scheduled_canonical_replenishment,
 )
+from app.api.opportunities import refresh_opportunity_index
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +60,24 @@ async def startup_seed_scheduler():
             name='Seed Thin Tracks + History/Justice Primary Sources (Nightly)',
             max_instances=1,
         )
+        _scheduler.add_job(
+            refresh_opportunity_index,
+            "cron",
+            day_of_week="sun",
+            hour=4,
+            minute=15,
+            timezone="America/Chicago",
+            id="refresh_opportunities_weekly",
+            name="Scrape student opportunities (Weekly)",
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=60 * 60 * 12,
+        )
 
         _scheduler.start()
         logger.info("[Scheduler] Started APScheduler with nightly seeding jobs:")
         logger.info("  - Gov/Math/Creative + History/Justice primary sources: 03:00 UTC")
+        logger.info("  - Opportunities scrape: Sunday 04:15 America/Chicago")
         if canonical_seeding_enabled():
             logger.info(
                 "  - Canonical lessons: %s %02d:%02d %s (batch=%s)",

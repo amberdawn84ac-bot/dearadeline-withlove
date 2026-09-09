@@ -54,6 +54,8 @@ FALLBACKS = [
 
 _cache: dict[str, tuple[float, list[dict]]] = {}
 _CACHE_SECONDS = 6 * 60 * 60
+_REDIS_TTL_SECONDS = 10 * 24 * 60 * 60
+_REDIS_PREFIX = "opportunities:v1:"
 
 
 class Opportunity(BaseModel):
@@ -168,6 +170,78 @@ def _fallbacks(state: str, grade: int) -> list[dict]:
     return items
 
 
+def _cache_key(location: str, state: str, grade: int) -> str:
+    return f"{location}|{state}|{grade}".lower()
+
+
+async def _redis_get(cache_key: str) -> list[dict] | None:
+    try:
+        import json
+        from app.connections.redis_client import redis_client
+        raw = await redis_client.get(f"{_REDIS_PREFIX}{cache_key}")
+        if not raw:
+            return None
+        payload = json.loads(raw)
+        return payload if isinstance(payload, list) else None
+    except Exception:
+        return None
+
+
+async def _redis_set(cache_key: str, items: list[dict]) -> None:
+    if not items:
+        return
+    try:
+        import json
+        from app.connections.redis_client import redis_client
+        await redis_client.set(f"{_REDIS_PREFIX}{cache_key}", json.dumps(items), ex=_REDIS_TTL_SECONDS)
+    except Exception:
+        return
+
+
+async def refresh_opportunity_index() -> int:
+    """Weekly scrape so Opportunities is not empty when live search flakes on page load."""
+    targets: list[tuple[str, str, int]] = [
+        ("Nowata County, Oklahoma", "Oklahoma", 8),
+        ("Oklahoma", "Oklahoma", 8),
+        ("United States", "Oklahoma", 8),
+    ]
+    seen: set[str] = {_cache_key(location, state, grade) for location, state, grade in targets}
+    stored = 0
+    try:
+        from app.config import get_db_conn
+        conn = await get_db_conn()
+        try:
+            rows = await conn.fetch('SELECT DISTINCT state, "gradeLevel" FROM "User" WHERE state IS NOT NULL')
+        finally:
+            await conn.close()
+        for row in rows:
+            state = str(row["state"] or "Oklahoma").strip() or "Oklahoma"
+            grade = _grade_number(row["gradeLevel"])
+            for location in (state, f"{state} homeschool"):
+                key = _cache_key(location, state, grade)
+                if key in seen:
+                    continue
+                seen.add(key)
+                targets.append((location, state, grade))
+    except Exception:
+        pass
+
+    for location, state, grade in targets:
+        key = _cache_key(location, state, grade)
+        try:
+            items = await asyncio.wait_for(
+                asyncio.to_thread(_live_search, location, state, grade),
+                timeout=25,
+            )
+        except Exception:
+            items = []
+        if items:
+            _cache[key] = (time.time(), items)
+            await _redis_set(key, items)
+            stored += len(items)
+    return stored
+
+
 @router.get("", response_model=dict, dependencies=[Depends(require_role(UserRole.STUDENT, UserRole.PARENT, UserRole.ADMIN))])
 async def get_opportunities(
     location: Optional[str] = Query(default=None, max_length=100),
@@ -184,21 +258,28 @@ async def get_opportunities(
     grade = _grade_number(row.get("gradeLevel"))
     state = (row.get("state") or "Oklahoma").strip()
     search_location = (location or state).strip()
-    cache_key = f"{search_location}|{state}|{grade}".lower()
+    cache_key = _cache_key(search_location, state, grade)
     cached = _cache.get(cache_key)
     if cached and time.time() - cached[0] < _CACHE_SECONDS:
         opportunities = cached[1]
     else:
-        try:
-            opportunities = await asyncio.wait_for(
-                asyncio.to_thread(_live_search, search_location, state, grade),
-                timeout=18,
-            )
-        except Exception:
-            opportunities = []
-        if not opportunities:
-            opportunities = _fallbacks(state, grade)
-        _cache[cache_key] = (time.time(), opportunities)
+        redis_hits = await _redis_get(cache_key)
+        if redis_hits:
+            opportunities = redis_hits
+            _cache[cache_key] = (time.time(), opportunities)
+        else:
+            try:
+                opportunities = await asyncio.wait_for(
+                    asyncio.to_thread(_live_search, search_location, state, grade),
+                    timeout=18,
+                )
+            except Exception:
+                opportunities = []
+            if opportunities:
+                await _redis_set(cache_key, opportunities)
+            if not opportunities:
+                opportunities = _fallbacks(state, grade)
+            _cache[cache_key] = (time.time(), opportunities)
 
     if category:
         opportunities = [item for item in opportunities if item["category"] == category]

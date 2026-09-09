@@ -16,6 +16,7 @@ import { EPUBReader } from '@/components/reading-nook/EPUBReader';
 import { ReflectionModal } from '@/components/reading-nook/ReflectionModal';
 import { ReaderProvider } from '@/lib/reader-context';
 import { useStudent } from '@/lib/useStudent';
+import { curatedBookAsReaderData, findCuratedBook } from '@/lib/public-domain-books';
 
 interface BookData {
   id: string;
@@ -52,9 +53,15 @@ export default function ReadingPage() {
         setLoading(true);
         setError(null);
 
-        // Fetch book details
-        const bookData = await getBook(studentId, bookId);
-        setBook({ ...bookData, source_url: `/api/reading-books/${encodeURIComponent(bookId)}` } as BookData);
+        const readerSource = `/api/reading-books/${encodeURIComponent(bookId)}`;
+        try {
+          const bookData = await getBook(studentId, bookId);
+          setBook({ ...bookData, source_url: readerSource } as BookData);
+        } catch (lookupError) {
+          const curated = findCuratedBook(bookId);
+          if (!curated) throw lookupError;
+          setBook({ ...curatedBookAsReaderData(curated), source_url: readerSource } as BookData);
+        }
 
         // Check if reading session already exists
         try {
@@ -96,7 +103,7 @@ export default function ReadingPage() {
 
   // Create reading session on first load (if no session exists)
   useEffect(() => {
-    if (book && !session && !loading && !error) {
+    if (book && !session && !loading && !error && studentId && !findCuratedBook(bookId)) {
       const createSession = async () => {
         try {
           const newSession = await startReading(studentId, bookId, 'reading');
@@ -162,18 +169,19 @@ export default function ReadingPage() {
   // Render reader
   return (
     <ReaderProvider>
-      {book && session ? (
+      {book ? (
         <>
           <EPUBReader
             bookId={bookId}
-            sessionId={session.id}
+            sessionId={session?.id || ''}
             studentId={studentId}
             book={book}
+            htmlUrl={findCuratedBook(bookId)?.readingUrl}
             onComplete={handleComplete}
             onBack={() => router.push('/dashboard/reading-nook')}
           />
 
-          {showReflection && (
+          {showReflection && session && (
             <ReflectionModal
               sessionId={session.id}
               studentId={studentId}

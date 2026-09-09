@@ -6,6 +6,7 @@ from app.services.resource_router import (
     ResourceRouter,
     _curated,
     _curated_archive_evidence,
+    _nasa,
     _youtube_resources,
     resource_block_for_lesson,
     resource_block_from_packet,
@@ -169,11 +170,9 @@ async def test_router_keeps_verified_archive_items_when_live_loc_api_fails(monke
     ))
 
     assert packet["provider_failures"] == ["loc"]
-    assert len(packet["resources"]) == 4
-    assert all(
-        item["availability"] == "VERIFIED_ARCHIVE_ITEM"
-        for item in packet["resources"]
-    )
+    archive = [item for item in packet["resources"] if item["availability"] == "VERIFIED_ARCHIVE_ITEM"]
+    assert len(archive) == 4
+    assert any(item["resource_type"] == "VIDEO" for item in packet["resources"])
 
 
 @pytest.mark.asyncio
@@ -195,3 +194,33 @@ async def test_verified_items_outrank_archive_search_pages(monkeypatch):
     assert [
         item["availability"] for item in packet["resources"][:4]
     ] == ["VERIFIED_ARCHIVE_ITEM"] * 4
+
+
+def test_youtube_videos_are_available_for_science_and_homestead():
+    science = _youtube_resources(ResourceQuery(topic="yeast fermentation", track="CREATION_SCIENCE"))
+    homestead = _youtube_resources(ResourceQuery(topic="sourdough starter", track="HOMESTEADING"))
+    assert science and homestead
+    assert all(item.resource_type == "VIDEO" for item in science)
+
+
+def test_nasa_searches_homestead_science_topics():
+    import inspect
+    assert "HOMESTEADING" in inspect.getsource(_nasa)
+
+
+@pytest.mark.asyncio
+async def test_router_does_not_duplicate_youtube_when_curated_already_includes_them(monkeypatch):
+    async def empty(*_args, **_kwargs):
+        return []
+
+    for provider in ("_loc", "_smithsonian", "_nasa", "_inaturalist"):
+        monkeypatch.setattr(f"app.services.resource_router.{provider}", empty)
+
+    packet = await ResourceRouter().search(ResourceQuery(
+        topic="yeast fermentation",
+        track="CREATION_SCIENCE",
+        limit=12,
+    ))
+    ids = [item["id"] for item in packet["resources"]]
+    assert len(ids) == len(set(ids))
+    assert any(item["resource_type"] == "VIDEO" for item in packet["resources"])
