@@ -88,21 +88,14 @@ from what you say. Ask no more than one question.
 Offer zero to four suggested_replies. Use them for natural short answers such as yes/no, ready/not yet, or a small
 set of genuine choices. Do not offer them when the learner needs to explain reasoning, show evidence, or write freely.
 Use display_breakout_tracks only when subject-specific work is useful now, and show_microscope_diagram only when microscopy is relevant.
-
-LOG FIELDS: this is about what the activity asks for, not its block_type label — a PROJECT_BUILDER, RESEARCH_MISSION,
-or any other block can want a repeated log just as much as a LAB_MISSION/EXPERIMENT does. If the current activity
-(read its actual content, don't guess generically) asks the family to record observations or progress repeatedly
-over time — a log kept across multiple sessions, not a single one-time answer — set "log_fields" to 2-5 short field
-labels tailored to exactly what THIS activity asks the family to record. Examples: a sourdough starter log might
-warrant ["Day", "Rise", "Bubbles", "Smell"]; a bean-growth experiment might warrant ["Day", "Height (cm)", "Leaf
-color"]; a multi-day build project that tracks progress might warrant ["Day", "What we built", "Problem we solved"].
-Leave "log_fields" empty whenever the activity only asks for a single one-time answer, whatever its block_type.
-CRITICAL: log_fields must cover every specific thing YOUR OWN "adeline_message" this turn asks the family to record —
-not just the activity's general theme. If your message asks for the exact time they mixed it, what ingredients they
-used, and what it smelled like, log_fields must be exactly those things (e.g. ["Time mixed", "Ingredients", "Smell"]),
-not a generic or previously-used set that leaves any of your own questions uncovered.
+Write adeline_message as spoken prose. Do not use markdown (no **bold**, no * bullets).
 
 {activity_mode}
+
+LOG FIELDS: only when the current activity asks the family to record observations or progress repeatedly over time —
+a log kept across sessions, not a one-time answer. Set "log_fields" to 2-5 short labels for what THIS activity (and
+your own adeline_message) still needs recorded. If they just submitted those observations, do not put the same fields
+back in the question; leave log_fields matching tomorrow's entry. Leave "log_fields" empty for a one-time answer.
 
 RABBIT HOLES: if the family's question or discussion genuinely goes beyond the activity above — a real tangent, not a
 passing mention — set "off_plan_topic" to name that concept. Use tier "demonstrated" only when the family's answer
@@ -119,8 +112,10 @@ Respond with ONLY a JSON object (no markdown fences, no commentary) matching exa
 
 
 def _turn_activity_mode(state: dict) -> str:
+    teaching = _teaching_context(state)
     if state["status"] == "completed":
         return (
+            f"{teaching}\n\n"
             "This unit's planned activities are already finished — you're in open conversation mode now. The family may "
             "ask follow-up questions, revisit something, or wander into a new question entirely. Answer genuinely and "
             "substantively; there is no \"next activity\" to advance to, so \"recommended_action\" should stay \"stay\" "
@@ -129,9 +124,11 @@ def _turn_activity_mode(state: dict) -> str:
             f"{json.dumps(state.get('current_block'))}"
         )
     return (
+        f"{teaching}\n\n"
         "The server has selected exactly one current activity. Teach that activity and evaluate only evidence in the "
         "learner's newest message. Never skip ahead. Recommend \"advance\" only when the learner has supplied the "
-        "evidence or answer this current activity explicitly requires. Use \"complete_unit\" only under that same rule "
+        "evidence or answer this current activity explicitly requires — a filled log is evidence, not by itself the "
+        "understanding the activity is for. Use \"complete_unit\" only under that same rule "
         f"when this is the final activity. Otherwise recommend \"stay\".\n\nUNIT: {state.get('title')}\n"
         f"LESSON: {(state.get('current_lesson') or {}).get('title') or 'Current lesson'}\n"
         f"ACTIVITY {state['current_block_index'] + 1} OF {state['total_blocks']}:\n{json.dumps(state.get('current_block'))}"
@@ -312,6 +309,140 @@ def _learner_depth(metadata: dict, block: dict | None) -> dict:
     return {"grade": grade, "band": band, "tier": tier, "assignment": roles.get(band) or ""}
 
 
+def _evaluation_to_bkt_correct(evaluation: str) -> bool | None:
+    """Map a Space-turn evaluation onto BKT's boolean evidence.
+
+    A filled log with no conceptual engagement is scored "partial" by the
+    prompt; that still counts as positive evidence that they did the work.
+    "not_answered" is a skip — no BKT update.
+    """
+    if evaluation in {"correct", "partial"}:
+        return True
+    if evaluation == "incorrect":
+        return False
+    return None
+
+
+def _block_concept_ids(metadata: dict, lesson: dict | None, block: dict | None) -> list[str]:
+    """Prefer the block's own concept_ids; fall back to the lesson's."""
+    ids: list[str] = []
+    for source in ((block or {}).get("concept_ids") or []):
+        value = str(source or "").strip()
+        if value and value not in ids:
+            ids.append(value)
+    if ids:
+        return ids
+    for source in ((lesson or {}).get("concept_ids") or []):
+        value = str(source or "").strip()
+        if value and value not in ids:
+            ids.append(value)
+    return ids
+
+
+def _concept_names(metadata: dict, concept_ids: list[str]) -> list[str]:
+    concepts = {
+        str(item.get("concept_id")): (item.get("concept") or str(item.get("concept_id")))
+        for item in ((metadata or {}).get("unit_plan") or {}).get("essential_concepts") or []
+        if isinstance(item, dict) and item.get("concept_id")
+    }
+    return [concepts.get(cid) or cid for cid in concept_ids]
+
+
+def _teaching_context(state: dict) -> str:
+    """Grade, role, concepts, and the teach-from-evidence rule for the turn prompt.
+
+    learner_depth is already computed on state; without this block the LLM
+    only saw the activity JSON and collapsed into log-clerking.
+    """
+    depth = state.get("learner_depth") or {}
+    grade = depth.get("grade")
+    band = depth.get("band") or ""
+    tier = depth.get("tier") or ""
+    assignment = str(depth.get("assignment") or "").strip()
+    metadata = state.get("metadata") or {}
+    lesson = state.get("current_lesson") or {}
+    block = state.get("current_block") or {}
+    names = _concept_names(metadata, _block_concept_ids(metadata, lesson, block))
+    mastery = state.get("track_mastery") or {}
+
+    lines = [
+        "TEACH — do not clerk. A log is evidence for a science lesson (and math where the observations "
+        "support a measurement or ratio), not the lesson itself.",
+        "If the family just submitted observations: acknowledge them in one short sentence, interpret "
+        "what they mean, then ask exactly ONE new question at THIS learner's level. Never re-ask fields "
+        "they already answered this turn.",
+        "Grade bands: elementary = concrete count, measure, simple why; middle = ratio, comparison, "
+        "mechanism, prediction; high school = competing explanations, tradeoffs, quantitative reasoning.",
+        "Filling a log without engaging the concept is at most \"partial\" and \"stay\". Use \"correct\" "
+        "only when the newest message shows the understanding or evidence this activity actually requires.",
+    ]
+    learner_bits = []
+    if grade:
+        learner_bits.append(f"grade {grade}")
+    if band:
+        learner_bits.append(band)
+    if tier:
+        learner_bits.append(f"tier={tier}")
+    if mastery.get("band"):
+        learner_bits.append(f"track mastery {mastery['band']}")
+    if learner_bits:
+        lines.append("LEARNER: " + ", ".join(learner_bits) + ".")
+    if assignment:
+        lines.append(f"THIS LEARNER'S ROLE ON THIS ACTIVITY: {assignment}")
+    if names:
+        lines.append("CONCEPTS THIS ACTIVITY MUST TEACH: " + "; ".join(names) + ".")
+    else:
+        lines.append(
+            "CONCEPTS THIS ACTIVITY MUST TEACH: derive them from the activity content "
+            "(mechanism, measurement, prediction) — do not reduce the turn to data entry."
+        )
+    return "\n".join(lines)
+
+
+async def _update_space_bkt(
+    *, student_id: str, track: str, metadata: dict, lesson: dict | None,
+    block: dict | None, evaluation: str,
+) -> None:
+    """Per-turn BKT for the concepts this activity is actually teaching.
+
+    Lesson-boundary record_mastery_credit still owns credit/journal. This
+    updates P(L) on every real answer so the next turn's ZPD is not stale.
+    Never raises — a tracker hiccup must not strand the family.
+    """
+    correct = _evaluation_to_bkt_correct(evaluation)
+    if correct is None or not track:
+        return
+    concept_ids = _block_concept_ids(metadata, lesson, block)
+    if not concept_ids:
+        return
+    from app.algorithms.bkt_tracker import update_bkt
+    for concept_id in concept_ids:
+        try:
+            await update_bkt(student_id, concept_id, track, correct)
+        except Exception:
+            logger.warning(
+                "[Spaces] BKT update failed student=%s concept=%s (non-fatal)",
+                student_id, concept_id, exc_info=True,
+            )
+
+
+async def _attach_mastery_context(state: dict) -> dict:
+    """Best-effort track mastery band for the prompt. Never fails the turn."""
+    student_id = state.get("student_id")
+    track = state.get("track") or ""
+    if not student_id:
+        return state
+    try:
+        from app.models.student import load_student_state
+        student_state = await load_student_state(student_id)
+        tm = student_state.get(track) if track else None
+        if tm:
+            return {**state, "track_mastery": {"band": tm.mastery_band.value, "score": tm.mastery_score}}
+    except Exception:
+        logger.warning("[Spaces] mastery context skipped (non-fatal) student=%s", student_id, exc_info=True)
+    return state
+
+
 def _state(session: dict, experience: dict) -> dict:
     blocks = experience.get("blocks") or []
     index = min(session["currentBlockIndex"], max(len(blocks) - 1, 0))
@@ -325,6 +456,7 @@ def _state(session: dict, experience: dict) -> dict:
         "total_blocks": len(blocks), "completed_block_ids": session["completedBlockIds"] or [],
         "current_block": block, "current_lesson": lesson,
         "learner_depth": _learner_depth(experience.get("metadata") or {}, block),
+        "track": experience.get("track") or (experience.get("metadata") or {}).get("track") or "",
         "messages": session["messagesJson"] or [], "metadata": experience.get("metadata") or {},
     }
 
@@ -570,12 +702,12 @@ async def _load_or_create(student_id: str, plan_item_id: str) -> tuple[dict, dic
     conn = await get_db_conn()
     try:
         row = await conn.fetchrow(
-            'SELECT id::text, status, title, "blocksJson", "metadataJson" FROM "StudentExperience" '
+            'SELECT id::text, status, title, track, "blocksJson", "metadataJson" FROM "StudentExperience" '
             'WHERE "studentId"=$1 AND "planItemId"=$2', student_id, plan_item_id,
         )
         if not row or row["status"] != "ready":
             raise HTTPException(status_code=409, detail="The unit must finish preparing before its Space can open.")
-        experience = {"id": row["id"], "title": row["title"],
+        experience = {"id": row["id"], "title": row["title"], "track": row["track"] or "",
                       "blocks": _decoded(row["blocksJson"], []), "metadata": _decoded(row["metadataJson"], {})}
         session_row = await conn.fetchrow(
             'INSERT INTO "SpaceSession" ("studentId","planItemId","experienceId") VALUES ($1,$2,$3::text) '
@@ -654,7 +786,9 @@ async def _apply_transition(student_id: str, plan_item_id: str, body: SpaceEvalu
             index = min(session_row["currentBlockIndex"], max(len(blocks) - 1, 0))
             completed_before = list(session_row["completedBlockIds"] or [])
             completed = list(completed_before)
-            current_id = blocks[index].get("block_id") if blocks else None
+            evaluated_block = blocks[index] if blocks else None
+            current_id = evaluated_block.get("block_id") if evaluated_block else None
+            evaluated_lesson = _lesson_for_block(metadata, current_id or "", index)
             may_advance = body.evaluation == "correct" and body.recommended_action in {"advance", "complete_unit"}
             if may_advance and blocks:
                 if current_id and current_id not in completed:
@@ -678,7 +812,7 @@ async def _apply_transition(student_id: str, plan_item_id: str, body: SpaceEvalu
         updated_session = dict(updated)
         updated_session["messagesJson"] = _decoded(updated_session["messagesJson"], [])
         experience = {"id": experience_row["id"], "title": experience_row["title"],
-                      "blocks": blocks, "metadata": metadata}
+                      "track": experience_row["track"] or "", "blocks": blocks, "metadata": metadata}
         result = _state(updated_session, experience)
         result["resource_triggers"] = body.resource_triggers
 
@@ -694,6 +828,12 @@ async def _apply_transition(student_id: str, plan_item_id: str, body: SpaceEvalu
                     blocks=blocks, lesson=newly_completed, block_evaluations=block_evaluations,
                     session_id=session_row["id"],
                 )
+
+        asyncio.create_task(_update_space_bkt(
+            student_id=student_id, track=experience_row["track"] or "",
+            metadata=metadata, lesson=evaluated_lesson, block=evaluated_block,
+            evaluation=body.evaluation,
+        ))
 
         # Independent of lesson-boundary credit above — a conversation can go
         # off-plan on any turn, whether mid-unit or after everything's done.
@@ -773,7 +913,7 @@ async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
     be a Next.js route calling out to Vercel's AI Gateway plus two more HTTP
     calls back into this same backend."""
     session, experience = await _load_or_create(student_id, plan_item_id)
-    state = _state(session, experience)
+    state = await _attach_mastery_context(_state(session, experience))
 
     try:
         evaluation = await _evaluate_turn(state, body.user_message)
