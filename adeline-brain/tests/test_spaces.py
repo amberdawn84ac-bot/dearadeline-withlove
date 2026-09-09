@@ -10,30 +10,27 @@ from pydantic import ValidationError
 from app.api.spaces import (
     OffPlanTopic,
     _TurnEvaluation,
-    _approved_resources_prompt,
-    _attach_approved_resources,
     _attach_household_learners,
     _attach_mastery_context,
+    _attach_offer_catalog,
     _block_concept_ids,
     _concept_credits_for_lesson,
     _concept_slug,
     _credit_off_plan_topic,
     _decoded,
-    _default_offered_resource_ids,
     _evaluate_turn,
     _evaluation_to_bkt_correct,
     _grade_from_text,
-    _hydrate_offered_resources,
     _learner_depth,
     _lesson_content,
     _lesson_for_block,
     _lesson_fully_completed,
-    _merge_resources,
     _newly_completed_lesson,
     _normalize_turn_payload,
+    _offer_catalog_prompt,
     _parse_json_response,
     _proficiency_from_evaluations,
-    _resource_block_for_offered,
+    _resource_block_for_turn,
     _salvage_spoken_turn,
     _space_list_item,
     _space_resource_topic,
@@ -43,7 +40,6 @@ from app.api.spaces import (
     _turn_activity_mode,
     _TURN_SYSTEM_PROMPT,
     _update_space_bkt,
-    _wants_math_tools,
 )
 
 
@@ -532,20 +528,18 @@ def test_teaching_context_puts_grade_role_and_concepts_in_the_prompt():
     assert "Wild yeast fermentation" in text
     assert "track mastery DEVELOPING" in text
     assert "Never re-ask" in text
-    assert "His name is not God" in text
-    assert "YHWH" in text
-    assert "do not say God's design" in text
-    assert "Do not lecture about names" in text
-    assert "OUTSIDE RESOURCES are how you teach" in text
 
 
-def test_turn_system_prompt_carries_original_name_policy():
+def test_turn_system_prompt_does_not_carry_the_scripture_translation_policy():
+    """The 60-line YHWH/Elohim/Fox/KJV block derailed science Space turns into
+    name lectures. It belongs on text-study routes, not every Space turn."""
     from app.agents.persona import SCRIPTURE_TRANSLATION_POLICY
 
-    assert SCRIPTURE_TRANSLATION_POLICY in _TURN_SYSTEM_PROMPT
+    assert SCRIPTURE_TRANSLATION_POLICY not in _TURN_SYSTEM_PROMPT
+    assert "Masoretic Hebrew text" not in _TURN_SYSTEM_PROMPT
+    assert "His name is not" not in _TURN_SYSTEM_PROMPT
     filled = _TURN_SYSTEM_PROMPT.format(activity_mode="ACTIVITY_MODE_SENTINEL")
     assert "ACTIVITY_MODE_SENTINEL" in filled
-    assert 'His name is not "God."' in filled
     assert "LOG FIELDS:" in filled
 
 
@@ -568,7 +562,24 @@ def test_turn_activity_mode_includes_teaching_context_before_the_activity():
     assert "Lactic acid vs wild yeast" in mode
     assert "Kitchen Chemistry: Sourdough" in mode
     assert "a filled log is evidence" in mode
-    assert "His name is not God" in mode
+    assert "His name is not God" not in mode
+
+
+def test_turn_activity_mode_omits_offer_section_when_no_catalog():
+    state = {
+        "status": "active", "title": "Sourdough",
+        "current_lesson": {"title": "Starter", "concept_ids": []},
+        "current_block_index": 0, "total_blocks": 3,
+        "current_block": {"block_id": "b1", "content": "Feed the starter."},
+        "learner_depth": {"grade": 7, "band": "middle", "tier": "analysis", "assignment": ""},
+        "metadata": {},
+    }
+    assert "OFFERED RESOURCES" not in _turn_activity_mode(state)
+    with_catalog = _turn_activity_mode({**state, "offer_catalog": [
+        {"id": "phet:search", "provider": "PhET", "resource_type": "SIMULATION", "title": "Yeast sim"},
+    ]})
+    assert "OFFERED RESOURCES" in with_catalog
+    assert "phet:search" in with_catalog
 
 
 def test_teaching_context_lists_each_child_at_their_own_grade():
@@ -751,8 +762,9 @@ async def test_evaluate_turn_prompt_tells_adeline_to_teach(monkeypatch):
     assert "grade 12" in captured["system"]
     assert "Wild yeast capture" in captured["system"]
     assert "Do not use markdown" in captured["system"]
-    assert "OUTSIDE RESOURCES: none approved" in captured["system"]
     assert "offered_resource_ids" in captured["system"]
+    # Opt-in: with no catalog on state, the prompt must not push resources.
+    assert "OFFERED RESOURCES" not in captured["system"]
 
 
 def test_turn_evaluation_offered_resource_ids_default_empty_and_can_be_chosen():
@@ -778,27 +790,6 @@ def test_normalize_caps_offered_resource_ids_at_two_and_accepts_a_string():
     assert single["offered_resource_ids"] == ["makecode:arcade"]
 
 
-def test_hydrate_offered_resources_keeps_only_approved_ids_in_order():
-    catalog = [
-        {"id": "phet:search", "title": "PhET"},
-        {"id": "makecode:arcade", "title": "Arcade"},
-        {"id": "geogebra:math", "title": "GeoGebra"},
-    ]
-    assert _hydrate_offered_resources(catalog, ["makecode:arcade", "invented", "phet:search"]) == [
-        {"id": "makecode:arcade", "title": "Arcade"},
-        {"id": "phet:search", "title": "PhET"},
-    ]
-    assert _hydrate_offered_resources(catalog, ["nope"]) == []
-
-
-def test_merge_resources_dedupes_by_id_and_keeps_first():
-    merged = _merge_resources(
-        [{"id": "phet:search", "title": "A"}],
-        [{"id": "phet:search", "title": "B"}, {"id": "geogebra:math", "title": "G"}],
-    )
-    assert merged == [{"id": "phet:search", "title": "A"}, {"id": "geogebra:math", "title": "G"}]
-
-
 def test_space_resource_topic_joins_unit_lesson_and_concepts():
     state = {
         "title": "Kitchen Chemistry: Sourdough",
@@ -812,95 +803,98 @@ def test_space_resource_topic_joins_unit_lesson_and_concepts():
     assert "Wild yeast" in topic
 
 
-def test_wants_math_tools_when_the_activity_is_quantitative():
-    assert _wants_math_tools({
-        "title": "Sourdough",
-        "current_lesson": {},
-        "current_block": {"content": "Graph the rise height as a ratio."},
-        "learner_depth": {"assignment": "Measure and graph"},
-        "metadata": {},
-    }) is True
-    assert _wants_math_tools({
-        "title": "Sourdough",
-        "current_lesson": {},
-        "current_block": {"content": "Smell the starter."},
-        "learner_depth": {"assignment": ""},
-        "metadata": {},
-    }) is False
-
-
-def test_approved_resources_prompt_lists_ids_adeline_may_offer():
-    text = _approved_resources_prompt({
-        "approved_resources": [
-            {"id": "makecode:arcade", "provider": "Microsoft MakeCode",
-             "resource_type": "GAME_BUILDER", "title": "Build a fermentation game"},
-        ],
-    })
+def test_offer_catalog_prompt_is_empty_without_a_catalog_and_opt_in_with_one():
+    assert _offer_catalog_prompt({}) == ""
+    assert _offer_catalog_prompt({"offer_catalog": []}) == ""
+    text = _offer_catalog_prompt({"offer_catalog": [
+        {"id": "makecode:arcade", "provider": "Microsoft MakeCode",
+         "resource_type": "GAME_BUILDER", "title": "Build a fermentation game"},
+    ]})
     assert "makecode:arcade" in text
     assert "Microsoft MakeCode" in text
-    assert "Never invent a URL" in text
-    assert "Assign one as this turn's work" in text
-    assert "Empty list on a routine log acknowledgment" not in text
+    assert "optional" in text.lower()
+    assert "Most turns leave it empty" in text
+    assert "never invent one" in text
 
 
-def test_default_offered_resource_ids_prefers_a_picture_when_adeline_forgets():
-    catalog = [
-        {"id": "khan:practice", "resource_type": "PRACTICE"},
-        {"id": "nasa:yeast", "resource_type": "IMAGE", "thumbnail_url": "https://images.nasa.gov/yeast.jpg"},
-        {"id": "phet:search", "resource_type": "SIMULATION"},
-    ]
-    assert _default_offered_resource_ids(catalog, ["phet:search"]) == ["phet:search"]
-    assert _default_offered_resource_ids(catalog, []) == ["nasa:yeast"]
-    assert _default_offered_resource_ids([], []) == []
-    inat_only = [
-        {"id": "khan:practice", "resource_type": "PRACTICE"},
-        {"id": "inat:1", "resource_type": "DATASET", "thumbnail_url": "https://inaturalist.org/p.jpg"},
-    ]
-    assert _default_offered_resource_ids(inat_only, []) == ["inat:1"]
-
-
-def test_resource_block_for_offered_is_a_collection_the_chat_already_knows_how_to_render():
+def test_resource_block_for_turn_is_opt_in_only():
     catalog = [{
         "id": "phet:search", "title": "PhET", "provider": "PhET",
         "resource_type": "SIMULATION", "source_url": "https://phet.colorado.edu/",
     }]
-    block = _resource_block_for_offered(catalog, ["phet:search"], "CREATION_SCIENCE")
+    # Normal turn: Adeline offered nothing -> no block.
+    assert _resource_block_for_turn(catalog, [], "CREATION_SCIENCE") is None
+    # An id that isn't in this turn's catalog is ignored, not invented.
+    assert _resource_block_for_turn(catalog, ["invented"], "CREATION_SCIENCE") is None
+    # A real match -> a RESOURCE_COLLECTION the chat already renders.
+    block = _resource_block_for_turn(catalog, ["phet:search"], "CREATION_SCIENCE")
     assert block["block_type"] == "RESOURCE_COLLECTION"
     assert block["metadata"]["resources"][0]["id"] == "phet:search"
-    assert _resource_block_for_offered(catalog, ["invented"], "CREATION_SCIENCE") is None
+
+
+def test_resource_block_for_turn_caps_at_two():
+    catalog = [
+        {"id": "a", "title": "A", "provider": "P", "resource_type": "SIMULATION"},
+        {"id": "b", "title": "B", "provider": "P", "resource_type": "VIDEO"},
+        {"id": "c", "title": "C", "provider": "P", "resource_type": "GAME"},
+    ]
+    block = _resource_block_for_turn(catalog, ["a", "b", "c"], "CREATION_SCIENCE")
+    assert [item["id"] for item in block["metadata"]["resources"]] == ["a", "b"]
 
 
 @pytest.mark.asyncio
-async def test_attach_approved_resources_swallows_router_failures(monkeypatch):
-    async def boom(*_args, **_kwargs):
-        raise RuntimeError("router down")
+async def test_attach_offer_catalog_swallows_router_failures(monkeypatch):
+    class BoomRouter:
+        async def search(self, *_args, **_kwargs):
+            raise RuntimeError("router down")
 
-    monkeypatch.setattr("app.api.spaces._search_approved_resources", boom)
+    monkeypatch.setattr("app.services.resource_router.resource_router", BoomRouter())
     state = {
         "student_id": "stu-1", "track": "CREATION_SCIENCE", "title": "Sourdough",
         "current_lesson": {}, "current_block": {}, "learner_depth": {"grade": 7},
         "metadata": {},
     }
-    attached = await _attach_approved_resources(state)
-    assert attached["approved_resources"] == []
+    attached = await _attach_offer_catalog(state)
+    assert "offer_catalog" not in attached
 
 
 @pytest.mark.asyncio
-async def test_evaluate_turn_prompt_includes_approved_arcade_and_geogebra(monkeypatch):
+async def test_attach_offer_catalog_attaches_router_results(monkeypatch):
+    class FakeRouter:
+        async def search(self, *_args, **_kwargs):
+            return {"resources": [
+                {"id": "phet:search", "title": "PhET", "provider": "PhET", "resource_type": "SIMULATION"},
+                {"title": "no id, dropped"},
+            ]}
+
+    monkeypatch.setattr("app.services.resource_router.resource_router", FakeRouter())
+    state = {
+        "student_id": "stu-1", "track": "CREATION_SCIENCE", "title": "Sourdough",
+        "current_lesson": {}, "current_block": {}, "learner_depth": {"grade": 7}, "metadata": {},
+    }
+    attached = await _attach_offer_catalog(state)
+    assert [item["id"] for item in attached["offer_catalog"]] == ["phet:search"]
+
+
+@pytest.mark.asyncio
+async def test_attach_offer_catalog_noop_without_a_track():
+    state = {"student_id": "stu-1", "track": "", "current_lesson": {}, "current_block": {}, "metadata": {}}
+    assert await _attach_offer_catalog(state) == state
+
+
+@pytest.mark.asyncio
+async def test_evaluate_turn_lists_the_offer_catalog_when_present(monkeypatch):
     captured = {}
 
     class CapturingLLM:
         async def ainvoke(self, messages):
             captured["system"] = messages[0].content
-            return _FakeResponse(json.dumps({
-                **_TURN_JSON,
-                "offered_resource_ids": ["makecode:arcade"],
-            }))
+            return _FakeResponse(json.dumps({**_TURN_JSON, "offered_resource_ids": ["makecode:arcade"]}))
 
     monkeypatch.setattr("app.api.spaces._space_turn_llm", lambda: CapturingLLM())
     state = {
         **_space_state(),
-        "approved_resources": [
+        "offer_catalog": [
             {"id": "makecode:arcade", "provider": "Microsoft MakeCode",
              "resource_type": "GAME_BUILDER", "title": "Build a yeast game"},
             {"id": "geogebra:math", "provider": "GeoGebra",

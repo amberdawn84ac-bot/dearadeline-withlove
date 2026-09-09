@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 function youtubeEmbed(url: string): string | null {
   try {
     const parsed = new URL(url);
@@ -8,6 +10,7 @@ function youtubeEmbed(url: string): string | null {
       return id ? `https://www.youtube.com/embed/${id}` : null;
     }
     if (parsed.hostname.includes('youtube.com')) {
+      // Only a real watch URL carries ?v=; channel/search links do not embed.
       const id = parsed.searchParams.get('v');
       return id ? `https://www.youtube.com/embed/${id}` : null;
     }
@@ -17,14 +20,27 @@ function youtubeEmbed(url: string): string | null {
   return null;
 }
 
+function httpUrl(value: unknown): string {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return /^https?:\/\//i.test(text) ? text : '';
+}
+
 export function OfferedResourceCard({ resource }: { resource: Record<string, unknown> }) {
-  const url = String(resource.editor_url || resource.embed_url || resource.source_url || '');
+  const [imageBroken, setImageBroken] = useState(false);
+
+  const url = httpUrl(resource.editor_url) || httpUrl(resource.embed_url) || httpUrl(resource.source_url);
   const title = String(resource.title || 'Resource');
   const kind = String(resource.resource_type || '').replaceAll('_', ' ');
-  const thumbnail = typeof resource.thumbnail_url === 'string' ? resource.thumbnail_url : '';
+  const thumbnail = httpUrl(resource.thumbnail_url);
   const description = typeof resource.description === 'string' ? resource.description : '';
+  const provider = String(resource.provider || '');
   const embed = url ? youtubeEmbed(url) : null;
-  const showPhoto = Boolean(thumbnail) && !embed;
+  const showPhoto = Boolean(thumbnail) && !embed && !imageBroken;
+  const label = embed || kind === 'VIDEO'
+    ? 'Watch'
+    : thumbnail || kind === 'IMAGE'
+      ? 'Look closely'
+      : 'Open';
 
   return (
     <article className="overflow-hidden rounded-2xl border border-[#D9CFBC] bg-white">
@@ -39,12 +55,20 @@ export function OfferedResourceCard({ resource }: { resource: Record<string, unk
           />
         </div>
       ) : showPhoto ? (
-        <img src={thumbnail} alt={title} className="h-40 w-full object-cover" />
+        <img
+          src={thumbnail}
+          alt={title}
+          className="h-40 w-full object-cover"
+          loading="lazy"
+          onError={() => setImageBroken(true)}
+        />
       ) : null}
       <div className="p-4">
-        <p className="text-xs font-black uppercase tracking-wider text-[#BD6809]">
-          {String(resource.provider || '')}{kind ? ` · ${kind}` : ''}
-        </p>
+        {(provider || kind) ? (
+          <p className="text-xs font-black uppercase tracking-wider text-[#BD6809]">
+            {provider}{provider && kind ? ' · ' : ''}{kind}
+          </p>
+        ) : null}
         <h3 className="mt-2 font-bold text-[#2F4731]">{title}</h3>
         {description ? <p className="mt-1 text-sm leading-6 text-[#2F4731]/65">{description}</p> : null}
         {url ? (
@@ -54,7 +78,7 @@ export function OfferedResourceCard({ resource }: { resource: Record<string, unk
             rel="noopener noreferrer"
             className="mt-3 inline-flex min-h-11 items-center rounded-xl bg-[#2F4731] px-4 py-2 text-sm font-bold text-white no-underline"
           >
-            {embed || kind === 'VIDEO' ? 'Watch' : (thumbnail || kind === 'IMAGE') ? 'Look closely' : 'Open'}
+            {label}
           </a>
         ) : null}
       </div>

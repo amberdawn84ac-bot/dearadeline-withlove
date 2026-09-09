@@ -13,7 +13,6 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from app.agents.persona import SCRIPTURE_TRANSLATION_POLICY
 from app.api.middleware import require_internal_key, verify_student_access
 from app.api.realtime import connection_manager
 from app.config import GEMINI_MODEL, create_llm, get_db_conn
@@ -92,8 +91,6 @@ set of genuine choices. Do not offer them when the learner needs to explain reas
 Use display_breakout_tracks only when subject-specific work is useful now, and show_microscope_diagram only when microscopy is relevant.
 Write adeline_message as spoken prose. Do not use markdown (no **bold**, no * bullets).
 
-""" + SCRIPTURE_TRANSLATION_POLICY + """
-
 {activity_mode}
 
 LOG FIELDS: only when the current activity asks the family to record observations or progress repeatedly over time —
@@ -113,15 +110,16 @@ Respond with ONLY a JSON object (no markdown fences, no commentary) matching exa
   "resource_triggers": ["show_microscope_diagram"|"display_breakout_tracks", ...] (0-2 items),
   "off_plan_topic": null | {{"concept_name": string, "track": string|null, "tier": "encountered"|"demonstrated"}},
   "suggested_replies": [string, ...] (0-4 items), "log_fields": [string, ...] (0-5 items),
-  "offered_resource_ids": [string, ...] (usually 1 id from the approved list; empty only if none fit)}}"""
+  "offered_resource_ids": [string, ...] (0-2 ids copied verbatim from the offered-resources list below, or empty — empty is normal)}}"""
 
 
 def _turn_activity_mode(state: dict) -> str:
     teaching = _teaching_context(state)
-    resources = _approved_resources_prompt(state)
+    offers = _offer_catalog_prompt(state)
+    preamble = f"{teaching}\n\n{offers}\n\n" if offers else f"{teaching}\n\n"
     if state["status"] == "completed":
         return (
-            f"{teaching}\n\n{resources}\n\n"
+            f"{preamble}"
             "This unit's planned activities are already finished — you're in open conversation mode now. The family may "
             "ask follow-up questions, revisit something, or wander into a new question entirely. Answer genuinely and "
             "substantively; there is no \"next activity\" to advance to, so \"recommended_action\" should stay \"stay\" "
@@ -130,7 +128,7 @@ def _turn_activity_mode(state: dict) -> str:
             f"{json.dumps(state.get('current_block'))}"
         )
     return (
-        f"{teaching}\n\n{resources}\n\n"
+        f"{preamble}"
         "The server has selected exactly one current activity. Teach that activity and evaluate only evidence in the "
         "learner's newest message. Never skip ahead. Recommend \"advance\" only when the learner has supplied the "
         "evidence or answer this current activity explicitly requires — a filled log is evidence, not by itself the "
@@ -464,14 +462,6 @@ def _teaching_context(state: dict) -> str:
         "own bands — never clone the same question for every child.",
         "Filling a log without engaging the concept is at most \"partial\" and \"stay\". Use \"correct\" "
         "only when the newest message shows the understanding or evidence this activity actually requires.",
-        "Drop an approved outside resource when it genuinely helps THIS turn — a sim to test a prediction, "
-        "a game that models the concept, a video of the process, a primary source. Not on every log entry.",
-        "NAMES: His name is not God. Use the original name the source writes (YHWH, Elohim, Yeshua). "
-        "Do not lecture about names or translation unless this activity is actually a text study. "
-        "Science and homestead turns: one short name if the Creator is in view, then teach the science; "
-        "do not say God's design.",
-        "OUTSIDE RESOURCES are how you teach with more than text. Assign a photo, video, sim, or game from "
-        "the approved list when it shows the mechanism — not as decoration, and not only after the log is filled.",
     ]
     learner_bits = []
     if grade is not None and grade != "":
@@ -517,12 +507,6 @@ def _teaching_context(state: dict) -> str:
     return "\n".join(lines)
 
 
-_QUANTITATIVE_TERMS = frozenset({
-    "ratio", "percent", "percentage", "graph", "measure", "measurement", "height",
-    "hydration", "doubling", "algebra", "geometry", "angle", "statistics",
-})
-
-
 def _space_resource_topic(state: dict) -> str:
     lesson = state.get("current_lesson") or {}
     block = state.get("current_block") or {}
@@ -539,54 +523,22 @@ def _space_resource_topic(state: dict) -> str:
     return " ".join(part for part in parts if part).strip()[:240] or "family investigation"
 
 
-def _authored_block_resources(state: dict) -> list[dict]:
-    metadata = (state.get("current_block") or {}).get("metadata") or {}
-    resources = metadata.get("resources") if isinstance(metadata, dict) else None
-    if not isinstance(resources, list):
-        return []
-    return [item for item in resources if isinstance(item, dict) and item.get("id")]
+def _offer_catalog_prompt(state: dict) -> str:
+    """The resources Adeline MAY offer this turn. Opt-in: most turns offer none.
 
-
-def _merge_resources(*groups: list[dict]) -> list[dict]:
-    merged: list[dict] = []
-    seen: set[str] = set()
-    for group in groups:
-        for item in group:
-            rid = str(item.get("id") or "").strip()
-            if not rid or rid in seen:
-                continue
-            seen.add(rid)
-            merged.append(item)
-    return merged
-
-
-def _wants_math_tools(state: dict) -> bool:
-    depth = state.get("learner_depth") or {}
-    haystack = " ".join([
-        _space_resource_topic(state),
-        str(depth.get("assignment") or ""),
-        str((state.get("current_block") or {}).get("content") or ""),
-    ])
-    words = {word.strip(".,:;!?()[]{}\"'").lower() for word in haystack.split() if word}
-    return bool(words & _QUANTITATIVE_TERMS)
-
-
-def _approved_resources_prompt(state: dict) -> str:
-    items = state.get("approved_resources") or []
+    Returns "" when there is no catalog, so _turn_activity_mode drops the
+    section entirely rather than telling the LLM "none available".
+    """
+    items = [item for item in (state.get("offer_catalog") or []) if isinstance(item, dict) and item.get("id")]
     if not items:
-        return (
-            "OUTSIDE RESOURCES: none approved for this activity right now. "
-            "Do not invent a URL or tool. Leave offered_resource_ids empty."
-        )
+        return ""
     lines = [
-        "OUTSIDE RESOURCES: you teach with these. They are the lab, photograph, video, game, or assignment — "
-        "not optional extra credit. Most teaching turns, offer 1 (sometimes 2) by id.",
-        "Assign one as this turn's work when it shows the mechanism: open this photo/video/sim/game, then come "
-        "back and tell me what you noticed. Do not leave offered_resource_ids empty just because they filled a log.",
-        "Prefer a photograph, video, or simulation over another paragraph. Never invent a URL. Opening a link is not mastery.",
-        "Set offered_resource_ids to ids from this list only:",
+        "OFFERED RESOURCES — optional. Set offered_resource_ids only when one of these genuinely helps THIS "
+        "turn: a simulation to test a prediction, a primary source, a video of the process, a game that models "
+        "the concept. Most turns leave it empty. Use an id verbatim from this list — never invent one. Opening a "
+        "link is not mastery.",
     ]
-    for item in items[:8]:
+    for item in items[:6]:
         rid = item.get("id") or ""
         provider = item.get("provider") or ""
         rtype = str(item.get("resource_type") or "").replace("_", " ")
@@ -595,88 +547,51 @@ def _approved_resources_prompt(state: dict) -> str:
     return "\n".join(lines)
 
 
-def _hydrate_offered_resources(catalog: list[dict], offered_ids: list[str]) -> list[dict]:
-    by_id = {str(item.get("id")): item for item in catalog if item.get("id")}
+async def _attach_offer_catalog(state: dict) -> dict:
+    """Best-effort catalog of resources Adeline may offer. Never fails the turn."""
+    track = state.get("track") or ""
+    if not track:
+        return state
+    try:
+        from app.services.resource_router import ResourceQuery, resource_router
+        packet = await resource_router.search(ResourceQuery(
+            topic=_space_resource_topic(state),
+            track=track,
+            grade_level=str((state.get("learner_depth") or {}).get("grade") or 8),
+            interactive_preferred=True,
+            limit=6,
+        ))
+        catalog = [
+            item for item in (packet.get("resources") or [])
+            if isinstance(item, dict) and item.get("id")
+        ]
+    except Exception:
+        logger.warning(
+            "[Spaces] offer catalog skipped (non-fatal) student=%s", state.get("student_id"), exc_info=True,
+        )
+        return state
+    return {**state, "offer_catalog": catalog}
+
+
+def _resource_block_for_turn(catalog: list[dict], offered_ids: list[str], track: str) -> dict | None:
+    """Opt-in only: build a RESOURCE_COLLECTION block iff Adeline named ids that
+    match this turn's catalog. No default, no forcing — an empty offered_ids
+    (the normal case) yields no block.
+    """
+    if not offered_ids:
+        return None
+    by_id = {str(item.get("id")): item for item in catalog if isinstance(item, dict) and item.get("id")}
     chosen: list[dict] = []
-    seen: set[str] = set()
     for rid in offered_ids:
-        key = str(rid).strip()
-        item = by_id.get(key)
-        if not item or key in seen:
-            continue
-        seen.add(key)
-        chosen.append(item)
+        item = by_id.get(str(rid).strip())
+        if item is not None and item not in chosen:
+            chosen.append(item)
         if len(chosen) == 2:
             break
-    return chosen
-
-
-def _default_offered_resource_ids(catalog: list[dict], offered_ids: list[str] | None = None) -> list[str]:
-    """If Adeline forgot to pick a tool, still put one visual/interactive in front of the family."""
-    chosen = _hydrate_offered_resources(catalog, offered_ids or [])
-    if chosen:
-        return [str(item.get("id")) for item in chosen if item.get("id")]
-    visual = (
-        "IMAGE", "VIDEO", "SIMULATION", "GAME", "GAME_BUILDER", "INTERACTIVE",
-        "ARTIFACT_3D", "MANIPULATIVE", "PRIMARY_SOURCE", "DATASET", "EXPERIMENT",
-    )
-    ranked = sorted(
-        [item for item in catalog if isinstance(item, dict) and item.get("id")],
-        key=lambda item: (
-            str(item.get("resource_type") or "") not in visual,
-            not item.get("thumbnail_url"),
-            str(item.get("resource_type") or "") not in {"IMAGE", "VIDEO"},
-        ),
-    )
-    if not ranked:
-        return []
-    return [str(ranked[0]["id"])]
-
-
-def _resource_block_for_offered(catalog: list[dict], offered_ids: list[str], track: str) -> dict | None:
-    chosen = _hydrate_offered_resources(catalog, offered_ids)
     if not chosen:
         return None
-    is_math = track == "APPLIED_MATHEMATICS"
-    return {
-        "block_type": "RESOURCE_COLLECTION",
-        "experience_stage": "RESOURCE",
-        "title": "Play with the idea, then prove it" if is_math else "Try this",
-        "content": (
-            "Choose the game, puzzle, or model matched to this idea. Change something, notice the pattern, then explain why. Time played is not mastery."
-            if is_math else
-            "Adeline remains the teacher. Open the resource, then come back and explain what you noticed, built, tested, or understood. Opening the link is not mastery."
-        ),
-        "metadata": {"resources": chosen, "requires_evidence": is_math},
-        "family_style": True,
-    }
-
-
-async def _search_approved_resources(topic: str, track: str, grade_level: str, limit: int = 8) -> list[dict]:
-    from app.services.resource_router import ResourceQuery, resource_router
-    packet = await resource_router.search(ResourceQuery(
-        topic=topic, track=track, grade_level=grade_level,
-        interactive_preferred=True, limit=limit,
-    ))
-    return [item for item in (packet.get("resources") or []) if isinstance(item, dict)]
-
-
-async def _attach_approved_resources(state: dict) -> dict:
-    """Best-effort approved catalog for this activity. Never fails the turn."""
-    topic = _space_resource_topic(state)
-    grade = str((state.get("learner_depth") or {}).get("grade") or 8)
-    track = state.get("track") or ""
-    catalog = _authored_block_resources(state)
-    try:
-        catalog = _merge_resources(catalog, await _search_approved_resources(topic, track, grade))
-        if _wants_math_tools(state) and track != "APPLIED_MATHEMATICS":
-            catalog = _merge_resources(
-                catalog,
-                await _search_approved_resources(topic, "APPLIED_MATHEMATICS", grade, limit=4),
-            )
-    except Exception:
-        logger.warning("[Spaces] resource catalog skipped (non-fatal) student=%s", state.get("student_id"), exc_info=True)
-    return {**state, "approved_resources": catalog[:8]}
+    from app.services.resource_router import ResourceRouter, resource_block_from_packet
+    return resource_block_from_packet({"resources": chosen, "track": track, "rules": ResourceRouter.rules})
 
 
 async def _update_space_bkt(
@@ -1261,7 +1176,7 @@ async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
     be a Next.js route calling out to Vercel's AI Gateway plus two more HTTP
     calls back into this same backend."""
     session, experience = await _load_or_create(student_id, plan_item_id)
-    state = await _attach_approved_resources(
+    state = await _attach_offer_catalog(
         await _attach_mastery_context(await _attach_household_learners(_state(session, experience)))
     )
 
@@ -1296,12 +1211,9 @@ async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
     result["suggested_replies"] = evaluation.suggested_replies
     result["log_fields"] = evaluation.log_fields
     try:
-        result["resource_block"] = _resource_block_for_offered(
-            state.get("approved_resources") or [],
-            _default_offered_resource_ids(
-                state.get("approved_resources") or [],
-                evaluation.offered_resource_ids,
-            ),
+        result["resource_block"] = _resource_block_for_turn(
+            state.get("offer_catalog") or [],
+            evaluation.offered_resource_ids,
             state.get("track") or "",
         )
     except Exception:
