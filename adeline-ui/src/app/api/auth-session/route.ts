@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveBrainBaseUrl } from '@/lib/server/brain-url';
 
-const BRAIN_URL = (
-  process.env.BRAIN_INTERNAL_URL ||
-  process.env.BRAIN_URL ||
-  process.env.NEXT_PUBLIC_BRAIN_URL ||
-  'https://dearadeline-withlove-production.up.railway.app'
-).replace(/\/$/, '');
+const BRAIN_URL = resolveBrainBaseUrl();
 
 const COOKIE_NAME = 'auth_token';
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60;

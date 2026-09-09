@@ -1,15 +1,11 @@
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
+import { resolveBrainBaseUrl } from '@/lib/server/brain-url';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const BRAIN_URL = (
-  process.env.BRAIN_INTERNAL_URL ||
-  process.env.BRAIN_URL ||
-  process.env.NEXT_PUBLIC_BRAIN_URL ||
-  'https://dearadeline-withlove-production.up.railway.app'
-).replace(/\/$/, '');
+const BRAIN_URL = resolveBrainBaseUrl();
 
 const REQUEST_HEADERS = [
   'accept',

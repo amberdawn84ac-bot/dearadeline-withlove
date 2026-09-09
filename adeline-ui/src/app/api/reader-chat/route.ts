@@ -16,13 +16,9 @@
  */
 
 import { NextRequest } from "next/server";
+import { resolveBrainBaseUrl } from '@/lib/server/brain-url';
 
-const BRAIN_URL = (
-  process.env.BRAIN_INTERNAL_URL ||
-  process.env.BRAIN_URL ||
-  process.env.NEXT_PUBLIC_BRAIN_URL ||
-  "https://dearadeline-withlove-production.up.railway.app"
-).replace(/\/$/, "");
+const BRAIN_URL = resolveBrainBaseUrl();
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
