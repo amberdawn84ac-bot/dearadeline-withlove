@@ -681,7 +681,11 @@ class ResourceRouter:
     ]
 
     async def search(self, query: ResourceQuery) -> dict[str, Any]:
-        cache_key = "resource-router:v6:" + hashlib.sha256(
+        # Bump the version whenever what a query resolves to changes — the
+        # hardcoded archive-evidence packs count. A stale v6 entry written
+        # before the Poison Squad pack existed was still being served the
+        # fixed code its empty result for the rest of its hour.
+        cache_key = "resource-router:v7:" + hashlib.sha256(
             json.dumps(asdict(query), sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
         try:
@@ -722,10 +726,23 @@ class ResourceRouter:
             item.provider,
             item.title,
         ))
-        packet = {"query": asdict(query), "resources": [asdict(item) for item in resources[:query.limit]], "rules": self.rules, "provider_failures": failures}
+        kept = resources[:query.limit]
+        packet = {"query": asdict(query), "resources": [asdict(item) for item in kept], "rules": self.rules, "provider_failures": failures}
+        # Don't let a degraded result rest in the cache for a full hour. A
+        # PRIMARY_SOURCE history query that surfaced nothing verified produces a
+        # packet that fails the item-level-source gate in experience authoring —
+        # and with the failure-escalation path that turns a transient miss into a
+        # permanent "flagged for review" that only a manual DB delete clears.
+        # A total provider washout is the same story. Short-TTL either so the
+        # next attempt retries live instead of replaying the empty result.
+        wants_primary = "PRIMARY_SOURCE" in (query.resource_types or ())
+        has_verified = any(
+            item.availability in {"VERIFIED_API_ITEM", "VERIFIED_ARCHIVE_ITEM"} for item in kept
+        )
+        degraded = (wants_primary and not has_verified) or (bool(failures) and not kept)
         try:
             from app.connections.redis_client import redis_client
-            await redis_client.set(cache_key, json.dumps(packet), ex=3600)
+            await redis_client.set(cache_key, json.dumps(packet), ex=120 if degraded else 3600)
         except Exception:
             pass
         return packet

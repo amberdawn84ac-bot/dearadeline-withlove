@@ -1,5 +1,6 @@
 import pytest
 
+from app.connections import redis_client as redis_client_module
 from app.curriculum.family_style import CANONICAL_FORMAT_VERSION
 from app.services.resource_router import (
     ResourceQuery,
@@ -162,6 +163,57 @@ def test_poison_squad_evidence_pack_supplies_verified_item_pages():
         assert all(item.resource_type == "PRIMARY_SOURCE" for item in results)
         assert all(item.source_url.startswith("https://www.archives.gov/") for item in results)
         assert all(item.evidence_scope and item.holding_institution for item in results)
+
+
+class _RecordingRedis:
+    def __init__(self):
+        self.set_calls: list[dict] = []
+
+    async def get(self, *_args, **_kwargs):
+        return None
+
+    async def set(self, key, value, *, ex=None):
+        self.set_calls.append({"key": key, "ex": ex})
+
+
+@pytest.mark.asyncio
+async def test_healthy_primary_source_packet_keeps_the_full_hour_ttl(monkeypatch):
+    fake = _RecordingRedis()
+    monkeypatch.setattr(redis_client_module, "redis_client", fake)
+
+    await ResourceRouter().search(ResourceQuery(
+        topic="Harvey Wiley Poison Squad Pure Food and Drug Act 1906",
+        track="TRUTH_HISTORY",
+        resource_types=("PRIMARY_SOURCE",),
+        interactive_preferred=False,
+        limit=8,
+    ))
+
+    assert fake.set_calls and fake.set_calls[-1]["ex"] == 3600
+    assert fake.set_calls[-1]["key"].startswith("resource-router:v7:")
+
+
+@pytest.mark.asyncio
+async def test_primary_source_query_with_nothing_verified_gets_a_short_ttl(monkeypatch):
+    fake = _RecordingRedis()
+    monkeypatch.setattr(redis_client_module, "redis_client", fake)
+
+    async def empty(*_args, **_kwargs):
+        return []
+
+    for provider in ("_loc", "_smithsonian", "_nasa", "_inaturalist", "_curated"):
+        monkeypatch.setattr(f"app.services.resource_router.{provider}", empty)
+
+    # An unmatched history topic: no live items, no hardcoded archive pack.
+    await ResourceRouter().search(ResourceQuery(
+        topic="a history topic with no verified coverage anywhere",
+        track="TRUTH_HISTORY",
+        resource_types=("PRIMARY_SOURCE",),
+        interactive_preferred=False,
+        limit=8,
+    ))
+
+    assert fake.set_calls and fake.set_calls[-1]["ex"] == 120
 
 
 def test_archive_evidence_pack_does_not_leak_into_unrelated_history():
