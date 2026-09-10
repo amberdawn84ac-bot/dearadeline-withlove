@@ -144,6 +144,15 @@ export function CanonicalExperiencePage({ view = 'lesson' }: { view?: 'lesson' |
             return;
           }
         }
+        // Once authoring has failed repeatedly, the backend stops retrying and
+        // leaves the row terminal. Don't launch another build that will just
+        // return the same escalation error — show it and stop.
+        if (persisted?.status === 'failed' && (persisted.failure_count ?? 0) >= 3) {
+          setError('Adeline could not build this investigation after several tries. It has been flagged for review — open another investigation from Today for now.');
+          setCanRetry(false);
+          setStatus('');
+          return;
+        }
         // The backend atomically reclaims failed records. Reopening a Space is
         // itself a safe retry; do not strand the learner behind a stale 503.
         if (persisted?.status === 'failed') {

@@ -590,6 +590,7 @@ export interface SavedExperience {
   blocks: LessonBlockResponse[];
   metadata: NonNullable<LessonResponse['metadata']> & { required_standard_codes?: string[] };
   error_message: string | null;
+  failure_count?: number;
   canonical_slug: string;
 }
 

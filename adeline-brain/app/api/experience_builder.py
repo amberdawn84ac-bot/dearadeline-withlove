@@ -60,6 +60,11 @@ ADAPTER_PROGRESS_MESSAGES = (
 # (same webhook pattern canonical_store.py uses for pending-review canonicals).
 EXPERIENCE_FAILURE_ESCALATION_THRESHOLD = 3
 
+_ESCALATED_MESSAGE = (
+    "Adeline has had trouble creating this experience several times in a row. "
+    "This has been flagged for review — try a different topic for now, or check back later."
+)
+
 
 async def _notify_repeated_authoring_failure(
     student_id: str, plan_item_id: str, topic: str, failure_count: int, last_error: str,
@@ -621,7 +626,10 @@ async def _stream(request: LessonRequest):
     plan_item_id = request.plan_item_id or f"canonical:{slug}"
     yield _sse({"type": "status", "message": "Opening today's planned experience…"})
 
-    claim = await student_experience_store.claim(request.student_id, plan_item_id, slug)
+    claim = await student_experience_store.claim(
+        request.student_id, plan_item_id, slug,
+        max_failures=EXPERIENCE_FAILURE_ESCALATION_THRESHOLD,
+    )
     if claim.state == "ready" and claim.record and _ready_draft_should_rebuild(claim.record, slug):
         # A short-name authoring (e.g. queue topic "Poison Squad") missed the
         # approved catalog unit, or saved a shell with the Harvey Wiley brief
@@ -630,12 +638,27 @@ async def _stream(request: LessonRequest):
             request.student_id, plan_item_id,
             "Replaced a short-name or empty draft with the approved catalog unit.",
         )
-        claim = await student_experience_store.claim(request.student_id, plan_item_id, slug)
+        claim = await student_experience_store.claim(
+            request.student_id, plan_item_id, slug,
+            max_failures=EXPERIENCE_FAILURE_ESCALATION_THRESHOLD,
+        )
     if claim.state == "ready" and claim.record:
         async for event in _emit_persisted(request, claim.record):
             yield event
         return
     if not claim.claimed:
+        # claim() refused this row. Either another request owns a fresh
+        # generation, or the row has already failed too many times and must not
+        # be retried again. Distinguish the two before waiting.
+        if (claim.record or {}).get("failure_count", 0) >= EXPERIENCE_FAILURE_ESCALATION_THRESHOLD:
+            # Force it terminal in case a prior escalation left it stuck in
+            # 'generating' (the UI polls that state forever).
+            await student_experience_store.mark_escalated(
+                request.student_id, plan_item_id,
+                f"Escalated after {claim.record.get('failure_count')} failed authoring attempts.",
+            )
+            yield _sse({"type": "error", "message": _ESCALATED_MESSAGE})
+            return
         # Another request or instance owns generation. Wait for the durable row;
         # a reconnect may also discover the completed record here.
         for attempt in range(240):
@@ -649,10 +672,7 @@ async def _stream(request: LessonRequest):
                 return
             if record and record["status"] == "failed":
                 if (record.get("failure_count") or 0) >= EXPERIENCE_FAILURE_ESCALATION_THRESHOLD:
-                    yield _sse({"type": "error", "message": (
-                        "Adeline has had trouble creating this experience several times in a row. "
-                        "This has been flagged for review — try a different topic for now, or check back later."
-                    )})
+                    yield _sse({"type": "error", "message": _ESCALATED_MESSAGE})
                 else:
                     yield _sse({"type": "error", "message": "That experience did not finish. Please retry."})
                 return
@@ -660,14 +680,14 @@ async def _stream(request: LessonRequest):
         return
 
     if (claim.record.get("failure_count") or 0) >= EXPERIENCE_FAILURE_ESCALATION_THRESHOLD:
-        # Already past the threshold before this attempt even starts — don't
-        # spend another LLM call proving what three prior attempts already
-        # showed. A family switching to a different topic gets a fresh row
-        # (failure_count=0) and is unaffected by this short-circuit.
-        yield _sse({"type": "error", "message": (
-            "Adeline has had trouble creating this experience several times in a row. "
-            "This has been flagged for review — try a different topic for now, or check back later."
-        )})
+        # Belt and suspenders: claim() should not hand back a row past the
+        # threshold, but if it ever does, leave it terminal rather than
+        # 'generating' so the UI stops polling.
+        await student_experience_store.mark_escalated(
+            request.student_id, plan_item_id,
+            f"Escalated after {claim.record.get('failure_count')} failed authoring attempts.",
+        )
+        yield _sse({"type": "error", "message": _ESCALATED_MESSAGE})
         return
 
     try:
@@ -814,10 +834,7 @@ async def _stream(request: LessonRequest):
         )
         if failure_count >= EXPERIENCE_FAILURE_ESCALATION_THRESHOLD:
             await _notify_repeated_authoring_failure(request.student_id, plan_item_id, request.topic, failure_count, str(exc))
-            yield _sse({"type": "error", "message": (
-                "Adeline has had trouble creating this experience several times in a row. "
-                "This has been flagged for review — try a different topic for now, or check back later."
-            )})
+            yield _sse({"type": "error", "message": _ESCALATED_MESSAGE})
             return
         detail = exc.detail if isinstance(exc, HTTPException) else "Adeline could not finish that experience. Your Today plan is safe; please retry."
         yield _sse({"type": "error", "message": str(detail)})

@@ -39,14 +39,22 @@ class StudentExperienceStore:
         finally:
             await conn.close()
 
-    async def claim(self, student_id: str, plan_item_id: str, canonical_slug: str) -> GenerationClaim:
+    async def claim(
+        self, student_id: str, plan_item_id: str, canonical_slug: str, *, max_failures: int = 3,
+    ) -> GenerationClaim:
         """Atomically claim generation, or return the existing state.
 
-        Failed rows are claimable again. A generating row is only reclaimable
-        after a short stale window — most real authoring finishes in well
-        under a minute; 3 minutes is generous headroom for a slow LLM call
-        without leaving a family staring at a dead request for 15 minutes
-        after a deploy or dropped connection killed it mid-stream.
+        Failed rows are claimable again UNTIL failureCount reaches max_failures —
+        past that the row is left terminal so the caller can escalate instead of
+        spending another LLM call proving what prior attempts already showed. A
+        generating row is only reclaimable after a short stale window — most real
+        authoring finishes in well under a minute; 3 minutes is generous headroom
+        for a slow LLM call without leaving a family staring at a dead request for
+        15 minutes after a deploy or dropped connection killed it mid-stream.
+
+        The prior errorMessage is preserved on reclaim so a repeated failure's
+        original cause is still visible for diagnosis; save_ready clears it on
+        success and mark_failed overwrites it on the next failure.
         """
         conn = await get_db_conn()
         try:
@@ -57,14 +65,15 @@ class StudentExperienceStore:
                       "blocksJson", "metadataJson", "createdAt", "updatedAt")
                    VALUES ($1, $2, $3, $4, 'generating', '[]'::jsonb, '{}'::jsonb, NOW(), NOW())
                    ON CONFLICT ("studentId", "planItemId") DO UPDATE SET
-                     status = 'generating', "errorMessage" = NULL, "updatedAt" = NOW(),
+                     status = 'generating', "updatedAt" = NOW(),
                      "canonicalSlug" = EXCLUDED."canonicalSlug"
-                   WHERE "StudentExperience".status = 'failed'
-                      OR ("StudentExperience".status = 'generating'
-                          AND "StudentExperience"."updatedAt" < NOW() - INTERVAL '3 minutes')
+                   WHERE COALESCE("StudentExperience"."failureCount", 0) < $5
+                     AND ("StudentExperience".status = 'failed'
+                          OR ("StudentExperience".status = 'generating'
+                              AND "StudentExperience"."updatedAt" < NOW() - INTERVAL '3 minutes'))
                    RETURNING id, status, title, track, "blocksJson", "metadataJson",
                              "errorMessage", "canonicalSlug", "failureCount"''',
-                experience_id, student_id, plan_item_id, canonical_slug,
+                experience_id, student_id, plan_item_id, canonical_slug, max_failures,
             )
             if row:
                 record = self._record(row)
@@ -127,6 +136,28 @@ class StudentExperienceStore:
                 student_id, plan_item_id, message[:500],
             )
             return row["failureCount"] if row else 0
+        finally:
+            await conn.close()
+
+    async def mark_escalated(self, student_id: str, plan_item_id: str, reason: str) -> bool:
+        """Force a repeatedly-failing row terminal, whatever its current status.
+
+        The escalation short-circuit in the author stream used to `return`
+        without touching the row, so a row that claim() had just flipped
+        failed->generating stayed 'generating' forever and the UI polled it as
+        if authoring were still in progress. This makes the row 'failed' so the
+        client shows a real error and stops polling. failureCount is left as-is
+        (already at the escalation threshold)."""
+        conn = await get_db_conn()
+        try:
+            row = await conn.fetchrow(
+                '''UPDATE "StudentExperience"
+                   SET status = 'failed', "errorMessage" = $3, "updatedAt" = NOW()
+                   WHERE "studentId" = $1 AND "planItemId" = $2 AND status <> 'ready'
+                   RETURNING id''',
+                student_id, plan_item_id, reason[:500],
+            )
+            return bool(row)
         finally:
             await conn.close()
 

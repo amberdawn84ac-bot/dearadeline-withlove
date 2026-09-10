@@ -267,12 +267,14 @@ async def test_repeated_failure_short_circuits_without_another_author_attempt():
     another LLM call proving what prior attempts already showed."""
     author = AsyncMock()
     notify = AsyncMock()
+    escalate = AsyncMock(return_value=True)
     with (
         patch("app.api.experience_builder.student_experience_store.claim", new=AsyncMock(
             return_value=GenerationClaim("generating", True, {
                 "id": "experience-doomed", "failure_count": EXPERIENCE_FAILURE_ESCALATION_THRESHOLD,
             })
         )),
+        patch("app.api.experience_builder.student_experience_store.mark_escalated", new=escalate),
         patch("app.api.experience_builder._author", new=author),
         patch("app.api.experience_builder._notify_repeated_authoring_failure", new=notify),
     ):
@@ -280,6 +282,7 @@ async def test_repeated_failure_short_circuits_without_another_author_attempt():
 
     author.assert_not_awaited()
     notify.assert_not_awaited()  # only the mark_failed path notifies; the pre-check just short-circuits
+    escalate.assert_awaited_once()  # row is forced terminal so the UI stops polling 'generating'
     assert any("flagged for review" in frame for frame in events)
 
 
@@ -316,4 +319,28 @@ async def test_failure_reaching_threshold_notifies_and_escalates():
         events = [frame async for frame in _stream(_request())]
 
     notify.assert_awaited_once()
+    assert any("flagged for review" in frame for frame in events)
+
+
+@pytest.mark.asyncio
+async def test_unclaimable_wedged_row_is_forced_terminal_not_polled():
+    """claim() refuses a row past the failure threshold. The stream must force
+    it to 'failed' and escalate immediately, not spin the 60s wait loop while
+    the UI keeps polling a stuck 'generating' row."""
+    escalate = AsyncMock(return_value=True)
+    get_mock = AsyncMock()
+    with (
+        patch("app.api.experience_builder.student_experience_store.claim", new=AsyncMock(
+            return_value=GenerationClaim("generating", False, {
+                "id": "experience-wedged", "status": "generating",
+                "failure_count": EXPERIENCE_FAILURE_ESCALATION_THRESHOLD,
+            })
+        )),
+        patch("app.api.experience_builder.student_experience_store.mark_escalated", new=escalate),
+        patch("app.api.experience_builder.student_experience_store.get", new=get_mock),
+    ):
+        events = [frame async for frame in _stream(_request())]
+
+    escalate.assert_awaited_once()
+    get_mock.assert_not_awaited()  # no polling loop
     assert any("flagged for review" in frame for frame in events)
