@@ -142,10 +142,36 @@ def test_robber_baron_evidence_pack_uses_item_pages_and_claim_boundaries():
     assert all(item.evidence_scope for item in results)
 
 
+def test_poison_squad_evidence_pack_supplies_verified_item_pages():
+    # Matches the seed's archive_query, the full investigation title, and the
+    # short queue name — all three must resolve to verified primary sources so
+    # TRUTH_HISTORY authoring's item-level-source gate can pass.
+    for topic in (
+        "Harvey Wiley Poison Squad Bureau of Chemistry formaldehyde milk Pure Food and Drug Act 1906",
+        "The Poison Squad: Formaldehyde Milk and the Fight for Food Safety",
+        "Poison Squad",
+    ):
+        results = _curated_archive_evidence(ResourceQuery(
+            topic=topic, track="TRUTH_HISTORY", resource_types=("PRIMARY_SOURCE",),
+        ))
+        assert {item.id for item in results} == {
+            "archives:pure-food-and-drug-act-1906",
+            "archives:meat-inspection-act-1906",
+        }, topic
+        assert all(item.availability == "VERIFIED_ARCHIVE_ITEM" for item in results)
+        assert all(item.resource_type == "PRIMARY_SOURCE" for item in results)
+        assert all(item.source_url.startswith("https://www.archives.gov/") for item in results)
+        assert all(item.evidence_scope and item.holding_institution for item in results)
+
+
 def test_archive_evidence_pack_does_not_leak_into_unrelated_history():
     assert _curated_archive_evidence(ResourceQuery(
         topic="The Boston Tea Party",
         track="TRUTH_HISTORY",
+    )) == []
+    assert _curated_archive_evidence(ResourceQuery(
+        topic="Poison Squad",
+        track="CREATION_SCIENCE",
     )) == []
 
 

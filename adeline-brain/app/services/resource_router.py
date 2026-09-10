@@ -481,14 +481,9 @@ def _curated_archive_evidence(query: ResourceQuery) -> list[RoutedResource]:
     temporarily unreachable, while their evidence_scope prevents a political
     cartoon from being treated as proof of every claim drawn in it.
     """
-    words = _terms(query.topic)
-    robber_baron_topic = (
-        query.track == "TRUTH_HISTORY"
-        and bool(words & {"railroad", "railroads"})
-        and bool(words & {"oil", "standard", "monopoly"})
-    )
-    if not robber_baron_topic:
+    if query.track != "TRUTH_HISTORY":
         return []
+    words = _terms(query.topic)
 
     verified_at = datetime.now(timezone.utc).isoformat()
     shared = {
@@ -498,6 +493,85 @@ def _curated_archive_evidence(query: ResourceQuery) -> list[RoutedResource]:
         "availability": "VERIFIED_ARCHIVE_ITEM",
         "verified_at": verified_at,
     }
+
+    poison_squad_topic = (
+        ("poison" in words and "squad" in words)
+        or "wiley" in words
+        or ({"pure", "food", "drug"} <= words)
+    )
+    if poison_squad_topic:
+        return [
+            RoutedResource(
+                id="archives:pure-food-and-drug-act-1906",
+                title="Pure Food and Drug Act (1906)",
+                provider="U.S. National Archives",
+                source_url="https://www.archives.gov/milestone-documents/pure-food-and-drug-act",
+                description=(
+                    "Digitized enrolled federal law barring the interstate sale of adulterated or "
+                    "misbranded food and drugs and giving the Bureau of Chemistry authority to test "
+                    "and enforce."
+                ),
+                creator_or_issuer="United States Congress",
+                source_date="1906-06-30",
+                holding_institution="U.S. National Archives",
+                source_identifier="34 Stat. 768; Record Group 11",
+                source_item_id="34-stat-768",
+                evidence_scope=(
+                    "Establishes what the 1906 law prohibited and who could enforce it. It is not by "
+                    "itself proof of how well enforcement worked or how industry complied."
+                ),
+                license="PUBLIC_DOMAIN_US_GOVERNMENT",
+                commercial_use="LINK_OR_PUBLIC_DOMAIN_TEXT",
+                discovery_prompt=(
+                    "Mark every practice the act prohibits, every power it gives the Bureau of Chemistry, "
+                    "and every limit or exception written into it."
+                ),
+                portfolio_output=(
+                    "Cite section numbers in a table of what the law banned versus what it left "
+                    "unregulated."
+                ),
+                **shared,
+            ),
+            RoutedResource(
+                id="archives:meat-inspection-act-1906",
+                title="Meat Inspection Act (1906)",
+                provider="U.S. National Archives",
+                source_url="https://www.archives.gov/milestone-documents/meat-inspection-act",
+                description=(
+                    "Digitized enrolled federal law requiring USDA inspection of meat-packing plants "
+                    "and carcasses, signed the same day as the Pure Food and Drug Act."
+                ),
+                creator_or_issuer="United States Congress",
+                source_date="1906-06-30",
+                holding_institution="U.S. National Archives",
+                source_identifier="34 Stat. 674; Record Group 11",
+                source_item_id="34-stat-674",
+                evidence_scope=(
+                    "Documents the inspection regime Congress enacted for meat specifically. Compare "
+                    "its requirements with the food-and-drug law and with later reports before judging "
+                    "outcomes."
+                ),
+                license="PUBLIC_DOMAIN_US_GOVERNMENT",
+                commercial_use="LINK_OR_PUBLIC_DOMAIN_TEXT",
+                discovery_prompt=(
+                    "Identify what inspection the act requires, who pays for it, and what it does not "
+                    "cover."
+                ),
+                portfolio_output=(
+                    "Add a timeline card distinguishing the inspection rule on paper from evidence of "
+                    "how it was carried out."
+                ),
+                **shared,
+            ),
+        ]
+
+    robber_baron_topic = (
+        bool(words & {"railroad", "railroads"})
+        and bool(words & {"oil", "standard", "monopoly"})
+    )
+    if not robber_baron_topic:
+        return []
+
     return [
         RoutedResource(
             id="archives:pacific-railway-act-1862",
