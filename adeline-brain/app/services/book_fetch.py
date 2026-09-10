@@ -28,21 +28,21 @@ async def fetch_from_standard_ebooks(author: str, title: str, timeout: int = 30)
         f"/dist/{author_slug}_{title_slug}.epub",
         f"/dist/{author_slug}_{title_slug}.kepub.epub",
     ]
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        for epub_path in epub_paths:
-            url = f"{base_url}{epub_path}"
-            try:
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            for epub_path in epub_paths:
+                url = f"{base_url}{epub_path}"
                 response = await client.get(url, follow_redirects=True)
                 if response.status_code == 200:
                     return response.content
-            except httpx.RequestError:
-                continue
+    except Exception as exc:
+        logger.warning(f"[BookFetch] Standard Ebooks lookup failed: {exc}")
     return None
 
 
 async def fetch_from_gutendex(title: str, timeout: int = 30) -> Optional[bytes]:
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        try:
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             search_response = await client.get("https://gutendex.com/books", params={"search": title})
             data = search_response.json()
             results = data.get("results", [])
@@ -53,14 +53,15 @@ async def fetch_from_gutendex(title: str, timeout: int = 30) -> Optional[bytes]:
                 return None
             epub_response = await client.get(epub_url)
             return epub_response.content if epub_response.status_code == 200 else None
-        except Exception:
-            return None
+    except Exception as exc:
+        logger.warning(f"[BookFetch] Gutendex lookup failed: {exc}")
+        return None
 
 
 async def fetch_from_internet_archive(title: str, timeout: int = 30) -> Optional[bytes]:
     """Fetch an unrestricted EPUB from Internet Archive when one is available."""
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        try:
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             search = await client.get(
                 "https://archive.org/advancedsearch.php",
                 params={
@@ -86,8 +87,8 @@ async def fetch_from_internet_archive(title: str, timeout: int = 30) -> Optional
                         )
                         if response.status_code == 200 and response.content.startswith(b"PK"):
                             return response.content
-        except Exception as exc:
-            logger.warning(f"[BookFetch] Internet Archive lookup failed: {exc}")
+    except Exception as exc:
+        logger.warning(f"[BookFetch] Internet Archive lookup failed: {exc}")
     return None
 
 

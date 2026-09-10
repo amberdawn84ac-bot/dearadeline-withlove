@@ -38,8 +38,16 @@ def app():
 @pytest_asyncio.fixture
 async def client(app):
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        yield c
+    with patch(
+        "app.api.middleware._decode_jwt",
+        return_value={"sub": "student-test", "app_metadata": {"role": "STUDENT"}},
+    ):
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://test",
+            headers={"Authorization": "Bearer test-token"},
+        ) as c:
+            yield c
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -111,6 +119,17 @@ async def test_get_book_found(client):
     assert data["id"] == "book-001"
     assert data["author"] == "Jane Austen"
     assert data["grade_band"] == "9-12"
+
+
+@pytest.mark.asyncio
+async def test_get_book_tolerates_missing_optional_metadata(client):
+    legacy_row = {"id": "book-legacy", "title": "A Legacy Book", "author": "A. Reader"}
+    mock_conn = _make_mock_conn(row=legacy_row)
+    with patch("app.api.bookshelf._get_conn", new_callable=AsyncMock, return_value=mock_conn):
+        resp = await client.get("/bookshelf/book-legacy")
+    assert resp.status_code == 200
+    assert resp.json()["format"] == "epub"
+    assert resp.json()["coverUrl"] is None
 
 
 @pytest.mark.asyncio

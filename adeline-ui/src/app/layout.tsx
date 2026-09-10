@@ -35,6 +35,7 @@ const emilysCandy = localFont({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://www.dearadeline.co"),
   title: "Dear Adeline Academy — Education as Unique as Your Child",
   description: "An AI-powered homeschool learning companion that adapts to your student's interests, tracks skills toward graduation, and transforms curiosity into achievement.",
   icons: {

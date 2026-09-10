@@ -59,6 +59,20 @@ async def test_provider_failure_does_not_break_router(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_http_client_setup_failure_keeps_offline_resources(monkeypatch):
+    class BrokenClient:
+        def __init__(self, *_args, **_kwargs):
+            raise RuntimeError("bad proxy configuration")
+
+    monkeypatch.setattr("app.services.resource_router.httpx.AsyncClient", BrokenClient)
+    packet = await ResourceRouter().search(ResourceQuery(
+        topic="build a game", track="CREATIVE_ECONOMY", resource_types=("GAME_BUILDER",),
+    ))
+    assert any(item["id"] == "makecode:arcade" for item in packet["resources"])
+    assert packet["provider_failures"] == ["loc", "smithsonian", "nasa", "inaturalist"]
+
+
+@pytest.mark.asyncio
 async def test_lesson_resource_block_is_live_not_canonical_content(monkeypatch):
     async def fake_search(_query):
         return {"resources": [{"id": "makecode:arcade"}], "rules": ["unknown means link"]}

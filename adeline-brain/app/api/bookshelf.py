@@ -92,6 +92,29 @@ class AddBookResponse(BaseModel):
     sourceLibrary: Optional[str] = None
 
 
+def _row_value(row, *keys: str, default=None):
+    """Read optional fields from asyncpg records and legacy/test mappings safely."""
+    for key in keys:
+        try:
+            return row[key]
+        except (KeyError, TypeError):
+            continue
+    return default
+
+
+def _book_response(row) -> BookResponse:
+    """Normalize current DB rows and rows written before optional metadata existed."""
+    return BookResponse(
+        id=str(row["id"]), title=row["title"], author=row["author"],
+        sourceLibrary=_row_value(row, "sourceLibrary"),
+        isDownloaded=bool(_row_value(row, "isDownloaded", default=False)),
+        format=_row_value(row, "format", default="epub"),
+        coverUrl=_row_value(row, "coverImageUrl", "coverUrl"),
+        track=_row_value(row, "track"), lexile_level=_row_value(row, "lexile_level"),
+        grade_band=_row_value(row, "grade_band"), description=_row_value(row, "description"),
+    )
+
+
 # ── Background waterfall fetch ────────────────────────────────────────────────
 
 async def _run_waterfall(book_id: str, title: str, author: str):
@@ -150,22 +173,7 @@ async def list_books(track: Optional[str] = Query(None, description="Filter by c
                 ORDER BY title
                 """
             )
-        return [
-            BookResponse(
-                id=str(r["id"]),
-                title=r["title"],
-                author=r["author"],
-                sourceLibrary=r["sourceLibrary"],
-                isDownloaded=r["isDownloaded"],
-                format=r["format"],
-                coverUrl=r["coverImageUrl"],
-                track=r["track"],
-                lexile_level=r["lexile_level"],
-                grade_band=r["grade_band"],
-                description=r["description"],
-            )
-            for r in rows
-        ]
+        return [_book_response(r) for r in rows]
     finally:
         await conn.close()
 
@@ -186,19 +194,7 @@ async def get_book(book_id: str):
         )
         if not r:
             raise HTTPException(status_code=404, detail="Book not found")
-        return BookResponse(
-            id=str(r["id"]),
-            title=r["title"],
-            author=r["author"],
-            sourceLibrary=r["sourceLibrary"],
-            isDownloaded=r["isDownloaded"],
-            format=r["format"],
-            coverUrl=r["coverImageUrl"],
-            track=r["track"],
-            lexile_level=r["lexile_level"],
-            grade_band=r["grade_band"],
-            description=r["description"],
-        )
+        return _book_response(r)
     finally:
         await conn.close()
 

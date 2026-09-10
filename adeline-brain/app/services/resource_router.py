@@ -696,12 +696,20 @@ class ResourceRouter:
         except Exception:
             pass
 
-        async with httpx.AsyncClient(timeout=httpx.Timeout(6, connect=3), follow_redirects=True, headers={"User-Agent": "DearAdelineResourceRouter/1.0"}) as client:
-            calls = [fn(query, client) for fn in (_loc, _smithsonian, _nasa, _inaturalist, _curated)]
-            settled = await asyncio.gather(*calls, return_exceptions=True)
+        provider_names = ("loc", "smithsonian", "nasa", "inaturalist", "curated")
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(6, connect=3), follow_redirects=True, headers={"User-Agent": "DearAdelineResourceRouter/1.0"}) as client:
+                calls = [fn(query, client) for fn in (_loc, _smithsonian, _nasa, _inaturalist, _curated)]
+                settled = await asyncio.gather(*calls, return_exceptions=True)
+        except Exception as client_error:
+            try:
+                curated = await _curated(query, None)
+            except Exception as curated_error:
+                curated = curated_error
+            settled = [client_error, client_error, client_error, client_error, curated]
         resources: list[RoutedResource] = []
         failures = []
-        for name, result in zip(("loc", "smithsonian", "nasa", "inaturalist", "curated"), settled):
+        for name, result in zip(provider_names, settled):
             if isinstance(result, Exception):
                 failures.append(name)
                 continue

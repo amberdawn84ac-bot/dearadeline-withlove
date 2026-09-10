@@ -92,12 +92,11 @@ jobs:
           # single change: mostly tests written against a SQLAlchemy ORM layer
           # since replaced by raw asyncpg (test_hippocampus_source_type.py,
           # test_pgvector_duplicate_detection.py), and tests written before
-          # their endpoint required auth (test_projects_api.py,
-          # test_e2e_bookshelf.py, parts of test_conversation_api.py). Fixing
+          # their endpoint required auth (test_projects_api.py and parts of
+          # test_conversation_api.py). Fixing
           # those is real product/test work, not a CI-config change, so they
           # stay ignored here rather than being silently re-broken.
           pytest tests/ --tb=short -q \
-            --ignore=tests/test_e2e_bookshelf.py \
             --ignore=tests/test_conversation_api.py \
             --ignore=tests/test_hippocampus_source_type.py \
             --ignore=tests/test_justice_parser.py \
