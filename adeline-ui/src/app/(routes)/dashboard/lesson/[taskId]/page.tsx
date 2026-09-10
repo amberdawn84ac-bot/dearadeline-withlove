@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import FamilyCanonicalLesson from '@/components/lessons/FamilyCanonicalLesson';
 import SpaceConversation from '@/components/spaces/SpaceConversation';
-import SpacePlayer from '@/components/spaces/SpacePlayer';
 import {
   buildExperience, getLearningPlan, getSavedExperience, getSavedTodayPlan,
   lessonRequestFromSuggestion,
@@ -233,7 +232,6 @@ export function CanonicalExperiencePage({ view = 'lesson' }: { view?: 'lesson' |
         ? (
           <div className="space-y-6">
             <SpaceHeader task={task} lesson={lesson} />
-            <SpacePlayer lesson={lesson} studentId={student.id} planItemId={task.id} />
             <SpaceConversation studentId={student.id} gradeLevel={student.gradeLevel ?? '8'} planItemId={task.id} />
           </div>
         )
