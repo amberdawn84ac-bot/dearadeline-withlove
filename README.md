@@ -1,178 +1,363 @@
-# Dear Adeline 2.0 — Truth-First K-12 AI Mentor
+# Dear Adeline 2.0
 
-A monorepo ecosystem grounded in the **10-Track Constitution**. Built for Christian homeschool families who want their kids to think clearly, act courageously, and know how to survive in the real world.
+**An interest-led AI learning companion for Christian homeschool families, ages 5–18.**
 
-## Packages
+Dear Adeline is not a worksheet generator or a collection of subject-specific chatbots. It is a family learning system built around a simple loop:
 
-| Package | Tech | Role |
-|---------|------|------|
-| `adeline-core` | TypeScript + Zod | Shared types, enums, schemas — source of truth |
-| `adeline-brain` | FastAPI + Python | Intelligence layer, Witness Protocol, 6-agent orchestration |
-| `adeline-ui` | Next.js 14 + Tailwind | Experience layer, GenUIRenderer, pricing, dashboard |
+**conversation → curiosity → investigation → learning experience → demonstrated understanding → mastery/credit → portfolio**
 
-## The 10-Track Constitution
+The goal is to help children recognize learning opportunities in real life, investigate them deeply, build useful capability, and leave evidence of what they can actually do.
 
-| # | Track | What It Teaches |
-|---|-------|-----------------|
-| 1 | **God's Creation & Science** | Experiment-first science through the Sovereign Lab — 3 chaos levels |
-| 2 | **Health & Naturopathy** | How your body actually works; what the system won't tell you |
-| 3 | **Homesteading & Stewardship** | Grid-down survival: food, water, building, medicine without a store |
-| 4 | **Government & Economics** | How power actually works — not the textbook version |
-| 5 | **Justice & Change-making** | Corporate capture tactics — flipped for justice instead of profit |
-| 6 | **Discipleship & Discernment** | Scripture in original context; no hollow motivation |
-| 7 | **Truth-Based History** | Primary sources, not the sanitized version |
-| 8 | **English Language & Literature** | Every story is a truth claim — read it like one |
-| 9 | **Applied Mathematics** | Math you will actually use: budgets, land, market pricing |
-| 10 | **Creative Economy** | Make beautiful things with your hands. Price them. Sell them. |
+> **Activity ≠ mastery. Credit is earned from demonstrated learning, not seat time or exposure.**
 
-## Architecture
+## What Dear Adeline Is Now
 
-```
-adeline-ui (Next.js 14, port 3000)
-    └── REST → adeline-brain (FastAPI, port 8000)
-                    ├── pgvector  (Hippocampus) — primary source chunks, semantic search
-                    ├── neo4j     (GraphRAG)    — 64 concept nodes, 55 prerequisite edges
-                    └── redis     (Upstash)     — session cache, daily bread
-```
+The current architecture deliberately moved away from the old multi-agent lesson generator. Adeline has **one canonical experience-generation path** in `adeline-brain/app/curriculum/canonical_author.py`.
 
-### Production Security
+Specialist logic still exists internally, but agents do not compete to author separate lessons. They support planning, resource selection, personalization, pedagogy, and portfolio/learning-record decisions around the canonical experience contract.
 
-- **Auth**: Supabase JWT verification (ES256 via JWKS or HS256 shared secret) on every endpoint — no unauthenticated routes
-- **Ownership enforcement**: `verify_student_access()` checks JWT `sub` claim against URL student IDs — students see only their own data, parents see their children, admins see all
-- **Internal API keys**: Server-to-server calls (lesson pipeline → learning records) use `X-Internal-Key` header
-- **Rate limiting**: 120 req/min per IP via slowapi
-- **Config**: Centralized `app/config.py` — production refuses to start without explicit credentials
-- **Migrations**: `entrypoint.sh` runs Prisma migrations before uvicorn startup
-- **CORS**: Configurable via `CORS_ORIGINS` environment variable
+The learner sees **one Adeline**, not a parade of bots.
 
-## 6-Agent Orchestration
+### The Core Learning Shapes
 
-| Agent | Tracks | What It Does |
+**Family investigations** are shared across siblings for history and science. The family investigates one real question together, while each learner contributes at an appropriate depth.
+
+**Individual progression** is used where prerequisite chains matter, especially mathematics and literacy. BKT/ZPD and sequence policies determine what each learner is ready to work on.
+
+This preserves the family experience without pretending that every subject should be taught the same way.
+
+## 10-Track Curriculum
+
+The track enum in `adeline-core/src/types.ts` is the canonical source of truth.
+
+| # | Track | Traditional Equivalent |
 |---|---|---|
-| **HistorianAgent** | Truth History | Witness Protocol (0.82 cosine); PRIMARY_SOURCE focus |
-| **JusticeAgent** | Justice & Change-making | Power-capture framing; primary source evidence (lobbying records, civil rights docs) |
-| **ScienceAgent** | Creation Science, Homesteading | Experiment-first for science; survival-skill lens for homesteading |
-| **LiteratureAgent** | English & Literature | Book-context aware (pulls active ReadingSession); literary analysis |
-| **PracticalAgent** | Applied Math, Creative Economy | Applied skills content — math, building, making, selling |
-| **DiscipleshipAgent** | Health, Government, Discipleship | Worldview synthesis; scripture integration |
-| **RegistrarAgent** | All tracks (post-processing) | xAPI learning records + CASE transcript credit — always runs last |
+| 1 | **God's Creation & Science** | Biology / Earth Science |
+| 2 | **Health & Naturopathy** | Health Science |
+| 3 | **Homesteading & Stewardship** | Agricultural Science & Technology |
+| 4 | **Government & Economics** | Government & Economics |
+| 5 | **Justice & Change-making** | Social Studies / Civics |
+| 6 | **Discipleship** | Philosophy & Ethics |
+| 7 | **Truth-Based History** | American / World History |
+| 8 | **English Language & Literature** | English Language Arts |
+| 9 | **Applied Mathematics** | Mathematics |
+| 10 | **Creative Economy** | Art, Design & Entrepreneurship |
 
-## Student Onboarding & Personalization
+## Canonical Experience Engine
 
-Every student starts with a required onboarding flow that Adeline uses to personalize all future lessons:
+`adeline-brain/app/curriculum/canonical_author.py` is the lesson-authoring contract.
 
-- **Profile Data**: Name, grade level, interests (16 tags), learning style (EXPEDITION/CLASSIC), pace multiplier
-- **State Alignment**: Curriculum standards mapped to student's state (Oklahoma, Texas, etc.)
-- **Graduation Planning**: Target graduation year for long-term credit tracking
-- **Settings**: Fully editable at any time via `/settings` — changes apply immediately to next lesson
+Current experience modes include:
 
-Adeline adapts to:
-- **Grade-appropriate vocabulary & concepts** based on overall grade + subject-specific mastery overrides (Math, ELA, Science, History)
-- **Cross-curricular connections** (EXPEDITION mode) or single-subject focus (CLASSIC mode)
-- **Student interests** — examples and scenarios reference their declared interests
-- **Pacing** — lesson length scales from 1.0x (standard) to 2.0x (sprint acceleration)
+- `investigation`
+- `stem`
+- `steam`
+- `arts_integrated`
+- `maker_build`
+- `design_challenge`
+- `creative_demonstration`
+- `family_project`
+- `public_interest_investigation`
+- `civic_action_project`
 
-## The Witness Protocol
+Every generated experience is validated against structural and mastery-evidence rules before it can become a learner experience.
+
+`experience_contract.py` gives experience blocks explicit stages:
+
+**INVITATION → DISCOVERY → ACTION → CREATION → DEMONSTRATION → REFLECTION → RESOURCE**
+
+Family investigations are additionally validated by `family_style.py` and the current format contract.
+
+### The Mission Layer
+
+The current internal mission team is intentionally small and accountable:
+
+| Component | Responsibility |
+|---|---|
+| **MissionArchitectAgent** | Turns ranked curriculum candidates into finishable learner missions and applies sequencing gates |
+| **CurriculumLibrarianAgent** | Finds reusable canonical teaching before generation is requested |
+| **PortfolioCuratorAgent** | Defines the natural portfolio contribution for the experience |
+| **ResourceIntelligenceAgent** | Selects learner-targeted resource packets |
+
+Other internal components handle learner context, cognitive state, pedagogy, curriculum planning, adaptation, and persona. These are supporting intelligence modules, not separate lesson-authoring systems.
+
+The **Registrar/credit layer** remains the authority for transcript and learning-record decisions. Credit is never awarded merely because a learner was exposed to a standard.
+
+## Adaptive Learning Plan
+
+The Today plan is generated from actual learner state rather than a fixed year-long assignment list.
+
+It can use:
+
+- grade and declared interests
+- subject-specific mastery
+- BKT/ZPD readiness
+- prerequisite relationships
+- sequence policies and bridge requirements
+- recent completed experiences
+- track balance
+- cross-track connections
+- standards and credit gaps
+- available canonical investigations
+- available resources
+- portfolio/project opportunities
+
+The plan distinguishes between **family investigations** and **individual skill targets**. It can also maintain upcoming investigations without presenting them as already-started lessons.
+
+The plan is adaptive. It is recalculated when evidence, mastery, pace, interests, or credit needs change.
+
+## Truth and Evidence
+
+### Witness Protocol
 
 > "A matter must be established by the testimony of two or three witnesses." — Deuteronomy 19:15
 
-The Witness Protocol is the HistorianAgent's verification gate for historical claims. Every history lesson must pass a **0.82 cosine similarity threshold** against the verified Hippocampus corpus before content reaches the student. If the threshold is not met:
+The Witness Protocol is now **track-aware**, not a universal lesson gate.
 
-- `ARCHIVE_SILENT` is returned
-- The Researcher tool searches archive.org, gutenberg.org, and archives.gov for verified sources
-- If still unverified, the student receives a `RESEARCH_MISSION` block — go find the primary source yourself
+| Track | Current threshold |
+|---|---:|
+| Truth-Based History | 0.82 |
+| Justice & Change-making | 0.82 |
+| God's Creation & Science | 0.72 |
+| All other tracks | 0.0, Witness does not gate generation |
 
-Historical claims in adjacent tracks (Justice, Government) may also be verified through this gate. All other tracks generate content through their own protocols without the Witness gate.
+For history and justice, evidence below the configured threshold can trigger `ARCHIVE_SILENT`, followed by researcher fallback or a `RESEARCH_MISSION` rather than fabricated certainty.
 
-## Sovereign Lab (Science Track)
+Historical work prioritizes primary evidence and distinguishes:
 
-Experiments over textbooks. Each experiment has:
-- **Chaos Level** — Sprout 🌱 / Scout 🔭 / Sovereign 🔥
-- **Creation Connection** — Scripture + real science explanation
-- **Film This** — social media kit for documenting discoveries
-- **Credit** — 0.25 Laboratory Science credit per completed experiment
+**primary evidence → historical interpretation → Adeline synthesis**
 
-## Daily Bread Widget
+Legitimate disagreement is represented through competing evidence instead of being hidden behind an authoritative-sounding answer.
 
-Scripture study integrated into every student dashboard:
+### Research
 
-- **Daily verse** with original language (Hebrew/Greek), meaning, and translation notes
-- **Deep Dive Study** — generates a guided study prompt covering original context, word meanings, translation differences, and historical/cultural hints
-- **Integration** — study prompts seamlessly connect to Adeline chat for deeper exploration
+The live researcher fallback uses site-scoped DuckDuckGo search. **Tavily is no longer a dependency.**
 
-## Portfolio Philosophy
+Never invent citations, studies, statistics, documents, experiments, or quotations.
 
-A portfolio is a record of **accomplishments, not assignments**.
+## Mastery, Credit, and Portfolio
 
-- "I filed this clemency petition — here's the tracking number"
-- "I built this raised bed — here's the harvest log"
-- "I sold these at the farmers market — here's what I charged"
+Dear Adeline treats the child's work as evidence of capability.
 
-Not: "I completed 20 assignments."
+### Mastery
 
-## Capability status
+The system includes BKT/ZPD mastery tracking, prerequisite-aware sequencing, adaptive learning algorithms, and spaced repetition. Algorithms are kept separate from database access so the learning logic can be tested independently.
 
-The detailed, testable source of truth is
-[`docs/CAPABILITY_CONTRACT.md`](docs/CAPABILITY_CONTRACT.md). “Code exists” and
-“the complete family journey is verified” are deliberately different claims.
+### Credit
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Bookshelf & Reading Coach | Partial | Shelf and reader exist; full identity-to-credit journey still needs enabled CI coverage |
-| Project Catalog & Guide | Partial | Catalog and sealing exist; artifact and credit traceability still need full verification |
-| Spaced Repetition | Present | SM-2/BKT logic exists; whole-journey behavior is not yet verified |
-| Parent Dashboard | Partial | Multi-student UI exists; role and household flows are being integration-tested |
-| Auth Hardening | Partial | Ownership helpers exist; the complete route matrix is not yet proven |
-| Track-Specific Agents | Present | Specialist routing exists; output must satisfy the new experience contract |
-| Adaptive internal plan | Partial | Exact-grade coverage and forecasts exist; selection is still being made fully evidence-driven |
-| Learner-facing year path | Not a feature | Requirements remain private; learners see Today and meaningful experiences |
-| Content Expansion | Ongoing | Nightly self-seeding + manual corpus expansion across all 10 tracks |
+The Registrar/credit system records learning activity and transcript credit, but exposure alone is not enough. The canonical authoring layer explicitly prevents non-exposure mastery from being treated as demonstrated mastery.
 
-## Pricing
+### Portfolio
 
-| Tier | Monthly | Yearly | Students |
-|------|---------|--------|----------|
-| Free | $0 | $0 | 1 |
-| Student | $9.99 | $107.89 | 1 |
-| Parent | $29.99 | $323.89 | 5 |
-| Teacher / Co-op | $49.99 | $539.89 | 40 |
+**Portfolio = accomplishments, not assignments.**
 
-7-day free trial on all paid tiers. +$2.99/mo per extra student on Parent/Teacher.
+Examples:
 
-## Quick Start
+- a child builds a raised bed and records the harvest
+- investigates a water-quality question and documents the data
+- researches a historical claim from primary records
+- completes a civic-action project with a real recipient
+- makes and prices something for a real market
 
-```bash
-# 1. Copy env file and fill in secrets
-cp adeline-brain/.env.example adeline-brain/.env
+The point is not to accumulate completed worksheets. The point is to build a body of evidence showing what the learner can understand, make, explain, investigate, and do.
 
-# 2. Build and start all services
-docker-compose up --build
+## Science: The Sovereign Lab
 
-# 3. Seed the Hippocampus and knowledge graph (run once)
-cd adeline-brain
-python scripts/seed_curriculum.py
-python scripts/seed_hippocampus.py
-python scripts/seed_knowledge_graph.py
+Science is investigation-first.
 
-# 4. Access the UI
-open http://localhost:3000
+Experiences emphasize observation, measurement, variables, controls, evidence, data, competing explanations, replication, and conclusions.
 
-# 5. adeline-brain API docs
-open http://localhost:8000/docs
+The Sovereign Lab supports multiple levels of challenge so a younger child and an older sibling can participate in the same investigation without receiving the same intellectual task.
+
+Simple experiments are valuable when they produce genuine observation and reasoning. Doing a craft does not automatically make it science.
+
+## Family Learning
+
+History and science are intentionally family-shared.
+
+A single living investigation can support very different contributions:
+
+- a younger learner observes, counts, compares, draws, or measures
+- an older learner analyzes primary sources, models systems, calculates consequences, or defends a conclusion
+
+Math and literacy remain learner-scoped because their prerequisite structures require individual progression.
+
+The architecture therefore avoids both extremes:
+
+- one identical worksheet for every child
+- completely separate school for every sibling
+
+## Discipleship and Worldview
+
+Dear Adeline is designed for Christian homeschool families and integrates biblical worldview, Scripture, discernment, character, and practical wisdom.
+
+It should not distort evidence to force a predetermined conclusion. Biblical interpretation, historical context, empirical evidence, inference, and unresolved questions remain distinguishable.
+
+## Practical Learning
+
+Learning is connected to life wherever appropriate:
+
+- cooking and food systems
+- gardening and agriculture
+- water and soil
+- building and repair
+- tools and household systems
+- money, budgeting, pricing, and markets
+- entrepreneurship and negotiation
+- civic participation and public-interest work
+- writing, rhetoric, research, and communication
+- health literacy and evaluation of competing health claims
+
+Cross-disciplinary investigations are encouraged when the connection is real, not because every lesson needs every subject attached to it.
+
+## Student Experience
+
+### Onboarding and Personalization
+
+Student profiles can include grade level, interests, learning style, pacing, state alignment, graduation target, and subject-specific mastery context.
+
+Personalization changes the **path, examples, scaffolding, and depth**, not the underlying expectation for honest evidence and demonstrated understanding.
+
+### Today
+
+Learners are not presented with a rigid year-at-a-glance checklist as the product experience. Today is built around meaningful current work, family investigations, individual progression, and projects.
+
+### Conversation
+
+Adeline is an educational guide and intellectual partner. It can ask questions, surface assumptions, provide hints, help interpret evidence, diagnose misconceptions, scaffold difficult concepts, suggest investigations, and help a learner explain what they know.
+
+It should not become an answer vending machine.
+
+## Daily Bread
+
+The student experience includes a Daily Bread devotional area with Scripture study and deeper exploration of original-language, context, translation, and cultural questions where appropriate.
+
+## Technical Architecture
+
+```text
+adeline-ui (Next.js 14, App Router)
+        │
+        │ REST
+        ▼
+adeline-brain (FastAPI)
+        │
+        ├── Canonical Experience Engine
+        ├── Adaptive Learning Plan
+        ├── Mission / Resource Intelligence
+        ├── Witness Protocol + Researcher
+        ├── BKT / ZPD / Sequencing / Spaced Repetition
+        ├── Mastery + Credit + Portfolio services
+        │
+        ├── PostgreSQL
+        │     └── pgvector / Hippocampus
+        │
+        └── Redis
+              └── cache + rate limiting only
 ```
 
-## Environment Variables
+**Postgres is the source of truth. Neo4j is no longer used.**
 
-See `adeline-brain/.env.example` for all required keys:
+The curriculum graph, prerequisite relationships, learner state, canonical experiences, journal/portfolio records, credit records, and other persistent application state live in Postgres.
 
-- `ADELINE_ENV` — `development` (default) or `production` (enables fail-fast credential checks)
-- `POSTGRES_DSN` — pgvector database (Hippocampus)
-- `OPENAI_API_KEY` — embeddings (`text-embedding-3-small`)
-- `ANTHROPIC_API_KEY` — lesson synthesis (`claude-sonnet-4-6`)
-- Curriculum relationships, prerequisites, standards, and mastery use the existing Postgres database.
-- `SUPABASE_JWT_SECRET` — JWT verification (required in production)
-- `INTERNAL_API_KEY` — server-to-server auth for internal endpoints
-- `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` — session cache (or `REDIS_URL` for local)
-- `CORS_ORIGINS` — comma-separated allowed origins (default: `http://localhost:3000`)
-- `STRIPE_SECRET_KEY` + price IDs — subscription billing
-- `HYGRAPH_ENDPOINT` / `HYGRAPH_TOKEN` — headless CMS
+Redis is a cache and rate-limit layer, not a source of truth.
+
+## Repository Structure
+
+```text
+adeline-core/
+  Shared TypeScript types and Zod schemas
+
+adeline-brain/
+  FastAPI intelligence layer
+  app/curriculum/       canonical experience contracts
+  app/agents/           planning, pedagogy, learner, resource intelligence
+  app/algorithms/       pure learning algorithms
+  app/protocols/        evidence and content protocols
+  app/services/         credit, portfolio, learner context, synthesis, etc.
+  app/api/              application endpoints
+  prisma/               PostgreSQL schema
+
+adeline-ui/
+  Next.js student and parent experience
+  dashboard, lessons, journal, projects, reading, onboarding, checkout
+
+adeline-world/
+  fenced-off legacy prototype; not part of the production workspace
+```
+
+## Key Production Capabilities
+
+The application currently includes substantial infrastructure for:
+
+- personalized Today plans
+- family investigations
+- canonical lesson/experience generation
+- learner-scoped progression and prerequisite tracking
+- BKT/ZPD mastery support
+- spaced repetition
+- projects and portfolio evidence
+- journal and learning records
+- transcript and credit workflows
+- Daily Bread
+- bookshelf / reading experience
+- family and parent management
+- COPPA consent flow
+- Stripe checkout/subscriptions
+- Supabase JWT authentication and ownership checks
+- health and diagnostic endpoints
+
+Not every end-to-end family journey is considered complete merely because the underlying code exists. See `docs/CAPABILITY_CONTRACT.md` for the current testable capability contract.
+
+## Security and Privacy
+
+- Supabase JWT verification
+- student/household ownership enforcement
+- internal API authentication
+- rate limiting
+- configurable CORS
+- production credential checks
+- parent consent/COPPA flow
+- least-privilege data access patterns
+
+Child and household data should be treated as protected application data throughout the stack.
+
+## Model Routing
+
+The current model factory is **Gemini-first** by default.
+
+- `ADELINE_MODEL` defaults to `gemini-2.5-flash`
+- `LEARNLM_MODEL` is used for pedagogical generation and adaptation
+- Claude and GPT model families remain available through the model factory when configured
+
+Do not document Claude as the default model unless the runtime configuration has actually been changed.
+
+## Development
+
+```bash
+cp adeline-brain/.env.example adeline-brain/.env
+
+docker-compose up --build
+
+# Run the UI at http://localhost:3000
+# Run the API at http://localhost:8000/docs
+```
+
+For current routes, data models, environment variables, and implementation details, use the source code and `CLAUDE.md` as the engineering references.
+
+## Documentation Truth Rule
+
+This README describes the **current architecture**, not historical architecture that happens to remain in old design documents.
+
+When implementation changes, update the README and `CLAUDE.md` together.
+
+Do not reintroduce the retired 4-agent orchestrator, Neo4j, Tavily, or competing lesson-generation pipelines merely because an older document still mentions them.
+
+## Current Status
+
+Dear Adeline is an actively developed product. Some capabilities are implemented and some remain under integration testing.
+
+The important distinction is:
+
+**implemented code ≠ verified family journey**
+
+That distinction is intentional and should remain visible in the project documentation.
