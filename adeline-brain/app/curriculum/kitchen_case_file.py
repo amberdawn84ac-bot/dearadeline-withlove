@@ -388,7 +388,7 @@ Ask two willing people to write the same sentence on separate cards: "The jar wa
 
 Look at letter height, slant, and how a letter like "a" or "g" is formed. Three differences are more interesting than a feeling that it "looks like" someone.
 
-Do not use a famous murder note, a ransom letter, or a picture of a harmed child as the sample. Those cases are not required to learn comparison, and they do not belong in this family lesson.
+Do not use a ransom note from a real case, or a picture of a harmed child, as the sample. Those cases are not required to learn comparison, and they do not belong in this family lesson.
 
 A handwriting opinion from the kitchen is practice. Document examiners use known samples taken on purpose, and they still talk about limitations.
             """,
@@ -702,7 +702,7 @@ def _payload() -> dict[str, Any]:
             "Change vocabulary and how much of the log a learner writes alone. Do not change the scene, the sources, or the rule that one clue is not proof.",
             "Younger learners notice, count, and place cards. They are not assigned a culprit or a graphic case.",
             "Older learners write limitations and measurements. They do not receive a more violent version of the same mystery.",
-            "Never add a real victim, a staged injury, or a famous murder as the 'advanced' text.",
+            "Never add a real victim, a staged injury, or a famous criminal case as the 'advanced' text.",
         ],
         "family_roles": ROLES,
         "contract_version": CONTRACT_VERSION,
