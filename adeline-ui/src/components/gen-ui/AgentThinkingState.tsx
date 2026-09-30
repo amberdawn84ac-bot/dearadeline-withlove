@@ -1,16 +1,13 @@
 "use client";
 
 /**
- * AgentThinkingState — Transparent AI "thinking" visualization.
- *
- * Cycles through agent activity messages while waiting for lesson generation,
- * giving students and parents insight into Adeline's multi-agent orchestration.
- * Uses framer-motion for smooth, physics-based transitions.
+ * AgentThinkingState — what the learner sees while a lesson is prepared.
+ * One Adeline is working. These lines are status, not a cast of bots.
  */
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Brain, BookOpen, Search, Sparkles, GraduationCap, Lightbulb } from "lucide-react";
+import { Brain, BookOpen, Search, Lightbulb } from "lucide-react";
 
 // ── Thinking step configuration ────────────────────────────────────────────────
 
@@ -24,46 +21,32 @@ interface ThinkingStep {
 
 const THINKING_STEPS: ThinkingStep[] = [
   {
-    id: "orchestrator",
+    id: "question",
     icon: <Brain className="w-5 h-5" />,
-    message: "Waking up the Orchestrator…",
-    subtext: "Analyzing your request",
+    message: "Reading the question…",
+    subtext: "One investigation, not a pile of worksheets",
     color: "#BD6809",
   },
   {
-    id: "historian",
+    id: "evidence",
     icon: <BookOpen className="w-5 h-5" />,
-    message: "Consulting the Historian Agent…",
-    subtext: "Searching primary sources",
+    message: "Checking the evidence…",
+    subtext: "Sources before a confident answer",
     color: "#9A3F4A",
   },
   {
-    id: "witness",
+    id: "experience",
     icon: <Search className="w-5 h-5" />,
-    message: "Running Witness Protocol…",
-    subtext: "Verifying source authenticity",
-    color: "#166534",
+    message: "Preparing the shared investigation…",
+    subtext: "Same question, each learner's own work",
+    color: "#2F6542",
   },
   {
-    id: "pedagogy",
-    icon: <GraduationCap className="w-5 h-5" />,
-    message: "Adapting to your learning level…",
-    subtext: "Calibrating vocabulary & complexity",
-    color: "#1D4ED8",
-  },
-  {
-    id: "zpd",
+    id: "ready",
     icon: <Lightbulb className="w-5 h-5" />,
-    message: "Finding your Zone of Proximal Development…",
-    subtext: "Balancing challenge & support",
-    color: "#6B21A8",
-  },
-  {
-    id: "crafting",
-    icon: <Sparkles className="w-5 h-5" />,
-    message: "Crafting your lesson…",
-    subtext: "Weaving narrative & evidence",
-    color: "#2F4731",
+    message: "Matching this to what you can do next…",
+    subtext: "Mastery still waits on what you show",
+    color: "#1F4E79",
   },
 ];
 

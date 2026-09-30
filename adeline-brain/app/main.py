@@ -106,14 +106,12 @@ if _SENTRY_DSN:
 async def lifespan(app: FastAPI):
     logger.info("[adeline-brain] Starting up...")
 
-    # PostgreSQL is a hard dependency. Do not advertise readiness or begin
-    # accepting curriculum writes while the primary pool is unavailable.
     app.state.ready = False
     await asyncio.wait_for(init_db_pool(), timeout=15.0)
-    app.state.ready = True
     logger.info("[adeline-brain] DatabasePool connected")
 
     async def _connect_services():
+        app.state.service_status = {}
         for name, coro in [
             ("CurriculumGraph", curriculum_graph.connect()),
             ("Hippocampus", hippocampus.connect()),
@@ -124,11 +122,16 @@ async def lifespan(app: FastAPI):
         ]:
             try:
                 await asyncio.wait_for(coro, timeout=15.0)
+                app.state.service_status[name] = "ok"
                 logger.info(f"[adeline-brain] {name} connected")
             except Exception as e:
+                app.state.service_status[name] = "unavailable"
                 logger.warning(f"[adeline-brain] {name} unavailable: {e}")
 
-    asyncio.create_task(_connect_services())
+    # Finish the attempt before advertising readiness. A replica must not take
+    # lesson traffic in the window where these stores are still connecting.
+    await _connect_services()
+    app.state.ready = True
     await start_privacy_cleanup()
     await startup_seed_scheduler()
     yield
@@ -231,75 +234,59 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(lessons_router)
-app.include_router(experience_builder_router)
-app.include_router(spaces_router)
-app.include_router(opportunities_router)
-app.include_router(journal_router)
-app.include_router(transcripts_router)
-app.include_router(scaffold_router)
-app.include_router(daily_bread_router)
-app.include_router(learning_records_router)
-app.include_router(students_router)
-app.include_router(student_auth_router)
-app.include_router(towns_router)
-app.include_router(player_systems_router)
-app.include_router(experiments_router)
-app.include_router(activities_router)
-app.include_router(projects_router)
-app.include_router(subscriptions_router)
-app.include_router(credits_router)
-app.include_router(bookshelf_router)
-app.include_router(books_router)
-app.include_router(reading_session_router)
-app.include_router(onboarding_router)
-app.include_router(parent_router)
-app.include_router(admin_router)
-app.include_router(learning_plan_router)
-app.include_router(genui_router)
-app.include_router(standards_router)
-app.include_router(agent_team_router)
-app.include_router(resources_router)
-app.include_router(family_router)
-app.include_router(coppa_router)
-# ── /brain/* prefix mounts (Vercel proxy: /brain/:path* → Railway /:path*) ──
-# Auth endpoints (for cookie-based auth)
-app.include_router(auth_router, prefix="/brain")
-# ── Other /brain/* routes ──
-app.include_router(onboarding_router, prefix="/brain")
-app.include_router(lessons_router, prefix="/brain")
-app.include_router(scaffold_router, prefix="/brain")
-app.include_router(experience_builder_router, prefix="/brain")
-app.include_router(journal_router, prefix="/brain")
-app.include_router(transcripts_router, prefix="/brain")
-app.include_router(learning_records_router, prefix="/brain")
-app.include_router(students_router, prefix="/brain")
-app.include_router(daily_bread_router, prefix="/brain")
-app.include_router(activities_router, prefix="/brain")
-app.include_router(projects_router, prefix="/brain")
-app.include_router(subscriptions_router, prefix="/brain")
-app.include_router(credits_router, prefix="/brain")
-app.include_router(bookshelf_router, prefix="/brain")
-app.include_router(books_router, prefix="/brain")
-app.include_router(reading_session_router, prefix="/brain")
-app.include_router(parent_router, prefix="/brain")
-app.include_router(learning_plan_router, prefix="/brain")
-app.include_router(genui_router, prefix="/brain")
-app.include_router(registrar_reports_router, prefix="/brain")
-app.include_router(admin_tasks_router, prefix="/brain")
-app.include_router(admin_review_router, prefix="/brain")
-app.include_router(admin_router, prefix="/brain")
-app.include_router(experiments_router, prefix="/brain")
-app.include_router(metrics_router, prefix="/brain")
-app.include_router(realtime_router, prefix="/brain")
-app.include_router(conversation_router, prefix="/brain")
-app.include_router(learning_path_router, prefix="/brain")
-app.include_router(standards_router, prefix="/brain")
-app.include_router(agent_team_router, prefix="/brain")
-app.include_router(resources_router, prefix="/brain")
-app.include_router(family_router, prefix="/brain")
-app.include_router(focus_router, prefix="/brain")
-app.include_router(coppa_router, prefix="/brain")
+def _mount(router) -> None:
+    """Mount a router at its own prefix and, unless that prefix already includes
+    /brain, also under /brain for the Next.js catch-all proxy.
+
+    The proxy forwards /brain/<path> to the brain as /brain/<path>. Routers
+    that bake /brain into their own prefix (spaces, opportunities) must not
+    be prefixed a second time.
+    """
+    app.include_router(router)
+    if not (router.prefix or "").startswith("/brain"):
+        app.include_router(router, prefix="/brain")
+
+
+_mount(lessons_router)
+_mount(experience_builder_router)
+_mount(spaces_router)
+_mount(opportunities_router)
+_mount(journal_router)
+_mount(transcripts_router)
+_mount(scaffold_router)
+_mount(daily_bread_router)
+_mount(learning_records_router)
+_mount(students_router)
+_mount(student_auth_router)
+_mount(towns_router)
+_mount(player_systems_router)
+_mount(experiments_router)
+_mount(activities_router)
+_mount(projects_router)
+_mount(subscriptions_router)
+_mount(credits_router)
+_mount(bookshelf_router)
+_mount(books_router)
+_mount(reading_session_router)
+_mount(onboarding_router)
+_mount(parent_router)
+_mount(admin_router)
+_mount(learning_plan_router)
+_mount(genui_router)
+_mount(standards_router)
+_mount(agent_team_router)
+_mount(resources_router)
+_mount(family_router)
+_mount(coppa_router)
+_mount(auth_router)
+_mount(registrar_reports_router)
+_mount(admin_tasks_router)
+_mount(admin_review_router)
+_mount(metrics_router)
+_mount(realtime_router)
+_mount(conversation_router)
+_mount(learning_path_router)
+_mount(focus_router)
 
 
 @app.get("/health")

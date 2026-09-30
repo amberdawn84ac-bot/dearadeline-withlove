@@ -107,7 +107,7 @@ async def main():
     if total_success == total_scripts:
         log.info("\n🎉 Hippocampus is ready for production!")
         log.info("Next steps:")
-        log.info("  1. Add TAVILY_API_KEY to Railway environment variables")
+        log.info("  1. Set OPENAI_API_KEY where embeddings are required")
         log.info("  2. Deploy to Railway")
         log.info("  3. Test with sample queries:")
         log.info("     - 'Tell me about Isaiah 43:1' (Sefaria integration)")

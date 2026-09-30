@@ -1,3 +1,18 @@
+# Historical note — do not treat this file as the current architecture
+
+This summary describes an April 2026 Witness/Sefaria change that targeted
+`app/agents/orchestrator.py`. That orchestrator was deleted. Current thresholds
+live in `adeline-brain/app/protocols/witness.py`:
+
+- TRUTH_HISTORY and JUSTICE_CHANGEMAKING: 0.82
+- CREATION_SCIENCE: 0.72
+- Every other track: 0.0 (Witness does not gate generation)
+
+Sefaria remains in `app/services/sefaria.py`. Do not reintroduce the orchestrator
+because this document mentions it.
+
+---
+
 # Track-Aware Witness Protocol + Sefaria Integration
 
 ## Implementation Complete ✅

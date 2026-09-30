@@ -1,9 +1,8 @@
 /**
  * adeline-core/src/schemas/agentResponse.ts
  * ─────────────────────────────────────────────────────────────────
- * Typed responses from the 4 specialist agents in Adeline 2.0.
- * The orchestrator in adeline-brain merges AgentResponses into
- * a final LessonResponse for adeline-ui.
+ * Typed lesson-response pieces. The canonical experience author merges the
+ * learning record. The old 4-agent orchestrator is not in the runtime.
  * ─────────────────────────────────────────────────────────────────
  */
 import { z } from "zod";

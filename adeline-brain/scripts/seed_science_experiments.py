@@ -82,29 +82,15 @@ EXPERIMENT_QUERIES = [
 ]
 
 
-async def seed_query(query: str, track: str, domain: str, tavily_key: str) -> int:
-    import httpx
+async def seed_query(query: str, track: str, domain: str) -> int:
     from openai import AsyncOpenAI
     from app.connections.pgvector_client import hippocampus
+    from app.tools.site_search import search_documents
 
     log.info(f"Searching [{track}]: {query[:60]}...")
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(
-                "https://api.tavily.com/search",
-                json={
-                    "api_key": tavily_key,
-                    "query": query,
-                    "include_domains": [domain],
-                    "max_results": 3,
-                    "search_depth": "basic",
-                },
-            )
-            if resp.status_code != 200:
-                log.warning(f"  Tavily {resp.status_code}")
-                return 0
-            results = resp.json().get("results", [])
+        results = await search_documents(query, domain=domain, max_results=3)
     except Exception as e:
         log.warning(f"  Search error: {e}")
         return 0
@@ -149,10 +135,6 @@ async def seed_query(query: str, track: str, domain: str, tavily_key: str) -> in
 
 
 async def main():
-    tavily_key = os.getenv("TAVILY_API_KEY")
-    if not tavily_key:
-        log.error("TAVILY_API_KEY not set")
-        return
     if not os.getenv("OPENAI_API_KEY"):
         log.error("OPENAI_API_KEY not set")
         return
@@ -166,7 +148,7 @@ async def main():
 
     total = 0
     for query, track, domain in EXPERIMENT_QUERIES:
-        count = await seed_query(query, track, domain, tavily_key)
+        count = await seed_query(query, track, domain)
         total += count
         await asyncio.sleep(1.0)
 
