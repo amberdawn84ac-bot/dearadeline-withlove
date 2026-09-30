@@ -101,7 +101,7 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
         driving_question="What can household evidence actually prove?",
         authoring_brief=(
             "DRIVING QUESTION: What can the traces in this house prove, and what are we only guessing? "
-            "MISSION FRAME: one staged or real household disturbance. No real victims, no blood, no famous murder cases, "
+            "MISSION FRAME: one staged or real household disturbance. No real victims, no blood, no famous criminal cases, "
             "and no child assigned to be the criminal. "
             "DOCUMENTED STARTING POINT: use the NIJ crime-scene guide, NISTIR 7842 and the NIST ACE-V process map, "
             "the NHGRI DNA fact sheet, the FBI Laboratory public page, and Deuteronomy 19:15 on Sefaria. "
