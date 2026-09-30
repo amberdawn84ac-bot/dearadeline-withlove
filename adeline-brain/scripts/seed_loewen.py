@@ -5,7 +5,7 @@ by James W. Loewen.
 We cannot copy copyrighted text, so we:
 1. Seed the documented historical corrections Loewen makes (factual claims,
    publicly documented in reviews, interviews, and academic analysis)
-2. Search for freely available academic discussions and reviews via Tavily
+2. Search for freely available academic discussions and reviews via DuckDuckGo
 3. Seed Loewen's key theses as reference chunks so Adeline can cite the book
 
 Track: TRUTH_HISTORY and JUSTICE_CHANGEMAKING
@@ -180,11 +180,11 @@ async def seed_reference_chunks() -> int:
     return seeded
 
 
-async def seed_web_analysis(tavily_key: str) -> int:
-    """Search for freely available academic analysis."""
-    import httpx
+async def seed_web_analysis() -> int:
+    """Search for freely available academic analysis via DuckDuckGo."""
     from openai import AsyncOpenAI
     from app.connections.pgvector_client import hippocampus
+    from app.tools.site_search import search_documents
 
     oai = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     seeded = 0
@@ -192,19 +192,7 @@ async def seed_web_analysis(tavily_key: str) -> int:
     for query in LOEWEN_WEB_QUERIES:
         log.info(f"Searching: {query}")
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.post(
-                    "https://api.tavily.com/search",
-                    json={
-                        "api_key": tavily_key,
-                        "query": query,
-                        "max_results": 3,
-                        "search_depth": "basic",
-                    },
-                )
-                if resp.status_code != 200:
-                    continue
-                results = resp.json().get("results", [])
+            results = await search_documents(query, max_results=3)
 
             for result in results:
                 content = result.get("content", "")
@@ -256,13 +244,9 @@ async def main():
     total = await seed_reference_chunks()
     log.info(f"Reference chunks: {total} seeded")
 
-    tavily_key = os.getenv("TAVILY_API_KEY")
-    if tavily_key:
-        web_count = await seed_web_analysis(tavily_key)
-        total += web_count
-        log.info(f"Web analysis: {web_count} seeded")
-    else:
-        log.warning("TAVILY_API_KEY not set — skipping web analysis")
+    web_count = await seed_web_analysis()
+    total += web_count
+    log.info(f"Web analysis: {web_count} seeded")
 
     log.info("=" * 60)
     log.info(f"  Done: {total} Loewen documents seeded")

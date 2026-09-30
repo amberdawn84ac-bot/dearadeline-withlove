@@ -120,6 +120,7 @@ function ChildOverview({ student, portfolio, portfolioLoading, onClose }: {
   );
 }
 
+const KITCHEN_CASE_TOPIC = 'The Kitchen Case File: What Can Household Evidence Actually Prove?';
 const INVESTIGATION_SLOTS = ['science', 'history'] as const;
 const SLOT_LABELS: Record<string, string> = { science: 'Science', history: 'History' };
 
@@ -130,6 +131,18 @@ function InvestigationQueueSection({ dashboard, onChange }: { dashboard: FamilyD
   });
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  async function queueKitchenCase() {
+    setSubmitting('science'); setError(null);
+    try {
+      await enqueueFamilyInvestigation(dashboard.parent_id, 'science', KITCHEN_CASE_TOPIC, 'CREATION_SCIENCE');
+      onChange();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not add the Kitchen Case File.');
+    } finally {
+      setSubmitting(null);
+    }
+  }
 
   async function handleAdd(slot: 'science' | 'history') {
     const draft = drafts[slot];
@@ -150,7 +163,15 @@ function InvestigationQueueSection({ dashboard, onChange }: { dashboard: FamilyD
     <section className="rounded-[26px] border border-[#D4C3A7] bg-[#FFFDF7] p-6">
       <p className="text-xs font-black uppercase tracking-[.14em] text-[#9A3F4A]">Science &amp; history queues</p>
       <h2 className="mt-1 text-2xl font-bold" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>Plan what comes next</h2>
-      <p className="mt-2 text-sm leading-6 text-[#2F4731]/62">Each slot runs until the family finishes it — however long that takes — then moves to whatever&rsquo;s queued next.</p>
+      <p className="mt-2 text-sm leading-6 text-[#2F4731]/62">Each slot runs until the family finishes it — however long that takes — then moves to whatever&rsquo;s queued next. The Kitchen Case File is the household forensic unit: scene, prints, trace, ink, impressions, and what a clue cannot prove. It does not use real victims.</p>
+      <button
+        type="button"
+        onClick={() => void queueKitchenCase()}
+        disabled={submitting === 'science'}
+        className="mt-4 rounded-xl bg-[#2F5A3A] px-4 py-2 text-xs font-bold text-white disabled:opacity-40"
+      >
+        {submitting === 'science' ? 'Adding…' : 'Queue the Kitchen Case File'}
+      </button>
       {error && <p className="mt-3 text-sm font-semibold text-[#9A3F4A]" role="alert">{error}</p>}
       <div className="mt-5 grid gap-5 md:grid-cols-2">
         {INVESTIGATION_SLOTS.map((slot) => {

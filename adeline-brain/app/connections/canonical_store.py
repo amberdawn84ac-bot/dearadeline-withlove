@@ -29,29 +29,45 @@ def canonical_slug(topic: str, track: str) -> str:
 
 class CanonicalStore:
     async def ready_slugs(self, slugs: list[str] | tuple[str, ...]) -> set[str]:
-        """Return approved, materialized canonicals in one database read.
+        """Return approved canonicals the planner is allowed to open.
 
-        The daily planner uses this instead of treating the seeding wish list as
-        ready inventory. A missing database result therefore withholds the
-        family card rather than sending a learner into foreground generation.
+        Database rows win. A repository canonical that already passes the current
+        family contract counts as ready when the database has no row yet, so a
+        household is not sent into a second authoring pass for that topic.
         """
         requested = list(dict.fromkeys(slug for slug in slugs if slug))
         if not requested:
             return set()
         from app.config import get_db_conn
 
-        conn = await get_db_conn()
+        ready: set[str] = set()
         try:
-            rows = await conn.fetch(
-                'SELECT "topicSlug" FROM "CanonicalLesson" '
-                'WHERE "topicSlug" = ANY($1::text[]) '
-                'AND ("pendingApproval" IS FALSE OR "pendingApproval" IS NULL) '
-                'AND "blocksJson" IS NOT NULL',
-                requested,
-            )
-            return {str(row["topicSlug"]) for row in rows}
-        finally:
-            await conn.close()
+            conn = await get_db_conn()
+            try:
+                rows = await conn.fetch(
+                    'SELECT "topicSlug" FROM "CanonicalLesson" '
+                    'WHERE "topicSlug" = ANY($1::text[]) '
+                    'AND ("pendingApproval" IS FALSE OR "pendingApproval" IS NULL) '
+                    'AND "blocksJson" IS NOT NULL',
+                    requested,
+                )
+                ready = {str(row["topicSlug"]) for row in rows}
+            finally:
+                await conn.close()
+        except Exception as exc:
+            logger.warning("[CanonicalStore] Ready-slug lookup failed; using repository canonicals: %s", exc)
+
+        missing = [slug for slug in requested if slug not in ready]
+        if missing:
+            from app.curriculum.builtin_canonicals import builtin_canonical
+            from app.curriculum.family_style import is_current_family_canonical
+
+            for slug in missing:
+                record = builtin_canonical(slug)
+                blocks = (record or {}).get("blocks") or []
+                if record and not record.get("pending_approval") and is_current_family_canonical(blocks):
+                    ready.add(slug)
+        return ready
 
     async def _redis_get(self, slug: str) -> Optional[str]:
         try:

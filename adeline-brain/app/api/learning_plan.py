@@ -1857,7 +1857,7 @@ async def get_learning_plan(
     - Track mastery (balance progress across all 10 tracks)
     - Portfolio projects (real-world accomplishments, not assignments)
     - Registrar credits (what the student has earned, what they still need)
-    - Agent routing (HistorianAgent, ScienceAgent, DiscipleshipAgent)
+    - Agent routing is not a second lesson author. The canonical experience is.
 
     Caching:
     - Learning plans are cached in Redis for 5 minutes to avoid expensive

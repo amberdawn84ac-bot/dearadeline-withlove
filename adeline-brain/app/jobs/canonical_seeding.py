@@ -88,6 +88,33 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
         content_revision="operation-hooked-records-v3",
     ),
     CanonicalSeed(
+        "The Kitchen Case File: What Can Household Evidence Actually Prove?",
+        "CREATION_SCIENCE",
+        True,
+        archive_query="NIJ crime scene investigation guide NIST latent print ACE-V",
+        display_title="The Kitchen Case File",
+        family_summary=(
+            "A household scene, tape lifts, prints, impressions, ink, droplet physics, and a strawberry DNA extraction, "
+            "closed by a case map that separates what was seen from what is only alleged."
+        ),
+        learner_hook="Something in the house was moved. One clue is not enough to say who did it.",
+        driving_question="What can household evidence actually prove?",
+        authoring_brief=(
+            "DRIVING QUESTION: What can the traces in this house prove, and what are we only guessing? "
+            "MISSION FRAME: one staged or real household disturbance. No real victims, no blood, no famous murder cases, "
+            "and no child assigned to be the criminal. "
+            "DOCUMENTED STARTING POINT: use the NIJ crime-scene guide, NISTIR 7842 and the NIST ACE-V process map, "
+            "the NHGRI DNA fact sheet, the FBI Laboratory public page, and Deuteronomy 19:15 on Sefaria. "
+            "Do not invent Locard quotations, match statistics, or autopsy findings. "
+            "OPENING ENCOUNTER: mark a boundary and photograph before anyone interprets. "
+            "SHARED OUTCOME: one custody log and a Seen / Inferred / Unknown case map. "
+            "An inferred claim needs two independent observations. A kitchen method is practice, not a courtroom identification. "
+            "CORRECTNESS: a fiber, a cocoa lift, a shoe length, a chromatogram, a colored-water splash, and a strawberry extraction "
+            "each have a hard limit. State the limit in the lesson where the method appears."
+        ),
+        content_revision="kitchen-case-file-v1",
+    ),
+    CanonicalSeed(
         "From Possession to Prison: Drug Policy, Diversion, and Reform",
         "JUSTICE_CHANGEMAKING",
         True,

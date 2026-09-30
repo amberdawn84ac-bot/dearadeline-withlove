@@ -5,7 +5,7 @@ Baker Creek Heirloom Seeds (rareseeds.com) — a family seed company that
 gave us free seeds. Their growing guides and seed stories are primary
 sources for HOMESTEADING lessons.
 
-Fetches content via Tavily web search and seeds into Hippocampus.
+Fetches content via DuckDuckGo site search and seeds into Hippocampus.
 
 Run from adeline-brain/:
     python scripts/seed_baker_creek.py
@@ -75,32 +75,16 @@ GOT_QUESTIONS_QUERIES = [
 ]
 
 
-async def seed_query(query: str, tavily_key: str, track: str = "HOMESTEADING", domain: str = "rareseeds.com", citation: str = "Baker Creek Heirloom Seeds") -> int:
-    """Search Tavily and seed results to Hippocampus. Returns count seeded."""
-    import httpx
+async def seed_query(query: str, track: str = "HOMESTEADING", domain: str = "rareseeds.com", citation: str = "Baker Creek Heirloom Seeds") -> int:
+    """Search DuckDuckGo for one site and seed results to Hippocampus."""
     from openai import AsyncOpenAI
+    from app.tools.site_search import search_documents
 
     log.info(f"Searching: {query}")
-
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(
-                "https://api.tavily.com/search",
-                json={
-                    "api_key": tavily_key,
-                    "query": query,
-                    "include_domains": [domain],
-                    "max_results": 3,
-                    "search_depth": "advanced",
-                },
-            )
-            if resp.status_code != 200:
-                log.warning(f"Tavily returned {resp.status_code} for: {query}")
-                return 0
-
-            results = resp.json().get("results", [])
+        results = await search_documents(query, domain=domain, max_results=3)
     except Exception as e:
-        log.warning(f"Tavily error: {e}")
+        log.warning(f"Search error: {e}")
         return 0
 
     if not results:
@@ -146,11 +130,6 @@ async def seed_query(query: str, tavily_key: str, track: str = "HOMESTEADING", d
 
 
 async def main():
-    tavily_key = os.getenv("TAVILY_API_KEY")
-    if not tavily_key:
-        log.error("TAVILY_API_KEY not set — cannot search Baker Creek")
-        return
-
     if not os.getenv("OPENAI_API_KEY"):
         log.error("OPENAI_API_KEY not set — cannot generate embeddings")
         return
@@ -166,19 +145,19 @@ async def main():
 
     log.info("-- Baker Creek Seeds (HOMESTEADING) --")
     for query in BAKER_CREEK_QUERIES:
-        count = await seed_query(query, tavily_key, track="HOMESTEADING", domain="rareseeds.com", citation="Baker Creek Heirloom Seeds")
+        count = await seed_query(query, track="HOMESTEADING", domain="rareseeds.com", citation="Baker Creek Heirloom Seeds")
         total += count
         await asyncio.sleep(1.0)
 
     log.info("-- Mountain Rose Herbs (HEALTH_NATUROPATHY) --")
     for query in MOUNTAIN_ROSE_QUERIES:
-        count = await seed_query(query, tavily_key, track=MOUNTAIN_ROSE_TRACK, domain="mountainroseherbs.com", citation="Mountain Rose Herbs")
+        count = await seed_query(query, track=MOUNTAIN_ROSE_TRACK, domain="mountainroseherbs.com", citation="Mountain Rose Herbs")
         total += count
         await asyncio.sleep(1.0)
 
     log.info("-- GotQuestions.org (DISCIPLESHIP) --")
     for query in GOT_QUESTIONS_QUERIES:
-        count = await seed_query(query, tavily_key, track="DISCIPLESHIP", domain="gotquestions.org", citation="GotQuestions.org")
+        count = await seed_query(query, track="DISCIPLESHIP", domain="gotquestions.org", citation="GotQuestions.org")
         total += count
         await asyncio.sleep(1.0)
 

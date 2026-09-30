@@ -4,7 +4,7 @@ from uuid import UUID
 
 import pytest
 
-from app.algorithms import bkt_tracker
+from app.services import bkt_tracker
 
 
 class _FakeConn:

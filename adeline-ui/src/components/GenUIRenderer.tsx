@@ -3,13 +3,9 @@
 /**
  * GenUIRenderer — Renders structured lesson blocks from adeline-brain.
  *
- * Handles all 6 block types emitted by the multi-agent orchestrator:
- *   PRIMARY_SOURCE  (HistorianAgent / ScienceAgent)
- *   LAB_MISSION     (ScienceAgent — HOMESTEADING / CREATION_SCIENCE)
- *   NARRATIVE       (DiscipleshipAgent — worldview-aligned content)
- *   RESEARCH_MISSION (any agent fallback — no verified source found)
- *   QUIZ            (future — scaffold route)
- *   TEXT            (plain content — catch-all)
+ * Handles lesson blocks from the canonical experience. Witness matches and
+ * item-level citations stay on PRIMARY_SOURCE blocks. Cross-track standards
+ * stay in the sidebar.
  *
  * Witness Protocol matches and item-level archival citations are displayed on
  * PRIMARY_SOURCE blocks without conflating their different provenance rules.

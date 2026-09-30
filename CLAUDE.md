@@ -2,7 +2,7 @@
 
 AI context guide for the **dearadeline-withlove** monorepo. Read this before making any changes.
 
-> **Last updated:** 2026-08-26 — Full rewrite after verifying against `main` at commit `f60f7fa`. The previous version of this file described an architecture (Neo4j GraphRAG, `orchestrator.py` 4-agent routing, Tavily as a core dependency) that no longer exists in the codebase. See "What Changed" below.
+> **Last updated:** 2026-09-30 — Checked against `main` after the Kitchen Case File and the routing/readiness fixes. Neo4j, the 4-agent orchestrator, and Tavily-as-a-live-dependency stay gone. `IMPLEMENTATION_SUMMARY.md` is a historical note and is not the architecture.
 
 ---
 
@@ -58,7 +58,7 @@ Two large, deliberate migrations happened in mid/late August 2026 (both by the r
 
 Everything the old orchestrator was responsible for still exists and is arguably more developed now: the Witness Protocol, BKT/ZPD mastery tracking, SM-2 spaced repetition, and xAPI/CASE credit recording are all present in current code (see below) — this was a replacement, not a regression.
 
-**Tavily was removed entirely on 2026-08-26.** It had actually been live — wired into a nightly APScheduler cron job in `app/jobs/seed_scheduler.py` that had almost certainly been silently failing every night since no `TAVILY_API_KEY` was ever set in Railway (one script even had a leftover `if not os.getenv("TAVILY_API_KEY"): skip` guard despite calling an already-DDG-backed search function underneath). The live per-request researcher fallback (`app/tools/researcher.py::search_witnesses`) had already been migrated to a free DuckDuckGo site-scoped search with no API key needed. The two Tavily-only nightly jobs were deleted and their intent (growing TRUTH_HISTORY/JUSTICE_CHANGEMAKING primary-source coverage) was folded into the existing `app/jobs/seed_thin_tracks.py` nightly job, which now covers 5 tracks through the same DDG-backed `search_witnesses()` path. No Tavily key is required anywhere in this app.
+**Tavily is not a live dependency.** It was removed from the researcher on 2026-08-26. The offline seed scripts (`seed_baker_creek.py`, `seed_loewen.py`, `seed_science_experiments.py`) now use the same DuckDuckGo site search. A `TAVILY_API_KEY` is not required.
 
 ---
 
@@ -83,14 +83,11 @@ dearadeline-withlove/
 │   │   │   │                           # validate_canonical_contract(), mastery-evidence rules
 │   │   │   ├── experience_contract.py  # ExperienceStage enum (INVITATION→DISCOVERY→ACTION→
 │   │   │   │                           # CREATION→DEMONSTRATION→REFLECTION→RESOURCE)
-│   │   │   ├── family_style.py         # Family-investigation structural validation (format v10)
-│   │   │   ├── builtin_canonicals.py
+│   │   │   ├── family_style.py         # Family-investigation structural validation (format v12)
+│   │   │   ├── builtin_canonicals.py   # Repository fallback; Kitchen Case File
+│   │   │   ├── kitchen_case_file.py
 │   │   │   └── progression_import.py
-│   │   ├── algorithms/          # PURE COMPUTATION — no DB calls
-│   │   │   ├── zpd_engine.py, bkt_tracker.py, spaced_repetition.py, adaptive_content.py,
-│   │   │   ├── cognitive_load.py, learner_profiler.py, learning_velocity.py,
-│   │   │   ├── collaborative_filter.py, component_selector.py, ml_component_selector.py,
-│   │   │   ├── ml_sequencer.py, sequence_policy.py, pedagogical_directives.py, rl_optimizer.py
+│   │   ├── algorithms/          # Pure computation. bkt_tracker.py re-exports services
 │   │   ├── api/                 # 44 routers — see "Key API Endpoints" below
 │   │   ├── connections/         # curriculum_graph, pgvector_client (Hippocampus), redis_client,
 │   │   │                        # postgres, journal_store, conversation_store, canonical_store,
@@ -99,16 +96,16 @@ dearadeline-withlove/
 │   │   │   ├── witness.py             # Track-aware truth thresholds (see below)
 │   │   │   └── content_filter.py      # LIVE — should_return_document(), used by tools/researcher.py
 │   │   ├── safety/
-│   │   │   └── content_filter.py      # ⚠ NOT imported anywhere — see "Known Issues"
-│   │   ├── services/            # credit_engine, credit_hook, gpa_calculator, learner_context,
+│   │   │   └── content_filter.py      # Wired from adapter.py
+│   │   ├── services/            # credit_engine, credit_hook, bkt_tracker, gpa_calculator, learner_context,
 │   │   │                        # portfolio_generator, synthesis, reality_layer, resource_router,
 │   │   │                        # sefaria, standards_mapper, transcript_pdf, memory, storage
 │   │   ├── jobs/                 # canonical_seeding, seed_scheduler, seed_thin_tracks,
 │   │   │                        # privacy_cleanup, warmup_jobs
-│   │   ├── tools/                # researcher.py, graph_query.py, declassified_parser.py,
+│   │   ├── tools/                # researcher.py, site_search.py, graph_query.py, declassified_parser.py,
 │   │   │                        # justice_parser.py
 │   │   └── config.py             # Single source of truth for env vars + LLM factory (below)
-│   └── prisma/schema.prisma      # 36 models — Postgres is the only datastore now
+│   └── prisma/schema.prisma      # 39 models — Postgres is the only datastore now
 └── adeline-ui/                  # Next.js 14 App Router — student/parent interface
     └── src/
         ├── app/(routes)/, app/onboarding/, app/coppa-verify/, app/coppa-pending/, app/pricing/
@@ -131,7 +128,7 @@ dearadeline-withlove/
 **Never bypass this gate for TRUTH_HISTORY/JUSTICE_CHANGEMAKING.** Below threshold → ARCHIVE_SILENT → researcher fallback or a RESEARCH_MISSION block for the student.
 
 ### 2. One canonical lesson-authoring contract, not competing generators
-`app/curriculum/canonical_author.py` defines `EXPERIENCE_MODES` and `validate_canonical_contract()`, which rejects a generated experience if it lacks a real entry move, named disciplines, a genuine constraint (for STEM/maker modes), or — for public-interest/civic modes — primary-record types, a power-and-accountability question, and a real-world action with a real recipient. `family_style.py` additionally validates the family-investigation structure (3–12 blocks, no placeholder text, format version 10). `experience_contract.py` tags every block with an `ExperienceStage` (INVITATION → DISCOVERY → ACTION → CREATION → DEMONSTRATION → REFLECTION → RESOURCE) so a renderer can't fake a lesson out of disconnected text blocks.
+`app/curriculum/canonical_author.py` defines `EXPERIENCE_MODES` and `validate_canonical_contract()`, which rejects a generated experience if it lacks a real entry move, named disciplines, a genuine constraint (for STEM/maker modes), or — for public-interest/civic modes — primary-record types, a power-and-accountability question, and a real-world action with a real recipient. `family_style.py` validates the family-investigation structure (format version 12). `experience_contract.py` tags every block with an `ExperienceStage` (INVITATION → DISCOVERY → ACTION → CREATION → DEMONSTRATION → REFLECTION → RESOURCE) so a renderer can't fake a lesson out of disconnected text blocks.
 
 ### 3. Generation is idempotent by design
 `connections/student_experience_store.py` keys each generated experience on `(student_id, plan_item_id)` with an explicit `GenerationState` (`not_started` / `generating` / `ready` / `failed`). Retries and double-clicks converge on the same record instead of silently regenerating a different lesson. `daily_plan_store.py` is the Postgres source of truth for a learner's dated Today plan. If you're chasing a "navigating away and back shows different content" bug, start in these two files, not in the UI.
@@ -142,8 +139,8 @@ dearadeline-withlove/
 ### 5. Postgres is the only datastore (pgvector + everything else)
 No Neo4j. `connections/curriculum_graph.py` does prerequisite/ZPD graph queries against Postgres tables directly. `connections/pgvector_client.py` (Hippocampus) does the Witness Protocol's similarity search. Redis (Upstash REST in production, or `REDIS_URL`) is cache + rate-limit storage only, not a source of truth — every Redis-backed value has a Postgres record behind it (e.g., `canonical archive() always evicts Redis` — commit `b825855`).
 
-### 6. No DB calls in `algorithms/`
-`zpd_engine.py`, `bkt_tracker.py`, `spaced_repetition.py`, `adaptive_content.py`, `cognitive_load.py`, and the newer ML/RL modules (`ml_sequencer.py`, `rl_optimizer.py`, `collaborative_filter.py`, etc.) are pure computation. API routes fetch data and pass it in.
+### 6. No DB calls in pure algorithm modules
+`zpd_engine.py`, `spaced_repetition.py`, `adaptive_content.py`, `cognitive_load.py`, and the ML/RL modules stay pure. `bkt_tracker` is the persistence bridge and lives in `app/services/bkt_tracker.py`. `app/algorithms/bkt_tracker.py` only re-exports it so older imports keep working.
 
 ### 7. Registrar only credits demonstrated evidence
 `enforce_non_exposure_mastery()` in `canonical_author.py` normalizes a `not_awarded_for_exposure_alone` flag as policy — a lesson mentioning a standard is not sufficient for credit; observable evidence is validated separately. Credit logic lives in `services/credit_engine.py` and `services/credit_hook.py`.
@@ -155,7 +152,7 @@ No Neo4j. `connections/curriculum_graph.py` does prerequisite/ZPD graph queries 
 Unchanged: any Hygraph GraphQL queries go through `adeline-ui/src/app/api/graphql/route.ts`. `adeline-brain` is REST-only.
 
 ### 10. `/brain` prefix mounting
-Nearly every router in `main.py` is mounted twice — once bare, once under a `/brain` prefix. This is because Vercel proxies `/brain/:path*` to the Railway backend. If you add a new route, mount it both ways or it will 404 through the production proxy.
+`main.py` mounts each router once at its own prefix and, unless that prefix already starts with `/brain`, once more under `/brain`. The Next.js catch-all forwards `/brain/<path>` upstream as `/brain/<path>`. Do not prefix a router that already includes `/brain` (`spaces`, `opportunities`).
 
 ---
 
@@ -177,7 +174,7 @@ Nearly every router in `main.py` is mounted twice — once bare, once under a `/
 
 ---
 
-## Database (Postgres only — 36 Prisma models, see `prisma/schema.prisma`)
+## Database (Postgres only — 39 Prisma models, see `prisma/schema.prisma`)
 
 Notable groups beyond the original 9-table list:
 - **Curriculum/mastery**: `CurriculumConcept`, `CurriculumConceptPrerequisite`, `CurriculumConceptEvidence`, `CurriculumTrackLink`, `StudentConceptMastery`, `StandardMastery`, `OASStandard`, `OASStandardRelation`, `SpacedRepetitionCard`
@@ -199,11 +196,17 @@ Row-Level Security is enabled on at least `User` and `StandardMastery` (checked 
 
 ---
 
-## Launch Test Debt — 2026-08-26
+## Launch test debt — corrected 2026-09-30
 
-`pnpm exec tsc --noEmit` is the only frontend gate CI runs (see CI workflow); `vitest run` is **not** part of CI, so these 27 failures (5 files, confirmed unchanged before/after v11 Phase 2) have been accumulating invisibly. Audited 2026-08-26 by reading each failure's assertion against the actual current source (not just the error text) so the classification below reflects a real diff between test expectation and shipped behavior, not a guess. None of the 27 are environment/CI-only — all are pure component/unit tests with mocked `fetch`, no real DB/network dependency.
+`pnpm test` (Vitest) **does** run in CI (`test-ui` in `.github/workflows/ci.yml`). The August note that said Vitest was not in CI is stale.
 
-**Root-cause groups (27 failures total):**
+`getBooks()` in `bookshelf-client.ts` calls `/brain/api/books`, not `/brain/api/books/books`. That double-path bug is fixed. Do not "fix" it again.
+
+Brain CI still ignores a real set of drifted tests (bookshelf e2e, conversation, hippocampus source type, justice parser, launch readiness, pgvector duplicates, projects API, deep-web witness search, spaced repetition, declassified witness integration, Sefaria, and one ZPD case). Green CI is still not the Today → Space → credit journey.
+
+The Kitchen Case File (`app/curriculum/kitchen_case_file.py`) is a repository canonical for household forensic science. Parents queue it from the parent dashboard. It is served from `builtin_canonicals` when the database has no approved row yet.
+
+**Root-cause groups from the 2026-08-26 audit.** The `getBooks()` row is stale: that path was fixed before 2026-09-30. The other rows were not re-run for this change.
 
 | Test file | Failing tests | Error pattern | Classification | Root cause | Recommended action |
 |---|---|---|---|---|---|
