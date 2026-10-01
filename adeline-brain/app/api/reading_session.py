@@ -23,6 +23,16 @@ from app.api.middleware import get_current_user_id
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/reading-session", tags=["reading-session"])
 
+# The live table can predate the columns this module reads. Prisma recorded
+# 20260404 as applied without adding them. Add the missing ones once per process
+# so a book can be started even if migrate deploy did not reach this release.
+_COLUMNS_READY = False
+_COLUMN_STATEMENTS = (
+    'ALTER TABLE "ReadingSession" ADD COLUMN IF NOT EXISTS "studentReflection" TEXT',
+    'ALTER TABLE "ReadingSession" ADD COLUMN IF NOT EXISTS "minutesRead" INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE "ReadingSession" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP',
+)
+
 
 # ── Request / Response Models ───────────────────────────────────────────────────
 
@@ -100,6 +110,16 @@ async def _get_conn():
         await conn.close()
 
 
+async def _ensure_reading_session_columns(conn) -> None:
+    """Make the bookshelf table match the columns this API reads and writes."""
+    global _COLUMNS_READY
+    if _COLUMNS_READY:
+        return
+    for statement in _COLUMN_STATEMENTS:
+        await conn.execute(statement)
+    _COLUMNS_READY = True
+
+
 # ── POST /api/reading-session ────────────────────────────────────────────────────
 
 @router.post("", status_code=201, response_model=SessionResponse)
@@ -136,6 +156,7 @@ async def create_reading_session(
     session_id = str(uuid.uuid4())
 
     async with _get_conn() as conn:
+        await _ensure_reading_session_columns(conn)
         # Check if book exists
         book_row = await conn.fetchrow(
             'SELECT id FROM "Book" WHERE id = $1',
@@ -152,14 +173,14 @@ async def create_reading_session(
         result = await conn.fetchrow(
             """
             INSERT INTO "ReadingSession" (
-                id, "studentId", "bookId", status, "startedAt", "createdAt", "updatedAt"
-            ) VALUES ($1, $2, $3, $4, $5::timestamp, $6::timestamp, $7::timestamp)
+                id, "studentId", "bookId", status, "startedAt", "updatedAt"
+            ) VALUES ($1, $2, $3, $4, $5::timestamp, $6::timestamp)
             ON CONFLICT ("studentId", "bookId") DO NOTHING
             RETURNING id, "studentId", "bookId", status, "startedAt",
                       "completedAt", "pagesRead", "totalPages",
                       "currentLocation", "studentReflection", "minutesRead"
             """,
-            session_id, student_id, payload.book_id, payload.status, now, now, now,
+            session_id, student_id, payload.book_id, payload.status, now, now,
         )
 
         # If no rows returned, session already exists — fetch it
@@ -280,6 +301,7 @@ async def update_reading_session(
     now = _now_iso()
 
     async with _get_conn() as conn:
+        await _ensure_reading_session_columns(conn)
         # Verify session exists and belongs to student (security check)
         existing = await conn.fetchrow(
             """
@@ -463,6 +485,7 @@ async def get_reading_shelf(
 
     try:
         async with _get_conn() as conn:
+            await _ensure_reading_session_columns(conn)
             # Query all sessions for this student (optionally filtered by status)
             if status:
                 rows = await conn.fetch(

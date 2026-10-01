@@ -584,6 +584,8 @@ model ReadingSession {
   startedAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  studentReflection String?
   
   @@unique([studentId, bookId])
   @@index([studentId])
