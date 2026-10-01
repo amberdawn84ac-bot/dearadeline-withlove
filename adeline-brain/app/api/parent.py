@@ -276,8 +276,9 @@ async def add_student(
                 '''
                 INSERT INTO "User" (
                     id, name, email, role, "gradeLevel", interests, "parentId",
-                    username, "pinHash", "linkCode", "isHomestead", "coppaVerified", "createdAt", "updatedAt"
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, TRUE, NOW(), NOW())
+                    username, "pinHash", "linkCode", "isHomestead", "coppaVerified",
+                    "onboardingComplete", "createdAt", "updatedAt"
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, TRUE, TRUE, NOW(), NOW())
                 ''',
                 student_id, payload.name, placeholder_email, "STUDENT", payload.grade_level,
                 payload.interests, parent_id, payload.username, pin_hash, link_code,

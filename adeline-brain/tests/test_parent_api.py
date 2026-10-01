@@ -103,6 +103,7 @@ def test_add_student_success(mock_parent_auth, mock_db_conn):
     # accepts anything, so only an explicit check like this catches it) --
     # NOW() must be used in the SQL text instead of a bound Python datetime.
     insert_user_call = next(call for call in mock_conn.execute.await_args_list if 'INSERT INTO "User"' in str(call.args[0]))
+    assert '"onboardingComplete"' in str(insert_user_call.args[0])
     assert not any(isinstance(arg, datetime) for arg in insert_user_call.args)
 
 
