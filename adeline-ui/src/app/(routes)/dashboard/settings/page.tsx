@@ -22,7 +22,7 @@ interface UserProfile {
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'not-onboarded'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,11 +46,13 @@ export default function SettingsPage() {
         }
 
         const data = await response.json();
-        const userProfile: UserProfile = data.user;
-
-        if (!userProfile.onboardingComplete) {
-          setStatus('not-onboarded');
-          return;
+        const userProfile: UserProfile | undefined = data.user;
+        // Parent-created and PIN learners never go through WelcomeFlow, so
+        // User.onboardingComplete stays false. /onboarding then sees the
+        // session cookie and sends them straight back to Today. A returned
+        // profile is enough to edit settings.
+        if (!userProfile?.id) {
+          throw new Error('Profile was not found');
         }
 
         setProfile(userProfile);
@@ -71,27 +73,6 @@ export default function SettingsPage() {
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 animate-spin text-[#BD6809]" />
           <p className="text-[#2F4731] text-lg font-semibold">Loading settings...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (status === 'not-onboarded') {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="max-w-md w-full mx-auto px-6">
-          <div className="bg-white rounded-2xl border-2 border-[#E7DAC3] p-8 text-center">
-            <h2 className="text-xl font-bold text-[#2F4731] mb-2">Onboarding Required</h2>
-            <p className="text-[#2F4731]/70 text-sm mb-6">
-              Please complete onboarding first before accessing settings.
-            </p>
-            <button
-              onClick={() => { window.location.href = '/onboarding'; }}
-              className="w-full px-4 py-2 bg-[#BD6809] text-white rounded-lg font-semibold hover:bg-[#A55708] transition-colors"
-            >
-              Go to Onboarding
-            </button>
-          </div>
         </div>
       </div>
     );
