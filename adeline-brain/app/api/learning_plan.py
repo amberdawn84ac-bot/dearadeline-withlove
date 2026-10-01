@@ -327,6 +327,20 @@ class UpcomingInvestigation(BaseModel):
     position: int
 
 
+class IndividualLesson(BaseModel):
+    """One lesson of the open family investigation, written as this child's work."""
+    id: str
+    investigation_id: str
+    investigation_title: str
+    slot: Optional[str] = None
+    lesson_id: str
+    index: int
+    count: int
+    title: str
+    assignment: str
+    track: str
+
+
 class LearningPlanResponse(BaseModel):
     # Version 10 replaces authoring-brief dumps on family cards with learner-facing
     # titles and questions (Poison Squad was showing Harvey Wiley prompt text).
@@ -341,6 +355,7 @@ class LearningPlanResponse(BaseModel):
     # Queued-but-not-yet-started items in each slot — a preview only, not
     # openable as a Space until they actually become current.
     upcoming_family_investigations: list[UpcomingInvestigation] = Field(default_factory=list)
+    individual_lessons: list[IndividualLesson] = Field(default_factory=list)
     individual_skills: list[LessonSuggestion] = Field(default_factory=list)
     progression_checklist: list[IndividualSkillTarget] = Field(default_factory=list)
     progression_map_status: ProgressionMapStatus
@@ -900,6 +915,144 @@ def _individual_skill_targets(
 
 
 FAMILY_INVESTIGATION_SLOTS = ("science", "history")
+
+
+def _grade_number(grade_level: str) -> int:
+    text = str(grade_level or "").strip().upper()
+    if not text:
+        return 8
+    if text in {"K", "KG", "KINDERGARTEN"} or text.startswith("K-") or text.startswith("K "):
+        return 0
+    digits = [part for part in text.replace("-", " ").split() if part.isdigit()]
+    return int(digits[0]) if digits else 8
+
+
+def _age_band(grade_level: str) -> str:
+    grade = _grade_number(grade_level)
+    if grade <= 5:
+        return "elementary"
+    if grade <= 8:
+        return "middle"
+    return "high_school"
+
+
+def _canonical_contract(record: dict) -> dict:
+    if not isinstance(record, dict):
+        return {}
+    blocks = record.get("blocks") or []
+    if isinstance(blocks, str):
+        try:
+            blocks = json.loads(blocks)
+        except (TypeError, ValueError):
+            blocks = []
+    if isinstance(blocks, list) and blocks and isinstance(blocks[0], dict):
+        contract = (blocks[0].get("metadata") or {}).get("canonical_contract") or {}
+        if isinstance(contract, dict) and contract:
+            return contract
+    return record if isinstance(record.get("unit_plan"), dict) else {}
+
+
+def lessons_from_canonical(
+    record: dict | None,
+    *,
+    investigation_id: str,
+    investigation_title: str,
+    slot: str | None,
+    track: str,
+    grade_level: str,
+) -> list[IndividualLesson]:
+    """Split one shared investigation into this child's lesson responsibilities."""
+    contract = _canonical_contract(record or {})
+    band = _age_band(grade_level)
+    unit = contract.get("unit_plan") if isinstance(contract.get("unit_plan"), dict) else {}
+    lessons = [item for item in (unit.get("lessons") or []) if isinstance(item, dict)]
+    cards: list[IndividualLesson] = []
+    for index, lesson in enumerate(lessons):
+        expectations = lesson.get("individual_expectations") or {}
+        assignment = str(expectations.get(band) or "").strip() if isinstance(expectations, dict) else ""
+        title = str(lesson.get("title") or "").strip()
+        lesson_id = str(lesson.get("lesson_id") or index)
+        if not assignment or not title:
+            continue
+        cards.append(IndividualLesson(
+            id=f"{investigation_id}:{lesson_id}",
+            investigation_id=investigation_id,
+            investigation_title=investigation_title,
+            slot=slot,
+            lesson_id=lesson_id,
+            index=index + 1,
+            count=len(lessons),
+            title=title,
+            assignment=assignment,
+            track=track,
+        ))
+    if cards:
+        return cards
+    roles = contract.get("family_roles") if isinstance(contract.get("family_roles"), dict) else {}
+    role = str((roles or {}).get(band) or "").strip()
+    if not role:
+        return []
+    return [IndividualLesson(
+        id=f"{investigation_id}:part",
+        investigation_id=investigation_id,
+        investigation_title=investigation_title,
+        slot=slot,
+        lesson_id="part",
+        index=1,
+        count=1,
+        title="Your part",
+        assignment=role,
+        track=track,
+    )]
+
+
+async def individual_lessons_for(
+    investigations: list[LessonSuggestion],
+    grade_level: str,
+) -> list[IndividualLesson]:
+    """Load each open family canonical and keep only this child's work."""
+    from app.connections.canonical_store import canonical_slug, canonical_store
+    from app.jobs.canonical_seeding import canonical_seed_for
+
+    cards: list[IndividualLesson] = []
+    for investigation in investigations:
+        topic = (investigation.canonical_topic or investigation.title or "").strip()
+        if not topic:
+            continue
+        seed = canonical_seed_for(topic, investigation.track)
+        lookup_topic = seed.topic if seed else topic
+        try:
+            record = await canonical_store.get(canonical_slug(lookup_topic, investigation.track))
+        except Exception as exc:
+            logger.warning("[LearningPlan] Individual lesson lookup failed for %s: %s", lookup_topic, exc)
+            record = None
+        cards.extend(lessons_from_canonical(
+            record,
+            investigation_id=investigation.id,
+            investigation_title=investigation.title,
+            slot=investigation.slot,
+            track=investigation.track,
+            grade_level=grade_level,
+        ))
+    return cards
+
+
+async def _attach_individual_lessons(plan: LearningPlanResponse) -> LearningPlanResponse:
+    investigations = list(plan.family_investigations or [])
+    if not investigations and plan.family_investigation:
+        investigations = [plan.family_investigation]
+    if not investigations:
+        investigations = [
+            item for item in plan.suggestions
+            if item.delivery_mode == "FAMILY_INVESTIGATION"
+        ]
+    grade = plan.placement.working_grade if plan.placement else "8"
+    try:
+        lessons = await individual_lessons_for(investigations, grade)
+    except Exception as exc:
+        logger.warning("[LearningPlan] Could not attach individual lessons: %s", exc)
+        return plan
+    return plan.model_copy(update={"individual_lessons": lessons})
 
 
 async def _shared_investigation_completed(shared_id: str) -> bool:
@@ -1890,14 +2043,14 @@ async def get_learning_plan(
             persisted = await daily_plan_store.get(student_id, plan_date)
             if persisted and persisted.get("plan_version") == 10:
                 logger.info("[LearningPlan] Persistent HIT for student=%s date=%s", student_id, plan_date)
-                return LearningPlanResponse(**persisted)
+                return await _attach_individual_lessons(LearningPlanResponse(**persisted))
         except Exception as e:
             logger.warning("[LearningPlan] Persistent plan read failed (non-fatal): %s", e)
         try:
             cached = await redis_client.get(cache_key)
             if cached:
                 logger.info(f"[LearningPlan] Cache HIT for student={student_id}")
-                return LearningPlanResponse(**json.loads(cached))
+                return await _attach_individual_lessons(LearningPlanResponse(**json.loads(cached)))
         except Exception as e:
             logger.warning(f"[LearningPlan] Redis cache read failed (non-fatal): {e}")
 
@@ -2247,7 +2400,7 @@ async def get_learning_plan(
     except Exception as e:
         logger.warning("[LearningPlan] Persistent plan write failed (non-fatal): %s", e)
 
-    return response
+    return await _attach_individual_lessons(response)
 
 
 @router.get("/{student_id}/today", response_model=LearningPlanResponse)
@@ -2263,4 +2416,4 @@ async def get_saved_today_plan(
     persisted = await daily_plan_store.get(student_id, plan_date)
     if not persisted or persisted.get("plan_version") != 10:
         raise HTTPException(status_code=404, detail="Today's plan has not been created yet")
-    return LearningPlanResponse(**persisted)
+    return await _attach_individual_lessons(LearningPlanResponse(**persisted))

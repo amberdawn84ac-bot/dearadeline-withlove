@@ -258,6 +258,12 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
   const familyDiscussion = lesson.metadata?.family_discussion;
   const isIndividualSkill = lesson.metadata?.delivery_mode === "INDIVIDUAL_SKILL";
 
+  useEffect(() => {
+    const id = window.location.hash.replace(/^#/, "");
+    if (!id) return;
+    document.getElementById(id)?.scrollIntoView({ block: "start" });
+  }, [lesson.lesson_id]);
+
   const centralQuestion = design.central_question?.trim() || questionFrom(visible, lesson.title);
   const entryMove = design.entry_move?.trim();
 
@@ -321,7 +327,7 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
         ? "elementary"
         : Number.parseInt(lesson.metadata?.grade_level ?? "", 10) <= 8 ? "middle" : "high_school";
       const expectation = unitLesson.individual_expectations?.[expectationBand];
-      return <section key={unitLesson.lesson_id} className="space-y-5 rounded-[28px] border-2 border-[#D9CFBC] bg-[#FFFDF7] p-5 md:p-8">
+      return <section id={`lesson-${unitLesson.lesson_id}`} key={unitLesson.lesson_id} className="scroll-mt-28 space-y-5 rounded-[28px] border-2 border-[#D9CFBC] bg-[#FFFDF7] p-5 md:p-8">
         <div className="border-b border-[#D9CFBC] pb-5">
           <p className="text-xs font-black uppercase tracking-[.18em] text-[#9A3F4A]">Lesson {lessonIndex + 1} of {unitLessons.length}</p>
           <h2 className="mt-2 text-4xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{unitLesson.title}</h2>

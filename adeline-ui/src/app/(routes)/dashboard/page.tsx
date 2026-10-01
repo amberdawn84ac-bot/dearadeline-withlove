@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useStudent } from '@/lib/useStudent';
 import { getLearningPlan, getRecentTranscript, getSavedTodayPlan, peekLearningPlan } from '@/lib/brain-client';
-import type { LearningPlanResponse, LessonSuggestion, TranscriptEntry } from '@/lib/brain-client';
+import type { IndividualLesson, LearningPlanResponse, LessonSuggestion, TranscriptEntry } from '@/lib/brain-client';
 import { AdelineConversationCard } from '@/components/AdelineConversationCard';
 import styles from '@/components/nav/sites-dashboard.module.css';
 
@@ -12,7 +12,7 @@ export default function TodayPage() {
   const { student, loading: studentLoading } = useStudent();
   const [todayInvestigations, setTodayInvestigations] = useState<LessonSuggestion[]>([]);
   const [sharedWithSiblings, setSharedWithSiblings] = useState(false);
-  const [comingUp, setComingUp] = useState<LessonSuggestion[]>([]);
+  const [individualLessons, setIndividualLessons] = useState<IndividualLesson[]>([]);
   const [finished, setFinished] = useState<TranscriptEntry[]>([]);
   const [isNextSchoolDay, setIsNextSchoolDay] = useState(false);
   const [planLoading, setPlanLoading] = useState(true);
@@ -27,12 +27,9 @@ export default function TodayPage() {
       : plan.family_investigation
         ? [plan.family_investigation]
         : lineup.filter((item) => item.delivery_mode === 'FAMILY_INVESTIGATION');
-    const skills = plan.individual_skills?.length
-      ? plan.individual_skills
-      : lineup.filter((item) => item.delivery_mode === 'INDIVIDUAL_SKILL');
     setTodayInvestigations(families);
     setSharedWithSiblings(plan.family_context.shared_with_siblings);
-    setComingUp(skills.slice(0, 4));
+    setIndividualLessons(plan.individual_lessons ?? []);
     setIsNextSchoolDay(false);
   }, []);
 
@@ -117,23 +114,28 @@ export default function TodayPage() {
           {!finished.length && <EmptyCard text="Completed lessons appear here after evidence is recorded." />}
         </div>
       </section>
-      {comingUp.length > 0 && (
-        <section className={styles.practiceStrip} aria-label="Math and reading practice">
+      {individualLessons.length > 0 && (
+        <section className={styles.practiceStrip} aria-label="This learner's lessons">
           <header>
-            <p>At this learner's level</p>
-            <h2>Math & reading practice</h2>
-            <span>Separate from the family investigations — only what this learner is ready for.</span>
+            <p>After the family work</p>
+            <h2>Your lessons</h2>
+            <span>The same investigations, broken into the part this learner does.</span>
           </header>
-          <div className={styles.practiceCards}>
-            {comingUp.map((mission) => (
-              <article key={mission.id} className={styles.kanbanCard}>
-                <small>{mission.track.replace(/_/g, ' ')}</small>
-                <h3>{mission.emoji} {mission.title}</h3>
-                <p>{mission.description}</p>
-                <Link href={`/dashboard/lesson/${encodeURIComponent(mission.id)}`}>Practice →</Link>
-              </article>
-            ))}
-          </div>
+          {groupedLessons(individualLessons).map((group) => (
+            <div key={group.id}>
+              <h3 className="mb-2 mt-4 text-sm font-black text-[#2F4731]">{group.title}</h3>
+              <div className={styles.practiceCards}>
+                {group.lessons.map((lesson) => (
+                  <article key={lesson.id} className={styles.kanbanCard}>
+                    <small>Lesson {lesson.index} of {lesson.count}</small>
+                    <h3>{lesson.title}</h3>
+                    <p>{lesson.assignment}</p>
+                    <Link href={`/dashboard/lesson/${encodeURIComponent(lesson.investigation_id)}#lesson-${encodeURIComponent(lesson.lesson_id)}`}>Open this lesson →</Link>
+                  </article>
+                ))}
+              </div>
+            </div>
+          ))}
         </section>
       )}
       <p className={styles.planFootnote}>
@@ -143,6 +145,16 @@ export default function TodayPage() {
       </p>
     </div>
   );
+}
+
+function groupedLessons(lessons: IndividualLesson[]) {
+  const groups: Array<{ id: string; title: string; lessons: IndividualLesson[] }> = [];
+  for (const lesson of lessons) {
+    const existing = groups.find((group) => group.id === lesson.investigation_id);
+    if (existing) existing.lessons.push(lesson);
+    else groups.push({ id: lesson.investigation_id, title: lesson.investigation_title, lessons: [lesson] });
+  }
+  return groups;
 }
 
 function InvestigationCard({ investigation }: { investigation: LessonSuggestion }) {
