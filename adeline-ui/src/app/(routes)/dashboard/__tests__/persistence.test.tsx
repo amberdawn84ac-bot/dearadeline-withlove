@@ -59,6 +59,18 @@ const plan = {
   family_investigation: undefined,
   family_investigations: undefined,
   individual_skills: [],
+  individual_lessons: [{
+    id: 'family-1-week-1:scene',
+    investigation_id: 'family-1-week-1',
+    investigation_title: 'Creek evidence',
+    slot: 'science',
+    lesson_id: 'scene',
+    index: 1,
+    count: 2,
+    title: 'The crime scene',
+    assignment: 'Walk the boundary and sketch what you see.',
+    track: 'CREATION_SCIENCE',
+  }],
   family_context: { household_id: 'family-1', shared_with_siblings: false, sibling_count: 0 },
   placement: { declared_level: '8', working_grade: '8', placement_required: false, subject_levels: {} },
   roadmap: { months: [] },
@@ -92,16 +104,19 @@ describe('durable Today and experience reopening', () => {
     expect(brain.getLearningPlan).not.toHaveBeenCalled();
   });
 
-  it('keeps the learner skill path separate and openable', async () => {
+  it('shows this learner’s part of the family investigation, not a standards list', async () => {
     render(<TodayPage />);
 
     await screen.findByText('Creek evidence');
     expect(screen.getByRole('heading', { name: 'Science together' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'History together' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Poison Squad/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Math & reading practice' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Practice →' })).toHaveAttribute(
-      'href', '/dashboard/lesson/math-1',
+    expect(screen.getByRole('heading', { name: 'Your lessons' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'The crime scene' })).toBeInTheDocument();
+    expect(screen.getByText('Walk the boundary and sketch what you see.')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Math & reading practice' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open this lesson →' })).toHaveAttribute(
+      'href', '/dashboard/lesson/family-1-week-1#lesson-scene',
     );
     expect(screen.getAllByRole('link', { name: /Start this investigation/ }).length).toBeGreaterThan(0);
   });

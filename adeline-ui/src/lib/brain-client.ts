@@ -1447,6 +1447,19 @@ export interface UpcomingInvestigation {
   position: number;
 }
 
+export interface IndividualLesson {
+  id: string;
+  investigation_id: string;
+  investigation_title: string;
+  slot?: string | null;
+  lesson_id: string;
+  index: number;
+  count: number;
+  title: string;
+  assignment: string;
+  track: string;
+}
+
 export interface SpaceListItem {
   plan_item_id: string;
   title: string;
@@ -1476,6 +1489,7 @@ export interface LearningPlanResponse {
   family_investigation?: LessonSuggestion;
   family_investigations?: LessonSuggestion[];
   upcoming_family_investigations?: UpcomingInvestigation[];
+  individual_lessons?: IndividualLesson[];
   individual_skills: LessonSuggestion[];
   progression_checklist?: IndividualSkillTarget[];
   progression_map_status: ProgressionMapStatus;
