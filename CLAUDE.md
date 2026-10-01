@@ -204,7 +204,7 @@ Row-Level Security is enabled on at least `User` and `StandardMastery` (checked 
 
 Brain CI still ignores a real set of drifted tests (bookshelf e2e, conversation, hippocampus source type, justice parser, launch readiness, pgvector duplicates, projects API, deep-web witness search, spaced repetition, declassified witness integration, Sefaria, and one ZPD case). Green CI is still not the Today → Space → credit journey.
 
-The Kitchen Case File (`app/curriculum/kitchen_case_file.py`) is a repository canonical for household forensic science. Parents queue it from the parent dashboard. It is served from `builtin_canonicals` when the database has no approved row yet.
+The forensic science unit (`app/curriculum/kitchen_case_file.py`) is a repository canonical. Parents queue it from the parent dashboard. It is the career unit — scene, prints, blood, documents, impressions, pathology, entomology, DNA — not a sanitized household mystery. `builtin_canonicals` serves it, and a newer content revision replaces a cached older copy.
 
 **Root-cause groups from the 2026-08-26 audit.** The `getBooks()` row is stale: that path was fixed before 2026-09-30. The other rows were not re-run for this change.
 

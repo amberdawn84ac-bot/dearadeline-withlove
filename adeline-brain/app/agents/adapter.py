@@ -114,13 +114,17 @@ def sanitize_learner_text(content: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
 
-def apply_safety_filter(content: str, block_type: str, grade: int) -> str:
+def apply_safety_filter(content: str, block_type: str, grade: int, *, parent_directed: bool = False) -> str:
     """Run the Kid-Safe Quality Gate on learner-facing text before delivery.
 
     Fails open on filter errors (never blocks a lesson because the filter
     itself broke) and on a hard block returns a short honest placeholder
     rather than either the unfiltered text or a silently empty block, so a
     parent knows a review is needed instead of the lesson looking broken.
+
+    parent_directed is for a canonical the parent queued on purpose, including
+    real forensic practice. Generated surprises still hard-block. PII is still
+    redacted either way.
     """
     if not content.strip():
         return content
@@ -137,7 +141,7 @@ def apply_safety_filter(content: str, block_type: str, grade: int) -> str:
         content = result.sanitized_content
 
     unresolved_hard_flags = {SafetyFlag.VIOLENCE, SafetyFlag.FEAR_CONTENT}.intersection(result.flags)
-    if unresolved_hard_flags:
+    if unresolved_hard_flags and not parent_directed:
         logger.warning(
             "[Adapter] Safety filter hard-blocked a %s block at grade %s: flags=%s",
             block_type, grade, result.flags,
@@ -145,6 +149,11 @@ def apply_safety_filter(content: str, block_type: str, grade: int) -> str:
         return (
             "This part of the lesson needs a parent's review before Adeline shows it here. "
             "Ask a parent to check this block in the lesson."
+        )
+    if unresolved_hard_flags and parent_directed:
+        logger.info(
+            "[Adapter] Parent-directed %s block kept at grade %s despite flags=%s",
+            block_type, grade, result.flags,
         )
 
     if result.warnings:
@@ -231,7 +240,10 @@ async def adapt_canonical_for_student(canonical: dict, req: AdaptationRequest) -
         block["block_type"] = str(block.get("block_type") or "TEXT").upper()
         if isinstance(block.get("content"), str):
             block["content"] = sanitize_learner_text(block["content"])
-            block["content"] = apply_safety_filter(block["content"], block["block_type"], grade)
+            parent_directed = bool((block.get("metadata") or {}).get("parent_directed"))
+            block["content"] = apply_safety_filter(
+                block["content"], block["block_type"], grade, parent_directed=parent_directed,
+            )
         roles = block.get("family_roles") or {}
         metadata = block.setdefault("metadata", {})
         metadata["learner_entry"] = {

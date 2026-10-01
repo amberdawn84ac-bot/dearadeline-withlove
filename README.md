@@ -232,13 +232,13 @@ It should not become an answer vending machine.
 
 The student experience includes a Daily Bread devotional area with Scripture study and deeper exploration of original-language, context, translation, and cultural questions where appropriate.
 
-## The Kitchen Case File
+## Forensic science
 
-Household forensic science for the family that would otherwise buy a packaged unit.
+The family forensic unit lives at `adeline-brain/app/curriculum/kitchen_case_file.py`. Parents queue it from the dashboard as **Forensic science**. The topic string stays stable so an existing science-queue row still opens this lesson.
 
-Eight multi-day lessons, about four weeks: scene security, transfer, fingerprints, impressions, handwriting and ink, droplet physics, what a DNA extraction cannot identify, and a case conference. The shared product is one custody log and a Seen / Inferred / Unknown map. One clue is not proof (Deuteronomy 19:15). There are no real victims and no famous murder cases.
+Ten lessons, about four weeks: the crime scene, who works it, latent prints (including the Madrid misidentification), bloodstain patterns, questioned documents, impressions, forensic pathology, forensic entomology, DNA, and what a learner would say under oath. Household labs practice the measurements. They are not a substitute subject, and there is no younger edition with the death investigation removed. One result is not proof (Deuteronomy 19:15).
 
-Parents queue it from the parent dashboard as **The Kitchen Case File**. The lesson is a repository canonical (`adeline-brain/app/curriculum/kitchen_case_file.py`), so opening it does not wait on a new model draft when the database does not already have an approved copy.
+The lesson is a repository canonical, so opening it does not wait on a new model draft. A newer `content_revision` replaces a cached copy of the older household mystery.
 
 ## Technical Architecture
 

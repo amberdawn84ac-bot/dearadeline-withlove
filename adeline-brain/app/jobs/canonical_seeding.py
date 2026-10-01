@@ -91,28 +91,31 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
         "The Kitchen Case File: What Can Household Evidence Actually Prove?",
         "CREATION_SCIENCE",
         True,
-        archive_query="NIJ crime scene investigation guide NIST latent print ACE-V",
-        display_title="The Kitchen Case File",
+        archive_query="NIJ crime scene investigation NIST latent print bloodstain pattern forensic pathology entomology",
+        display_title="Forensic Science",
         family_summary=(
-            "A household scene, tape lifts, prints, impressions, ink, droplet physics, and a strawberry DNA extraction, "
-            "closed by a case map that separates what was seen from what is only alleged."
+            "Catalog card for the shared forensic careers unit: scene, prints, blood, documents, "
+            "impressions, pathology, entomology, and DNA in one case file."
         ),
-        learner_hook="Something in the house was moved. One clue is not enough to say who did it.",
-        driving_question="What can household evidence actually prove?",
+        learner_hook="The real jobs: crime scene, prints, blood, pathology, insects, and DNA. Same file for every age.",
+        driving_question="What can forensic science actually prove, and where does one result stop?",
         authoring_brief=(
-            "DRIVING QUESTION: What can the traces in this house prove, and what are we only guessing? "
-            "MISSION FRAME: one staged or real household disturbance. No real victims, no blood, no famous criminal cases, "
-            "and no child assigned to be the criminal. "
-            "DOCUMENTED STARTING POINT: use the NIJ crime-scene guide, NISTIR 7842 and the NIST ACE-V process map, "
-            "the NHGRI DNA fact sheet, the FBI Laboratory public page, and Deuteronomy 19:15 on Sefaria. "
-            "Do not invent Locard quotations, match statistics, or autopsy findings. "
-            "OPENING ENCOUNTER: mark a boundary and photograph before anyone interprets. "
-            "SHARED OUTCOME: one custody log and a Seen / Inferred / Unknown case map. "
-            "An inferred claim needs two independent observations. A kitchen method is practice, not a courtroom identification. "
-            "CORRECTNESS: a fiber, a cocoa lift, a shoe length, a chromatogram, a colored-water splash, and a strawberry extraction "
-            "each have a hard limit. State the limit in the lesson where the method appears."
+            "DRIVING QUESTION: What can forensic science actually prove, and where does one result stop? "
+            "MISSION FRAME: one family case file on real forensic careers. Do not write a younger edition that removes "
+            "death investigation, bloodstain patterns, autopsy, insects, or a real case. "
+            "DOCUMENTED STARTING POINT: NIJ crime-scene guide, NISTIR 7842, OSAC bloodstain pattern analysis, "
+            "OSAC forensic document examination, the NAME forensic pathology fellowship page, the NIJ blow-fly webinar, "
+            "the NHGRI DNA fact sheet, the FBI Laboratory description, the 2009 National Academies forensic science report, "
+            "and Deuteronomy 19:15. "
+            "Include the Madrid latent-print error and the Pitchfork DNA case as job facts, without a graphic retelling. "
+            "OPENING ENCOUNTER: secure a scene and start a custody log before anyone names a suspect or a cause. "
+            "SHARED OUTCOME: one custody log and a Seen / Inferred / Unknown map. "
+            "An inferred claim needs two independent observations. "
+            "CORRECTNESS: a kitchen measurement is practice of the real method and is not a courtroom identification. "
+            "Simulated blood is used because human blood can carry disease, not because blood evidence is off limits. "
+            "Cause of death is not manner of death. Homicide as a manner is not a murder conviction."
         ),
-        content_revision="kitchen-case-file-v1",
+        content_revision="kitchen-case-file-v2",
     ),
     CanonicalSeed(
         "From Possession to Prison: Drug Policy, Diversion, and Reform",
@@ -489,6 +492,37 @@ async def seed_one_canonical(seed: CanonicalSeed) -> str:
     from app.services.resource_router import resource_router
 
     slug = canonical_slug(seed.topic, seed.track)
+    from app.curriculum.builtin_canonicals import builtin_canonical
+    from app.connections.canonical_store import content_revision_of
+
+    builtin = builtin_canonical(slug)
+    if builtin and not builtin.get("pending_approval"):
+        try:
+            stored = await canonical_store._db_get(slug)
+        except Exception as exc:
+            logger.warning("[CanonicalSeed] DB read failed for repository canonical %s: %s", slug, exc)
+            stored = None
+        if stored and content_revision_of(stored) == content_revision_of(builtin):
+            logger.info("[CanonicalSeed] SKIP repository — %s / %s", seed.topic, seed.track)
+            return "skipped"
+        await canonical_store.save(
+            slug,
+            {
+                "id": builtin["id"],
+                "topic": builtin["topic"],
+                "track": builtin["track"],
+                "title": builtin["title"],
+                "blocks": builtin["blocks"],
+                "oas_standards": builtin.get("oas_standards") or [],
+                "researcher_activated": False,
+                "agent_name": builtin.get("agent_name") or "Canonical Experience Author",
+                "needs_review_reason": None,
+            },
+            pending=False,
+        )
+        logger.info("[CanonicalSeed] READY repository — %s / %s", seed.topic, seed.track)
+        return "repository"
+
     existing = await canonical_store.get(slug)
     stored_revision = ""
     stored_content_revision = ""

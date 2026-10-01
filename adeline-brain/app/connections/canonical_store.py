@@ -21,6 +21,37 @@ logger = logging.getLogger(__name__)
 REDIS_PREFIX = "canonical:"
 
 
+def content_revision_of(record: dict | None) -> str:
+    """Revision stamped on a canonical, or empty when the copy predates one."""
+    if not record:
+        return ""
+    blocks = record.get("blocks") or []
+    if isinstance(blocks, str):
+        try:
+            blocks = json.loads(blocks)
+        except (TypeError, ValueError):
+            return ""
+    if not isinstance(blocks, list) or not blocks or not isinstance(blocks[0], dict):
+        return ""
+    meta = blocks[0].get("metadata")
+    if not isinstance(meta, dict):
+        return ""
+    return str(meta.get("content_revision") or "")
+
+
+def repository_copy_supersedes(stored: dict | None, repository: dict | None) -> bool:
+    """A hand-authored lesson replaces a cached copy when its revision has moved.
+
+    Cached rows with no revision are older than any revisioned repository lesson.
+    """
+    if not stored or not repository:
+        return False
+    repo_rev = content_revision_of(repository)
+    if not repo_rev:
+        return False
+    return content_revision_of(stored) != repo_rev
+
+
 def canonical_slug(topic: str, track: str) -> str:
     """Deterministic 32-char hex key for (topic, track). Case- and whitespace-insensitive."""
     raw = f"{topic.strip().lower()}:{track}"
@@ -146,31 +177,46 @@ class CanonicalStore:
             await conn.close()
 
     async def get(self, slug: str) -> Optional[dict]:
-        """Redis-first lookup. Returns dict or None."""
-        raw = await self._redis_get(slug)
-        if raw:
-            logger.info(f"[CanonicalStore] Redis HIT — {slug}")
-            return json.loads(raw)
+        """Redis, then Postgres, then a repository canonical.
 
-        try:
-            record = await self._db_get(slug)
-        except Exception as e:
-            logger.warning(f"[CanonicalStore] DB GET failed, checking repository canonicals: {e}")
-            record = None
+        A hand-authored repository lesson replaces either cache when its
+        content revision has moved. Otherwise a stored approved copy wins.
+        """
+        raw = await self._redis_get(slug)
+        record = None
+        if raw:
+            try:
+                record = json.loads(raw)
+                logger.info(f"[CanonicalStore] Redis HIT — {slug}")
+            except (TypeError, ValueError):
+                record = None
+
+        if record is None:
+            try:
+                record = await self._db_get(slug)
+            except Exception as e:
+                logger.warning(f"[CanonicalStore] DB GET failed, checking repository canonicals: {e}")
+                record = None
+            else:
+                if record:
+                    logger.info(f"[CanonicalStore] DB HIT — {slug}")
+
+        from app.curriculum.builtin_canonicals import builtin_canonical
+        repository = builtin_canonical(slug)
+        if repository_copy_supersedes(record, repository):
+            logger.info("[CanonicalStore] Repository revision overrides cached canonical — %s", slug)
+            await self._redis_set(slug, json.dumps(repository))
+            return repository
+
         if record:
-            logger.info(f"[CanonicalStore] DB HIT — {slug}, populating Redis")
-            await self._redis_set(slug, json.dumps(record))
+            if not raw:
+                await self._redis_set(slug, json.dumps(record))
             return record
 
-        # Repository canonicals keep critical lessons immediately available even when the
-        # remote curriculum store is empty or temporarily unreachable. A DB-approved copy
-        # always wins because it is checked first.
-        from app.curriculum.builtin_canonicals import builtin_canonical
-        record = builtin_canonical(slug)
-        if record:
+        if repository:
             logger.info(f"[CanonicalStore] BUILTIN HIT — {slug}")
-            await self._redis_set(slug, json.dumps(record))
-        return record
+            await self._redis_set(slug, json.dumps(repository))
+        return repository
 
     async def _redis_delete(self, slug: str) -> None:
         try:

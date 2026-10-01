@@ -136,6 +136,21 @@ def _ready_draft_should_rebuild(record: dict, expected_slug: str) -> bool:
         blob = " ".join(str(block.get("content") or "") for block in teaching[:2])
         if dump[:48] in title or dump[:80] in blob:
             return True
+    from app.connections.canonical_store import content_revision_of
+    from app.curriculum.builtin_canonicals import builtin_canonical
+
+    repository = builtin_canonical(expected_slug)
+    repo_rev = content_revision_of(repository)
+    if repo_rev:
+        saved_rev = ""
+        for block in teaching:
+            if not isinstance(block, dict):
+                continue
+            saved_rev = str((block.get("metadata") or {}).get("content_revision") or "")
+            if saved_rev:
+                break
+        if saved_rev != repo_rev:
+            return True
     return False
 
 
