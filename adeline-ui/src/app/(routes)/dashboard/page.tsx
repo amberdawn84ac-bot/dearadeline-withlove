@@ -119,7 +119,7 @@ export default function TodayPage() {
           <header>
             <p>After the family work</p>
             <h2>Your lessons</h2>
-            <span>The same investigations, broken into the part this learner does.</span>
+            <span>The family lesson, with the other subjects that fit this learner&rsquo;s level. Work that does not fit stays open below.</span>
           </header>
           {groupedLessons(individualLessons).map((group) => (
             <div key={group.id}>
@@ -127,10 +127,15 @@ export default function TodayPage() {
               <div className={styles.practiceCards}>
                 {group.lessons.map((lesson) => (
                   <article key={lesson.id} className={styles.kanbanCard}>
-                    <small>Lesson {lesson.index} of {lesson.count}</small>
+                    <small>{lesson.kind === 'gap' ? lesson.track.replaceAll('_', ' ') : `Lesson ${lesson.index} of ${lesson.count}`}</small>
                     <h3>{lesson.title}</h3>
                     <p>{lesson.assignment}</p>
-                    <Link href={`/dashboard/lesson/${encodeURIComponent(lesson.investigation_id)}#lesson-${encodeURIComponent(lesson.lesson_id)}`}>Open this lesson →</Link>
+                    {!!lesson.connections?.length && <ul className="mt-2 space-y-1">
+                      {lesson.connections.map((connection) => <li key={connection.suggestion_id} className="text-xs leading-5 text-[#2F4731]/70">
+                        <b>{domainLabel(connection.domain)} · level {connection.working_level || 'yours'}:</b> {connection.title}
+                      </li>)}
+                    </ul>}
+                    <Link href={lessonHref(lesson)}>{lesson.kind === 'gap' ? 'Work on this →' : 'Open this lesson →'}</Link>
                   </article>
                 ))}
               </div>
@@ -147,12 +152,34 @@ export default function TodayPage() {
   );
 }
 
+function domainLabel(domain: string) {
+  const labels: Record<string, string> = {
+    math: 'Math',
+    literacy: 'Reading and writing',
+    history: 'History',
+    science: 'Science',
+    homesteading: 'Homesteading',
+    discipleship: 'Scripture',
+    justice: 'Justice',
+    health: 'Health',
+    government_economics: 'Government and economics',
+    creative_economy: 'Making and selling',
+  };
+  return labels[domain] || domain.replaceAll('_', ' ');
+}
+
+function lessonHref(lesson: IndividualLesson) {
+  if (lesson.kind === 'gap') return `/dashboard/lesson/${encodeURIComponent(lesson.investigation_id)}`;
+  return `/dashboard/lesson/${encodeURIComponent(lesson.investigation_id)}#lesson-${encodeURIComponent(lesson.lesson_id)}`;
+}
+
 function groupedLessons(lessons: IndividualLesson[]) {
   const groups: Array<{ id: string; title: string; lessons: IndividualLesson[] }> = [];
   for (const lesson of lessons) {
-    const existing = groups.find((group) => group.id === lesson.investigation_id);
+    const key = lesson.kind === 'gap' ? 'gaps' : lesson.investigation_id;
+    const existing = groups.find((group) => group.id === key);
     if (existing) existing.lessons.push(lesson);
-    else groups.push({ id: lesson.investigation_id, title: lesson.investigation_title, lessons: [lesson] });
+    else groups.push({ id: key, title: lesson.investigation_title, lessons: [lesson] });
   }
   return groups;
 }
