@@ -327,6 +327,15 @@ class UpcomingInvestigation(BaseModel):
     position: int
 
 
+class LessonConnection(BaseModel):
+    """Another subject folded into this lesson because the work actually uses it."""
+    suggestion_id: str
+    domain: str
+    track: str
+    title: str
+    working_level: str = ""
+
+
 class IndividualLesson(BaseModel):
     """One lesson of the open family investigation, written as this child's work."""
     id: str
@@ -339,6 +348,8 @@ class IndividualLesson(BaseModel):
     title: str
     assignment: str
     track: str
+    kind: Literal["investigation", "gap"] = "investigation"
+    connections: list[LessonConnection] = Field(default_factory=list)
 
 
 class LearningPlanResponse(BaseModel):
@@ -1006,6 +1017,95 @@ def lessons_from_canonical(
     )]
 
 
+def _level_fits(working_level: str | None, grade_level: str) -> bool:
+    """A target from another grade band is not this child's work."""
+    if not str(working_level or "").strip():
+        return True
+    return _age_band(str(working_level)) == _age_band(grade_level)
+
+
+def _target_fits_lesson(target: IndividualSkillTarget, lesson: IndividualLesson) -> bool:
+    """Fold a subject in only when this lesson's own words call for it."""
+    from app.api.experience_builder import _skill_families_for_text
+
+    if target.track == lesson.track or lesson.kind != "investigation":
+        return False
+    return bool(_skill_families_for_text(target.domain, f"{lesson.title} {lesson.assignment}"))
+
+
+def personalize_lessons(
+    lessons: list[IndividualLesson],
+    targets: list[IndividualSkillTarget],
+    grade_level: str,
+    covered_tracks: set[str],
+) -> list[IndividualLesson]:
+    """Weave this child's ready subjects into the family lessons, and keep the rest.
+
+    One current target per track. It joins the first lesson that actually uses
+    that subject. A target from the wrong grade, or one whose foundation is
+    still locked, is not assigned. Anything the open investigations do not use
+    stays as this child's own gap.
+    """
+    eligible: list[IndividualSkillTarget] = []
+    for target in targets:
+        if target.sequence_state == "LOCKED":
+            continue
+        if target.track in covered_tracks:
+            continue
+        if not str(target.title or "").strip():
+            continue
+        if not _level_fits(target.working_level, grade_level):
+            continue
+        eligible.append(target)
+
+    used: set[str] = set()
+    woven: list[IndividualLesson] = []
+    for lesson in lessons:
+        connections: list[LessonConnection] = []
+        for target in eligible:
+            if target.suggestion_id in used or target.sequence_state == "BRIDGE_REQUIRED":
+                continue
+            if not _target_fits_lesson(target, lesson):
+                continue
+            connections.append(LessonConnection(
+                suggestion_id=target.suggestion_id,
+                domain=target.domain,
+                track=target.track,
+                title=target.title,
+                working_level=str(target.working_level or grade_level),
+            ))
+            used.add(target.suggestion_id)
+        woven.append(lesson.model_copy(update={"connections": connections}))
+
+    gaps: list[IndividualLesson] = []
+    for target in eligible:
+        if target.suggestion_id in used:
+            continue
+        if target.sequence_state == "BRIDGE_REQUIRED":
+            assignment = (
+                "The foundation for this is not secure yet. Practice it before using it in the family work."
+            )
+        else:
+            assignment = (
+                f"This is the next {target.domain.replace('_', ' ')} work at level "
+                f"{target.working_level or grade_level}. The open investigations do not use it, so it stays with this learner."
+            )
+        gaps.append(IndividualLesson(
+            id=f"gap:{target.suggestion_id}",
+            investigation_id=target.suggestion_id,
+            investigation_title="Still open for you",
+            slot="gap",
+            lesson_id="gap",
+            index=1,
+            count=1,
+            title=target.title,
+            assignment=assignment,
+            track=target.track,
+            kind="gap",
+        ))
+    return woven + gaps
+
+
 async def individual_lessons_for(
     investigations: list[LessonSuggestion],
     grade_level: str,
@@ -1049,6 +1149,13 @@ async def _attach_individual_lessons(plan: LearningPlanResponse) -> LearningPlan
     grade = plan.placement.working_grade if plan.placement else "8"
     try:
         lessons = await individual_lessons_for(investigations, grade)
+        targets = list(plan.progression_checklist or []) or _learner_progression_targets(plan.suggestions, grade)
+        lessons = personalize_lessons(
+            lessons,
+            targets,
+            grade,
+            {item.track for item in investigations},
+        )
     except Exception as exc:
         logger.warning("[LearningPlan] Could not attach individual lessons: %s", exc)
         return plan

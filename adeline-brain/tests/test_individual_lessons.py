@@ -34,3 +34,55 @@ def test_kitchen_case_splits_into_this_childs_lessons():
     assert elementary[0].index == 1
     assert elementary[0].count == 10
     assert elementary[0].id == "family-science:scene"
+
+
+def test_other_subjects_join_only_when_the_lesson_uses_them():
+    from app.api.learning_plan import IndividualSkillTarget, personalize_lessons
+
+    record = build_kitchen_case_canonical()
+    lessons = lessons_from_canonical(
+        record,
+        investigation_id="family-science",
+        investigation_title="Forensic Science",
+        slot="science",
+        track="CREATION_SCIENCE",
+        grade_level="8",
+    )
+    targets = [
+        IndividualSkillTarget(
+            suggestion_id="math-1", domain="math", title="Measure a real length and keep the unit",
+            track="APPLIED_MATHEMATICS", working_level="8", sequence_state="READY", mastery_eligible=True,
+        ),
+        IndividualSkillTarget(
+            suggestion_id="write-1", domain="literacy", title="Write one precise observation",
+            track="ENGLISH_LITERATURE", working_level="8", sequence_state="READY", mastery_eligible=True,
+        ),
+        IndividualSkillTarget(
+            suggestion_id="scripture-1", domain="discipleship", title="Read the verse in context",
+            track="DISCIPLESHIP", working_level="8", sequence_state="READY", mastery_eligible=True,
+        ),
+        IndividualSkillTarget(
+            suggestion_id="too-old", domain="math", title="Use a derivative",
+            track="APPLIED_MATHEMATICS", working_level="11", sequence_state="READY",
+        ),
+        IndividualSkillTarget(
+            suggestion_id="locked", domain="health", title="Explain a dose",
+            track="HEALTH_NATUROPATHY", working_level="8", sequence_state="LOCKED",
+        ),
+        IndividualSkillTarget(
+            suggestion_id="science-gap", domain="science", title="Name a variable",
+            track="CREATION_SCIENCE", working_level="8", sequence_state="READY",
+        ),
+    ]
+    personalized = personalize_lessons(lessons, targets, "8", {"CREATION_SCIENCE"})
+    blood = next(card for card in personalized if card.title == "Bloodstain patterns")
+    custody = next(card for card in personalized if card.title == "Who works a scene")
+    gaps = [card for card in personalized if card.kind == "gap"]
+
+    assert [item.suggestion_id for item in blood.connections] == ["math-1"]
+    assert [item.suggestion_id for item in custody.connections] == ["write-1"]
+    assert [card.title for card in gaps] == ["Read the verse in context"]
+    assert all(card.title != "Use a derivative" for card in personalized)
+    assert all(card.title != "Explain a dose" for card in personalized)
+    assert all(card.title != "Name a variable" for card in personalized)
+

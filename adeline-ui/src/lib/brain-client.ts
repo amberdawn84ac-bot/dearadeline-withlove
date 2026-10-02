@@ -1447,6 +1447,14 @@ export interface UpcomingInvestigation {
   position: number;
 }
 
+export interface LessonConnection {
+  suggestion_id: string;
+  domain: string;
+  track: string;
+  title: string;
+  working_level?: string;
+}
+
 export interface IndividualLesson {
   id: string;
   investigation_id: string;
@@ -1458,6 +1466,8 @@ export interface IndividualLesson {
   title: string;
   assignment: string;
   track: string;
+  kind?: 'investigation' | 'gap';
+  connections?: LessonConnection[];
 }
 
 export interface SpaceListItem {
