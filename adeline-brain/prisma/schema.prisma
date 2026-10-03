@@ -294,6 +294,13 @@ model DailyPlan {
 }
 
 model CanonicalLesson {
+  contentRevision       String @default("")
+  contractVersion       Int @default(1)
+  stagesJson            Json @default("[]")
+  skillOpportunitiesJson Json @default("[]")
+  sharedFactsJson       Json @default("[]")
+  sharedSourcesJson     Json @default("[]")
+  realWorldContractJson Json?
   id                  String        @id @default(uuid())
   topicSlug           String        @unique
   topic               String
@@ -776,4 +783,105 @@ model HippocampusDocument {
   @@index([track])
   @@index([oasStandard])
   @@index([sourceType])
+}
+
+model FamilyUnit {
+  id          String   @id @default(uuid())
+  title       String
+  description String   @default("")
+  createdAt   DateTime @default(now())
+}
+
+model FamilyUnitQueue {
+  id            String    @id @default(uuid())
+  householdId   String
+  unitId        String
+  position      Int
+  status        String    @default("queued")
+  startedAt     DateTime?
+  completedAt   DateTime?
+  legacyQueueId String?   @unique
+  createdAt     DateTime @default(now())
+  // One-active partial unique index and status CHECK are in the SQL migration.
+  @@unique([householdId, position])
+}
+
+model FamilyUnitExperience {
+  id             String @id @default(uuid())
+  unitId         String
+  position       Int
+  canonicalTopic String
+  track          String
+  @@unique([unitId, position])
+}
+
+model FamilyUnitExperienceProgress {
+  queueId      String
+  experienceId String
+  completedAt  DateTime @default(now())
+  @@id([queueId, experienceId])
+}
+
+model StudentCharacter {
+  studentId        String @id
+  name             String
+  identity         String @default("")
+  rolePreferences  Json @default("[]")
+  persistentTraits Json @default("[]")
+  visualData       Json @default("{}")
+  updatedAt        DateTime @updatedAt
+}
+
+model EvidenceAttempt {
+  id                String @id @default(uuid())
+  studentId         String
+  canonicalSlug     String
+  canonicalRevision String @default("")
+  lessonId          String
+  skillId           String?
+  parentAttemptId   String?
+  kind              String
+  content           Json
+  submissionKey     String
+  createdAt         DateTime @default(now())
+  @@unique([studentId, submissionKey])
+  @@index([studentId, lessonId])
+}
+
+model EvidenceEvaluation {
+  id          String @id @default(uuid())
+  attemptId   String
+  evaluatorId String
+  skillId     String
+  result      String
+  reasoning   String
+  createdAt   DateTime @default(now())
+  @@unique([attemptId, skillId])
+}
+
+model StudentSkillState {
+  studentId          String
+  skillId            String
+  status             String @default("developing")
+  workingLevel       String @default("")
+  nextSkillReady     Boolean @default(false)
+  lastEvidenceId     String?
+  evidenceCount      Int @default(0)
+  lastDemonstratedAt DateTime?
+  @@id([studentId, skillId])
+}
+
+model TimelineCard {
+  id                  String @id @default(uuid())
+  attemptId           String @unique
+  studentId           String
+  dateStart           String
+  dateEnd             String?
+  claim               String
+  sources             Json
+  perspectives        Json @default("[]")
+  omittedPerspectives Json @default("[]")
+  conflictingEvidence Json @default("[]")
+  uncertainty         String @default("")
+  createdAt           DateTime @default(now())
 }

@@ -54,6 +54,8 @@ _STRUCTURE_OWNING_TYPES = frozenset({
 class AdaptationRequest:
     grade_level: str
     track: str
+    curriculum_state: dict = field(default_factory=dict)
+    character: dict = field(default_factory=dict)
     interests: list[str] = field(default_factory=list)
     interaction_count: int = 10
     recent_quiz_scores: list[float] = field(default_factory=list)
@@ -247,6 +249,7 @@ async def adapt_canonical_for_student(canonical: dict, req: AdaptationRequest) -
         roles = block.get("family_roles") or {}
         metadata = block.setdefault("metadata", {})
         metadata["learner_entry"] = {
+            "character": deepcopy(req.character),
             "role_band": band,
             "role": roles.get(band) if isinstance(roles, dict) else None,
             "session_support": (

@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import logging
+import json
 
 from app.agents.adapter import AdaptationRequest
-from app.algorithms.bkt_tracker import get_mastery_map
 from app.agents.cognitive_twin import get_twin, recommend_intervention
 from app.config import get_db_conn
 
@@ -12,11 +12,16 @@ logger = logging.getLogger(__name__)
 
 
 async def adaptation_for(student_id: str, grade_level: str, track: str) -> AdaptationRequest:
+    character: dict = {}
     interests: list[str] = []
     modality = "text"
     try:
         conn = await get_db_conn()
         try:
+            character_row = await conn.fetchrow('SELECT * FROM "StudentCharacter" WHERE "studentId"=$1', student_id)
+            character = {key:character_row[key] for key in ("studentId","name","identity","rolePreferences","persistentTraits","visualData")} if character_row else {}
+            for key in ('rolePreferences','persistentTraits','visualData'):
+                if isinstance(character.get(key),str): character[key]=json.loads(character[key])
             row = await conn.fetchrow(
                 'SELECT "interests", "learningStyle" FROM "User" WHERE "id" = $1', student_id
             )
@@ -28,13 +33,17 @@ async def adaptation_for(student_id: str, grade_level: str, track: str) -> Adapt
     except Exception as exc:
         logger.warning("Learner profile unavailable for adaptation: %s", exc)
 
-    proficiency = await get_mastery_map(student_id, track)
+    from app.services.curriculum_state import get_curriculum_state
+    curriculum_state = await get_curriculum_state(student_id)
+    proficiency = {str(signal['conceptId']):float(signal['masteryLevel']) for signal in curriculum_state['bkt_scheduling_signals'] if signal['track']==track}
     mastery = sum(proficiency.values()) / len(proficiency) if proficiency else 0.1
     # Cheap bridge between the durable learner model and the live session. A
     # missing/expired Twin simply returns its neutral default and adds no model
     # call. The Twin remains ephemeral and is not copied into the database.
     twin = await get_twin(student_id)
     return AdaptationRequest(
+        curriculum_state=curriculum_state,
+        character=character,
         grade_level=grade_level,
         track=track,
         interests=interests,
@@ -62,8 +71,23 @@ def learner_contribution(contract: dict, adaptation: AdaptationRequest) -> dict:
     public_interest = contract.get("public_interest_contract") or {}
     portfolio = contract.get("portfolio_task") or {}
     role = (contract.get("family_roles") or {}).get(band) or real_task.get("individual_contribution") or "Make one meaningful contribution to the shared investigation."
+    character = adaptation.character or {}
+    character_name = str(character.get("name") or "").strip()
+    role_preferences = character.get("rolePreferences") or []
+    allowed_roles = contract.get("available_roles") or []
+    selected_role = next((r for r in allowed_roles if r in role_preferences), None)
+    if selected_role:
+        role = str(selected_role) + ": " + role
+    skill_states = {row['skillId']:row['status'] for row in adaptation.curriculum_state.get('skills', [])}
+    concept_ids = [c['concept_id'] for c in (contract.get('unit_plan') or {}).get('essential_concepts', []) if c.get('concept_id')]
+    stretch_ready = bool(concept_ids) and all(skill_states.get(c)=='secure' for c in concept_ids)
+    review_needed = any(skill_states.get(c) in (None,'developing') for c in concept_ids)
     interests = adaptation.interests[:3]
     return {
+        "character": character,
+        "character_name": character_name,
+        "stretch_ready": stretch_ready,
+        "review_needed": review_needed,
         "role": role,
         "prompt": demonstration.get("learner_prompt") or real_task.get("individual_contribution") or role,
         "artifact_prompt": demonstration.get("artifact_prompt") or "Preserve a photo, recording, drawing, model, calculation, or explanation that shows what you discovered.",

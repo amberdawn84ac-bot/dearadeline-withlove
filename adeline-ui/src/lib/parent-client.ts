@@ -197,7 +197,7 @@ export async function getSpacesInsights(limit = 20): Promise<SpaceInsight[]> {
 }
 
 export async function enqueueFamilyInvestigation(
-  householdId: string, slot: 'science' | 'history', canonicalTopic: string, track: string,
+  householdId: string, slot: 'family' | 'science' | 'history', canonicalTopic: string, track: string,
 ): Promise<void> {
   const res = await fetch(`${BRAIN_URL}/learning-plan/family-investigation-queue`, {
     method: 'POST',

@@ -54,6 +54,7 @@ from app.api.onboarding import router as onboarding_router
 from app.api.parent import router as parent_router
 from app.api.admin import router as admin_router
 from app.api.learning_plan import router as learning_plan_router
+from app.api.curriculum import router as curriculum_router
 from app.api.genui import router as genui_router
 from app.api.focus import router as focus_router
 from app.api.auth import router as auth_router
@@ -272,6 +273,7 @@ _mount(onboarding_router)
 _mount(parent_router)
 _mount(admin_router)
 _mount(learning_plan_router)
+_mount(curriculum_router)
 _mount(genui_router)
 _mount(standards_router)
 _mount(agent_team_router)

@@ -1,133 +1,26 @@
+"""Universal family queue replaces independent science/history slots."""
 from unittest.mock import AsyncMock, patch
-
 import pytest
-
-from app.api.learning_plan import (
-    FAMILY_INVESTIGATION_SLOTS,
-    LessonSuggestion,
-    _family_investigation_suggestion_for_slot,
-    _family_investigation_suggestions,
-    _upcoming_family_investigations,
-)
-
-
-def suggestion(**updates) -> LessonSuggestion:
-    values = {
-        "id": "skill-1", "title": "Compare ratios", "track": "APPLIED_MATHEMATICS",
-        "description": "Use ratios in a new example.", "emoji": "\U0001f4d0", "priority": 1.0,
-        "source": "zpd", "concept_id": "ratio-concept", "sequence_policy": "HARD",
-        "sequence_state": "READY", "sequence_target_id": "ratio-concept",
-        "prerequisite_readiness": 1.0, "delivery_mode": "INDIVIDUAL_SKILL",
-    }
-    values.update(updates)
-    return LessonSuggestion(**values)
-
-
-def _queue_row(position: int, topic: str, track: str) -> dict:
-    return {"id": f"queue-{position}", "position": position, "canonical_topic": topic, "track": track}
+from app.api.learning_plan import _family_investigation_suggestions, _upcoming_family_investigations, FAMILY_INVESTIGATION_SLOTS
 
 
 @pytest.mark.asyncio
-async def test_slot_with_no_completed_items_returns_position_zero_as_current():
-    with (
-        patch("app.api.learning_plan.family_investigation_queue_store.get_current",
-              new=AsyncMock(return_value=_queue_row(0, "Sourdough", "CREATION_SCIENCE"))),
-        patch("app.api.learning_plan._shared_investigation_completed", new=AsyncMock(return_value=False)),
-    ):
-        result = await _family_investigation_suggestion_for_slot("household-1", "science", [suggestion()], "7")
-    assert result is not None
-    assert result.canonical_topic == "Sourdough"
+async def test_empty_queue_has_no_family_investigation():
+    with patch('app.api.learning_plan.family_unit_store.current',new=AsyncMock(return_value=None)):
+        assert await _family_investigation_suggestions('household',[],'7')==[]
 
 
 @pytest.mark.asyncio
-async def test_completed_current_item_advances_to_the_next_position():
-    # Simulate the queue: position 0 is complete, position 1 is not.
-    calls = {"get_current": 0}
-
-    async def fake_get_current(household_id, slot):
-        calls["get_current"] += 1
-        return _queue_row(0, "Sourdough", "CREATION_SCIENCE") if calls["get_current"] == 1 else _queue_row(1, "Next Unit", "CREATION_SCIENCE")
-
-    mark_completed = AsyncMock()
-    with (
-        patch("app.api.learning_plan.family_investigation_queue_store.get_current", new=fake_get_current),
-        patch("app.api.learning_plan.family_investigation_queue_store.mark_completed", new=mark_completed),
-        patch("app.api.learning_plan._shared_investigation_completed", new=AsyncMock(side_effect=[True, False])),
-    ):
-        result = await _family_investigation_suggestion_for_slot("household-1", "science", [suggestion()], "7")
-
-    assert result is not None
-    assert result.canonical_topic == "Next Unit"
-    mark_completed.assert_awaited_once()
+async def test_only_one_family_slot_exists():
+    assert FAMILY_INVESTIGATION_SLOTS==('family',)
 
 
 @pytest.mark.asyncio
-async def test_empty_queue_returns_no_suggestion_not_an_error():
-    with patch("app.api.learning_plan.family_investigation_queue_store.get_current", new=AsyncMock(return_value=None)):
-        result = await _family_investigation_suggestion_for_slot("household-1", "history", [suggestion()], "7")
-    assert result is None
-
-
-@pytest.mark.asyncio
-async def test_completion_check_failure_leaves_the_current_item_active():
-    with (
-        patch("app.api.learning_plan.family_investigation_queue_store.get_current",
-              new=AsyncMock(return_value=_queue_row(0, "Sourdough", "CREATION_SCIENCE"))),
-        patch("app.api.learning_plan._shared_investigation_completed", new=AsyncMock(side_effect=RuntimeError("db hiccup"))),
-    ):
-        result = await _family_investigation_suggestion_for_slot("household-1", "science", [suggestion()], "7")
-    assert result is not None
-    assert result.canonical_topic == "Sourdough"
-
-
-@pytest.mark.asyncio
-async def test_both_slots_present_and_independent_of_each_others_completion():
-    assert FAMILY_INVESTIGATION_SLOTS == ("science", "history")
-
-    async def fake_get_current(household_id, slot):
-        if slot == "science":
-            return _queue_row(0, "Sourdough", "CREATION_SCIENCE")
-        return _queue_row(0, "Poison Squad", "TRUTH_HISTORY")
-
-    with (
-        patch("app.api.learning_plan.family_investigation_queue_store.get_current", new=fake_get_current),
-        patch("app.api.learning_plan._shared_investigation_completed", new=AsyncMock(return_value=False)),
-    ):
-        results = await _family_investigation_suggestions("household-1", [suggestion()], "7")
-
-    assert len(results) == 2
-    topics = {item.canonical_topic for item in results}
-    assert topics == {"Sourdough", "Poison Squad"}
-    tracks = {item.track for item in results}
-    assert tracks == {"CREATION_SCIENCE", "TRUTH_HISTORY"}
-    titles = {item.title for item in results}
-    assert any("Poison Squad" in title and title != "Poison Squad" for title in titles)
-    assert any("Sourdough" in title for title in titles)
-    history = next(item for item in results if item.track == "TRUTH_HISTORY")
-    assert not history.description.lower().startswith("open harvey")
-    assert "Harvey Wiley" not in history.description
-    assert history.driving_question
-    assert "food" in history.driving_question.lower() or "chemical" in history.driving_question.lower()
-    assert len(history.description) < 220
-
-
-@pytest.mark.asyncio
-async def test_upcoming_investigations_lists_items_queued_after_the_current_one():
-    async def fake_get_current(household_id, slot):
-        return _queue_row(0, "Sourdough", "CREATION_SCIENCE") if slot == "science" else None
-
-    async def fake_list_upcoming(household_id, slot, after_position):
-        if slot == "science":
-            assert after_position == 0
-            return [_queue_row(1, "Fermented Vegetables", "CREATION_SCIENCE")]
-        assert after_position == -1
-        return [_queue_row(0, "Poison Squad", "TRUTH_HISTORY")]
-
-    with (
-        patch("app.api.learning_plan.family_investigation_queue_store.get_current", new=fake_get_current),
-        patch("app.api.learning_plan.family_investigation_queue_store.list_upcoming", new=fake_list_upcoming),
-    ):
-        upcoming = await _upcoming_family_investigations("household-1")
-
-    topics = {(item.slot, item.canonical_topic) for item in upcoming}
-    assert topics == {("science", "Fermented Vegetables"), ("history", "Poison Squad")}
+async def test_upcoming_units_share_one_order_across_subjects():
+    with patch('app.api.learning_plan.family_unit_store.upcoming',new=AsyncMock(return_value=[
+        {'title':'Weather','track':'CREATION_SCIENCE','position':1},
+        {'title':'Railroads','track':'TRUTH_HISTORY','position':2},
+    ])):
+        result=await _upcoming_family_investigations('household')
+    assert [item.slot for item in result]==['family','family']
+    assert [item.canonical_topic for item in result]==['Weather','Railroads']

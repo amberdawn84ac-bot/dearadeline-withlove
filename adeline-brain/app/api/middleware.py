@@ -239,3 +239,21 @@ def require_internal_key(
             detail="Invalid or missing internal API key.",
         )
     return x_internal_key
+
+
+async def verify_household_access(
+    household_id: str,
+    authorization: Optional[str] = Header(default=None),
+    auth_token: Optional[str] = Cookie(default=None),
+) -> str:
+    """Parents manage their own household; admins may manage another household."""
+    user_id = _extract_user_id(_decode_jwt(_token_from_sources(authorization, auth_token)))
+    from app.config import get_db_conn
+    conn = await get_db_conn()
+    try:
+        role = str(await conn.fetchval('SELECT role FROM "User" WHERE id=$1', user_id) or '').upper()
+    finally:
+        await conn.close()
+    if role == 'ADMIN' or (role == 'PARENT' and user_id == household_id):
+        return user_id
+    raise HTTPException(status_code=403, detail='You do not manage this household.')

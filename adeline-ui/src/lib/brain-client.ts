@@ -347,6 +347,8 @@ export interface LessonResponse {
   }>;
   metadata?: {
     canonical_slug?: string;
+    canonical_revision?: string;
+    science_foundations?: Array<{skill_id:string;title:string;status:string;instruction:"REVIEW"|"REINFORCE"|"TEACH"}>;
     topic?: string;
     grade_level?: string;
     unit_plan?: {
@@ -366,6 +368,7 @@ export interface LessonResponse {
       lessons?: Array<{
         lesson_id: string;
         title: string;
+        stages?: Array<{stage: "READ" | "EXPLORE" | "WRITE" | "APPLY" | "EXPERIENCE"; block_ids: string[]; prompt: string; activity?: string; evidence_required?: string[]}>;
         purpose?: string;
         concept_ids?: string[];
         block_ids: string[];
@@ -395,6 +398,7 @@ export interface LessonResponse {
       questions?: string[];
       synthesis_prompt?: string;
     };
+    real_world_contract?: { recipient: string; need: string; deliverable: string; delivery_method: string; success_signal: string; evidence_required: string[] };
     real_world_task?: {
       description?: string;
       deliverable?: string;
@@ -415,6 +419,9 @@ export interface LessonResponse {
       high_school?: string;
     };
     learner_contribution?: {
+      character_name?: string;
+      review_needed?: boolean;
+      stretch_ready?: boolean;
       role?: string;
       prompt?: string;
       artifact_prompt?: string;
@@ -1487,7 +1494,7 @@ export interface IndividualLesson {
   count: number;
   title: string;
   assignment: string;
-  track: string;
+  track: Track;
   kind?: 'investigation' | 'gap';
   faith_talk?: string;
   think_tank?: string;
