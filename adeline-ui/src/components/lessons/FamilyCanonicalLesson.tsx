@@ -151,6 +151,62 @@ function NoteBox({ label, prompt }: { label: string; prompt: string }) {
   );
 }
 
+function LevelWork({
+  current, review, stretch,
+}: { current?: string; review?: string; stretch?: string }) {
+  if (!current && !review && !stretch) return null;
+  return (
+    <section className="space-y-3">
+      {review && <div className="rounded-2xl border border-[#D9CFBC] bg-white p-4">
+        <p className="text-xs font-black uppercase tracking-[.16em] text-[#2F4731]/55">If this is not secure yet</p>
+        <p className="mt-2 text-sm leading-6">{review}</p>
+      </div>}
+      {current && <div className="rounded-2xl border border-[#2F4731]/20 bg-[#E7EFE5] p-4">
+        <p className="text-xs font-black uppercase tracking-[.16em] text-[#2F4731]">Your level</p>
+        <p className="mt-2 text-sm leading-6">{current}</p>
+      </div>}
+      {stretch && <div className="rounded-2xl border border-[#BD6809]/30 bg-[#FDF6E9] p-4">
+        <p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">If your level is already secure</p>
+        <p className="mt-2 text-sm leading-6">{stretch}</p>
+      </div>}
+    </section>
+  );
+}
+
+function UnitFollowThrough({ lesson }: { lesson: LessonResponse }) {
+  const task = lesson.metadata?.real_world_task;
+  const actions = (lesson.metadata?.public_interest_contract?.live_action_options ?? []).filter((item) => item.real_recipient || item.action);
+  if (lesson.track === "TRUTH_HISTORY") {
+    return (
+      <section className="rounded-[26px] border border-[#8B5E34] bg-[#FBF3E4] p-6">
+        <p className="text-xs font-black uppercase tracking-[.16em] text-[#8B5E34]">Classroom timeline</p>
+        <p className="mt-2 text-sm leading-6">This did not have to be the next date. Put what you learned on the wall: the date or the span, the claim, one source, and who usually gets left out. Move the card if the evidence says it belongs somewhere else.</p>
+      </section>
+    );
+  }
+  if (lesson.track !== "JUSTICE_CHANGEMAKING" && lesson.track !== "HOMESTEADING") return null;
+  const farm = lesson.track === "HOMESTEADING";
+  return (
+    <section className="rounded-[26px] border-2 border-[#2F4731] bg-[#E7EFE5] p-6">
+      <p className="text-xs font-black uppercase tracking-[.16em] text-[#2F4731]">{farm ? "The farm is the work" : "The action is the work"}</p>
+      <p className="mt-2 text-sm leading-6">{farm
+        ? "A page about the farm is not the lesson. Do the work in the garden, the greenhouse, the kitchen, or with the animals."
+        : "A poster is not the lesson. Name a real person or office, make something they can use, and decide how you will know whether it helped."}</p>
+      {task?.deliverable && <p className="mt-3 text-sm leading-6"><b>Make this:</b> {task.deliverable}</p>}
+      {actions.map((item) => <p key={`${item.real_recipient}-${item.action}`} className="mt-3 text-sm leading-6"><b>{item.real_recipient || "Someone real"}.</b> {item.action} {item.feedback_or_impact_signal && `You will know it helped when ${item.feedback_or_impact_signal}`}</p>)}
+    </section>
+  );
+}
+  const [value, setValue] = useState("");
+  return (
+    <label className="grid gap-2 rounded-2xl border border-[#D9CFBC] bg-white p-4 text-sm font-bold">
+      <span className="text-xs font-black uppercase tracking-[.14em] text-[#BD6809]">{label}</span>
+      <span className="font-normal leading-6">{prompt}</span>
+      <textarea value={value} onChange={(event) => setValue(event.target.value)} rows={3} placeholder="Write it here, while it is still in front of you." className="rounded-xl border border-[#BFB39E] bg-[#FFFDF7] p-3 font-normal" />
+    </label>
+  );
+}
+
 function useChildCoreLessons(studentId: string) {
   const [lessons, setLessons] = useState<IndividualLesson[]>([]);
   useEffect(() => {
@@ -365,7 +421,9 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
       const expectationBand = Number.parseInt(lesson.metadata?.grade_level ?? "", 10) <= 6
         ? "elementary"
         : Number.parseInt(lesson.metadata?.grade_level ?? "", 10) <= 8 ? "middle" : "high_school";
-      const expectation = unitLesson.individual_expectations?.[expectationBand];
+      const bands = ["elementary", "middle", "high_school"] as const;
+      const bandIndex = bands.indexOf(expectationBand);
+      const expectations = unitLesson.individual_expectations;
       const { read, work } = splitReadAndWork(lessonGroups);
       const activities = coreLessons
         .filter((item) => item.lesson_id === unitLesson.lesson_id)
@@ -382,10 +440,11 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
           {read.map(({ node, blocks }) => <FlowStep key={node.node_id} node={node} blocks={blocks} {...stepProps} />)}
         </div>}
         <NoteBox label="Write it down" prompt="Write the idea while it is still on the page. One sentence you could explain to someone who was not here." />
-        {expectation && <section className="rounded-2xl border border-[#2F4731]/20 bg-[#E7EFE5] p-4">
-          <p className="text-xs font-black uppercase tracking-[.16em] text-[#2F4731]">Apply</p>
-          <p className="mt-2 text-sm leading-6">{expectation}</p>
-        </section>}
+        <LevelWork
+          review={bandIndex > 0 ? expectations?.[bands[bandIndex - 1]] : undefined}
+          current={expectations?.[expectationBand]}
+          stretch={bandIndex >= 0 && bandIndex < bands.length - 1 ? expectations?.[bands[bandIndex + 1]] : undefined}
+        />
         {work.length > 0 && <div className="space-y-4">
           <p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Experience</p>
           {work.map(({ node, blocks }) => <FlowStep key={`${node.node_id}-work`} node={node} blocks={blocks} {...stepProps} />)}
@@ -407,6 +466,8 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
     }) : groups.map(({ node, blocks }) => (
       <FlowStep key={node.node_id} node={node} blocks={blocks} layout={layout} lessonId={lesson.lesson_id} studentId={studentId} isHomestead={lesson.track === "HOMESTEADING"} agentName={lesson.agent_name} />
     ))}
+
+    <UnitFollowThrough lesson={lesson} />
 
     {resources.map((block) => <ResourceCollection key={block.block_id} block={block} />)}
 
@@ -496,6 +557,7 @@ function LegacyStageExperience({ lesson, studentId }: { lesson: LessonResponse; 
     {discovery.length > 0 && <section><p className="mb-4 text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Clues and tools</p>{render(discovery)}</section>}
     {action.length > 0 && <section><p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Do something with it</p><h2 className="mt-2 mb-6 text-3xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>Investigate, make, test, or decide</h2>{render(action)}</section>}
     {resources.map((block) => <ResourceCollection key={block.block_id} block={block} />)}
+    <UnitFollowThrough lesson={lesson} />
     {demonstration.length > 0 && <section className="border-y-2 border-[#2F4731] py-8"><p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">Demonstrate</p><h2 className="mt-2 mb-6 text-4xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>Show what the experience helped you understand</h2>{render(demonstration)}</section>}
     <section className="rounded-[26px] border-2 border-[#BD6809] bg-[#FDF6E9] p-6 md:p-8">
       <p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">Your contribution</p>

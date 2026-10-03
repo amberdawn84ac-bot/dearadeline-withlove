@@ -148,3 +148,32 @@ def test_math_stays_on_the_next_skill_even_when_a_later_one_fits():
     assert [card.title for card in gaps] == ["Compare ratios"]
     assert "mini lesson" in gaps[0].assignment
 
+
+def test_history_can_jump_and_then_goes_on_the_timeline():
+    from app.api.learning_plan import IndividualSkillTarget, personalize_lessons
+
+    record = build_kitchen_case_canonical()
+    lessons = lessons_from_canonical(
+        record,
+        investigation_id="family-science",
+        investigation_title="Forensic Science",
+        slot="science",
+        track="CREATION_SCIENCE",
+        grade_level="8",
+    )
+    earlier = IndividualSkillTarget(
+        suggestion_id="early", domain="history", title="Memorize the textbook chapter",
+        track="TRUTH_HISTORY", working_level="8", sequence_state="READY",
+        progression_mode="SEQUENTIAL", progression_ordinal=1,
+    )
+    fitting = IndividualSkillTarget(
+        suggestion_id="mayfield", domain="history", title="Explain the Mayfield identification",
+        track="TRUTH_HISTORY", working_level="8", sequence_state="READY", progression_ordinal=9,
+    )
+    personalized = personalize_lessons(lessons, [earlier], "8", set(), [earlier, fitting])
+    prints = next(card for card in personalized if card.title == "Latent prints")
+
+    assert [item.skill_title for item in prints.core_activities] == ["Explain the Mayfield identification"]
+    assert "classroom timeline" in prints.core_activities[0].activity
+    assert all(card.kind != "gap" for card in personalized)
+
