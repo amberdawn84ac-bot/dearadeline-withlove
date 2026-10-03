@@ -401,6 +401,14 @@ export interface LessonResponse {
       shared_family_component?: string;
       individual_contribution?: string;
     };
+    public_interest_contract?: {
+      live_action_options?: Array<{
+        action?: string;
+        real_recipient?: string;
+        intended_change?: string;
+        feedback_or_impact_signal?: string;
+      }>;
+    };
     family_roles?: {
       elementary?: string;
       middle?: string;

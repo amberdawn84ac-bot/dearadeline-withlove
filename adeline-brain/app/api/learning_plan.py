@@ -1066,8 +1066,10 @@ _CONTENT_STOP = frozenset({
 
 
 def _stays_in_sequence(target: IndividualSkillTarget) -> bool:
-    """Math and reading stay in order. So does any skill the map marks sequential."""
-    return target.track in _SEQUENCE_TRACKS or target.progression_mode == "SEQUENTIAL"
+    """Math and reading stay on the next skill. History jumps. Science is taught inside the unit."""
+    if target.track == "TRUTH_HISTORY":
+        return False
+    return target.track in _SEQUENCE_TRACKS
 
 
 def _content_words(text: str) -> set[str]:
@@ -1081,21 +1083,25 @@ def _skill_fits_lesson(target: IndividualSkillTarget, lesson: IndividualLesson) 
     """A fit is the skill and the lesson sharing the same kind of work."""
     from app.api.experience_builder import _skill_families_for_text
 
-    if target.track == lesson.track or lesson.kind != "investigation":
+    if lesson.kind != "investigation":
         return False
     lesson_text = " ".join((lesson.title, lesson.assignment, lesson.faith_talk, lesson.think_tank))
     skill_text = target.title
+    overlap = _content_words(skill_text) & _content_words(lesson_text)
+    if target.track == lesson.track:
+        return bool(overlap)
     lesson_families = _skill_families_for_text(target.domain, lesson_text)
     skill_families = _skill_families_for_text(target.domain, skill_text)
     if lesson_families and skill_families and (lesson_families & skill_families):
         return True
-    return bool(_content_words(skill_text) & _content_words(lesson_text))
+    return bool(overlap)
 
 
 def _usable_target(target: IndividualSkillTarget, grade_level: str, covered_tracks: set[str]) -> bool:
+    del covered_tracks
     if target.sequence_state in {"LOCKED", "BRIDGE_REQUIRED"}:
         return False
-    if target.track in covered_tracks or not str(target.title or "").strip():
+    if not str(target.title or "").strip():
         return False
     return _level_fits(target.working_level, grade_level)
 
@@ -1148,6 +1154,21 @@ def _core_activity(target: IndividualSkillTarget, lesson: IndividualLesson, grad
             f"This unit does not already teach it, so use this job as the material. "
             f"{lesson.title}. {material}"
         )
+    if target.track == "TRUTH_HISTORY":
+        activity += (
+            " Then put it on the classroom timeline: the date or the span, the claim, one source, "
+            "and who usually gets left out. Move the card if the evidence says it belongs somewhere else."
+        )
+    if target.track == "JUSTICE_CHANGEMAKING":
+        activity += (
+            " This is not done until there is a real person or office, something they can use, "
+            "and a way to tell whether it helped."
+        )
+    if target.track == "HOMESTEADING":
+        activity += (
+            " Do it on the place itself: the garden, the greenhouse, the kitchen, or the animals. "
+            "A page about the farm is not the work."
+        )
     return CoreActivity(
         suggestion_id=target.suggestion_id,
         domain=target.domain,
@@ -1170,11 +1191,11 @@ def personalize_lessons(
 ) -> list[IndividualLesson]:
     """Use the skill that belongs with this unit.
 
-    Math, reading, and any sequential skill stay on the next item. If that
-    item does not belong to the unit, it stays the child's own practice.
-    Other subjects may skip to a later skill from this year when that skill
-    is the one the unit can actually use. A skill that does not fit is not
-    glued on.
+    Math and reading stay on the next skill. If the unit cannot use it, it is
+    still today's mini lesson. History may skip to the skill the unit can use,
+    and that skill is added to the classroom timeline. Science, justice, and
+    farm skills join the lesson when the words are the same work. A skill that
+    does not fit is not glued on.
     """
     unit = [lesson for lesson in lessons if lesson.kind == "investigation"]
     placed: dict[str, list[CoreActivity]] = {}
@@ -1194,7 +1215,7 @@ def personalize_lessons(
     next_by_track: list[IndividualSkillTarget] = []
     seen: set[str] = set()
     for target in targets:
-        if target.track in seen or target.track in covered_tracks:
+        if target.track in seen:
             continue
         if not str(target.title or "").strip() or not _level_fits(target.working_level, grade_level):
             continue

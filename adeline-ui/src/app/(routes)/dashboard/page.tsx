@@ -76,6 +76,7 @@ export default function TodayPage() {
         <span>
           One shared unit for the whole family. The unit is the lens. This child&rsquo;s own skills are on this page, inside the unit when they fit. The next unit waits until this one is done.
           {sharedWithSiblings ? ' The same lesson is open for the household.' : ''}
+          {unitEnding(day.unit?.track)}
         </span>
       </header>
 
@@ -181,6 +182,13 @@ function campfireDay(
   const unit = science.find((item) => item.id === unitId || item.title === current?.investigation_title) ?? science[0];
   const nextChapter = history.find((item) => item.title !== current?.investigation_title && item.id !== current?.investigation_id) ?? null;
   return { current, toc, inOrder, cores, unit, nextChapter };
+}
+
+function unitEnding(track?: string) {
+  if (track === 'TRUTH_HISTORY') return ' History can jump to what fits. What you learn goes on the classroom timeline.';
+  if (track === 'JUSTICE_CHANGEMAKING') return ' This unit is not done until a real person has something they can use.';
+  if (track === 'HOMESTEADING') return ' This unit is not done on paper. The work is the garden, the greenhouse, the kitchen, or the animals.';
+  return '';
 }
 
 function lessonHref(lesson: IndividualLesson) {
