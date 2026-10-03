@@ -1101,16 +1101,19 @@ def _usable_target(target: IndividualSkillTarget, grade_level: str, covered_trac
 
 
 def _own_practice(target: IndividualSkillTarget, grade_level: str) -> IndividualLesson:
+    """The next sequenced skill still happens today, just not inside the unit."""
     domain = target.domain.replace("_", " ")
+    level = target.working_level or grade_level
     if target.sequence_state == "BRIDGE_REQUIRED":
         assignment = (
-            f"The foundation for this {domain} skill is not secure yet. "
-            f"Practice it before anything later in the sequence."
+            f"Today's {domain} mini lesson. The foundation for {target.title} is not secure yet. "
+            "Practice that missing piece today so the sequence does not stall."
         )
     else:
         assignment = (
-            f"This is the next {domain} work at level {target.working_level or grade_level}. "
-            "It has to stay in order, and this unit does not use it, so it stays your own practice."
+            f"Today's {domain} mini lesson, level {level}. "
+            "The unit does not use this skill, so it is practiced on its own. "
+            "It is still the next skill, so this learner does not fall behind."
         )
     return IndividualLesson(
         id=f"gap:{target.suggestion_id}",

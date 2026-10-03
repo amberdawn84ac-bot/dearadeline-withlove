@@ -134,10 +134,10 @@ export default function TodayPage() {
           )}
           {day.inOrder.map((lesson) => (
             <article key={lesson.id} className={styles.kanbanCard}>
-              <small>Sequence matters</small>
-              <h3>{sequenceLabel(lesson.track)}</h3>
+              <small>Separate from the unit, so the sequence keeps moving</small>
+              <h3>Today&rsquo;s mini lesson</h3>
               <p><b>{lesson.title}.</b> {lesson.assignment}</p>
-              <Link href={lessonHref(lesson)}>Work on this →</Link>
+              <Link href={lessonHref(lesson)}>Open this lesson →</Link>
             </article>
           ))}
           {day.nextChapter && (
@@ -181,12 +181,6 @@ function campfireDay(
   const unit = science.find((item) => item.id === unitId || item.title === current?.investigation_title) ?? science[0];
   const nextChapter = history.find((item) => item.title !== current?.investigation_title && item.id !== current?.investigation_id) ?? null;
   return { current, toc, inOrder, cores, unit, nextChapter };
-}
-
-function sequenceLabel(track: string) {
-  if (track === 'APPLIED_MATHEMATICS') return 'Math stays in order';
-  if (track === 'ENGLISH_LITERATURE') return 'Reading and writing stays in order';
-  return 'This stays in order';
 }
 
 function lessonHref(lesson: IndividualLesson) {
