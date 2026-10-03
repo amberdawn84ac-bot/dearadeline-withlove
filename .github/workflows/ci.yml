@@ -73,6 +73,7 @@ jobs:
         run: |
           cd adeline-brain
           psql -f prisma/migrations/apply_all.sql
+          psql -v ON_ERROR_STOP=1 -f prisma/migrations/20261003_unified_curriculum/migration.sql
       - name: Run tests
         run: |
           cd adeline-brain
