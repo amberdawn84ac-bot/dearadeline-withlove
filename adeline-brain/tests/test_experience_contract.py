@@ -149,14 +149,15 @@ def test_author_contract_budgets_repetition_not_learning_quality():
     assert "archive search page" in prompt
 
 
-def test_author_contract_requires_concept_mapped_complete_units():
+def test_author_contract_requires_one_teachable_experience_within_family_unit():
     from app.curriculum.canonical_author import (
         CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT,
         validate_canonical_contract,
     )
 
     assert "PUBLIC-SCHOOL DEPTH, DEAR ADELINE FORM" in CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT
-    assert "concept map determines the lesson count" in CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT
+    assert "THE CANONICAL EXPERIENCE IS ONE TEACHABLE EXPERIENCE WITHIN THE FAMILY UNIT" in CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT
+    assert "exactly one lesson with five explicit stages" in CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT
     errors = validate_canonical_contract({"experience_design": {}})
     assert "unit_plan is required: every canonical is a complete teachable unit" in errors
 
