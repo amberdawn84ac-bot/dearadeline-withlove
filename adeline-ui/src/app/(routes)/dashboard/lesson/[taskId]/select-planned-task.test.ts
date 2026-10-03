@@ -57,6 +57,27 @@ describe('selectPlannedTask', () => {
     expect(selected?.id).toBe(science.id);
   });
 
+  it('opens a sequenced skill that did not fit the unit as its own lesson', () => {
+    const { selected } = selectPlannedTask({
+      suggestions: [],
+      individual_lessons: [{
+        id: 'gap:ratios',
+        investigation_id: 'ratios',
+        investigation_title: 'Stays in order',
+        lesson_id: 'gap',
+        index: 1,
+        count: 1,
+        title: 'Compare ratios',
+        assignment: "Today's math mini lesson, level 8.",
+        track: 'APPLIED_MATHEMATICS',
+        kind: 'gap',
+      }],
+    }, 'ratios');
+
+    expect(selected?.title).toBe('Compare ratios');
+    expect(selected?.delivery_mode).toBe('INDIVIDUAL_SKILL');
+  });
+
   it('does not throw when roadmap months are missing', () => {
     const { selected } = selectPlannedTask({
       suggestions: [],

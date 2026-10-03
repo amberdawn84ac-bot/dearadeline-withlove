@@ -1,10 +1,11 @@
-import type { LearningPlanResponse, LessonSuggestion } from '@/lib/brain-client';
+import type { IndividualLesson, LearningPlanResponse, LessonSuggestion } from '@/lib/brain-client';
 
 export type PlanLookup = {
   suggestions?: LearningPlanResponse['suggestions'];
   family_investigations?: LearningPlanResponse['family_investigations'];
   family_investigation?: LearningPlanResponse['family_investigation'];
   individual_skills?: LearningPlanResponse['individual_skills'];
+  individual_lessons?: IndividualLesson[];
   roadmap?: LearningPlanResponse['roadmap'] | null;
 };
 
@@ -50,7 +51,36 @@ export function selectPlannedTask(plan: PlanLookup, requestedId: string): {
     ?.flatMap((month) => month.weeks ?? [])
     .flatMap((week) => week.days ?? [])
     .find((day) => day.lesson_id === requestedId);
-  if (!roadmapDay) return { selected: undefined, requiredStandardCodes: [] };
+  if (!roadmapDay) {
+    const mini = (plan.individual_lessons ?? []).find(
+      (lesson) => lesson.kind === 'gap' && (lesson.investigation_id === requestedId || lesson.id === requestedId),
+    );
+    if (!mini) return { selected: undefined, requiredStandardCodes: [] };
+    return {
+      requiredStandardCodes: [],
+      selected: {
+        id: mini.investigation_id,
+        title: mini.title,
+        track: mini.track,
+        description: mini.assignment,
+        emoji: '✦',
+        priority: 1,
+        source: 'continue',
+        canonical_topic: mini.title,
+        canonical_ready: false,
+        mission_kind: 'learning_mission',
+        success_criteria: [],
+        sequence_policy: 'OPEN',
+        sequence_state: 'READY',
+        prerequisite_readiness: 1,
+        prerequisite_concept_ids: [],
+        prerequisite_standard_ids: [],
+        bridge_required: false,
+        delivery_mode: 'INDIVIDUAL_SKILL',
+        individual_skill_targets: [],
+      },
+    };
+  }
 
   const requiredStandardCodes = roadmapDay.standard_codes ?? [];
   return {
