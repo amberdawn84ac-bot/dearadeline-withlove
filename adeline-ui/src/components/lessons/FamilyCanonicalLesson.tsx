@@ -439,14 +439,23 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
           <p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Read</p>
           {read.map(({ node, blocks }) => <FlowStep key={node.node_id} node={node} blocks={blocks} {...stepProps} />)}
         </div>}
-        <NoteBox label="Write it down" prompt="Write the idea while it is still on the page. One sentence you could explain to someone who was not here." />
-        <LevelWork
-          review={bandIndex > 0 ? expectations?.[bands[bandIndex - 1]] : undefined}
-          current={expectations?.[expectationBand]}
-          stretch={bandIndex >= 0 && bandIndex < bands.length - 1 ? expectations?.[bands[bandIndex + 1]] : undefined}
-        />
+        <section className="rounded-2xl border border-[#D9CFBC] bg-white p-4">
+          <p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Explore</p>
+          <p className="mt-2 text-sm leading-6">{unitLesson.purpose || "Look back at what you just read. Find the one fact this lesson turns on, and say it out loud before you write it."}</p>
+        </section>
+        <NoteBox label="Write" prompt="Write that fact in your own words while the page is still open. These are your notes. They are part of the lesson." />
+        <div className="space-y-3">
+          <p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Apply</p>
+          <LevelWork
+            review={bandIndex > 0 ? expectations?.[bands[bandIndex - 1]] : undefined}
+            current={expectations?.[expectationBand]}
+            stretch={bandIndex >= 0 && bandIndex < bands.length - 1 ? expectations?.[bands[bandIndex + 1]] : undefined}
+          />
+          {activities.length > 0 && activities.map((activity) => <NoteBox key={activity.suggestion_id} label={activity.skill_title} prompt={activity.activity} />)}
+        </div>
         {work.length > 0 && <div className="space-y-4">
           <p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Experience</p>
+          <p className="text-sm leading-6 text-[#2F4731]/70">Now do the thing people actually do with this. Not a second worksheet about it.</p>
           {work.map(({ node, blocks }) => <FlowStep key={`${node.node_id}-work`} node={node} blocks={blocks} {...stepProps} />)}
         </div>}
         {unitLesson.faith_talk && <section className="rounded-2xl border border-[#4338CA]/30 bg-[#F1F0FE] p-4">
@@ -456,11 +465,6 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
         {unitLesson.think_tank && <section className="rounded-2xl border border-[#8B5E34]/30 bg-[#FBF3E4] p-4">
           <p className="text-xs font-black uppercase tracking-[.16em] text-[#8B5E34]">Think tank</p>
           <p className="mt-2 text-sm leading-6">{unitLesson.think_tank}</p>
-        </section>}
-        {activities.length > 0 && <section className="space-y-3">
-          <p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Your core work</p>
-          <p className="text-sm leading-6 text-[#2F4731]/70">This is your next skill, at your level. The unit did not come with it. This job is the material.</p>
-          {activities.map((activity) => <NoteBox key={activity.suggestion_id} label={activity.skill_title} prompt={activity.activity} />)}
         </section>}
       </section>;
     }) : groups.map(({ node, blocks }) => (

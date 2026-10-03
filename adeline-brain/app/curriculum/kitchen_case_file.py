@@ -31,7 +31,7 @@ from app.curriculum.family_style import (
 TOPIC = "The Kitchen Case File: What Can Household Evidence Actually Prove?"
 TRACK = "CREATION_SCIENCE"
 TITLE = "Forensic Science"
-CONTENT_REVISION = "kitchen-case-file-v2"
+CONTENT_REVISION = "kitchen-case-file-v3"
 
 ROLES = {
     "elementary": "Do the same investigation as everyone else. Measure, name the job, and write only what you saw. You may write less. You do not get a version with the death, the blood, or the insects taken out.",
@@ -296,15 +296,15 @@ def _blocks() -> list[dict[str, Any]]:
             "INVITATION",
             "This is the job",
             """
-You are studying forensic science the way people study it for a career. Crime scene investigators, latent print examiners, bloodstain pattern analysts, document examiners, forensic pathologists, forensic entomologists, and DNA analysts do this work on real deaths and real crimes. The question for the month is the question they have to answer under oath: what can this evidence actually prove?
+Stand at a doorway and don't touch anything yet. On the other side of a real door, in a real case, that is where the job starts. Crime scene investigators, latent print examiners, bloodstain pattern analysts, document examiners, forensic pathologists, forensic entomologists, and DNA analysts walk into deaths and crimes and then have to say, under oath, what the evidence can actually prove.
 
-The household labs are how this family practices the measurements. You will use cocoa or fingerprint powder, tape, a ruler, simulated blood, ink, a shoe print, a strawberry, and a jar of meat or liver for insects. Simulated blood is corn syrup, water, and red food coloring because human blood can carry disease. An adult may substitute blood from a butcher if you want the real thickness. That is laboratory safety, the same reason a lab wears gloves. It is not a different, nicer subject.
+You are going to practice their measurements in this house. Cocoa or fingerprint powder. Tape. A ruler. Simulated blood, which is corn syrup, water, and red food coloring, because human blood can carry disease. An adult may use blood from a butcher if you want the real thickness. Ink. A shoe print. A strawberry. A jar of meat or liver, because insects come to a body and an entomologist has to be able to watch that happen. Gloves are laboratory safety. They are not a nicer version of the subject.
 
-Younger learners write less of the same file. Nobody gets a copy with the deaths, the blood, or the insects removed. A parent decides which photographs are in the room. The science stays.
+Younger learners write less of the same file. Nobody gets a copy with the deaths, the blood, or the insects taken out. A parent decides which photographs are in the room. The science stays.
 
-Open one case file for the whole family. Every photograph, lift, measurement, and conclusion goes in it. Deuteronomy 19:15 is the rule you will actually use: one witness does not establish a matter. A single print, stain, or fly is one witness.
+Open one case file for the whole family. Every photograph, lift, measurement, and conclusion goes in it. Deuteronomy 19:15 is the rule you will use, not a verse for the end of the day: one witness does not establish a matter. A single print, stain, or fly is one witness.
 
-Materials for the month: tape, paper, a pencil, a ruler, a camera, cocoa or fingerprint powder, a soft brush, clear tape, white cards, corn syrup, water, red food coloring, a dropper, a board you can prop up, gloves, coffee filters, washable markers, flour or damp soil, a strawberry, dish soap, salt, a zip bag, rubbing alcohol that only an adult handles, a small piece of meat or liver, a screened container, and a thermometer if you have one.
+The month needs tape, paper, a pencil, a ruler, a camera, cocoa or fingerprint powder, a soft brush, clear tape, white cards, corn syrup, water, red food coloring, a dropper, a board you can prop up, gloves, coffee filters, washable markers, flour or damp soil, a strawberry, dish soap, salt, a zip bag, rubbing alcohol that only an adult handles, a small piece of meat or liver, a screened container, and a thermometer if you have one. Open the file and begin.
             """,
             [scripture],
         ),

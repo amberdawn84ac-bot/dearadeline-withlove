@@ -76,6 +76,15 @@ CANONICAL EXPERIENCE AUTHOR — NON-NEGOTIABLE:
   interview, calculate, perform, write for an audience, or solve a consequential problem.
 - The finish must produce reviewable evidence. Name the artifact, observation, explanation,
   performance, decision trail, or scored interaction that could demonstrate each target concept.
+- Every lesson follows the same method, in this order: Read, Explore, Write, Apply, Experience.
+  Read is the shared text, said the way a teacher would say it out loud. Same facts as a textbook.
+  Not a definition dump, and not a made-up child. A real scene, a real case, or a direct explanation.
+  Explore is one look back at that reading before anyone writes: the fact this lesson turns on.
+  Write is the notes, taken while the page is still open. The notes are part of the lesson.
+  Apply is the same task at the learner's level, with the level below if it is not secure and the
+  level above if it already is. Experience is the real work people do with this knowledge: a case,
+  a lab, a build, a decision, a trauma scenario, a kitchen, a garden. Not a second worksheet about it.
+  A parent should be able to open the lesson and begin. Name any materials in the lesson.
 - Completion, exposure, elapsed time, and button clicks are never mastery. Proposed credit remains
   a draft until the evidence is evaluated.
 - A shared family experience keeps one central question and shared outcome. Give each learner an

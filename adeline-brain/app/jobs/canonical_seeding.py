@@ -115,7 +115,7 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
             "Simulated blood is used because human blood can carry disease, not because blood evidence is off limits. "
             "Cause of death is not manner of death. Homicide as a manner is not a murder conviction."
         ),
-        content_revision="kitchen-case-file-v2",
+        content_revision="kitchen-case-file-v3",
     ),
     CanonicalSeed(
         "From Possession to Prison: Drug Policy, Diversion, and Reform",
