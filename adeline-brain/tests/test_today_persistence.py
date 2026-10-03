@@ -68,10 +68,12 @@ async def test_reopening_today_reads_saved_plan_with_zero_planner_calls():
     saved = AsyncMock(return_value=_saved_plan())
     planner = AsyncMock()
     zpd = AsyncMock()
+    family_read = AsyncMock(return_value=[])
     with (
         patch("app.api.learning_plan.daily_plan_store.get", new=saved),
         patch("app.api.learning_plan.personalized_curriculum_planner", new=planner),
         patch("app.api.learning_plan.tool_get_zpd_candidates", new=zpd),
+        patch("app.api.learning_plan._family_investigation_suggestions", new=family_read),
     ):
         first = await get_saved_today_plan("student-1", Response(), _user_id="student-1")
         second = await get_saved_today_plan("student-1", Response(), _user_id="student-1")
@@ -80,6 +82,7 @@ async def test_reopening_today_reads_saved_plan_with_zero_planner_calls():
     assert saved.await_count == 2
     planner.assert_not_awaited()
     zpd.assert_not_awaited()
+    assert family_read.await_count == 2
 
 
 @pytest.mark.asyncio
