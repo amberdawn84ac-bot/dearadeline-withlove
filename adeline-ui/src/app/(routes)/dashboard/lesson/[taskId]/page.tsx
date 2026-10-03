@@ -268,11 +268,7 @@ function SpaceHeader({ task, lesson }: { task: LessonSuggestion; lesson: LessonR
     task.driving_question || design.central_question || '',
   );
   const hook = shortCopy(task.description);
-  const slotLabel = task.slot === 'history'
-    ? 'History together'
-    : task.slot === 'science'
-      ? 'Science together'
-      : 'Family investigation';
+  const slotLabel = 'This unit';
   return (
     <header className="overflow-hidden rounded-[24px] border border-[#E7DAC3] bg-white/80 p-6 md:p-8">
       <div className="grid gap-6 md:grid-cols-[1.15fr_.85fr]">

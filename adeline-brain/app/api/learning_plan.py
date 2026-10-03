@@ -349,6 +349,8 @@ class IndividualLesson(BaseModel):
     assignment: str
     track: str
     kind: Literal["investigation", "gap"] = "investigation"
+    faith_talk: str = ""
+    think_tank: str = ""
     connections: list[LessonConnection] = Field(default_factory=list)
 
 
@@ -996,6 +998,8 @@ def lessons_from_canonical(
             title=title,
             assignment=assignment,
             track=track,
+            faith_talk=str(lesson.get("faith_talk") or "").strip(),
+            think_tank=str(lesson.get("think_tank") or "").strip(),
         ))
     if cards:
         return cards
@@ -1044,7 +1048,7 @@ def personalize_lessons(
     One current target per track. It joins the first lesson that actually uses
     that subject. A target from the wrong grade, or one whose foundation is
     still locked, is not assigned. Anything the open investigations do not use
-    stays as this child's own gap.
+    stays as this child's own math practice. Other subjects are not turned into a second list.
     """
     eligible: list[IndividualSkillTarget] = []
     for target in targets:
@@ -1079,7 +1083,7 @@ def personalize_lessons(
 
     gaps: list[IndividualLesson] = []
     for target in eligible:
-        if target.suggestion_id in used:
+        if target.suggestion_id in used or target.track != "APPLIED_MATHEMATICS":
             continue
         if target.sequence_state == "BRIDGE_REQUIRED":
             assignment = (

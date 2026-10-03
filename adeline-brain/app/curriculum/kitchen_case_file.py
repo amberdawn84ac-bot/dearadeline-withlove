@@ -90,6 +90,33 @@ def _source(
     }
 
 
+_FAITH_TALKS = {
+    "scene": "Deuteronomy 19:15. One witness cannot establish a matter. The boundary exists so a later witness still has something true to see.",
+    "investigation": "Who held the evidence is part of whether the testimony is clean. An unlogged hand is a witness you cannot question.",
+    "prints": "A confident name is not a second witness. The Mayfield identification was wrong.",
+    "blood": "Measure what you can see. Do not testify to a story the stain cannot carry.",
+    "documents": "The letters you can point to are the testimony. A guess about who wrote them is not.",
+    "impressions": "The ruler in the photograph is what lets someone else check your claim.",
+    "pathology": "Cause and manner are not a verdict. The autopsy does not convict anyone.",
+    "entomology": "Write the insects and the temperature you actually saw. An invented hour is a false witness.",
+    "dna": "A profile can free someone as well as implicate someone. That is part of telling the truth.",
+    "conference": "Say only the finding two observations can carry. Refuse the rest.",
+}
+
+_THINK_TANKS = {
+    "scene": "What can a later person no longer prove if someone already walked through?",
+    "investigation": "What happens to the lab's claim if one hand on the evidence was never written down?",
+    "prints": "Where does ACE-V require you to stop before you say it is a match?",
+    "blood": "What does the angle tell you, and what does this board refuse to reconstruct?",
+    "documents": "Which marks did you see, and which claim about the writer are you not allowed to make?",
+    "impressions": "Which features are shared by a whole kind of shoe, and which one might belong to only this shoe?",
+    "pathology": "What can a pathologist decide, and what is still a question for the court?",
+    "entomology": "Why will an entomologist not give you an hour without the species and the temperature?",
+    "dna": "Who did the profile include, who did it exclude, and what did it not prove by itself?",
+    "conference": "Which claim would you say under oath, and which claim do you have only one observation for?",
+}
+
+
 def _lessons() -> list[dict[str, Any]]:
     """Ten lessons, about four weeks. Campfire's table of contents is the job list."""
     bands = (
@@ -146,6 +173,8 @@ def _lessons() -> list[dict[str, Any]]:
                 "middle": middle,
                 "high_school": high_school,
             },
+            "faith_talk": _FAITH_TALKS[lesson_id],
+            "think_tank": _THINK_TANKS[lesson_id],
         })
     return lessons
 

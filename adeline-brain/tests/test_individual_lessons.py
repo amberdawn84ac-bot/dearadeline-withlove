@@ -33,6 +33,8 @@ def test_kitchen_case_splits_into_this_childs_lessons():
     assert all("Students will" not in card.assignment for card in elementary)
     assert elementary[0].index == 1
     assert elementary[0].count == 10
+    assert elementary[0].faith_talk.startswith("Deuteronomy 19:15")
+    assert elementary[0].think_tank.startswith("What can a later person")
     assert elementary[0].id == "family-science:scene"
 
 
@@ -81,7 +83,8 @@ def test_other_subjects_join_only_when_the_lesson_uses_them():
 
     assert [item.suggestion_id for item in blood.connections] == ["math-1"]
     assert [item.suggestion_id for item in custody.connections] == ["write-1"]
-    assert [card.title for card in gaps] == ["Read the verse in context"]
+    assert gaps == []
+    assert all(card.title != "Read the verse in context" for card in personalized)
     assert all(card.title != "Use a derivative" for card in personalized)
     assert all(card.title != "Explain a dose" for card in personalized)
     assert all(card.title != "Name a variable" for card in personalized)
