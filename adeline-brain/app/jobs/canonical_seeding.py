@@ -94,7 +94,7 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
         archive_query="NIJ crime scene investigation NIST latent print bloodstain pattern forensic pathology entomology",
         display_title="Forensic Science",
         family_summary=(
-            "Catalog card for the shared forensic careers unit: scene, prints, blood, documents, "
+            "Catalog card for the shared Forensic Science unit: scene, prints, blood, documents, "
             "impressions, pathology, entomology, and DNA in one case file."
         ),
         learner_hook="The real jobs: crime scene, prints, blood, pathology, insects, and DNA. Same file for every age.",
