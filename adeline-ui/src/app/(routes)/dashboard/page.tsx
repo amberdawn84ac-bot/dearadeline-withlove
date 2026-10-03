@@ -132,14 +132,14 @@ export default function TodayPage() {
               </ul>
             </article>
           )}
-          {day.math && (
-            <article className={styles.kanbanCard}>
-              <small>Not this job</small>
-              <h3>Math stays its own work</h3>
-              <p>{day.math.assignment}</p>
-              <Link href={lessonHref(day.math)}>Work on this →</Link>
+          {day.inOrder.map((lesson) => (
+            <article key={lesson.id} className={styles.kanbanCard}>
+              <small>Sequence matters</small>
+              <h3>{sequenceLabel(lesson.track)}</h3>
+              <p><b>{lesson.title}.</b> {lesson.assignment}</p>
+              <Link href={lessonHref(lesson)}>Work on this →</Link>
             </article>
-          )}
+          ))}
           {day.nextChapter && (
             <article className={styles.kanbanCard}>
               <small>Not today</small>
@@ -176,11 +176,17 @@ function campfireDay(
   const unitId = unitLessons[0]?.investigation_id;
   const toc = unitLessons.filter((lesson) => lesson.investigation_id === unitId);
   const current = toc[0];
-  const math = lessons.find((lesson) => lesson.kind === 'gap' && lesson.track === 'APPLIED_MATHEMATICS');
+  const inOrder = lessons.filter((lesson) => lesson.kind === 'gap');
   const cores = toc.flatMap((lesson) => (lesson.core_activities ?? []).map((activity) => ({ activity, lesson })));
   const unit = science.find((item) => item.id === unitId || item.title === current?.investigation_title) ?? science[0];
   const nextChapter = history.find((item) => item.title !== current?.investigation_title && item.id !== current?.investigation_id) ?? null;
-  return { current, toc, math, cores, unit, nextChapter };
+  return { current, toc, inOrder, cores, unit, nextChapter };
+}
+
+function sequenceLabel(track: string) {
+  if (track === 'APPLIED_MATHEMATICS') return 'Math stays in order';
+  if (track === 'ENGLISH_LITERATURE') return 'Reading and writing stays in order';
+  return 'This stays in order';
 }
 
 function lessonHref(lesson: IndividualLesson) {

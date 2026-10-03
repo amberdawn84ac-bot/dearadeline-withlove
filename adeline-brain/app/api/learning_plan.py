@@ -23,6 +23,7 @@ This is the heart of Adeline's adaptive curriculum — connecting:
 import asyncio
 import json
 import logging
+import re
 from typing import Literal, Optional
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -105,6 +106,8 @@ class IndividualSkillTarget(BaseModel):
     ] = "PLACED_STANDARD_SEQUENCE"
     prerequisite_ids: list[str] = Field(default_factory=list)
     needs_progression_review: bool = False
+    progression_mode: Literal["SEQUENTIAL", "SCAFFOLDED", "OPEN"] = "OPEN"
+    progression_ordinal: int = 0
 
 
 class LessonSuggestion(BaseModel):
@@ -389,6 +392,9 @@ class LearningPlanResponse(BaseModel):
     individual_lessons: list[IndividualLesson] = Field(default_factory=list)
     individual_skills: list[LessonSuggestion] = Field(default_factory=list)
     progression_checklist: list[IndividualSkillTarget] = Field(default_factory=list)
+    # This year's unmastered skills. The open unit may use one that fits,
+    # even when it is not the single next item, unless the track must stay in order.
+    year_skills: list[IndividualSkillTarget] = Field(default_factory=list)
     progression_map_status: ProgressionMapStatus
     projects: list[ProjectSuggestion]  # Portfolio projects ready to start
     recommended_books: list[BookRecommendation] = []
@@ -1047,12 +1053,78 @@ def _level_fits(working_level: str | None, grade_level: str) -> bool:
 
 
 def _target_fits_lesson(target: IndividualSkillTarget, lesson: IndividualLesson) -> bool:
-    """Fold a subject in only when this lesson's own words call for it."""
+    """True when this skill's own work meets this lesson, not merely its subject."""
+    return _skill_fits_lesson(target, lesson)
+
+
+_SEQUENCE_TRACKS = frozenset({"APPLIED_MATHEMATICS", "ENGLISH_LITERATURE"})
+_CONTENT_STOP = frozenset({
+    "about", "after", "again", "also", "because", "before", "does", "from", "have",
+    "into", "keep", "only", "real", "that", "them", "then", "they", "this", "what",
+    "when", "with", "your", "write", "using", "their", "there", "which", "would",
+})
+
+
+def _stays_in_sequence(target: IndividualSkillTarget) -> bool:
+    """Math and reading stay in order. So does any skill the map marks sequential."""
+    return target.track in _SEQUENCE_TRACKS or target.progression_mode == "SEQUENTIAL"
+
+
+def _content_words(text: str) -> set[str]:
+    return {
+        word for word in re.findall(r"[a-z]{4,}", text.lower())
+        if word not in _CONTENT_STOP
+    }
+
+
+def _skill_fits_lesson(target: IndividualSkillTarget, lesson: IndividualLesson) -> bool:
+    """A fit is the skill and the lesson sharing the same kind of work."""
     from app.api.experience_builder import _skill_families_for_text
 
     if target.track == lesson.track or lesson.kind != "investigation":
         return False
-    return bool(_skill_families_for_text(target.domain, f"{lesson.title} {lesson.assignment}"))
+    lesson_text = " ".join((lesson.title, lesson.assignment, lesson.faith_talk, lesson.think_tank))
+    skill_text = target.title
+    lesson_families = _skill_families_for_text(target.domain, lesson_text)
+    skill_families = _skill_families_for_text(target.domain, skill_text)
+    if lesson_families and skill_families and (lesson_families & skill_families):
+        return True
+    return bool(_content_words(skill_text) & _content_words(lesson_text))
+
+
+def _usable_target(target: IndividualSkillTarget, grade_level: str, covered_tracks: set[str]) -> bool:
+    if target.sequence_state in {"LOCKED", "BRIDGE_REQUIRED"}:
+        return False
+    if target.track in covered_tracks or not str(target.title or "").strip():
+        return False
+    return _level_fits(target.working_level, grade_level)
+
+
+def _own_practice(target: IndividualSkillTarget, grade_level: str) -> IndividualLesson:
+    domain = target.domain.replace("_", " ")
+    if target.sequence_state == "BRIDGE_REQUIRED":
+        assignment = (
+            f"The foundation for this {domain} skill is not secure yet. "
+            f"Practice it before anything later in the sequence."
+        )
+    else:
+        assignment = (
+            f"This is the next {domain} work at level {target.working_level or grade_level}. "
+            "It has to stay in order, and this unit does not use it, so it stays your own practice."
+        )
+    return IndividualLesson(
+        id=f"gap:{target.suggestion_id}",
+        investigation_id=target.suggestion_id,
+        investigation_title="Stays in order",
+        slot="gap",
+        lesson_id="gap",
+        index=1,
+        count=1,
+        title=target.title,
+        assignment=assignment,
+        track=target.track,
+        kind="gap",
+    )
 
 
 def _core_activity(target: IndividualSkillTarget, lesson: IndividualLesson, grade_level: str, fit: str) -> CoreActivity:
@@ -1091,46 +1163,103 @@ def personalize_lessons(
     targets: list[IndividualSkillTarget],
     grade_level: str,
     covered_tracks: set[str],
+    year_skills: list[IndividualSkillTarget] | None = None,
 ) -> list[IndividualLesson]:
-    """Attach each child's next core skill to the open unit.
+    """Use the skill that belongs with this unit.
 
-    Core skills are not stored on the unit. One current target per track, at
-    this child's level, is placed on the lesson that can actually use it. If no
-    lesson can, it is bridged onto the lesson the family is on. A locked skill
-    or one from another grade is not assigned.
+    Math, reading, and any sequential skill stay on the next item. If that
+    item does not belong to the unit, it stays the child's own practice.
+    Other subjects may skip to a later skill from this year when that skill
+    is the one the unit can actually use. A skill that does not fit is not
+    glued on.
     """
-    eligible: list[IndividualSkillTarget] = []
-    seen_tracks: set[str] = set()
-    for target in targets:
-        if target.sequence_state == "LOCKED" or target.track in covered_tracks:
-            continue
-        if not str(target.title or "").strip() or target.track in seen_tracks:
-            continue
-        if not _level_fits(target.working_level, grade_level):
-            continue
-        seen_tracks.add(target.track)
-        eligible.append(target)
-
     unit = [lesson for lesson in lessons if lesson.kind == "investigation"]
-    current = unit[0] if unit else None
     placed: dict[str, list[CoreActivity]] = {}
-    for target in eligible:
-        host = current
-        fit = "foundation" if target.sequence_state == "BRIDGE_REQUIRED" else "bridged"
-        if fit != "foundation":
-            for lesson in unit:
-                if _target_fits_lesson(target, lesson):
-                    host = lesson
-                    fit = "direct"
-                    break
-        if host is None:
+    gaps: list[IndividualLesson] = []
+    claimed: set[str] = set()
+
+    def place(target: IndividualSkillTarget) -> bool:
+        for lesson in unit:
+            if _skill_fits_lesson(target, lesson):
+                placed.setdefault(lesson.id, []).append(
+                    _core_activity(target, lesson, grade_level, "direct"),
+                )
+                claimed.add(target.track)
+                return True
+        return False
+
+    next_by_track: list[IndividualSkillTarget] = []
+    seen: set[str] = set()
+    for target in targets:
+        if target.track in seen or target.track in covered_tracks:
             continue
-        placed.setdefault(host.id, []).append(_core_activity(target, host, grade_level, fit))
+        if not str(target.title or "").strip() or not _level_fits(target.working_level, grade_level):
+            continue
+        seen.add(target.track)
+        next_by_track.append(target)
+
+    for target in next_by_track:
+        if not _stays_in_sequence(target):
+            continue
+        if target.sequence_state in {"LOCKED", "BRIDGE_REQUIRED"}:
+            if target.sequence_state == "BRIDGE_REQUIRED":
+                gaps.append(_own_practice(target, grade_level))
+            claimed.add(target.track)
+            continue
+        if not place(target):
+            gaps.append(_own_practice(target, grade_level))
+
+    pool: list[IndividualSkillTarget] = []
+    seen_ids: set[str] = set()
+    for target in [*(year_skills or []), *next_by_track]:
+        if target.suggestion_id in seen_ids or target.track in claimed or _stays_in_sequence(target):
+            continue
+        if not _usable_target(target, grade_level, covered_tracks):
+            continue
+        seen_ids.add(target.suggestion_id)
+        pool.append(target)
+
+    by_track: dict[str, list[IndividualSkillTarget]] = {}
+    for target in pool:
+        by_track.setdefault(target.track, []).append(target)
+    for track, options in by_track.items():
+        for target in sorted(options, key=lambda item: item.progression_ordinal or 0):
+            if place(target):
+                break
+        claimed.add(track)
 
     return [
         lesson.model_copy(update={"core_activities": placed.get(lesson.id, []), "connections": []})
         for lesson in lessons
-    ]
+    ] + gaps
+
+
+def _targets_from_standards(standards: list[GradeLevelStandard]) -> list[IndividualSkillTarget]:
+    """This year's unfinished skills, in progression order, for unit matching."""
+    targets: list[IndividualSkillTarget] = []
+    for standard in sorted(standards, key=lambda item: item.progression_ordinal or 0):
+        if standard.mastered or not standard.prerequisites_met or not standard.track:
+            continue
+        if standard.progression_mode == "SEQUENTIAL" and not standard.progression_ready:
+            continue
+        title = (standard.lesson_hook or "").strip() or (standard.description or "").split(".")[0].strip()
+        if not title:
+            continue
+        domain = TRACK_PROGRESSION_DOMAIN.get(standard.track, "")
+        if not domain:
+            continue
+        targets.append(IndividualSkillTarget(
+            suggestion_id=f"year-{standard.standard_id}",
+            domain=domain,
+            title=title[:180],
+            track=standard.track,
+            standard_code=standard.standard_id,
+            working_level=str(standard.grade),
+            sequence_state="READY",
+            progression_mode=standard.progression_mode,
+            progression_ordinal=standard.progression_ordinal,
+        ))
+    return targets
 
 
 async def individual_lessons_for(
@@ -1177,11 +1306,13 @@ async def _attach_individual_lessons(plan: LearningPlanResponse) -> LearningPlan
     try:
         lessons = await individual_lessons_for(investigations, grade)
         targets = list(plan.progression_checklist or []) or _learner_progression_targets(plan.suggestions, grade)
+        year_skills = list(plan.year_skills or []) or _targets_from_standards(plan.grade_standards)
         lessons = personalize_lessons(
             lessons,
             targets,
             grade,
             {item.track for item in investigations},
+            year_skills,
         )
     except Exception as exc:
         logger.warning("[LearningPlan] Could not attach individual lessons: %s", exc)
@@ -2497,6 +2628,7 @@ async def get_learning_plan(
         upcoming_family_investigations=upcoming_family_investigations,
         individual_skills=individual_skills,
         progression_checklist=progression_checklist,
+        year_skills=_targets_from_standards(grade_standards),
         progression_map_status=_progression_map_status(progression_checklist),
         projects=projects,
         recommended_books=recommended_books,
