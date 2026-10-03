@@ -163,7 +163,7 @@ function InvestigationQueueSection({ dashboard, onChange }: { dashboard: FamilyD
     <section className="rounded-[26px] border border-[#D4C3A7] bg-[#FFFDF7] p-6">
       <p className="text-xs font-black uppercase tracking-[.14em] text-[#9A3F4A]">Science &amp; history queues</p>
       <h2 className="mt-1 text-2xl font-bold" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>Plan what comes next</h2>
-      <p className="mt-2 text-sm leading-6 text-[#2F4731]/62">Each slot runs until the family finishes it — however long that takes — then moves to whatever&rsquo;s queued next. Forensic science is the real work: crime scene, prints, bloodstain patterns, documents, impressions, pathology, entomology, and DNA. Same case file for every age. One result is not proof.</p>
+      <p className="mt-2 text-sm leading-6 text-[#2F4731]/62">Each slot runs until the family finishes it, then moves to whatever is queued next. A unit can look through a career, or through something else. The family shares the unit. Each child still follows their own scope and sequence through it. Forensic science is one unit you can add: one case file, every age, and one result is not proof.</p>
       <button
         type="button"
         onClick={() => void queueKitchenCase()}

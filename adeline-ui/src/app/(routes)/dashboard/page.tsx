@@ -74,7 +74,7 @@ export default function TodayPage() {
         <p>{isNextSchoolDay ? 'Your next school day' : 'Ready when you are'}</p>
         <h1>{isNextSchoolDay ? 'Coming up next' : 'Today'}</h1>
         <span>
-          One career lesson for the whole family. This child&rsquo;s part is on this page. The next chapter waits until this unit is done.
+          One shared unit for the whole family. The unit is the lens. This child&rsquo;s own skills are on this page, inside the unit when they fit. The next unit waits until this one is done.
           {sharedWithSiblings ? ' The same lesson is open for the household.' : ''}
         </span>
       </header>
