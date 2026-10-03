@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Archive, CheckCircle2, Download, ExternalLink, Gamepad2, Search, ShieldCheck } from "lucide-react";
 import GenUIRenderer from "@/components/GenUIRenderer";
 import { downloadInvestigationPrintable, getSavedTodayPlan, peekLearningPlan, sealJournal } from "@/lib/brain-client";
@@ -138,15 +138,43 @@ function useDossierPrint(lesson: LessonResponse) {
 // visual treatment only; unrecognized layouts still follow flow order, just
 // with the neutral "default" treatment below.
 
+import { EvidenceAttempt, getEvidencePortfolio, saveEvidenceNote } from "@/lib/curriculum-client";
+
+const NoteContext = createContext<{ studentId: string; canonicalSlug: string; revision: string; lessonId: string; attempts: EvidenceAttempt[]; loadError: string; loaded: boolean } | null>(null);
+
 type FlowNode = { node_id: string; label: string; block_ids: string[] };
 
 function NoteBox({ label, prompt }: { label: string; prompt: string }) {
   const [value, setValue] = useState("");
+  const [saved, setSaved] = useState("");
+  const [attemptId, setAttemptId] = useState<string>();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const context = useContext(NoteContext);
+  const pendingKey = useRef<{ text: string; key: string }>();
+  useEffect(() => {
+    if (!context) return;
+    const previous = context.attempts.filter(a => a.lessonId === context.lessonId && a.canonicalSlug === context.canonicalSlug && a.content?.label === label).at(-1);
+    if (previous) { setValue(previous.content.text ?? ""); setSaved(previous.content.text ?? ""); setAttemptId(previous.id); }
+  }, [context?.attempts, context?.lessonId, context?.canonicalSlug, label]);
+  async function save() {
+    if (!context || saving || !context.loaded || !value.trim() || value === saved) return;
+    setSaving(true); setError("");
+    if (!pendingKey.current || pendingKey.current.text !== value) pendingKey.current = {text:value,key:crypto.randomUUID()};
+    try {
+      const attempt = await saveEvidenceNote(context.studentId, { canonical_slug: context.canonicalSlug, canonical_revision: context.revision,
+        lesson_id: context.lessonId, parent_attempt_id: attemptId, kind: attemptId ? "revision" : "note", content: {text:value,label}, submission_key:pendingKey.current.key });
+      setAttemptId(attempt.id); setSaved(value); pendingKey.current = undefined;
+    } catch { setError("Could not save. Your text is still here; try again."); }
+    finally { setSaving(false); }
+  }
   return (
     <label className="grid gap-2 rounded-2xl border border-[#D9CFBC] bg-white p-4 text-sm font-bold">
       <span className="text-xs font-black uppercase tracking-[.14em] text-[#BD6809]">{label}</span>
       <span className="font-normal leading-6">{prompt}</span>
-      <textarea value={value} onChange={(event) => setValue(event.target.value)} rows={3} placeholder="Write it here, while it is still in front of you." className="rounded-xl border border-[#BFB39E] bg-[#FFFDF7] p-3 font-normal" />
+      <textarea disabled={context ? !context.loaded : false} onBlur={() => void save()} value={value} onChange={(event) => setValue(event.target.value)} rows={3} placeholder="Write it here, while it is still in front of you." className="rounded-xl border border-[#BFB39E] bg-[#FFFDF7] p-3 font-normal" />
+      {context && <button type="button" onClick={() => void save()} disabled={saving || !value.trim() || value === saved} className="justify-self-start rounded-lg bg-[#2F4731] px-3 py-2 text-white disabled:opacity-40">{saving ? "Saving…" : value === saved && attemptId ? "Saved" : "Save notes"}</button>}
+      {(error || context?.loadError) && <span role="alert" className="text-red-700">{error || context?.loadError}</span>}
     </label>
   );
 }
@@ -174,39 +202,17 @@ function LevelWork({
 }
 
 function UnitFollowThrough({ lesson }: { lesson: LessonResponse }) {
-  const task = lesson.metadata?.real_world_task;
-  const actions = (lesson.metadata?.public_interest_contract?.live_action_options ?? []).filter((item) => item.real_recipient || item.action);
-  if (lesson.track === "TRUTH_HISTORY") {
-    return (
-      <section className="rounded-[26px] border border-[#8B5E34] bg-[#FBF3E4] p-6">
-        <p className="text-xs font-black uppercase tracking-[.16em] text-[#8B5E34]">Classroom timeline</p>
-        <p className="mt-2 text-sm leading-6">This did not have to be the next date. Put what you learned on the wall: the date or the span, the claim, one source, and who usually gets left out. Move the card if the evidence says it belongs somewhere else.</p>
-      </section>
-    );
-  }
-  if (lesson.track !== "JUSTICE_CHANGEMAKING" && lesson.track !== "HOMESTEADING") return null;
-  const farm = lesson.track === "HOMESTEADING";
-  return (
-    <section className="rounded-[26px] border-2 border-[#2F4731] bg-[#E7EFE5] p-6">
-      <p className="text-xs font-black uppercase tracking-[.16em] text-[#2F4731]">{farm ? "The farm is the work" : "The action is the work"}</p>
-      <p className="mt-2 text-sm leading-6">{farm
-        ? "A page about the farm is not the lesson. Do the work in the garden, the greenhouse, the kitchen, or with the animals."
-        : "A poster is not the lesson. Name a real person or office, make something they can use, and decide how you will know whether it helped."}</p>
-      {task?.deliverable && <p className="mt-3 text-sm leading-6"><b>Make this:</b> {task.deliverable}</p>}
-      {actions.map((item) => <p key={`${item.real_recipient}-${item.action}`} className="mt-3 text-sm leading-6"><b>{item.real_recipient || "Someone real"}.</b> {item.action} {item.feedback_or_impact_signal && `You will know it helped when ${item.feedback_or_impact_signal}`}</p>)}
-    </section>
-  );
+  const contract = lesson.metadata?.real_world_contract;
+  if (!contract) return null;
+  return <section className="rounded-[26px] border-2 border-[#2F4731] bg-[#E7EFE5] p-6">
+    <p className="text-xs font-black uppercase tracking-[.16em]">Real work</p>
+    <p className="mt-2 text-sm"><b>{contract.recipient}:</b> {contract.need}</p>
+    <p className="mt-3 text-sm"><b>Deliver:</b> {contract.deliverable}</p>
+    <p className="mt-2 text-sm">{contract.delivery_method}</p>
+    <p className="mt-2 text-sm"><b>Look for:</b> {contract.success_signal}</p>
+    <p className="mt-2 text-sm"><b>Preserve:</b> {contract.evidence_required.join(", ")}</p>
+  </section>;
 }
-  const [value, setValue] = useState("");
-  return (
-    <label className="grid gap-2 rounded-2xl border border-[#D9CFBC] bg-white p-4 text-sm font-bold">
-      <span className="text-xs font-black uppercase tracking-[.14em] text-[#BD6809]">{label}</span>
-      <span className="font-normal leading-6">{prompt}</span>
-      <textarea value={value} onChange={(event) => setValue(event.target.value)} rows={3} placeholder="Write it here, while it is still in front of you." className="rounded-xl border border-[#BFB39E] bg-[#FFFDF7] p-3 font-normal" />
-    </label>
-  );
-}
-
 function useChildCoreLessons(studentId: string) {
   const [lessons, setLessons] = useState<IndividualLesson[]>([]);
   useEffect(() => {
@@ -336,6 +342,14 @@ function SkillConnectionSummary({
 }
 
 function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; studentId: string }) {
+  const [attempts, setAttempts] = useState<EvidenceAttempt[]>([]);
+  const [noteLoadError, setNoteLoadError] = useState("");
+  const [notesLoaded, setNotesLoaded] = useState(false);
+  useEffect(() => {
+    let active = true; setNotesLoaded(false); setNoteLoadError("");
+    getEvidencePortfolio(studentId).then(data => { if (active) { setAttempts(data.attempts); setNotesLoaded(true); } }).catch(() => { if (active) { setNoteLoadError("Could not load saved notes."); setNotesLoaded(true); } });
+    return () => { active = false; };
+  }, [studentId, lesson.lesson_id]);
   const seal = useLessonSeal(lesson);
   const print = useDossierPrint(lesson);
   const visible = lesson.blocks.filter((block) => !block.is_silenced);
@@ -377,6 +391,7 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
       <div className="grid gap-8 p-7 md:grid-cols-[1.2fr_.8fr] md:p-11">
         <div>
           <p className="text-xs font-black uppercase tracking-[.2em] text-[#A95322]">{isIndividualSkill ? "Your skill practice" : "Today’s family investigation"}</p>
+          {learnerContribution?.character_name && <p className="mt-2 text-sm font-bold">{learnerContribution.character_name} · {learnerContribution.role}</p>}
           <h1 className="mt-3 text-5xl leading-[.95] md:text-6xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{lesson.title}</h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-[#2F4731]/75">{entryMove || (isIndividualSkill ? "Work at your current level. Practice the skill, show your reasoning, and leave evidence of what you can do." : "Follow the shared question. Use what helps. Make, test, examine, or decide something real.")}</p>
           {lesson.metadata?.printable_request && <button type="button" onClick={() => void print.printDossier()} disabled={print.printing} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#2F4731] bg-white/70 px-4 py-2 text-sm font-bold disabled:opacity-50"><Download className="h-4 w-4" />{print.printing ? "Preparing dossier…" : isIndividualSkill ? "Print skill practice" : "Print field dossier"}</button>}
@@ -389,6 +404,11 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
       </div>
     </header>
 
+    {!!lesson.metadata?.science_foundations?.length && <section className="rounded-2xl border border-[#D9CFBC] p-5">
+      <h2 className="font-bold">Before this investigation</h2>
+      <ol className="mt-3 space-y-2">{lesson.metadata.science_foundations.map(foundation => <li key={foundation.skill_id} className="text-sm"><b>{foundation.instruction === "REVIEW" ? "Quick review" : foundation.instruction === "REINFORCE" ? "Practice again" : "Learn first"}:</b> {foundation.title}</li>)}</ol>
+      <p className="mt-3 text-sm">Ask Adeline to walk through these in order before using them in the investigation.</p>
+    </section>}
     {!!unitLessons.length && <section className="rounded-[26px] border border-[#D9CFBC] bg-white/80 p-6 md:p-8">
       <p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">Your complete learning path</p>
       <h2 className="mt-2 text-3xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{unitPlan?.unit_title || lesson.title}</h2>
@@ -424,12 +444,17 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
       const bands = ["elementary", "middle", "high_school"] as const;
       const bandIndex = bands.indexOf(expectationBand);
       const expectations = unitLesson.individual_expectations;
-      const { read, work } = splitReadAndWork(lessonGroups);
+      const stage = (name: string) => unitLesson.stages?.find(item => item.stage === name);
+      const stageGroups = (name: string) => {
+        const ids = new Set(stage(name)?.block_ids ?? []);
+        return lessonGroups.map(group => ({ ...group, blocks:group.blocks.filter(block => ids.has(block.block_id)) })).filter(group => group.blocks.length > 0);
+      };
+      const { read, work } = unitLesson.stages?.length ? { read:stageGroups("READ"), work:stageGroups("EXPERIENCE") } : splitReadAndWork(lessonGroups);
       const activities = coreLessons
         .filter((item) => item.lesson_id === unitLesson.lesson_id)
         .flatMap((item) => item.core_activities ?? []);
       const stepProps = { layout, lessonId: lesson.lesson_id, studentId, isHomestead: lesson.track === "HOMESTEADING", agentName: lesson.agent_name };
-      return <section id={`lesson-${unitLesson.lesson_id}`} key={unitLesson.lesson_id} className="scroll-mt-28 space-y-5 rounded-[28px] border-2 border-[#D9CFBC] bg-[#FFFDF7] p-5 md:p-8">
+      return <NoteContext.Provider key={unitLesson.lesson_id} value={{ studentId, canonicalSlug: lesson.metadata?.canonical_slug ?? lesson.lesson_id, revision: lesson.metadata?.canonical_revision ?? "", lessonId: unitLesson.lesson_id, attempts, loadError:noteLoadError, loaded:notesLoaded }}><section id={`lesson-${unitLesson.lesson_id}`} key={unitLesson.lesson_id} className="scroll-mt-28 space-y-5 rounded-[28px] border-2 border-[#D9CFBC] bg-[#FFFDF7] p-5 md:p-8">
         <div className="border-b border-[#D9CFBC] pb-5">
           <p className="text-xs font-black uppercase tracking-[.18em] text-[#9A3F4A]">Lesson {lessonIndex + 1} of {unitLessons.length}</p>
           <h2 className="mt-2 text-4xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{unitLesson.title}</h2>
@@ -441,15 +466,15 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
         </div>}
         <section className="rounded-2xl border border-[#D9CFBC] bg-white p-4">
           <p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Explore</p>
-          <p className="mt-2 text-sm leading-6">{unitLesson.purpose || "Look back at what you just read. Find the one fact this lesson turns on, and say it out loud before you write it."}</p>
+          <p className="mt-2 text-sm leading-6">{stage("EXPLORE")?.prompt || unitLesson.purpose || "Look back at what you just read. Find the one fact this lesson turns on, and say it out loud before you write it."}</p>
         </section>
-        <NoteBox label="Write" prompt="Write that fact in your own words while the page is still open. These are your notes. They are part of the lesson." />
+        <NoteBox label="Write" prompt={stage("WRITE")?.prompt || "Write that fact in your own words while the page is still open. These are your notes. They are part of the lesson."} />
         <div className="space-y-3">
           <p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Apply</p>
           <LevelWork
-            review={bandIndex > 0 ? expectations?.[bands[bandIndex - 1]] : undefined}
+            review={learnerContribution?.review_needed && bandIndex > 0 ? expectations?.[bands[bandIndex - 1]] : undefined}
             current={expectations?.[expectationBand]}
-            stretch={bandIndex >= 0 && bandIndex < bands.length - 1 ? expectations?.[bands[bandIndex + 1]] : undefined}
+            stretch={learnerContribution?.stretch_ready && bandIndex >= 0 && bandIndex < bands.length - 1 ? expectations?.[bands[bandIndex + 1]] : undefined}
           />
           {activities.length > 0 && activities.map((activity) => <NoteBox key={activity.suggestion_id} label={activity.skill_title} prompt={activity.activity} />)}
         </div>
@@ -466,7 +491,7 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
           <p className="text-xs font-black uppercase tracking-[.16em] text-[#8B5E34]">Think tank</p>
           <p className="mt-2 text-sm leading-6">{unitLesson.think_tank}</p>
         </section>}
-      </section>;
+      </section></NoteContext.Provider>;
     }) : groups.map(({ node, blocks }) => (
       <FlowStep key={node.node_id} node={node} blocks={blocks} layout={layout} lessonId={lesson.lesson_id} studentId={studentId} isHomestead={lesson.track === "HOMESTEADING"} agentName={lesson.agent_name} />
     ))}

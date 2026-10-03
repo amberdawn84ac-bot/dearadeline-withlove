@@ -848,6 +848,9 @@ async def _credit_newly_completed_lesson(
             if block_evaluations.get(block_id)
         ]
         proficiency = _proficiency_from_evaluations(evaluations)
+        # Finishing navigation without a correct demonstration cannot raise BKT.
+        if proficiency not in {"UNDERSTANDING", "EXTENDING"}:
+            concept_credits = []
         grade = _grade_from_metadata(metadata)
         oas_standards = await _topic_oas_standards(track, grade, _lesson_content(blocks, lesson))
 
@@ -859,6 +862,7 @@ async def _credit_newly_completed_lesson(
             proficiency=proficiency,
             evidence_sources=[{
                 "type": "space_conversation_transcript",
+                "session_id": session_id,
                 "lesson_id": lesson_id,
                 "lesson_title": lesson.get("title") or "",
                 "concepts": [credit.concept_name for credit in concept_credits if credit.concept_name],

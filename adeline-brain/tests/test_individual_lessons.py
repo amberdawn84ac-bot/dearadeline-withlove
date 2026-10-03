@@ -50,6 +50,10 @@ def test_child_core_skills_attach_to_the_unit_not_the_other_way_around():
         track="CREATION_SCIENCE",
         grade_level="8",
     )
+    lessons = [lesson.model_copy(update={"skill_opportunities": (
+        [{"skill_id":"math-1","task":"Measure width and length with units.","evidence_requirement":"measurement record"}] if lesson.lesson_id=="blood" else
+        [{"skill_id":"write-1","task":"Write a precise custody observation.","evidence_requirement":"written observation"}] if lesson.lesson_id=="investigation" else []
+    )}) for lesson in lessons]
     targets = [
         IndividualSkillTarget(
             suggestion_id="math-1", domain="math", title="Measure a real length and keep the unit",
@@ -106,6 +110,7 @@ def test_open_subjects_skip_to_the_year_skill_that_fits_the_unit():
         track="CREATION_SCIENCE",
         grade_level="8",
     )
+    lessons = [lesson.model_copy(update={"skill_opportunities":[{"skill_id":"witness","task":"Say what one witness can establish.","evidence_requirement":"claim with source"}] if lesson.lesson_id=="scene" else []}) for lesson in lessons]
     next_skill = IndividualSkillTarget(
         suggestion_id="psalm", domain="discipleship", title="Read a psalm about sheep",
         track="DISCIPLESHIP", working_level="8", sequence_state="READY", progression_ordinal=1,
@@ -161,6 +166,7 @@ def test_history_can_jump_and_then_goes_on_the_timeline():
         track="CREATION_SCIENCE",
         grade_level="8",
     )
+    lessons = [lesson.model_copy(update={"skill_opportunities":[{"skill_id":"mayfield","task":"Explain the Mayfield identification from the source record.","evidence_requirement":"source analysis and timeline"}] if lesson.lesson_id=="prints" else []}) for lesson in lessons]
     earlier = IndividualSkillTarget(
         suggestion_id="early", domain="history", title="Memorize the textbook chapter",
         track="TRUTH_HISTORY", working_level="8", sequence_state="READY",

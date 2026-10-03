@@ -31,7 +31,7 @@ from app.curriculum.canonical_author import (
     validate_flow_composition,
 )
 from app.curriculum.family_style import finalize_family_lesson, is_current_family_canonical
-from app.connections.canonical_store import canonical_store, canonical_slug
+from app.connections.canonical_store import canonical_store, canonical_slug, content_revision_of
 from app.connections.student_experience_store import student_experience_store
 from app.agents.adapter import adapt_canonical_for_student
 from app.services.resource_router import resource_router, ResourceQuery, resource_block_from_packet
@@ -354,49 +354,18 @@ def skill_connections_for_contract(contract: dict, targets: list[dict]) -> tuple
     the shared experience. Topic similarity alone cannot turn a math or literacy
     target into themed work.
     """
-    design = contract.get("experience_design") or {}
-    declared_disciplines = " ".join(
-        str(item).lower() for item in design.get("disciplines_integrated") or []
-    )
-    integration_text = json.dumps({
-        "disciplines_integrated": design.get("disciplines_integrated") or [],
-        "integration_rationale": design.get("integration_rationale") or "",
-        "central_question": design.get("central_question") or "",
-        "real_world_task": contract.get("real_world_task") or {},
-        "mastery_evidence_map": contract.get("mastery_evidence_map") or [],
-    }, ensure_ascii=False).lower()
-    integrated: list[dict] = []
-    separate: list[dict] = []
+    opportunities = {str(item["skill_id"]): item for item in contract.get("skill_opportunities") or []
+                     if isinstance(item, dict) and item.get("skill_id") and item.get("task") and item.get("evidence_requirement")}
+    integrated, separate = [], []
     for raw in targets:
         target = dict(raw)
-        domain = str(target.get("domain") or "").lower()
-        target_text = " ".join([
-            str(target.get("title") or ""),
-            str(target.get("integration_reason") or ""),
-        ])
-        target_families = _skill_families_for_text(domain, target_text)
-        investigation_families = _skill_families_for_text(domain, integration_text)
-        matching_families = sorted(target_families & investigation_families)
-        domain_is_declared = any(
-            re.search(rf"\b{re.escape(term)}\b", declared_disciplines)
-            for term in _DOMAIN_DISCIPLINE_TERMS.get(domain, frozenset())
-        )
-        fits = bool(domain_is_declared and matching_families)
-        if fits:
-            target["integration_status"] = "INTEGRATED"
-            target["integration_reason"] = (
-                f"The investigation genuinely uses this target through {', '.join(item.replace('_', ' ') for item in matching_families)}."
-            )
-            target["contribution_prompt"] = (
-                f"At working level {target.get('working_level') or 'current'}, use “{target.get('title') or f'this {domain} target'}” "
-                f"where the shared evidence or outcome actually calls for {domain}; preserve the work so understanding can be reviewed."
-            )
+        identities = [target.get("standard_code"), target.get("concept_id"), target.get("suggestion_id")]
+        opportunity = next((opportunities[str(key)] for key in identities if key and str(key) in opportunities), None)
+        if opportunity and target.get("sequence_state") != "LOCKED":
+            target.update(integration_status="INTEGRATED", integration_reason="Explicit skill and demonstration match in the canonical contract.", contribution_prompt=opportunity["task"])
             integrated.append(target)
         else:
-            target["integration_status"] = "SEPARATE"
-            target["integration_reason"] = (
-                "The authored investigation does not justify this connection, so it remains in the learner's separate skill path."
-            )
+            target.update(integration_status="SEPARATE", integration_reason="No explicit evidence-backed skill opportunity; keep the ordered skill path.")
             separate.append(target)
     return integrated, separate
 
@@ -544,7 +513,8 @@ async def _author(
                 request.topic, attempt + 1, len(parsed.get("blocks") or []),
             )
             contract_errors = (
-                validate_canonical_contract(parsed)
+                (["Author must declare curriculum_contract_version 2"] if parsed.get("curriculum_contract_version") != 2 else [])
+                + validate_canonical_contract(parsed)
                 + validate_flow_composition(parsed)
                 + validate_experience_substance(parsed)
             )
@@ -658,6 +628,13 @@ async def _stream(request: LessonRequest):
             max_failures=EXPERIENCE_FAILURE_ESCALATION_THRESHOLD,
         )
     if claim.state == "ready" and claim.record:
+        current_canonical = await canonical_store.get(slug)
+        expected_revision = content_revision_of(current_canonical)
+        saved_revision = (claim.record.get("metadata") or {}).get("canonical_revision") or ""
+        if expected_revision and saved_revision != expected_revision:
+            await student_experience_store.invalidate_ready(request.student_id, plan_item_id, "canonical_revision_changed")
+            claim = await student_experience_store.claim(request.student_id, plan_item_id, slug)
+    if claim.state == "ready" and claim.record:
         async for event in _emit_persisted(request, claim.record):
             yield event
         return
@@ -746,9 +723,9 @@ async def _stream(request: LessonRequest):
             # Durable contracts live with the canonical blocks so the current DB schema
             # can preserve one source of truth without introducing a parallel lesson table.
             blocks[0].setdefault("metadata", {})["canonical_contract"] = {
-                key: authored.get(key) for key in ("big_question", "learning_goal", "shared_experience", "unit_plan", "experience_design", "investigation_scope_contract", "public_interest_contract", "family_discussion", "real_world_task", "portfolio_task", "printable_contract", "demonstration_contract", "mastery_evidence_map", "family_roles", "contract_version", "prompt_version")
+                key: authored.get(key) for key in ("big_question", "learning_goal", "shared_experience", "unit_plan", "experience_design", "investigation_scope_contract", "public_interest_contract", "family_discussion", "real_world_task", "portfolio_task", "printable_contract", "demonstration_contract", "mastery_evidence_map", "family_roles", "curriculum_contract_version", "available_roles", "shared_facts", "shared_sources", "skill_opportunities", "real_world_contract", "contract_version", "prompt_version")
             }
-            canonical = {"id": str(uuid.uuid4()), "topic": request.topic, "track": request.track.value, "title": authored.get("title") or request.topic, "blocks": blocks, "oas_standards": [], "researcher_activated": False, "agent_name": "Canonical Experience Author"}
+            canonical = {"id": str(uuid.uuid4()), "topic": request.topic, "track": request.track.value, "title": authored.get("title") or request.topic, "blocks": blocks, "contract_version": 2, "shared_facts": authored.get("shared_facts") or [], "shared_sources": authored.get("shared_sources") or [], "stages": [s for lesson in (authored.get("unit_plan") or {}).get("lessons", []) for s in lesson.get("stages", [])], "skill_opportunities": authored.get("skill_opportunities") or [], "real_world_contract": authored.get("real_world_contract"), "oas_standards": [], "researcher_activated": False, "agent_name": "Canonical Experience Author"}
             await canonical_store.save(slug, canonical, pending=False)
             logger.info("[ExperienceAuthor] canonical saved topic=%r, adapting for student…", request.topic)
         yield _sse({"type": "status", "message": "The shared experience is ready. Preparing this learner's entry point…"})
@@ -777,9 +754,14 @@ async def _stream(request: LessonRequest):
             block.setdefault("block_id", f"{experience_id}-{index}")
         contract = ((canonical.get("blocks") or [{}])[0].get("metadata") or {}).get("canonical_contract") or {}
         learner_contribution_data = learner_contribution_for_request(contract, adaptation, request)
+        from app.services.curriculum_state import science_foundations
+        foundations = await science_foundations(request.student_id, [
+            str(c['concept_id']) for c in (contract.get('unit_plan') or {}).get('essential_concepts', []) if c.get('concept_id')
+        ]) if request.track.value in {'CREATION_SCIENCE','HEALTH_NATUROPATHY','HOMESTEADING'} else []
         integrated_targets = list(learner_contribution_data.get("skill_connections") or [])
         metadata = {
-            "canonical_slug": slug, "topic": request.topic, "grade_level": request.grade_level,
+            "science_foundations": foundations,
+            "canonical_slug": slug, "canonical_revision": content_revision_of(canonical), "topic": request.topic, "grade_level": request.grade_level,
             "required_standard_codes": request.required_standard_codes,
             "investigation_scope_contract": contract.get("investigation_scope_contract") or {},
             "demonstration_contract": contract.get("demonstration_contract") or {},
@@ -788,6 +770,7 @@ async def _stream(request: LessonRequest):
             "public_interest_contract": contract.get("public_interest_contract") or {},
             "family_discussion": contract.get("family_discussion") or {},
             "real_world_task": contract.get("real_world_task") or {},
+            "real_world_contract": contract.get("real_world_contract"),
             "family_roles": contract.get("family_roles") or {},
             "mastery_evidence_map": contract.get("mastery_evidence_map") or [],
             "contract_version": contract.get("contract_version"),

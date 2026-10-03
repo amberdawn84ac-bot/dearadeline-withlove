@@ -1,5 +1,10 @@
 'use client';
 
+import { EvidenceLedger } from "@/components/parent/EvidenceLedger";
+import { StudentCharacterEditor } from "@/components/parent/StudentCharacterEditor";
+import { FamilyTimeline } from "@/components/parent/FamilyTimeline";
+import { FamilyUnitComposer } from "@/components/parent/FamilyUnitComposer";
+import { FamilyUnitProgress } from "@/components/parent/FamilyUnitProgress";
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -79,6 +84,8 @@ function ChildOverview({ student, portfolio, portfolioLoading, onClose }: {
         <span className="rounded-full bg-[#E7EFE5] px-4 py-2 text-xs font-black text-[#2F6542]">{gradeLabel(student.grade_level)}</span>
       </div>
 
+      <StudentCharacterEditor studentId={student.student_id} />
+      <EvidenceLedger studentId={student.student_id} />
       <div className="mt-7 grid gap-6 lg:grid-cols-2">
         <div className="space-y-6">
           <section className="rounded-2xl border border-[#DED1BD] p-5">
@@ -121,21 +128,17 @@ function ChildOverview({ student, portfolio, portfolioLoading, onClose }: {
 }
 
 const KITCHEN_CASE_TOPIC = 'The Kitchen Case File: What Can Household Evidence Actually Prove?';
-const INVESTIGATION_SLOTS = ['science', 'history'] as const;
-const SLOT_LABELS: Record<string, string> = { science: 'Science', history: 'History' };
+const INVESTIGATION_SLOTS = ['family'] as const;
+const SLOT_LABELS: Record<string, string> = { family: 'Family unit' };
 
 function InvestigationQueueSection({ dashboard, onChange }: { dashboard: FamilyDashboard; onChange: () => void }) {
-  const [drafts, setDrafts] = useState<Record<string, { topic: string; track: string }>>({
-    science: { topic: '', track: 'CREATION_SCIENCE' },
-    history: { topic: '', track: 'TRUTH_HISTORY' },
-  });
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function queueKitchenCase() {
-    setSubmitting('science'); setError(null);
+    setSubmitting('family'); setError(null);
     try {
-      await enqueueFamilyInvestigation(dashboard.parent_id, 'science', KITCHEN_CASE_TOPIC, 'CREATION_SCIENCE');
+      await enqueueFamilyInvestigation(dashboard.parent_id, 'family', KITCHEN_CASE_TOPIC, 'CREATION_SCIENCE');
       onChange();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not add forensic science.');
@@ -144,42 +147,28 @@ function InvestigationQueueSection({ dashboard, onChange }: { dashboard: FamilyD
     }
   }
 
-  async function handleAdd(slot: 'science' | 'history') {
-    const draft = drafts[slot];
-    if (!draft.topic.trim()) return;
-    setSubmitting(slot); setError(null);
-    try {
-      await enqueueFamilyInvestigation(dashboard.parent_id, slot, draft.topic.trim(), draft.track);
-      setDrafts((previous) => ({ ...previous, [slot]: { ...previous[slot], topic: '' } }));
-      onChange();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not add that to the queue.');
-    } finally {
-      setSubmitting(null);
-    }
-  }
 
   return (
     <section className="rounded-[26px] border border-[#D4C3A7] bg-[#FFFDF7] p-6">
-      <p className="text-xs font-black uppercase tracking-[.14em] text-[#9A3F4A]">Science &amp; history queues</p>
+      <p className="text-xs font-black uppercase tracking-[.14em] text-[#9A3F4A]">Family unit queue</p>
+      <FamilyUnitProgress householdId={dashboard.parent_id} onChange={onChange} />
       <h2 className="mt-1 text-2xl font-bold" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>Plan what comes next</h2>
-      <p className="mt-2 text-sm leading-6 text-[#2F4731]/62">Each slot runs until the family finishes it, then moves to whatever is queued next. A unit can look through a career, or through something else. The family shares the unit. Each child still follows their own scope and sequence through it. Forensic science is one unit you can add: one case file, every age, and one result is not proof.</p>
+      <p className="mt-2 text-sm leading-6 text-[#2F4731]/62">One family unit stays active until every experience is finished and you advance the unit. A unit can look through a career, or through something else. The family shares the unit. Each child still follows their own scope and sequence through it. Forensic science is one unit you can add: one case file, every age, and one result is not proof.</p>
       <button
         type="button"
         onClick={() => void queueKitchenCase()}
-        disabled={submitting === 'science'}
+        disabled={submitting === 'family'}
         className="mt-4 rounded-xl bg-[#2F5A3A] px-4 py-2 text-xs font-bold text-white disabled:opacity-40"
       >
-        {submitting === 'science' ? 'Adding…' : 'Queue forensic science'}
+        {submitting === 'family' ? 'Adding…' : 'Queue forensic science'}
       </button>
       {error && <p className="mt-3 text-sm font-semibold text-[#9A3F4A]" role="alert">{error}</p>}
-      <div className="mt-5 grid gap-5 md:grid-cols-2">
+      <div className="mt-5 grid gap-5">
         {INVESTIGATION_SLOTS.map((slot) => {
           const current = dashboard.family_investigations.find((item) => item.slot === slot);
           const upcoming = dashboard.upcoming_family_investigations
             .filter((item) => item.slot === slot)
             .sort((a, b) => a.position - b.position);
-          const draft = drafts[slot];
           return (
             <div key={slot} className="rounded-2xl border border-[#DED1BD] p-4">
               <p className="text-xs font-black uppercase tracking-[.14em] text-[#2F6542]">{SLOT_LABELS[slot]}</p>
@@ -188,33 +177,7 @@ function InvestigationQueueSection({ dashboard, onChange }: { dashboard: FamilyD
                 <p className="text-[10px] font-black uppercase tracking-[.12em] text-[#2F4731]/45">Up next</p>
                 {upcoming.map((item) => <p key={item.position} className="text-xs text-[#2F4731]/62">{item.canonical_topic}</p>)}
               </div>}
-              <div className="mt-4 flex flex-col gap-2 border-t border-[#E7DAC3] pt-3">
-                <label className="sr-only" htmlFor={`${slot}-topic`}>Add a topic to the {SLOT_LABELS[slot]} queue</label>
-                <input
-                  id={`${slot}-topic`}
-                  value={draft.topic}
-                  onChange={(event) => setDrafts((previous) => ({ ...previous, [slot]: { ...previous[slot], topic: event.target.value } }))}
-                  placeholder={`Add a ${SLOT_LABELS[slot].toLowerCase()} topic…`}
-                  className="rounded-xl border border-[#D8C9AB] bg-white px-3 py-2 text-sm text-[#2F4731]"
-                />
-                <div className="flex gap-2">
-                  <select
-                    value={draft.track}
-                    onChange={(event) => setDrafts((previous) => ({ ...previous, [slot]: { ...previous[slot], track: event.target.value } }))}
-                    className="flex-1 rounded-xl border border-[#D8C9AB] bg-white px-3 py-2 text-xs text-[#2F4731]"
-                  >
-                    {Object.entries(TRACK_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => void handleAdd(slot)}
-                    disabled={submitting === slot || !draft.topic.trim()}
-                    className="rounded-xl bg-[#2F5A3A] px-4 py-2 text-xs font-bold text-white disabled:opacity-40"
-                  >
-                    {submitting === slot ? 'Adding…' : 'Add'}
-                  </button>
-                </div>
-              </div>
+              <FamilyUnitComposer householdId={dashboard.parent_id} tracks={TRACK_LABELS} onChange={onChange} />
             </div>
           );
         })}
@@ -337,6 +300,7 @@ export default function ParentDashboardPage() {
           <section className="overflow-hidden rounded-[30px] border border-[#C6B796] bg-[#FFFDF7] shadow-[0_18px_55px_rgba(62,50,33,.08)]"><div className="grid lg:grid-cols-[1.35fr_.65fr]"><div className="p-6 sm:p-9"><p className="flex items-center gap-2 text-xs font-black uppercase tracking-[.18em] text-[#9A3F4A]"><Search className="h-4 w-4" /> Family investigation</p>{investigation ? <><h2 className="mt-4 max-w-3xl text-3xl font-bold leading-tight sm:text-4xl" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>{investigation.title}</h2><p className="mt-4 max-w-3xl text-base leading-7 text-[#2F4731]/72">{investigation.description}</p><div className="mt-6 grid gap-3 sm:grid-cols-2"><div className="rounded-2xl bg-[#F3E8D5] p-4"><p className="text-[10px] font-black uppercase tracking-[.15em] text-[#9A3F4A]">Where the family is</p><p className="mt-2 text-sm font-semibold">Following the evidence and deciding what matters next—not racing a weekly deadline.</p></div><div className="rounded-2xl bg-[#E7EFE5] p-4"><p className="text-[10px] font-black uppercase tracking-[.15em] text-[#2F6542]">Suggested next move</p><p className="mt-2 text-sm font-semibold">{investigation.next_action || investigation.success_criteria?.[0] || 'Compare what everyone noticed and choose the next useful question together.'}</p></div></div></> : <><h2 className="mt-4 text-3xl font-bold" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>The next shared question is still emerging</h2><p className="mt-3 max-w-2xl text-sm leading-6 text-[#2F4731]/65">It may narrow, widen, branch, pause, or continue as long as the evidence calls for.</p></>}</div><aside className="border-t border-[#DCCFB9] bg-[#5B314E] p-6 text-white sm:p-8 lg:border-l lg:border-t-0"><p className="text-xs font-black uppercase tracking-[.18em] text-[#F0BE62]">Recent discoveries</p><div className="mt-5 space-y-4">{dashboard.recent_activity.slice(0, 4).map((activity) => <div key={`${activity.student_id}-${activity.lesson_id}-${activity.completed_at}`} className="border-b border-white/15 pb-4 last:border-0"><p className="font-bold">{activity.student_name}</p><p className="mt-1 text-sm leading-5 text-white/70">Added evidence: {activity.title}</p></div>)}{dashboard.recent_activity.length === 0 && <p className="text-sm leading-6 text-white/65">The family&rsquo;s first discoveries will appear here as learners add evidence and reflections.</p>}</div><p className="mt-6 text-xs leading-5 text-white/55">Investigations continue until the family finishes, changes direction, or finds a better question.</p></aside></div></section>
 
           <InvestigationQueueSection dashboard={dashboard} onChange={() => void fetchData()} />
+          <FamilyTimeline householdId={dashboard.parent_id} />
           <SpacesInsightsFeed students={dashboard.students.map((student) => ({ id: student.student_id, name: student.student_name }))} />
 
           <section><div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-black uppercase tracking-[.18em] text-[#BD6809]">Each child&rsquo;s learning</p><h2 className="mt-1 text-3xl font-bold" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>One family, distinct learners</h2><p className="mt-2 text-sm text-[#2F4731]/62">No impersonating children. Choose one only when you want details.</p></div><div className="flex gap-2"><button onClick={() => setShowClaimStudent(true)} className="inline-flex items-center gap-2 rounded-xl border border-[#CFC1A8] bg-white px-4 py-2.5 text-xs font-bold"><Link2 className="h-4 w-4" /> Connect learner</button><button onClick={() => setShowAddStudent(true)} className="inline-flex items-center gap-2 rounded-xl bg-[#BD6809] px-4 py-2.5 text-xs font-bold text-white"><Plus className="h-4 w-4" /> Create learner</button></div></div><div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">{dashboard.students.map((student) => <ChildCard key={student.student_id} student={student} onSelect={() => setSelectedStudentId(student.student_id)} />)}</div></section>

@@ -31,7 +31,7 @@ from app.curriculum.family_style import (
 TOPIC = "The Kitchen Case File: What Can Household Evidence Actually Prove?"
 TRACK = "CREATION_SCIENCE"
 TITLE = "Forensic Science"
-CONTENT_REVISION = "kitchen-case-file-v3"
+CONTENT_REVISION = "kitchen-case-file-v4"
 
 ROLES = {
     "elementary": "Do the same investigation as everyone else. Measure, name the job, and write only what you saw. You may write less. You do not get a version with the death, the blood, or the insects taken out.",
@@ -173,6 +173,13 @@ def _lessons() -> list[dict[str, Any]]:
                 "middle": middle,
                 "high_school": high_school,
             },
+            "stages": [
+                {"stage":"READ", "block_ids":[block_ids[0]], "prompt":""},
+                {"stage":"EXPLORE", "block_ids":[], "prompt":_THINK_TANKS[lesson_id]},
+                {"stage":"WRITE", "block_ids":[], "prompt":"Record the observation and its limits in your own words while the evidence is open.", "evidence_required":["notes"]},
+                {"stage":"APPLY", "block_ids":[], "prompt":middle},
+                {"stage":"EXPERIENCE", "block_ids":[block_ids[1]], "prompt":"", "activity":middle, "evidence_required":["observation, measurement or artifact"]},
+            ],
             "faith_talk": _FAITH_TALKS[lesson_id],
             "think_tank": _THINK_TANKS[lesson_id],
         })
@@ -767,6 +774,7 @@ def _payload() -> dict[str, Any]:
 def build_kitchen_case_canonical() -> dict[str, Any]:
     """Return a store-ready canonical. Raises if the unit violates the contract."""
     payload = _payload()
+    payload["curriculum_contract_version"] = 1  # whole-unit compatibility record
     finalized, errors = finalize_family_lesson(payload["blocks"], TOPIC, track=TRACK)
     if errors:
         raise RuntimeError("Forensic science unit failed family validation: " + "; ".join(errors))
@@ -786,6 +794,7 @@ def build_kitchen_case_canonical() -> dict[str, Any]:
             "big_question",
             "learning_goal",
             "shared_experience",
+            "curriculum_contract_version",
             "unit_plan",
             "experience_design",
             "family_discussion",
@@ -802,6 +811,8 @@ def build_kitchen_case_canonical() -> dict[str, Any]:
     slug = _slug(TOPIC, TRACK)
     return {
         "id": payload["id"],
+        "content_revision": CONTENT_REVISION,
+        "stages": [stage for lesson in payload["unit_plan"]["lessons"] for stage in lesson["stages"]],
         "topic_slug": slug,
         "topic": TOPIC,
         "track": TRACK,

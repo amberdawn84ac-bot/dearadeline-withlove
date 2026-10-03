@@ -2,7 +2,7 @@
 
 AI context guide for the **dearadeline-withlove** monorepo. Read this before making any changes.
 
-> **Last updated:** 2026-09-30 — Checked against `main` after the Kitchen Case File and the routing/readiness fixes. Neo4j, the 4-agent orchestrator, and Tavily-as-a-live-dependency stay gone. `IMPLEMENTATION_SUMMARY.md` is a historical note and is not the architecture.
+> **Last updated:** 2026-10-03 — Checked against `main` after the Kitchen Case File and the routing/readiness fixes. Neo4j, the 4-agent orchestrator, and Tavily-as-a-live-dependency stay gone. `IMPLEMENTATION_SUMMARY.md` is a historical note and is not the architecture.
 
 ---
 
@@ -18,9 +18,15 @@ The product loop is: **conversation → curiosity → investigation → learning
 
 Credit is based on demonstrated learning, not seat time. Do not redesign this into a system that asks primarily "how long did you spend?" or "what grade worksheet should we generate?" **Activity ≠ mastery.** The Registrar only credits concepts with evidence behind them (see `curriculum/canonical_author.py::enforce_non_exposure_mastery` — awarding credit for mere exposure is blocked at the schema level, not just by convention).
 
-**Two different learning shapes, on purpose:**
-- **History and science are family-shared.** One investigation (e.g. "Railroads, Oil, and the Robber Barons"), everyone participates at their own depth — a 6-year-old counts and observes, a 14-year-old analyzes primary sources and calculates freight economics. Do **not** generate separate grade-level lessons per child for these tracks.
-- **Math and literacy are learner-scoped.** These have real prerequisite chains (you can't do algebra without arithmetic), so they run through individual BKT/ZPD mastery tracking per student, not the shared-investigation model.
+**One family unit; individual curriculum states:**
+- A household has exactly one active universal unit. It can span any of the ten tracks.
+- A unit contains ordered canonical experiences. Today projects the current experience;
+  it does not author or advance the household curriculum.
+- Math/literacy keep their ordered learner skill paths. Attach a next skill only
+  through an explicit skill identity, task and evidence opportunity; otherwise keep
+  its individual lesson. Keyword similarity is not alignment.
+- Science prerequisites remain in the path as review, reinforcement or teaching.
+- Read `docs/CURRICULUM_ENGINE_CONTRACT.md` before modifying the pipeline.
 
 **Adeline is one interface**, not a bounced-between collection of bots. Specialist logic exists internally (`app/agents/`), but there is one canonical experience-generation path (`app/curriculum/canonical_author.py`) with different *modes* — `investigation`, `stem`, `steam`, `arts_integrated`, `maker_build`, `design_challenge`, `creative_demonstration`, `family_project`, `public_interest_investigation`, `civic_action_project` — not competing generators. Do not resurrect a second lesson-generation path.
 
@@ -232,7 +238,7 @@ None of the 27 were fixed as part of this audit — this section is the tracked 
 1. **Witness Protocol thresholds** in `app/protocols/witness.py` (env-var overridable, but the defaults encode a real trust decision)
 2. **10-Track Constitution** — canonical in `adeline-core/src/types.ts`; no renaming, no reordering
 3. **`canonical_author.py`'s validation contract** — it's what stops the system from awarding credit for exposure alone, and from generating "decorative activity" masquerading as STEM
-4. **Family-shared vs. learner-scoped split** — history/science are shared family investigations; math/literacy are individual BKT/ZPD-tracked skill paths. Don't collapse these into one model.
+4. **Family-shared vs. learner-scoped split** — the universal family unit supplies shared canonical content; every child has individual curriculum state, and math/literacy retain ordered BKT/ZPD-tracked skill paths.
 5. **GraphQL in Next.js only** — adeline-brain is REST-only by design
 6. **Pure computation algorithms** — no DB calls inside `algorithms/`
 7. **Portfolio = accomplishments** — never treat activity completion alone as mastery evidence
