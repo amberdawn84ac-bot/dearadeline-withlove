@@ -108,17 +108,17 @@ describe('durable Today and experience reopening', () => {
     render(<TodayPage />);
 
     await screen.findByText('Creek evidence');
-    expect(screen.getByRole('heading', { name: 'Science together' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'History together' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Poison Squad/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Your lessons' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'The crime scene' })).toBeInTheDocument();
-    expect(screen.getByText('Walk the boundary and sketch what you see.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Today’s lesson' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Science together' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'History together' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Next chapter' })).toBeInTheDocument();
+    expect(screen.getByText(/Poison Squad/)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Your lessons' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Walk the boundary and sketch what you see/)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Math & reading practice' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open this lesson →' })).toHaveAttribute(
       'href', '/dashboard/lesson/family-1-week-1#lesson-scene',
     );
-    expect(screen.getAllByRole('link', { name: /Start this investigation/ }).length).toBeGreaterThan(0);
   });
 
   it('reopens a ready experience with zero build/author requests', async () => {

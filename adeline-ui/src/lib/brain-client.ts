@@ -1467,6 +1467,8 @@ export interface IndividualLesson {
   assignment: string;
   track: string;
   kind?: 'investigation' | 'gap';
+  faith_talk?: string;
+  think_tank?: string;
   connections?: LessonConnection[];
 }
 

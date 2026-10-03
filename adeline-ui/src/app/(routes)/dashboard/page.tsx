@@ -66,6 +66,7 @@ export default function TodayPage() {
     || (!item.slot && item.track !== 'TRUTH_HISTORY' && item.track !== 'JUSTICE_CHANGEMAKING'));
   const historyInvestigations = todayInvestigations.filter((item) => (item.slot || '').toLowerCase() === 'history'
     || (!item.slot && (item.track === 'TRUTH_HISTORY' || item.track === 'JUSTICE_CHANGEMAKING')));
+  const day = campfireDay(individualLessons, scienceInvestigations, historyInvestigations);
 
   return (
     <div className={styles.todayWorkspace}>
@@ -73,9 +74,8 @@ export default function TodayPage() {
         <p>{isNextSchoolDay ? 'Your next school day' : 'Ready when you are'}</p>
         <h1>{isNextSchoolDay ? 'Coming up next' : 'Today'}</h1>
         <span>
-          {sharedWithSiblings
-            ? 'Two family investigations run side by side — science in the kitchen and field, history from real records. Each child keeps their own work and credits.'
-            : 'Two family investigations run side by side — science in the kitchen and field, history from real records.'}
+          One career lesson for the whole family. This child&rsquo;s part is on this page. The next chapter waits until this unit is done.
+          {sharedWithSiblings ? ' The same lesson is open for the household.' : ''}
         </span>
       </header>
 
@@ -90,19 +90,52 @@ export default function TodayPage() {
         />
       </div>
 
-      <section className={styles.kanban} aria-label="Today's learning board">
+      <section className={styles.dayBoard} aria-label="Today's lesson">
         <div className={`${styles.kanbanColumn} ${styles.kanbanToday}`}>
-          <header><span>1</span><div><small>In the kitchen and the field</small><h2>Science together</h2></div></header>
-          {scienceInvestigations.length
-            ? scienceInvestigations.map((investigation) => <InvestigationCard key={investigation.id} investigation={investigation} />)
-            : <EmptyCard text="No science investigation is open yet." />}
-        </div>
-
-        <div className={`${styles.kanbanColumn} ${styles.kanbanToday}`}>
-          <header><span>2</span><div><small>A real case from the records</small><h2>History together</h2></div></header>
-          {historyInvestigations.length
-            ? historyInvestigations.map((investigation) => <InvestigationCard key={investigation.id} investigation={investigation} />)
-            : <EmptyCard text="No history investigation is open yet." />}
+          <header><span>1</span><div><small>This unit, this job</small><h2>Today&rsquo;s lesson</h2></div></header>
+          {day.current ? (
+            <article className={styles.kanbanCard}>
+              <small>Lesson {day.current.index} of {day.current.count} · a lesson can take more than one day</small>
+              <h3>{day.current.investigation_title}</h3>
+              <p><strong>{day.current.title}.</strong> {day.current.assignment}</p>
+              {day.current.faith_talk ? <p className="mt-2"><strong>Faith talk.</strong> {day.current.faith_talk}</p> : null}
+              {day.current.think_tank ? <p className="mt-2"><strong>Think tank.</strong> {day.current.think_tank}</p> : null}
+              {!!day.current.connections?.length && <ul>
+                {day.current.connections.map((connection) => <li key={connection.suggestion_id}>
+                  <b>{connection.domain === 'math' ? 'This job uses the math' : 'Also in this lesson'} · level {connection.working_level || 'yours'}:</b> {connection.title}
+                </li>)}
+              </ul>}
+              <Link href={lessonHref(day.current)}>Open this lesson →</Link>
+            </article>
+          ) : day.unit ? (
+            <InvestigationCard investigation={day.unit} />
+          ) : <EmptyCard text="No unit is open yet." />}
+          {day.toc.length > 1 && (
+            <article className={styles.kanbanCard}>
+              <small>The jobs in this unit</small>
+              <h3>Table of contents</h3>
+              <ul>
+                {day.toc.map((lesson) => <li key={lesson.id}>
+                  {lesson.index === day.current?.index ? <b>{lesson.index}. {lesson.title} — today</b> : `${lesson.index}. ${lesson.title}`}
+                </li>)}
+              </ul>
+            </article>
+          )}
+          {day.math && (
+            <article className={styles.kanbanCard}>
+              <small>Not this job</small>
+              <h3>Math stays its own work</h3>
+              <p>{day.math.assignment}</p>
+              <Link href={lessonHref(day.math)}>Work on this →</Link>
+            </article>
+          )}
+          {day.nextChapter && (
+            <article className={styles.kanbanCard}>
+              <small>Not today</small>
+              <h3>Next chapter</h3>
+              <p>{day.nextChapter.title}</p>
+            </article>
+          )}
         </div>
 
         <div className={styles.kanbanColumn}>
@@ -114,35 +147,6 @@ export default function TodayPage() {
           {!finished.length && <EmptyCard text="Completed lessons appear here after evidence is recorded." />}
         </div>
       </section>
-      {individualLessons.length > 0 && (
-        <section className={styles.practiceStrip} aria-label="This learner's lessons">
-          <header>
-            <p>After the family work</p>
-            <h2>Your lessons</h2>
-            <span>The family lesson, with the other subjects that fit this learner&rsquo;s level. Work that does not fit stays open below.</span>
-          </header>
-          {groupedLessons(individualLessons).map((group) => (
-            <div key={group.id}>
-              <h3 className="mb-2 mt-4 text-sm font-black text-[#2F4731]">{group.title}</h3>
-              <div className={styles.practiceCards}>
-                {group.lessons.map((lesson) => (
-                  <article key={lesson.id} className={styles.kanbanCard}>
-                    <small>{lesson.kind === 'gap' ? lesson.track.replaceAll('_', ' ') : `Lesson ${lesson.index} of ${lesson.count}`}</small>
-                    <h3>{lesson.title}</h3>
-                    <p>{lesson.assignment}</p>
-                    {!!lesson.connections?.length && <ul className="mt-2 space-y-1">
-                      {lesson.connections.map((connection) => <li key={connection.suggestion_id} className="text-xs leading-5 text-[#2F4731]/70">
-                        <b>{domainLabel(connection.domain)} · level {connection.working_level || 'yours'}:</b> {connection.title}
-                      </li>)}
-                    </ul>}
-                    <Link href={lessonHref(lesson)}>{lesson.kind === 'gap' ? 'Work on this →' : 'Open this lesson →'}</Link>
-                  </article>
-                ))}
-              </div>
-            </div>
-          ))}
-        </section>
-      )}
       <p className={styles.planFootnote}>
         <Link href="/dashboard/spaces">Browse all your Spaces →</Link>
         {' · '}
@@ -152,36 +156,24 @@ export default function TodayPage() {
   );
 }
 
-function domainLabel(domain: string) {
-  const labels: Record<string, string> = {
-    math: 'Math',
-    literacy: 'Reading and writing',
-    history: 'History',
-    science: 'Science',
-    homesteading: 'Homesteading',
-    discipleship: 'Scripture',
-    justice: 'Justice',
-    health: 'Health',
-    government_economics: 'Government and economics',
-    creative_economy: 'Making and selling',
-  };
-  return labels[domain] || domain.replaceAll('_', ' ');
+function campfireDay(
+  lessons: IndividualLesson[],
+  science: LessonSuggestion[],
+  history: LessonSuggestion[],
+) {
+  const unitLessons = lessons.filter((lesson) => lesson.kind !== 'gap');
+  const unitId = unitLessons[0]?.investigation_id;
+  const toc = unitLessons.filter((lesson) => lesson.investigation_id === unitId);
+  const current = toc[0];
+  const math = lessons.find((lesson) => lesson.kind === 'gap' && lesson.track === 'APPLIED_MATHEMATICS');
+  const unit = science.find((item) => item.id === unitId || item.title === current?.investigation_title) ?? science[0];
+  const nextChapter = history.find((item) => item.title !== current?.investigation_title && item.id !== current?.investigation_id) ?? null;
+  return { current, toc, math, unit, nextChapter };
 }
 
 function lessonHref(lesson: IndividualLesson) {
   if (lesson.kind === 'gap') return `/dashboard/lesson/${encodeURIComponent(lesson.investigation_id)}`;
   return `/dashboard/lesson/${encodeURIComponent(lesson.investigation_id)}#lesson-${encodeURIComponent(lesson.lesson_id)}`;
-}
-
-function groupedLessons(lessons: IndividualLesson[]) {
-  const groups: Array<{ id: string; title: string; lessons: IndividualLesson[] }> = [];
-  for (const lesson of lessons) {
-    const key = lesson.kind === 'gap' ? 'gaps' : lesson.investigation_id;
-    const existing = groups.find((group) => group.id === key);
-    if (existing) existing.lessons.push(lesson);
-    else groups.push({ id: key, title: lesson.investigation_title, lessons: [lesson] });
-  }
-  return groups;
 }
 
 function InvestigationCard({ investigation }: { investigation: LessonSuggestion }) {
