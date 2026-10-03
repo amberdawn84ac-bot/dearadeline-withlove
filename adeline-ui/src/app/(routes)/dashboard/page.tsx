@@ -110,6 +110,17 @@ export default function TodayPage() {
           ) : day.unit ? (
             <InvestigationCard investigation={day.unit} />
           ) : <EmptyCard text="No unit is open yet." />}
+          {day.cores.length > 0 && (
+            <article className={styles.kanbanCard}>
+              <small>This child&rsquo;s next skills, not part of the unit</small>
+              <h3>Your core work</h3>
+              <ul>
+                {day.cores.map(({ activity, lesson }) => <li key={activity.suggestion_id}>
+                  <b>{activity.skill_title}.</b> {activity.fit === 'direct' ? `Uses ${lesson.title}.` : activity.fit === 'foundation' ? 'The foundation comes first.' : `Bridged onto ${lesson.title}.`} {activity.activity}
+                </li>)}
+              </ul>
+            </article>
+          )}
           {day.toc.length > 1 && (
             <article className={styles.kanbanCard}>
               <small>The jobs in this unit</small>
@@ -166,9 +177,10 @@ function campfireDay(
   const toc = unitLessons.filter((lesson) => lesson.investigation_id === unitId);
   const current = toc[0];
   const math = lessons.find((lesson) => lesson.kind === 'gap' && lesson.track === 'APPLIED_MATHEMATICS');
+  const cores = toc.flatMap((lesson) => (lesson.core_activities ?? []).map((activity) => ({ activity, lesson })));
   const unit = science.find((item) => item.id === unitId || item.title === current?.investigation_title) ?? science[0];
   const nextChapter = history.find((item) => item.title !== current?.investigation_title && item.id !== current?.investigation_id) ?? null;
-  return { current, toc, math, unit, nextChapter };
+  return { current, toc, math, cores, unit, nextChapter };
 }
 
 function lessonHref(lesson: IndividualLesson) {

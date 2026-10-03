@@ -371,6 +371,8 @@ export interface LessonResponse {
         block_ids: string[];
         family_work?: string;
         individual_expectations?: { elementary?: string; middle?: string; high_school?: string };
+        faith_talk?: string;
+        think_tank?: string;
         estimated_minutes?: number;
       }>;
     };
@@ -1455,6 +1457,18 @@ export interface LessonConnection {
   working_level?: string;
 }
 
+export interface CoreActivity {
+  suggestion_id: string;
+  domain: string;
+  track: string;
+  skill_title: string;
+  working_level?: string;
+  fit?: 'direct' | 'bridged' | 'foundation';
+  lesson_id?: string;
+  lesson_title?: string;
+  activity: string;
+}
+
 export interface IndividualLesson {
   id: string;
   investigation_id: string;
@@ -1470,6 +1484,7 @@ export interface IndividualLesson {
   faith_talk?: string;
   think_tank?: string;
   connections?: LessonConnection[];
+  core_activities?: CoreActivity[];
 }
 
 export interface SpaceListItem {

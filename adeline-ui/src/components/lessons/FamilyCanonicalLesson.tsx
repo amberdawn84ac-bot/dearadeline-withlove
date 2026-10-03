@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { Archive, CheckCircle2, Download, ExternalLink, Gamepad2, Search, ShieldCheck } from "lucide-react";
 import GenUIRenderer from "@/components/GenUIRenderer";
-import { downloadInvestigationPrintable, sealJournal } from "@/lib/brain-client";
-import type { LessonBlockResponse, LessonResponse } from "@/lib/brain-client";
+import { downloadInvestigationPrintable, getSavedTodayPlan, peekLearningPlan, sealJournal } from "@/lib/brain-client";
+import type { IndividualLesson, LessonBlockResponse, LessonResponse } from "@/lib/brain-client";
 
 type Resource = {
   id?: string; title?: string; provider?: string; resource_type?: string;
@@ -140,6 +140,44 @@ function useDossierPrint(lesson: LessonResponse) {
 
 type FlowNode = { node_id: string; label: string; block_ids: string[] };
 
+function NoteBox({ label, prompt }: { label: string; prompt: string }) {
+  const [value, setValue] = useState("");
+  return (
+    <label className="grid gap-2 rounded-2xl border border-[#D9CFBC] bg-white p-4 text-sm font-bold">
+      <span className="text-xs font-black uppercase tracking-[.14em] text-[#BD6809]">{label}</span>
+      <span className="font-normal leading-6">{prompt}</span>
+      <textarea value={value} onChange={(event) => setValue(event.target.value)} rows={3} placeholder="Write it here, while it is still in front of you." className="rounded-xl border border-[#BFB39E] bg-[#FFFDF7] p-3 font-normal" />
+    </label>
+  );
+}
+
+function useChildCoreLessons(studentId: string) {
+  const [lessons, setLessons] = useState<IndividualLesson[]>([]);
+  useEffect(() => {
+    const known = peekLearningPlan(studentId);
+    if (known?.individual_lessons?.length) {
+      setLessons(known.individual_lessons);
+      return;
+    }
+    void getSavedTodayPlan(studentId).then((plan) => setLessons(plan?.individual_lessons ?? [])).catch(() => undefined);
+  }, [studentId]);
+  return lessons;
+}
+
+const EXPERIENCE_STAGES = new Set(["ACTION", "CREATION", "DEMONSTRATION"]);
+
+function splitReadAndWork(groups: Array<{ node: FlowNode; blocks: LessonBlockResponse[] }>) {
+  const read: typeof groups = [];
+  const work: typeof groups = [];
+  for (const group of groups) {
+    const reading = group.blocks.filter((block) => !EXPERIENCE_STAGES.has((block.experience_stage || "").toUpperCase()));
+    const doing = group.blocks.filter((block) => EXPERIENCE_STAGES.has((block.experience_stage || "").toUpperCase()));
+    if (reading.length) read.push({ ...group, blocks: reading });
+    if (doing.length) work.push({ ...group, blocks: doing });
+  }
+  return { read, work };
+}
+
 export function isV11FlowExperience(lesson: LessonResponse): boolean {
   const formatVersion = lesson.blocks[0]?.canonical_format_version ?? 0;
   const flow = lesson.metadata?.experience_design?.flow;
@@ -250,6 +288,7 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
   const flow = (design.flow ?? []) as FlowNode[];
   const layout = design.layout ?? "";
   const groups = resolveFlowGroups(visible, flow);
+  const coreLessons = useChildCoreLessons(studentId);
   const unitPlan = lesson.metadata?.unit_plan;
   const unitLessons = unitPlan?.lessons ?? [];
   const demonstrationContract = lesson.metadata?.demonstration_contract;
@@ -327,14 +366,43 @@ function V11FlowExperience({ lesson, studentId }: { lesson: LessonResponse; stud
         ? "elementary"
         : Number.parseInt(lesson.metadata?.grade_level ?? "", 10) <= 8 ? "middle" : "high_school";
       const expectation = unitLesson.individual_expectations?.[expectationBand];
+      const { read, work } = splitReadAndWork(lessonGroups);
+      const activities = coreLessons
+        .filter((item) => item.lesson_id === unitLesson.lesson_id)
+        .flatMap((item) => item.core_activities ?? []);
+      const stepProps = { layout, lessonId: lesson.lesson_id, studentId, isHomestead: lesson.track === "HOMESTEADING", agentName: lesson.agent_name };
       return <section id={`lesson-${unitLesson.lesson_id}`} key={unitLesson.lesson_id} className="scroll-mt-28 space-y-5 rounded-[28px] border-2 border-[#D9CFBC] bg-[#FFFDF7] p-5 md:p-8">
         <div className="border-b border-[#D9CFBC] pb-5">
           <p className="text-xs font-black uppercase tracking-[.18em] text-[#9A3F4A]">Lesson {lessonIndex + 1} of {unitLessons.length}</p>
           <h2 className="mt-2 text-4xl" style={{ fontFamily: "var(--font-emilys-candy), cursive" }}>{unitLesson.title}</h2>
           {unitLesson.family_work && <p className="mt-3 text-sm leading-6 text-[#2F4731]/70"><b>Together:</b> {unitLesson.family_work}</p>}
-          {expectation && <p className="mt-2 text-sm leading-6 text-[#2F4731]/70"><b>Your responsibility:</b> {expectation}</p>}
         </div>
-        {lessonGroups.map(({ node, blocks }) => <FlowStep key={node.node_id} node={node} blocks={blocks} layout={layout} lessonId={lesson.lesson_id} studentId={studentId} isHomestead={lesson.track === "HOMESTEADING"} agentName={lesson.agent_name} />)}
+        {read.length > 0 && <div className="space-y-4">
+          <p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Read</p>
+          {read.map(({ node, blocks }) => <FlowStep key={node.node_id} node={node} blocks={blocks} {...stepProps} />)}
+        </div>}
+        <NoteBox label="Write it down" prompt="Write the idea while it is still on the page. One sentence you could explain to someone who was not here." />
+        {expectation && <section className="rounded-2xl border border-[#2F4731]/20 bg-[#E7EFE5] p-4">
+          <p className="text-xs font-black uppercase tracking-[.16em] text-[#2F4731]">Apply</p>
+          <p className="mt-2 text-sm leading-6">{expectation}</p>
+        </section>}
+        {work.length > 0 && <div className="space-y-4">
+          <p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Experience</p>
+          {work.map(({ node, blocks }) => <FlowStep key={`${node.node_id}-work`} node={node} blocks={blocks} {...stepProps} />)}
+        </div>}
+        {unitLesson.faith_talk && <section className="rounded-2xl border border-[#4338CA]/30 bg-[#F1F0FE] p-4">
+          <p className="text-xs font-black uppercase tracking-[.16em] text-[#4338CA]">Faith talk</p>
+          <p className="mt-2 text-sm leading-6">{unitLesson.faith_talk}</p>
+        </section>}
+        {unitLesson.think_tank && <section className="rounded-2xl border border-[#8B5E34]/30 bg-[#FBF3E4] p-4">
+          <p className="text-xs font-black uppercase tracking-[.16em] text-[#8B5E34]">Think tank</p>
+          <p className="mt-2 text-sm leading-6">{unitLesson.think_tank}</p>
+        </section>}
+        {activities.length > 0 && <section className="space-y-3">
+          <p className="text-xs font-black uppercase tracking-[.16em] text-[#BD6809]">Your core work</p>
+          <p className="text-sm leading-6 text-[#2F4731]/70">This is your next skill, at your level. The unit did not come with it. This job is the material.</p>
+          {activities.map((activity) => <NoteBox key={activity.suggestion_id} label={activity.skill_title} prompt={activity.activity} />)}
+        </section>}
       </section>;
     }) : groups.map(({ node, blocks }) => (
       <FlowStep key={node.node_id} node={node} blocks={blocks} layout={layout} lessonId={lesson.lesson_id} studentId={studentId} isHomestead={lesson.track === "HOMESTEADING"} agentName={lesson.agent_name} />

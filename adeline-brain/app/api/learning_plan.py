@@ -336,6 +336,23 @@ class LessonConnection(BaseModel):
     working_level: str = ""
 
 
+class CoreActivity(BaseModel):
+    """This child's next core skill, turned into work on the open unit.
+
+    The skill belongs to the child. The unit does not contain it. The open unit
+    only chooses where that next skill can be practiced.
+    """
+    suggestion_id: str
+    domain: str
+    track: str
+    skill_title: str
+    working_level: str = ""
+    fit: Literal["direct", "bridged", "foundation"] = "bridged"
+    lesson_id: str = ""
+    lesson_title: str = ""
+    activity: str
+
+
 class IndividualLesson(BaseModel):
     """One lesson of the open family investigation, written as this child's work."""
     id: str
@@ -352,6 +369,7 @@ class IndividualLesson(BaseModel):
     faith_talk: str = ""
     think_tank: str = ""
     connections: list[LessonConnection] = Field(default_factory=list)
+    core_activities: list[CoreActivity] = Field(default_factory=list)
 
 
 class LearningPlanResponse(BaseModel):
@@ -1037,77 +1055,82 @@ def _target_fits_lesson(target: IndividualSkillTarget, lesson: IndividualLesson)
     return bool(_skill_families_for_text(target.domain, f"{lesson.title} {lesson.assignment}"))
 
 
+def _core_activity(target: IndividualSkillTarget, lesson: IndividualLesson, grade_level: str, fit: str) -> CoreActivity:
+    """Turn the child's next skill into a worksheet that uses this unit."""
+    level = str(target.working_level or grade_level)
+    domain = target.domain.replace("_", " ")
+    material = lesson.assignment.strip() or lesson.title
+    if fit == "foundation":
+        activity = (
+            f"Your next {domain} is not ready to use in this job yet. "
+            f"The missing piece is: {target.title}. Practice that first, then come back to {lesson.title}."
+        )
+    elif fit == "direct":
+        activity = f"{target.title}. Do that with this job, not as a separate page. {material}"
+    else:
+        activity = (
+            f"Your next {domain}, level {level}: {target.title}. "
+            f"This unit does not already teach it, so use this job as the material. "
+            f"{lesson.title}. {material}"
+        )
+    return CoreActivity(
+        suggestion_id=target.suggestion_id,
+        domain=target.domain,
+        track=target.track,
+        skill_title=target.title,
+        working_level=level,
+        fit=fit,  # type: ignore[arg-type]
+        lesson_id=lesson.lesson_id,
+        lesson_title=lesson.title,
+        activity=activity,
+    )
+
+
 def personalize_lessons(
     lessons: list[IndividualLesson],
     targets: list[IndividualSkillTarget],
     grade_level: str,
     covered_tracks: set[str],
 ) -> list[IndividualLesson]:
-    """Weave this child's ready subjects into the family lessons, and keep the rest.
+    """Attach each child's next core skill to the open unit.
 
-    One current target per track. It joins the first lesson that actually uses
-    that subject. A target from the wrong grade, or one whose foundation is
-    still locked, is not assigned. Anything the open investigations do not use
-    stays as this child's own math practice. Other subjects are not turned into a second list.
+    Core skills are not stored on the unit. One current target per track, at
+    this child's level, is placed on the lesson that can actually use it. If no
+    lesson can, it is bridged onto the lesson the family is on. A locked skill
+    or one from another grade is not assigned.
     """
     eligible: list[IndividualSkillTarget] = []
+    seen_tracks: set[str] = set()
     for target in targets:
-        if target.sequence_state == "LOCKED":
+        if target.sequence_state == "LOCKED" or target.track in covered_tracks:
             continue
-        if target.track in covered_tracks:
-            continue
-        if not str(target.title or "").strip():
+        if not str(target.title or "").strip() or target.track in seen_tracks:
             continue
         if not _level_fits(target.working_level, grade_level):
             continue
+        seen_tracks.add(target.track)
         eligible.append(target)
 
-    used: set[str] = set()
-    woven: list[IndividualLesson] = []
-    for lesson in lessons:
-        connections: list[LessonConnection] = []
-        for target in eligible:
-            if target.suggestion_id in used or target.sequence_state == "BRIDGE_REQUIRED":
-                continue
-            if not _target_fits_lesson(target, lesson):
-                continue
-            connections.append(LessonConnection(
-                suggestion_id=target.suggestion_id,
-                domain=target.domain,
-                track=target.track,
-                title=target.title,
-                working_level=str(target.working_level or grade_level),
-            ))
-            used.add(target.suggestion_id)
-        woven.append(lesson.model_copy(update={"connections": connections}))
-
-    gaps: list[IndividualLesson] = []
+    unit = [lesson for lesson in lessons if lesson.kind == "investigation"]
+    current = unit[0] if unit else None
+    placed: dict[str, list[CoreActivity]] = {}
     for target in eligible:
-        if target.suggestion_id in used or target.track != "APPLIED_MATHEMATICS":
+        host = current
+        fit = "foundation" if target.sequence_state == "BRIDGE_REQUIRED" else "bridged"
+        if fit != "foundation":
+            for lesson in unit:
+                if _target_fits_lesson(target, lesson):
+                    host = lesson
+                    fit = "direct"
+                    break
+        if host is None:
             continue
-        if target.sequence_state == "BRIDGE_REQUIRED":
-            assignment = (
-                "The foundation for this is not secure yet. Practice it before using it in the family work."
-            )
-        else:
-            assignment = (
-                f"This is the next {target.domain.replace('_', ' ')} work at level "
-                f"{target.working_level or grade_level}. The open investigations do not use it, so it stays with this learner."
-            )
-        gaps.append(IndividualLesson(
-            id=f"gap:{target.suggestion_id}",
-            investigation_id=target.suggestion_id,
-            investigation_title="Still open for you",
-            slot="gap",
-            lesson_id="gap",
-            index=1,
-            count=1,
-            title=target.title,
-            assignment=assignment,
-            track=target.track,
-            kind="gap",
-        ))
-    return woven + gaps
+        placed.setdefault(host.id, []).append(_core_activity(target, host, grade_level, fit))
+
+    return [
+        lesson.model_copy(update={"core_activities": placed.get(lesson.id, []), "connections": []})
+        for lesson in lessons
+    ]
 
 
 async def individual_lessons_for(
