@@ -5,7 +5,8 @@ Two-layer storage:
   1. Redis (fast, in-memory) — checked first, written on DB miss
   2. PostgreSQL CanonicalLesson table — source of truth, survives Redis eviction
 
-Lookup: Redis HIT → return. Redis MISS → DB lookup → populate Redis → return.
+Lookup: validate Redis revision against Postgres metadata, then use cached content.
+A revision mismatch reloads durable content; database failure allows cache fallback.
 Write:  DB first → then Redis. Pending canonicals skip Redis until approved.
 """
 import asyncio
@@ -25,6 +26,8 @@ def content_revision_of(record: dict | None) -> str:
     """Revision stamped on a canonical, or empty when the copy predates one."""
     if not record:
         return ""
+    if record.get("content_revision"):
+        return str(record["content_revision"])
     blocks = record.get("blocks") or []
     if isinstance(blocks, str):
         try:
@@ -113,13 +116,22 @@ class CanonicalStore:
         except Exception as e:
             logger.warning(f"[CanonicalStore] Redis SET failed: {e}")
 
+    async def _db_revision(self, slug: str) -> dict | None:
+        from app.config import get_db_conn
+        conn = await get_db_conn()
+        try:
+            row = await conn.fetchrow('SELECT "contentRevision",COALESCE("pendingApproval",FALSE) AS "pendingApproval" FROM "CanonicalLesson" WHERE "topicSlug"=$1',slug)
+            return dict(row) if row else None
+        finally:
+            await conn.close()
+
     async def _db_get(self, slug: str) -> Optional[dict]:
         from app.config import get_db_conn
         conn = await get_db_conn()
         try:
             row = await conn.fetchrow(
                 'SELECT id, topic, track, title, "blocksJson", "oasStandards", '
-                '"researcherActivated", "agentName", '
+                '"researcherActivated", "agentName", "contentRevision", "contractVersion", "stagesJson", "skillOpportunitiesJson", "sharedFactsJson", "sharedSourcesJson", "realWorldContractJson", '
                 'COALESCE("pendingApproval", FALSE) AS "pendingApproval", "needsReviewReason" '
                 'FROM "CanonicalLesson" '
                 'WHERE "topicSlug" = $1 '
@@ -129,6 +141,13 @@ class CanonicalStore:
             if not row:
                 return None
             return {
+                "content_revision": row["contentRevision"],
+                "contract_version": row["contractVersion"],
+                "stages": row["stagesJson"],
+                "skill_opportunities": row["skillOpportunitiesJson"],
+                "shared_facts": row["sharedFactsJson"],
+                "shared_sources": row["sharedSourcesJson"],
+                "real_world_contract": row["realWorldContractJson"],
                 "id": row["id"],
                 "topic_slug": slug,
                 "topic": row["topic"],
@@ -156,9 +175,17 @@ class CanonicalStore:
                 INSERT INTO "CanonicalLesson" (
                     id, "topicSlug", topic, track, title,
                     "blocksJson", "oasStandards", "researcherActivated", "agentName",
-                    "pendingApproval", "needsReviewReason", "updatedAt"
-                ) VALUES ($1, $2, $3, $4::"Track", $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12)
+                    "pendingApproval", "needsReviewReason", "updatedAt", "contentRevision", "contractVersion",
+                    "stagesJson", "skillOpportunitiesJson", "sharedFactsJson", "sharedSourcesJson", "realWorldContractJson"
+                ) VALUES ($1, $2, $3, $4::"Track", $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb)
                 ON CONFLICT ("topicSlug") DO UPDATE SET
+                    "contentRevision" = EXCLUDED."contentRevision",
+                    "contractVersion" = EXCLUDED."contractVersion",
+                    "stagesJson" = EXCLUDED."stagesJson",
+                    "skillOpportunitiesJson" = EXCLUDED."skillOpportunitiesJson",
+                    "sharedFactsJson" = EXCLUDED."sharedFactsJson",
+                    "sharedSourcesJson" = EXCLUDED."sharedSourcesJson",
+                    "realWorldContractJson" = EXCLUDED."realWorldContractJson",
                     title               = EXCLUDED.title,
                     "blocksJson"        = EXCLUDED."blocksJson",
                     "oasStandards"      = EXCLUDED."oasStandards",
@@ -172,6 +199,10 @@ class CanonicalStore:
                 json.dumps(record["blocks"]), json.dumps(record["oas_standards"]),
                 record["researcher_activated"], record["agent_name"],
                 pending, record.get("needs_review_reason"), now,
+                content_revision_of(record), int(record.get("contract_version") or 1),
+                json.dumps(record.get("stages") or []), json.dumps(record.get("skill_opportunities") or []),
+                json.dumps(record.get("shared_facts") or []), json.dumps(record.get("shared_sources") or []),
+                json.dumps(record.get("real_world_contract")),
             )
         finally:
             await conn.close()
@@ -191,15 +222,17 @@ class CanonicalStore:
             except (TypeError, ValueError):
                 record = None
 
-        if record is None:
-            try:
-                record = await self._db_get(slug)
-            except Exception as e:
-                logger.warning(f"[CanonicalStore] DB GET failed, checking repository canonicals: {e}")
-                record = None
+        try:
+            if record is not None:
+                revision = await self._db_revision(slug)
+                if revision is None or revision['pendingApproval']:
+                    record = None
+                elif str(revision['contentRevision'] or '') != content_revision_of(record):
+                    record = await self._db_get(slug)
             else:
-                if record:
-                    logger.info(f"[CanonicalStore] DB HIT — {slug}")
+                record = await self._db_get(slug)
+        except Exception as exc:
+            logger.warning("[CanonicalStore] DB unavailable; using cached or repository content: %s", exc)
 
         from app.curriculum.builtin_canonicals import builtin_canonical
         repository = builtin_canonical(slug)
@@ -209,8 +242,7 @@ class CanonicalStore:
             return repository
 
         if record:
-            if not raw:
-                await self._redis_set(slug, json.dumps(record))
+            await self._redis_set(slug, json.dumps(record))
             return record
 
         if repository:
@@ -226,6 +258,11 @@ class CanonicalStore:
 
     async def save(self, slug: str, record: dict, pending: bool = False) -> None:
         """Write to DB first (durable), then Redis only if not pending."""
+        if not content_revision_of(record):
+            revision_payload = {k:record.get(k) for k in ('blocks','stages','skill_opportunities','shared_facts','shared_sources','real_world_contract')}
+            record['content_revision'] = hashlib.sha256(json.dumps(revision_payload,sort_keys=True,default=str).encode()).hexdigest()[:24]
+        else:
+            record['content_revision'] = content_revision_of(record)
         await self._db_write(slug, record, pending=pending)
         if not pending:
             await self._redis_set(slug, json.dumps(record))
@@ -301,7 +338,7 @@ class CanonicalStore:
         try:
             row = await conn.fetchrow(
                 'SELECT id, topic, track, title, "blocksJson", "oasStandards", '
-                '"researcherActivated", "agentName", '
+                '"researcherActivated", "agentName", "contentRevision", "contractVersion", "stagesJson", "skillOpportunitiesJson", "sharedFactsJson", "sharedSourcesJson", "realWorldContractJson", '
                 'COALESCE("pendingApproval", FALSE) AS "pendingApproval", "needsReviewReason" '
                 'FROM "CanonicalLesson" WHERE "topicSlug" = $1',
                 slug,
@@ -309,6 +346,13 @@ class CanonicalStore:
             if not row:
                 return None
             return {
+                "content_revision": row["contentRevision"],
+                "contract_version": row["contractVersion"],
+                "stages": row["stagesJson"],
+                "skill_opportunities": row["skillOpportunitiesJson"],
+                "shared_facts": row["sharedFactsJson"],
+                "shared_sources": row["sharedSourcesJson"],
+                "real_world_contract": row["realWorldContractJson"],
                 "id": row["id"],
                 "topic_slug": slug,
                 "topic": row["topic"],

@@ -28,18 +28,18 @@ from typing import Literal, Optional
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, Header, Cookie
 from pydantic import BaseModel, Field
 
 from app.schemas.api_models import Track
-from app.api.middleware import verify_student_access, require_account_role
+from app.api.middleware import verify_student_access, require_account_role, verify_household_access
 from app.schemas.api_models import UserRole
 from app.models.student import load_student_state
 from app.connections.journal_store import journal_store
 from app.connections.curriculum_graph import curriculum_graph
 from app.connections.redis_client import redis_client
 from app.connections.daily_plan_store import daily_plan_store
-from app.connections.family_investigation_queue_store import family_investigation_queue_store
+from app.connections.family_unit_store import family_unit_store
 from app.services.rate_limit import enforce_rate_limit
 from app.tools.graph_query import tool_get_zpd_candidates, ZPDCandidate
 from app.agents.curriculum_planner import personalized_curriculum_planner
@@ -372,6 +372,7 @@ class IndividualLesson(BaseModel):
     faith_talk: str = ""
     think_tank: str = ""
     connections: list[LessonConnection] = Field(default_factory=list)
+    skill_opportunities: list[dict] = Field(default_factory=list)
     core_activities: list[CoreActivity] = Field(default_factory=list)
 
 
@@ -382,11 +383,9 @@ class LearningPlanResponse(BaseModel):
     student_id: str
     suggestions: list[LessonSuggestion]
     family_investigation: Optional[LessonSuggestion] = None
-    # Up to two concurrent, pace-driven investigations (science + history
-    # slots) — replaces the single calendar-bound family_investigation above,
-    # which is kept set to the first of these for back-compat only.
+    # Compatibility list containing the one current family-unit experience.
     family_investigations: list[LessonSuggestion] = Field(default_factory=list)
-    # Queued-but-not-yet-started items in each slot — a preview only, not
+    # Queued units are a preview only, not
     # openable as a Space until they actually become current.
     upcoming_family_investigations: list[UpcomingInvestigation] = Field(default_factory=list)
     individual_lessons: list[IndividualLesson] = Field(default_factory=list)
@@ -951,7 +950,7 @@ def _individual_skill_targets(
     ]
 
 
-FAMILY_INVESTIGATION_SLOTS = ("science", "history")
+FAMILY_INVESTIGATION_SLOTS = ("family",)
 
 
 def _grade_number(grade_level: str) -> int:
@@ -1021,6 +1020,7 @@ def lessons_from_canonical(
             count=len(lessons),
             title=title,
             assignment=assignment,
+            skill_opportunities=[o for o in contract.get("skill_opportunities") or [] if not o.get("lesson_id") or o.get("lesson_id") == lesson_id],
             track=track,
             faith_talk=str(lesson.get("faith_talk") or "").strip(),
             think_tank=str(lesson.get("think_tank") or "").strip(),
@@ -1080,21 +1080,10 @@ def _content_words(text: str) -> set[str]:
 
 
 def _skill_fits_lesson(target: IndividualSkillTarget, lesson: IndividualLesson) -> bool:
-    """A fit is the skill and the lesson sharing the same kind of work."""
-    from app.api.experience_builder import _skill_families_for_text
-
-    if lesson.kind != "investigation":
+    if lesson.kind != "investigation" or target.sequence_state == "LOCKED":
         return False
-    lesson_text = " ".join((lesson.title, lesson.assignment, lesson.faith_talk, lesson.think_tank))
-    skill_text = target.title
-    overlap = _content_words(skill_text) & _content_words(lesson_text)
-    if target.track == lesson.track:
-        return bool(overlap)
-    lesson_families = _skill_families_for_text(target.domain, lesson_text)
-    skill_families = _skill_families_for_text(target.domain, skill_text)
-    if lesson_families and skill_families and (lesson_families & skill_families):
-        return True
-    return bool(overlap)
+    identities = {str(key) for key in (target.standard_code,target.concept_id,target.suggestion_id) if key}
+    return any(str(o.get("skill_id")) in identities and o.get("task") and o.get("evidence_requirement") for o in lesson.skill_opportunities)
 
 
 def _usable_target(target: IndividualSkillTarget, grade_level: str, covered_tracks: set[str]) -> bool:
@@ -1147,7 +1136,9 @@ def _core_activity(target: IndividualSkillTarget, lesson: IndividualLesson, grad
             f"The missing piece is: {target.title}. Practice that first, then come back to {lesson.title}."
         )
     elif fit == "direct":
-        activity = f"{target.title}. Do that with this job, not as a separate page. {material}"
+        identities = {str(key) for key in (target.standard_code,target.concept_id,target.suggestion_id) if key}
+        opportunity = next(o for o in lesson.skill_opportunities if str(o.get("skill_id")) in identities and o.get("task") and o.get("evidence_requirement"))
+        activity = str(opportunity["task"])
     else:
         activity = (
             f"Your next {domain}, level {level}: {target.title}. "
@@ -1317,7 +1308,17 @@ async def individual_lessons_for(
     return cards
 
 
-async def _attach_individual_lessons(plan: LearningPlanResponse) -> LearningPlanResponse:
+async def _attach_individual_lessons(plan: LearningPlanResponse, *, refresh_family: bool = False) -> LearningPlanResponse:
+    if refresh_family:
+        grade = plan.placement.working_grade if plan.placement else "8"
+        candidates = plan.individual_skills or plan.suggestions
+        family = await _family_investigation_suggestions(plan.family_context.household_id, candidates, grade)
+        plan = plan.model_copy(update={
+            "family_investigations":family,
+            "family_investigation":family[0] if family else None,
+            "upcoming_family_investigations":await _upcoming_family_investigations(plan.family_context.household_id),
+            "suggestions":[*family,*[s for s in plan.suggestions if s.delivery_mode != "FAMILY_INVESTIGATION"]],
+        })
     investigations = list(plan.family_investigations or [])
     if not investigations and plan.family_investigation:
         investigations = [plan.family_investigation]
@@ -1367,69 +1368,55 @@ async def _family_investigation_suggestion_for_slot(
     skill_suggestions: list[LessonSuggestion],
     working_grade: str,
 ) -> LessonSuggestion | None:
-    """This slot's current queue item, advancing past anything already finished.
-
-    Pace-driven, not calendar-bound: an item stays current until its Space's
-    activities are actually completed, however long that takes.
-    """
-    import hashlib
+    """Project the one active family unit; reads never advance curriculum."""
     from app.jobs.canonical_seeding import canonical_seed_for
-    household_key = hashlib.sha256(household_id.encode("utf-8")).hexdigest()[:12]
-
-    for _ in range(25):  # defensive bound; a real queue is never this deep in one read
-        current = await family_investigation_queue_store.get_current(household_id, slot)
-        if not current:
-            return None
-        shared_id = f"family-{household_key}-{slot}-{current['position']}"
-        try:
-            completed = await _shared_investigation_completed(shared_id)
-        except Exception as exc:
-            logger.warning(
-                "[LearningPlan] Family investigation completion check failed "
-                "(leaving current item active): %s", exc,
-            )
-            completed = False
-        if not completed:
-            track = current["track"]
-            canonical_topic = current["canonical_topic"]
-            seed = canonical_seed_for(canonical_topic, track)
-            title = seed.learner_title if seed else canonical_topic
-            description = (
-                (seed.card_description() if seed else "")
-                or personalized_curriculum_planner.TRACK_LABELS.get(track, canonical_topic)
-            )
-            driving_question = seed.resolved_driving_question() if seed else None
-            sequence = build_sequence_contract(source="family")
-            return LessonSuggestion(
-                id=shared_id,
-                title=title,
-                track=track,
-                description=description,
-                emoji=TRACK_EMOJI.get(track, "✦"),
-                priority=1.0,
-                source="family",
-                agent=TRACK_AGENT_MAP.get(track),
-                canonical_ready=True,
-                canonical_slug=shared_id,
-                canonical_topic=canonical_topic,
-                mission_kind="family_investigation",
-                slot=slot,
-                driving_question=driving_question or None,
-                success_criteria=[
-                    "Work from real observations, records, sources, measurements, or results.",
-                    "Let each learner make one meaningful contribution without dividing the family into separate lessons.",
-                ],
-                personalization_reason="The household shares the investigation; this learner's math and literacy supports remain level-specific.",
-                sequence_policy=sequence.policy.value,
-                sequence_state=sequence.state.value,
-                bridge_required=sequence.bridge_required,
-                sequence_rationale=sequence.rationale,
-                delivery_mode="FAMILY_INVESTIGATION",
-                shared_investigation_id=shared_id,
-                individual_skill_targets=_individual_skill_targets(skill_suggestions, working_grade),
-                learner_progression_targets=_learner_progression_targets(skill_suggestions, working_grade),
-            )
-        await family_investigation_queue_store.mark_completed(current["id"])
+    current = await family_unit_store.current(household_id)
+    if not current or not current.get("experienceId"):
+        return None
+    shared_id = f"family-unit-{current['id']}-{current['experienceId']}"
+    if current.get("legacySlot"):
+        import hashlib
+        household_key = hashlib.sha256(household_id.encode()).hexdigest()[:12]
+        shared_id = f"family-{household_key}-{current['legacySlot']}-{current['legacyPosition']}"
+    track = current["track"]
+    canonical_topic = current["canonicalTopic"]
+    seed = canonical_seed_for(canonical_topic, track)
+    title = seed.learner_title if seed else canonical_topic.rsplit(" / ", 1)[-1]
+    description = (
+        (seed.card_description() if seed else "")
+        or personalized_curriculum_planner.TRACK_LABELS.get(track, canonical_topic)
+    )
+    driving_question = seed.resolved_driving_question() if seed else None
+    sequence = build_sequence_contract(source="family")
+    return LessonSuggestion(
+        id=shared_id,
+        title=title,
+        track=track,
+        description=description,
+        emoji=TRACK_EMOJI.get(track, "✦"),
+        priority=1.0,
+        source="family",
+        agent=TRACK_AGENT_MAP.get(track),
+        canonical_ready=True,
+        canonical_slug=shared_id,
+        canonical_topic=canonical_topic,
+        mission_kind="family_investigation",
+        slot=slot,
+        driving_question=driving_question or None,
+        success_criteria=[
+            "Work from real observations, records, sources, measurements, or results.",
+            "Let each learner make one meaningful contribution without dividing the family into separate lessons.",
+        ],
+        personalization_reason="The household shares the investigation; this learner's math and literacy supports remain level-specific.",
+        sequence_policy=sequence.policy.value,
+        sequence_state=sequence.state.value,
+        bridge_required=sequence.bridge_required,
+        sequence_rationale=sequence.rationale,
+        delivery_mode="FAMILY_INVESTIGATION",
+        shared_investigation_id=shared_id,
+        individual_skill_targets=_individual_skill_targets(skill_suggestions, working_grade),
+        learner_progression_targets=_learner_progression_targets(skill_suggestions, working_grade),
+    )
     return None
 
 
@@ -1438,7 +1425,7 @@ async def _family_investigation_suggestions(
     skill_suggestions: list[LessonSuggestion],
     working_grade: str,
 ) -> list[LessonSuggestion]:
-    """Up to two concurrent family investigations — one per slot with an active item."""
+    """Exactly one household unit supplies the shared family experience."""
     suggestions = []
     for slot in FAMILY_INVESTIGATION_SLOTS:
         suggestion = await _family_investigation_suggestion_for_slot(
@@ -1450,18 +1437,9 @@ async def _family_investigation_suggestions(
 
 
 async def _upcoming_family_investigations(household_id: str) -> list[UpcomingInvestigation]:
-    """Queued-but-not-yet-started items in each slot — not real Spaces yet,
-    just a preview of what's next once the current item finishes."""
-    upcoming: list[UpcomingInvestigation] = []
-    for slot in FAMILY_INVESTIGATION_SLOTS:
-        current = await family_investigation_queue_store.get_current(household_id, slot)
-        after_position = current["position"] if current else -1
-        for item in await family_investigation_queue_store.list_upcoming(household_id, slot, after_position):
-            upcoming.append(UpcomingInvestigation(
-                slot=slot, canonical_topic=item["canonical_topic"], track=item["track"],
-                position=item["position"],
-            ))
-    return upcoming
+    return [UpcomingInvestigation(
+        slot="family", canonical_topic=item["title"], track=item["track"], position=item["position"],
+    ) for item in await family_unit_store.upcoming(household_id)]
 
 
 def _family_investigation_for_learner(
@@ -2243,7 +2221,7 @@ async def _replenish_learning_plan_queue(student_id: str) -> None:
 
 class FamilyInvestigationQueueRequest(BaseModel):
     household_id: str
-    slot: str = Field(pattern="^(science|history)$")
+    slot: str = Field(default="family", pattern="^(family|science|history)$")
     canonical_topic: str
     track: Track
 
@@ -2259,26 +2237,18 @@ class FamilyInvestigationQueueResponse(BaseModel):
 @router.post("/family-investigation-queue", response_model=FamilyInvestigationQueueResponse)
 async def enqueue_family_investigation(
     body: FamilyInvestigationQueueRequest,
+    authorization: Optional[str] = Header(default=None),
+    auth_token: Optional[str] = Cookie(default=None),
     _role: str = Depends(require_account_role(UserRole.PARENT, UserRole.ADMIN)),
 ):
-    """Append a topic/track to the end of one household's science or history
-    investigation queue. The current item in a slot runs until its Space's
-    activities are actually completed — no calendar involved — then the queue
-    advances to whatever was enqueued next.
-
-    Known limitation: this only verifies the caller holds a parent or admin
-    account, not that they specifically own `household_id` — there is no
-    existing household-ownership check anywhere else in this codebase to
-    reuse (household_id is an internal rotation/cache key, not a modeled
-    tenant boundary). Fine for now since nothing in the product surfaces this
-    endpoint to end users yet; tighten if that changes.
-    """
-    row = await family_investigation_queue_store.enqueue(
-        body.household_id, body.slot, body.canonical_topic, body.track.value,
-    )
+    """Compatibility endpoint: enqueue one experience in the universal unit queue."""
+    await verify_household_access(body.household_id, authorization, auth_token)
+    from app.curriculum.builtin_canonicals import unit_experiences
+    row = await family_unit_store.enqueue(body.household_id, body.canonical_topic,
+        unit_experiences(body.canonical_topic, body.track.value))
     return FamilyInvestigationQueueResponse(
-        household_id=body.household_id, slot=body.slot, position=row["position"],
-        canonical_topic=row["canonical_topic"], track=body.track,
+        household_id=body.household_id, slot="family", position=row["position"],
+        canonical_topic=body.canonical_topic, track=body.track,
     )
 
 
@@ -2332,14 +2302,14 @@ async def get_learning_plan(
             persisted = await daily_plan_store.get(student_id, plan_date)
             if persisted and persisted.get("plan_version") == 10:
                 logger.info("[LearningPlan] Persistent HIT for student=%s date=%s", student_id, plan_date)
-                return await _attach_individual_lessons(LearningPlanResponse(**persisted))
+                return await _attach_individual_lessons(LearningPlanResponse(**persisted), refresh_family=True)
         except Exception as e:
             logger.warning("[LearningPlan] Persistent plan read failed (non-fatal): %s", e)
         try:
             cached = await redis_client.get(cache_key)
             if cached:
                 logger.info(f"[LearningPlan] Cache HIT for student={student_id}")
-                return await _attach_individual_lessons(LearningPlanResponse(**json.loads(cached)))
+                return await _attach_individual_lessons(LearningPlanResponse(**json.loads(cached)), refresh_family=True)
         except Exception as e:
             logger.warning(f"[LearningPlan] Redis cache read failed (non-fatal): {e}")
 
@@ -2562,7 +2532,7 @@ async def get_learning_plan(
         )[:max(2, limit - 1)]
 
     ready_family_catalog = await _ready_family_seed_catalog()
-    # Pace-driven, not date-cached: each slot's current queue item is already
+    # Pace-driven: the current universal unit experience is already
     # a deterministic, cheap lookup (no LLM/expensive work), so every sibling's
     # read naturally lands on the same shared_investigation_id without needing
     # the old per-date household cache.
@@ -2706,4 +2676,4 @@ async def get_saved_today_plan(
     persisted = await daily_plan_store.get(student_id, plan_date)
     if not persisted or persisted.get("plan_version") != 10:
         raise HTTPException(status_code=404, detail="Today's plan has not been created yet")
-    return await _attach_individual_lessons(LearningPlanResponse(**persisted))
+    return await _attach_individual_lessons(LearningPlanResponse(**persisted), refresh_family=True)

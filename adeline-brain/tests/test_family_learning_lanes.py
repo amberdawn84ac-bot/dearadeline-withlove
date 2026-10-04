@@ -22,8 +22,8 @@ _current_item = {"id": "queue-row-1", "position": 0,
 
 def _mocked_slot(current_item=None):
     return (
-        patch("app.api.learning_plan.family_investigation_queue_store.get_current",
-              new=AsyncMock(return_value=current_item or _current_item)),
+        patch("app.api.learning_plan.family_unit_store.current",
+              new=AsyncMock(return_value={**(current_item or _current_item),"experienceId":"experience","canonicalTopic":(current_item or _current_item)["canonical_topic"]})),
         patch("app.api.learning_plan._shared_investigation_completed", new=AsyncMock(return_value=False)),
     )
 
@@ -241,7 +241,7 @@ async def test_durable_household_choice_replaces_private_skill_attachments():
 
 @pytest.mark.asyncio
 async def test_family_card_is_withheld_when_no_pregenerated_lesson_is_ready():
-    with patch("app.api.learning_plan.family_investigation_queue_store.get_current",
+    with patch("app.api.learning_plan.family_unit_store.current",
                new=AsyncMock(return_value=None)):
         assert await _family_investigation_suggestion_for_slot(
             "household-1", "science", [suggestion()], "7",
@@ -264,6 +264,7 @@ def test_only_authored_interdisciplinary_connections_are_woven_into_theme():
         },
     ]
     contract = {
+        "skill_opportunities": [{"skill_id":"math-1", "task":"Compare the reported percentages with the original land records.", "evidence_requirement":"calculation with cited records"}],
         "experience_design": {
             "disciplines_integrated": ["history", "statistics"],
             "integration_rationale": "Statistics are needed to test railroad land-grant claims.",
@@ -299,6 +300,7 @@ def test_statistics_does_not_turn_precalculus_into_themed_busywork():
 
 def test_real_science_and_design_targets_can_join_one_family_investigation():
     contract = {
+        "skill_opportunities": [{"skill_id":"science", "task":"At working level 6, compare the controlled plant observations.", "evidence_requirement":"measured growth record"}, {"skill_id":"design", "task":"Design a greenhouse model using the measured plant results.", "evidence_requirement":"model and explanation"}],
         "experience_design": {
             "disciplines_integrated": ["science", "creative design"],
             "integration_rationale": "A controlled plant test determines the greenhouse design.",

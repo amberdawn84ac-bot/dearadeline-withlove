@@ -369,3 +369,14 @@ The important distinction is:
 **implemented code ≠ verified family journey**
 
 That distinction is intentional and should remain visible in the project documentation.
+
+## Curriculum engine (October 2026)
+
+The family works through one active unit containing ordered canonical experiences.
+Each experience has Read, Explore, Write, Apply and Experience stages. Children
+retain their individual skill sequences and persistent characters. Saved notes and
+reviewed demonstrations are append-only evidence; completion does not award mastery.
+
+See [the curriculum contract](docs/CURRICULUM_ENGINE_CONTRACT.md) for API ownership,
+sequencing policies, migration order, compatibility and required release checks.
+The new schema migration must precede the matching API/UI deployment.

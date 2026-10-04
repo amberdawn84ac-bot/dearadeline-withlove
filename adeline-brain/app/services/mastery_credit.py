@@ -53,6 +53,11 @@ async def record_mastery_credit(
     human action) or just be logged (Space lesson-boundary crediting, an
     automatic background event that must never block the learner's turn).
     """
+    from app.services.curriculum_state import record_demonstration
+    skills = [credit.concept_id for credit in concept_credits or [] if credit.concept_id]
+    skills.extend(str(standard.get("standard_id") or standard.get("code") or "") for standard in oas_standards or [])
+    await record_demonstration(student_id=student_id,lesson_id=lesson_id,plan_item_id=plan_item_id,
+        sources=evidence_sources or [],proficiency=proficiency,skills=[skill for skill in skills if skill])
     track_progress = await journal_store.seal(
         student_id=student_id,
         lesson_id=lesson_id,

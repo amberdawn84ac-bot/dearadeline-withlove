@@ -115,7 +115,7 @@ CANONICAL_SEED_CATALOG: tuple[CanonicalSeed, ...] = (
             "Simulated blood is used because human blood can carry disease, not because blood evidence is off limits. "
             "Cause of death is not manner of death. Homicide as a manner is not a murder conviction."
         ),
-        content_revision="kitchen-case-file-v3",
+        content_revision="kitchen-case-file-v4",
     ),
     CanonicalSeed(
         "From Possession to Prison: Drug Policy, Diversion, and Reform",
@@ -596,6 +596,13 @@ async def seed_one_canonical(seed: CanonicalSeed) -> str:
         blocks[0].setdefault("metadata", {})["canonical_contract"] = {
             key: authored.get(key)
             for key in (
+                "unit_plan",
+                "curriculum_contract_version",
+                "skill_opportunities",
+                "shared_facts",
+                "shared_sources",
+                "available_roles",
+                "real_world_contract",
                 "big_question",
                 "learning_goal",
                 "shared_experience",
@@ -620,6 +627,12 @@ async def seed_one_canonical(seed: CanonicalSeed) -> str:
             "topic": seed.topic,
             "track": seed.track,
             "title": authored.get("title") or seed.topic,
+            "contract_version": 2,
+            "stages": [stage for lesson in (authored.get("unit_plan") or {}).get("lessons", []) for stage in lesson.get("stages", [])],
+            "skill_opportunities": authored.get("skill_opportunities") or [],
+            "shared_facts": authored.get("shared_facts") or [],
+            "shared_sources": authored.get("shared_sources") or [],
+            "real_world_contract": authored.get("real_world_contract"),
             "blocks": blocks,
             "oas_standards": [],
             "researcher_activated": bool(packet.get("resources")),
