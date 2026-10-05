@@ -73,7 +73,7 @@ interface SpaceChatState {
   status: "active" | "completed";
   current_block?: Record<string, unknown> | null;
   resource_block?: Record<string, unknown> | null;
-  messages?: Array<{ role: "user" | "assistant"; content: string }>;
+  messages?: Array<{ role: "user" | "assistant"; content: string; resource_block?: Record<string, unknown> | null }>;
   suggested_replies?: string[];
   log_fields?: string[];
   [key: string]: unknown;
@@ -479,11 +479,13 @@ export function AdelineChatPanel({
         setSpaceState(state);
         setSuggestedReplies(blockSuggestedReplies(state.current_block));
         const history: Message[] = state.messages?.length
-          ? state.messages.map((message, index) => ({
+          ? state.messages.flatMap((message, index): Message[] => [{
               id: `space-history-${index}`,
               role: message.role === "user" ? "user" as const : "adeline" as const,
               content: message.content,
-            }))
+            }, ...(message.resource_block ? [{
+              ...spaceBlockMessage(message.resource_block), id: `space-history-resource-${index}`,
+            }] : [])])
           : [];
         if (state.current_block) {
           history.push({

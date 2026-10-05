@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   reportActivity: vi.fn(),
@@ -28,6 +28,7 @@ vi.mock('@/hooks/useALUStream', () => ({
 import { AdelineChatPanel } from '@/components/AdelineChatPanel';
 
 describe('AdelineChatPanel teaching intent', () => {
+  afterEach(() => vi.unstubAllGlobals());
   beforeEach(() => {
     vi.clearAllMocks();
     Element.prototype.scrollIntoView = vi.fn();
@@ -49,5 +50,24 @@ describe('AdelineChatPanel teaching intent', () => {
     await waitFor(() => expect(mocks.streamConversation).toHaveBeenCalledOnce());
     expect(mocks.reportActivity).not.toHaveBeenCalled();
     expect(await screen.findByText(/Cancer begins when changes in a cell/)).toBeInTheDocument();
+  });
+
+  it('reopens a generated resource alongside its saved conversation', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        title: 'Forensic scientist', version: 2, current_block_index: 0, total_blocks: 1, status: 'active',
+        current_block: { block_type: 'NARRATIVE', title: 'Observe', content: 'Look at the evidence.' },
+        messages: [{ role: 'assistant', content: 'Let’s separate facts from conclusions.', resource_block: {
+          block_type: 'NARRATIVE', title: 'What does the print show?',
+          content: 'A muddy print is visible. What would test the garden claim?',
+          metadata: { instructional_resource: true },
+        } }],
+      }),
+    }));
+    render(<AdelineChatPanel studentId="student-1" gradeLevel="8" spacePlanItemId="unit-1" />);
+    expect(await screen.findByText(/What does the print show\?/)).toBeInTheDocument();
+    expect(screen.getByText(/What would test the garden claim/)).toBeInTheDocument();
+    expect(screen.getByText(/Let’s separate facts/)).toBeInTheDocument();
   });
 });

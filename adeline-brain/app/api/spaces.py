@@ -42,6 +42,11 @@ def _decoded(value, fallback):
     return value
 
 
+def _retained_space_messages(messages: list[dict]) -> list[dict]:
+    """Keep resource-bearing turns when trimming ordinary chat, so artifacts survive reopening."""
+    return [m for m in messages[:-38] if m.get("role") == "assistant" and m.get("resource_block")] + messages[-38:]
+
+
 class SpaceMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(min_length=1, max_length=4000)
@@ -62,6 +67,8 @@ class SpaceEvaluation(BaseModel):
     off_plan_topic: OffPlanTopic | None = None
     user_message: str = Field(min_length=1, max_length=4000)
     expected_version: int = Field(ge=0)
+    resource_decision: dict | None = None
+    resource_block: dict | None = None
 
 
 class SpaceTurnRequest(BaseModel):
@@ -117,6 +124,29 @@ def _turn_activity_mode(state: dict) -> str:
     teaching = _teaching_context(state)
     offers = _offer_catalog_prompt(state)
     preamble = f"{teaching}\n\n{offers}\n\n" if offers else f"{teaching}\n\n"
+    decision = state.get("resource_decision")
+    resource = state.get("instructional_resource")
+    if decision:
+        preamble += (
+            "INSTRUCTIONAL DECISION (the separate need-first planner): "
+            + json.dumps(decision) + "\nFollow this teaching move; do not generate extra artifacts. "
+            "Only offer catalog ids chosen by this planner.\n"
+        )
+    if resource:
+        preamble += (
+            "A targeted resource will be shown after your response: " + json.dumps(resource)
+            + "\nIntroduce its purpose briefly. Do not duplicate its instructions. Stay on the current "
+            "activity; its new task has not yet been answered. Evaluate the newest learner message "
+            "against the canonical objective, never award mastery for creating a resource.\n"
+        )
+    last_assistant = next((m for m in reversed(state.get("messages") or []) if m.get("role") == "assistant"), {})
+    previous_resource = last_assistant.get("resource_block")
+    if previous_resource:
+        preamble += (
+            "PREVIOUS RESOURCE (the newest answer may respond to this): " + json.dumps(previous_resource)
+            + "\nUse its evidence prompt to interpret the response, but advance only if the saved "
+            "canonical activity's own evidence requirements are met.\n"
+        )
     if state["status"] == "completed":
         return (
             f"{preamble}"
@@ -1063,9 +1093,11 @@ async def _apply_transition(student_id: str, plan_item_id: str, body: SpaceEvalu
                 if index < len(blocks) - 1:
                     index += 1
             status = "completed" if blocks and len(completed) >= len(blocks) else "active"
-            messages = _decoded(session_row["messagesJson"], [])[-38:]
+            messages = _retained_space_messages(_decoded(session_row["messagesJson"], []))
             messages.extend([{"role": "user", "content": body.user_message},
-                             {"role": "assistant", "content": body.adeline_message}])
+                             {"role": "assistant", "content": body.adeline_message,
+                              "resource_decision": body.resource_decision,
+                              "resource_block": body.resource_block}])
             block_evaluations = _decoded(session_row["blockEvaluations"], {})
             if current_id:
                 block_evaluations[current_id] = body.evaluation
@@ -1183,12 +1215,34 @@ async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
     state = await _attach_offer_catalog(
         await _attach_mastery_context(await _attach_household_learners(_state(session, experience)))
     )
+    if state["version"] != body.expected_version:
+        raise HTTPException(status_code=409, detail="Space changed in another window. Refresh and continue.")
+    try:
+        from app.services.curriculum_state import get_curriculum_state
+        curriculum = await get_curriculum_state(student_id)
+        state["evaluated_skills"] = curriculum.get("skills") or []
+    except Exception:
+        logger.warning("[Spaces] evaluated skill context unavailable; treat knowledge as unverified")
+    from app.services.instructional_resources import prepare_instructional_resource
+    state = await prepare_instructional_resource(state, body.user_message, _space_turn_llm, _parse_json_response)
 
     try:
         evaluation = await _evaluate_turn(state, body.user_message)
     except Exception:
         logger.exception("[Spaces] Turn evaluation failed student=%s plan_item=%s", student_id, plan_item_id)
         raise HTTPException(status_code=502, detail="Adeline could not continue this Space just now.")
+
+    decision = state.get("resource_decision")
+    resource_block = state.get("instructional_resource")
+    offered_ids = (decision.get("resource_ids") or []) if decision else evaluation.offered_resource_ids
+    if not resource_block:
+        resource_block = _resource_block_for_turn(state.get("offer_catalog") or [], offered_ids, state.get("track") or "")
+    if state.get("instructional_resource"):
+        # The intervention has just been issued; it cannot already be completed.
+        evaluation.recommended_action = "stay"
+        evaluation.is_waiting_for_user = True
+        evaluation.suggested_replies = []
+        evaluation.log_fields = []
 
     result = await _apply_transition(student_id, plan_item_id, SpaceEvaluation(
         adeline_message=evaluation.adeline_message,
@@ -1199,6 +1253,8 @@ async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
         off_plan_topic=evaluation.off_plan_topic,
         user_message=body.user_message,
         expected_version=body.expected_version,
+        resource_decision=decision,
+        resource_block=resource_block,
     ))
 
     try:
@@ -1215,11 +1271,8 @@ async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
     result["suggested_replies"] = evaluation.suggested_replies
     result["log_fields"] = evaluation.log_fields
     try:
-        result["resource_block"] = _resource_block_for_turn(
-            state.get("offer_catalog") or [],
-            evaluation.offered_resource_ids,
-            state.get("track") or "",
-        )
+        result["resource_block"] = resource_block
+        result["resource_decision"] = decision
     except Exception:
         logger.warning("[Spaces] resource block skipped (non-fatal) student=%s", student_id, exc_info=True)
         result["resource_block"] = None
