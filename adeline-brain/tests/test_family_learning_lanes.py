@@ -252,6 +252,7 @@ def test_only_authored_interdisciplinary_connections_are_woven_into_theme():
     targets = [
         {
             "suggestion_id": "math-1",
+            "concept_id": "math-1",
             "domain": "math",
             "title": "Compare percentages",
             "track": "APPLIED_MATHEMATICS",
@@ -264,7 +265,8 @@ def test_only_authored_interdisciplinary_connections_are_woven_into_theme():
         },
     ]
     contract = {
-        "skill_opportunities": [{"skill_id":"math-1", "task":"Compare the reported percentages with the original land records.", "evidence_requirement":"calculation with cited records"}],
+        "unit_plan": {"lessons": [{"lesson_id":"records", "stages":[{"block_ids":["percentage-check"]}]}]},
+        "skill_opportunities": [{"skill_id":"math-1", "lesson_id":"records", "block_ids":["percentage-check"], "task":"Compare the reported percentages with the original land records.", "evidence_requirement":"calculation with cited records"}],
         "experience_design": {
             "disciplines_integrated": ["history", "statistics"],
             "integration_rationale": "Statistics are needed to test railroad land-grant claims.",
@@ -300,7 +302,8 @@ def test_statistics_does_not_turn_precalculus_into_themed_busywork():
 
 def test_real_science_and_design_targets_can_join_one_family_investigation():
     contract = {
-        "skill_opportunities": [{"skill_id":"science", "task":"At working level 6, compare the controlled plant observations.", "evidence_requirement":"measured growth record"}, {"skill_id":"design", "task":"Design a greenhouse model using the measured plant results.", "evidence_requirement":"model and explanation"}],
+        "unit_plan": {"lessons": [{"lesson_id":"plants", "stages":[{"block_ids":["growth-check","model-check"]}]}]},
+        "skill_opportunities": [{"skill_id":"science", "lesson_id":"plants", "block_ids":["growth-check"], "task":"At working level 6, compare the controlled plant observations.", "evidence_requirement":"measured growth record"}, {"skill_id":"design", "lesson_id":"plants", "block_ids":["model-check"], "task":"Design a greenhouse model using the measured plant results.", "evidence_requirement":"model and explanation"}],
         "experience_design": {
             "disciplines_integrated": ["science", "creative design"],
             "integration_rationale": "A controlled plant test determines the greenhouse design.",
@@ -313,6 +316,7 @@ def test_real_science_and_design_targets_can_join_one_family_investigation():
     integrated, separate = skill_connections_for_contract(contract, [
         {
             "suggestion_id": "science",
+            "concept_id": "science",
             "domain": "science",
             "title": "Use observations in a controlled plant experiment",
             "track": "CREATION_SCIENCE",
@@ -320,6 +324,7 @@ def test_real_science_and_design_targets_can_join_one_family_investigation():
         },
         {
             "suggestion_id": "design",
+            "concept_id": "design",
             "domain": "creative_economy",
             "title": "Design and communicate a useful product",
             "track": "CREATIVE_ECONOMY",
