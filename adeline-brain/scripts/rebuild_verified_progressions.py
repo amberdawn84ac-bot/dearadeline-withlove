@@ -7,11 +7,16 @@ references are rejected instead of guessed. These are factual relationships,
 not copied framework teaching materials.
 """
 
-import json, re, hashlib, collections
+import argparse
+import collections
+import hashlib
+import json
+import re
+import sys
 from pathlib import Path
+
 import fitz
 from bs4 import BeautifulSoup
-import argparse
 
 parser = argparse.ArgumentParser(
     description="Rebuild the reviewed graph from saved primary sources."
@@ -30,6 +35,8 @@ parser.add_argument(
 )
 args = parser.parse_args()
 ROOT = Path(__file__).resolve().parents[1]
+
+sys.path.insert(0, str(ROOT))
 SRC = args.source_directory
 SEEDS = ROOT / "data/seeds"
 base = json.loads((SEEDS / "oas_to_8track.json").read_text())
@@ -233,6 +240,16 @@ for name, (subject, prefix, track) in subjects.items():
             )
             rows.append(existing)
             by_subject[subject][code] = existing
+        if subject == "Social Studies":
+            # Reuse the existing ten-track routing policy for the current codes.
+            from scripts.build_oas_seed import _reroute_social_studies
+
+            if code.split(".")[0] in {"AWH", "MWH", "TOT"}:
+                routed_track = "TRUTH_HISTORY"
+            else:
+                routed_track, grade = _reroute_social_studies(code, record["text"], grade)
+            existing["track"] = routed_track
+            existing["track_label"] = routed_track
         existing["grade_band"] = (
             "PK-2"
             if subject == "Health" and grade == 0

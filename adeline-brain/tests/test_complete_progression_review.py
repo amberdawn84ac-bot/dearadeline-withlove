@@ -59,3 +59,12 @@ async def test_science_standard_connections_reach_the_bridge_with_own_evidence_a
     assert result[0]['source_title'] == 'DCI progression'
     assert conn.fetch.call_args.args[1:] == (['target'], 'child')
     conn.close.assert_awaited_once()
+
+
+def test_new_social_codes_preserve_the_existing_ten_track_routing_policy():
+    catalog = json.loads((SEEDS / 'oas_to_8track.json').read_text())['mappings']
+    social = {row['standard_id']: row for row in catalog if row['subject'] == 'Social Studies'}
+    assert social['K.C.1.1']['track'] == 'GOVERNMENT_ECONOMICS'
+    assert social['USG.1']['track'] == 'GOVERNMENT_ECONOMICS'
+    assert social['E.1']['track'] == 'CREATIVE_ECONOMY'
+    assert all(row['track'] == 'TRUTH_HISTORY' for code, row in social.items() if code.startswith('AWH.'))
