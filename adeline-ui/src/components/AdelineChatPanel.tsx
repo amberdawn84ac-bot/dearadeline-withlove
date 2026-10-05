@@ -12,6 +12,7 @@ import { ProjectCatalog } from "@/components/projects/ProjectCard";
 import { ProjectGuide } from "@/components/projects/ProjectGuide";
 import { LogEntryForm } from "@/components/spaces/LogEntryForm";
 import { OfferedResourceCard } from "@/components/spaces/OfferedResourceCard";
+import { ScienceLabNotebook } from "@/components/spaces/ScienceLabNotebook";
 import { useALUStream } from "@/hooks/useALUStream";
 import { StreamingGenUIRenderer } from "@/components/gen-ui/StreamingGenUIRenderer";
 import { parseDataStreamLine } from "@/lib/stream-protocol";
@@ -284,6 +285,10 @@ function ConversationBlockCard({ block, onReflect, onLogSubmit, logFields }: {
   const metadata = block.metadata as { resources?: Array<Record<string, unknown>> } | undefined;
   const resources = metadata?.resources ?? [];
 
+  if (blockType === "SCIENCE_LAB" && (block.metadata as Record<string, unknown>)?.lab) {
+    return <ScienceLabNotebook block={block} onSubmit={onLogSubmit} />;
+  }
+
   if (experiment) {
     return (
       <div className="my-2">
@@ -536,7 +541,7 @@ export function AdelineChatPanel({
     if (!text || isLoading) return;
     setInput("");
     setSuggestedReplies([]);
-    addMessage({ role: "user", content: text });
+    addMessage({ role: "user", content: text.startsWith('Lab notebook submission:\n') ? 'I’m submitting my lab notebook for review.' : text });
     setIsLoading(true);
     const startsTeachingRequest = isExplicitLearningRequest(text);
 

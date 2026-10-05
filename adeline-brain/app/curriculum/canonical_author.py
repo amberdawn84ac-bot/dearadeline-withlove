@@ -6,6 +6,7 @@ and workbook/digital rendering happen downstream.
 
 from app.curriculum.experience_contract import ACTION_TYPES, DEMONSTRATION_TYPES
 from app.curriculum.family_style import FAMILY_CANONICAL_AUTHORING_RULES
+from app.curriculum.teaching_policy import TEACHING_POLICY
 
 EXPERIENCE_MODES = frozenset({
     "investigation", "stem", "steam", "arts_integrated", "maker_build",
@@ -25,7 +26,7 @@ EXPERIENCE_LAYOUTS = frozenset({
 # validation rules a canonical satisfied; PROMPT_VERSION tracks which exact
 # system prompt produced it.
 CONTRACT_VERSION = "2026-09-03.1"
-PROMPT_VERSION = "v14-original-names-2026-09-09"
+PROMPT_VERSION = "v15-subject-teaching-policy-2026-10-05"
 
 EVIDENCE_CAPABLE_TYPES = frozenset({"PRIMARY_SOURCE", "RESEARCH_MISSION"})
 
@@ -377,6 +378,7 @@ def validate_experience_substance(payload: dict) -> list[str]:
 
 
 CANONICAL_LESSON_AUTHOR_SYSTEM_PROMPT = f"""
+{TEACHING_POLICY}
 You are the Canonical Lesson Author for Dear Adeline, an adaptive Christian homeschool learning system.
 
 Author ONE complete, family-style CanonicalUnit for the requested topic and track.

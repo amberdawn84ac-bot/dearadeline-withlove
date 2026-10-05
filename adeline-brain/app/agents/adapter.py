@@ -200,7 +200,8 @@ def build_adaptation_prompt(req: AdaptationRequest, content: str, topic_hint: st
 
 
 async def adapt_block_content(content: str, req: AdaptationRequest, topic_hint: str = "") -> str:
-    result = await _llm_call(_ADAPTATION_SYSTEM, build_adaptation_prompt(req, content, topic_hint))
+    from app.curriculum.teaching_policy import TEACHING_POLICY
+    result = await _llm_call(TEACHING_POLICY + "\n\n" + _ADAPTATION_SYSTEM, build_adaptation_prompt(req, content, topic_hint))
     return sanitize_learner_text(result if result.strip() else content)
 
 

@@ -26,9 +26,10 @@ components, success check, exit rule and maximum duration. Both planner and make
 receive the relevant contracts. Guided practice models a task, fades help, and
 checks a fresh independent attempt. Vocabulary support requires an identified
 obstructing term; an uncertain language-versus-concept barrier calls for a
-diagnostic question, not a vocabulary packet. Output
-is a student-facing text resource inside Adeline's chat; this implementation does
-not create slide decks, downloadable worksheets, or third-party Diffit resources.
+diagnostic question, not a vocabulary packet. Output is a student-facing resource inside Adeline's chat. Structured science
+labs also provide an editable notebook, measurement table, optional graph from
+entered measurements, and claim/evidence/reasoning fields. This implementation
+does not create slide decks, downloadable worksheets, or third-party Diffit resources.
 Simulated data must be labeled, source ids must belong to supplied context, and
 unknown crime evidence is not used for a household experiment.
 
@@ -58,3 +59,32 @@ Run the focused Python suites, UI chat/schema tests, and UI TypeScript check.
 Live teaching quality, response latency, and real database/browser operation
 remain release verification steps. The earlier unified-curriculum migration on
 main still has its own staging/release requirements.
+
+## Shared subject philosophy
+
+`app/curriculum/teaching_policy.py` contains the shared policy used by the
+canonical author, adaptation editor, instructional resource planner/maker,
+investigation planner, and Space evidence evaluator. Reviewed against Campfire's
+published subject approaches at https://campfirecurriculums.com/high-school-themed-studies/
+on October 5, 2026, it translates the philosophy into original operational rules:
+science builds and revisits foundations; history weighs source provenance and
+conflicting evidence; ELA uses recurring, purposeful reading and language work.
+User requirements retain priority. Existing learner evidence determines support;
+completed activities alone do not award mastery. Prompt instructions guide model
+behavior and still need review of real generated materials.
+
+## Science notebooks and coordinated sessions
+
+A generated `science_lab` supplies a validated blank notebook specification.
+The learner can save unfinished work and reopen it in the same Space. The server
+validates that the notebook belongs to that session and checks measurement columns
+and finite numbers. Drafts and revisions to earlier activities cannot advance
+the current activity. Graphs use entered measurements, never invented results.
+
+Parents can preview two to ten coordinated sessions through Plan a unit, edit
+them, then use the existing Queue unit flow. The planner supplies a shared
+question, ordered tasks, evidence requirements and resource suggestions. The
+existing canonical author builds each experience. Earlier sessions' saved lab
+notebooks and learner responses provide context for the same learner in later
+sessions; siblings' evidence is not cross-credited. A session may span multiple
+days. Advancement remains the existing explicit completion flow.

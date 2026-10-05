@@ -8,10 +8,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 from app.services.resource_toolbox import RESOURCE_TOOLBOX
+from app.services.science_lab import ScienceLabSpec
+from app.curriculum.teaching_policy import TEACHING_POLICY
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +30,10 @@ class ResourceDecision(BaseModel):
     resource_type: Literal[
         "none", "mini_lesson", "worked_examples", "comparison", "visual_model",
         "retrieval", "guided_practice", "investigation", "evidence_set",
-        "transfer_task", "stations", "reading_support", "extension", "performance_task", "vocabulary_support",
+        "transfer_task", "stations", "reading_support", "extension", "performance_task", "vocabulary_support", "science_lab",
     ] = "none"
     resource_ids: list[str] = Field(default_factory=list, max_length=2)
-    duration_minutes: int = Field(default=3, ge=1, le=20)
+    duration_minutes: int = Field(default=3, ge=1, le=60)
     # A diagnosis is tentative unless the newest response actually supports it.
     diagnosis_evidence: str = Field(default="", max_length=1000)
     blocked_term: str | None = Field(default=None, max_length=100)
@@ -59,6 +62,7 @@ class InstructionalResource(BaseModel):
     evidence_prompt: str = Field(min_length=1, max_length=600)
     # Sources may only refer to supplied canonical evidence/catalog items.
     source_ids: list[str] = Field(default_factory=list, max_length=6)
+    lab: ScienceLabSpec | None = None
 
     @model_validator(mode="after")
     def bounded_text(self):
@@ -93,6 +97,8 @@ claims: investigation/evidence_set; transfer: transfer_task; uncertain mastery:
 performance_task. Preserve concept rigor while adapting reading/support/depth.
 Shared family facts do not change with age or character. Never infer a sibling's
 mastery from another speaker. Keep interventions 1-20 minutes.
+Choose science_lab for a full notebook-based investigation (up to 60 minutes),
+not a brief demonstration. Respect a saved activity that explicitly calls for a lab.
 Copy block_id and objective exactly from the context. success_evidence must serve the saved activity.
 diagnosis_evidence quotes or summarizes actual learner evidence, or says unverified.
 existing resource_ids must come verbatim from the catalog; search pages are not
@@ -114,6 +120,12 @@ measurements or external links. Clearly label invented scenarios/data as simulat
 For real_world, guide a safe observation/investigation and check material availability;
 never direct handling unknown powders, bodily fluids or actual crime evidence.
 For a generated lab, include controls/variables and safe materials where relevant.
+For science_lab, populate the structured lab field: question, investigation kind,
+prediction, variables for controlled experiments, controls or observational limits,
+safety, labeled data columns with units, optional graph using two numeric columns,
+and claim/evidence/reasoning prompts. Never pre-fill learner observations. Graphs
+are optional for qualitative evidence. Simulation must be labeled in the teaching.
+For all other resource types, leave lab null. The learner supplies the actual data.
 If a procedure cannot be made safe/accurate with this context, use a simulated
 comparison instead and explain that. No HTML, executable code, answer giveaway,
 or teacher-only answer key. Source ids must be copied from supplied context.
@@ -130,6 +142,7 @@ def context_for_resources(state: dict, user_message: str) -> dict:
         "learner": state.get("learner_depth"), "family": state.get("household_learners") or [],
         "evaluated_skills": state.get("evaluated_skills") or [],
         "recent_conversation": (state.get("messages") or [])[-6:],
+        "previous_session_evidence": state.get("previous_session_evidence") or [],
         "newest_learner_evidence": user_message,
         "catalog": state.get("offer_catalog") or [],
     }
@@ -138,7 +151,7 @@ def context_for_resources(state: dict, user_message: str) -> dict:
 async def _json_call(llm_factory, policy: str, schema: dict, context: dict, parse_json):
     from langchain_core.messages import HumanMessage, SystemMessage
     response = await llm_factory().ainvoke([
-        SystemMessage(content=policy + "\nSchema: " + json.dumps(schema)),
+        SystemMessage(content=TEACHING_POLICY + "\n\n" + policy + "\nSchema: " + json.dumps(schema)),
         HumanMessage(content=json.dumps(context, default=str)),
     ])
     return parse_json(response.content)
@@ -151,10 +164,13 @@ def resource_as_block(resource: InstructionalResource, decision: ResourceDecisio
     sections.append("\n".join(f"{i + 1}. {s}" for i, s in enumerate(resource.steps)))
     sections.append(resource.evidence_prompt)
     return {
-        "block_type": "NARRATIVE", "title": resource.title,
+        "block_type": "SCIENCE_LAB" if resource.lab else "NARRATIVE", "title": resource.title,
         "content": "\n\n".join(sections),
         "metadata": {"instructional_resource": True, "decision": decision.model_dump(),
-                     "source_ids": resource.source_ids, "does_not_award_mastery": True},
+                     "source_ids": resource.source_ids, "does_not_award_mastery": True,
+                     **({"lab": resource.lab.model_dump(), "materials": resource.materials,
+                         "steps": resource.steps, "teaching": resource.teaching,
+                         "resource_id": str(uuid.uuid4())} if resource.lab else {})},
     }
 
 
@@ -185,6 +201,8 @@ async def prepare_instructional_resource(state: dict, user_message: str, llm_fac
                         "selected_tool_contract": RESOURCE_TOOLBOX.get(decision.resource_type)}, parse_json),
             timeout=12,
         ))
+        if (decision.resource_type == "science_lab") != (resource.lab is not None):
+            raise ValueError("Structured lab must match the planner's requested resource type")
         # Canonical evidence may have ids as well as the supplied catalog.
         allowed = catalog_ids | {
             str(item.get("id")) for item in (context["canonical_activity"].get("evidence") or [])
