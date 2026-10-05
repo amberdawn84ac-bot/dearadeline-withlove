@@ -133,3 +133,27 @@ def test_a_lower_subject_working_level_still_gets_its_next_step():
     work = personalize_lessons([lesson], [lower], '8', {'CREATION_SCIENCE'})
     assert work[1].skill_target.working_level == '3'
     assert work[1].skill_target.concept_id == 'ratio-1'
+
+
+@pytest.mark.asyncio
+async def test_finished_lower_grade_prerequisite_resumes_placed_subject_path():
+    from app.api.learning_plan import GradeLevelStandard, LearningPlanResponse, _advance_evaluated_targets
+    from tests.test_today_persistence import _saved_plan
+    data = _saved_plan()
+    data['progression_checklist'] = [target().model_copy(update={
+        'concept_id': None, 'standard_code': 'MATHEM_G5_5.N.1.3', 'working_level': '5',
+    }).model_dump()]
+    data['placement'] = {'declared_level': '8', 'working_grade': '8',
+                         'placement_required': False, 'subject_levels': {'math': 6}}
+    plan = LearningPlanResponse(**data)
+    successor = GradeLevelStandard(standard_id='MATHEM_G6_6.N.3.1', subject='Mathematics',
+        grade=6, description='Identify and use ratios.', mastered=False, priority=1,
+        track='APPLIED_MATHEMATICS', prerequisites_met=True, progression_ready=True,
+        prerequisite_standard_ids=['MATHEM_G5_5.N.1.3'])
+    with patch('app.services.curriculum_state.get_curriculum_state', new=AsyncMock(return_value={
+        'skills': [{'skillId': 'MATHEM_G5_5.N.1.3', 'status': 'demonstrated'}],
+    })), patch('app.api.learning_plan._get_grade_level_standards', new=AsyncMock(return_value=[successor])) as query:
+        updated = await _advance_evaluated_targets(plan, '8')
+        query.assert_awaited_once_with(plan.student_id, '6')
+        assert updated.progression_checklist[0].standard_code == successor.standard_id
+        assert updated.progression_checklist[0].working_level == '6'

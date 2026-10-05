@@ -86,7 +86,7 @@ async def record_skill_response(*, student_id, plan_item_id, session_id, metadat
         )
         if task['skill_id'] == target.get('standard_code'):
             await curriculum_graph.record_standard_mastery(student_id, target.get('track') or metadata.get('track') or '',
-                [{'standard_id': task['skill_id'], 'text': target.get('title') or '', 'grade': int(target.get('working_level') or 0) if str(target.get('working_level') or '').isdigit() else 0}], proficiency='UNDERSTANDING')
+                [{'standard_id': task['skill_id'], 'text': target.get('title') or '', 'grade': int(target.get('working_level') or 0) if str(target.get('working_level') or '').lstrip('-').isdigit() else 0}], proficiency='UNDERSTANDING')
 
 
 async def ensure_skill_ready(request):

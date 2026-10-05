@@ -1,0 +1,1003 @@
+[
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144896775/2020%20DCI%20-%20PS1%20Matter%20and%20Its%20Interactions",
+    "sha256": "51a3bee2f5247feeb2866a6d06c3f817578e6b01132e3d7f7af61e22538ea126",
+    "row": 8,
+    "dimension": "PS1.A Structure and Properties of Matter",
+    "bands": [
+      [
+        "2.PS1.1",
+        "2.PS1.2",
+        "2.PS1.3"
+      ],
+      [
+        "5.PS1.1",
+        "5.PS1.2",
+        "5.PS1.3"
+      ],
+      [
+        "6.PS1.4",
+        "7.PS1.1",
+        "7.PS1.2",
+        "7.PS1.3"
+      ],
+      [
+        "CH.PS1.1",
+        "CH.PS1.2",
+        "CH.PS1.3",
+        "CH.PS1.4",
+        "PS.PS1.1",
+        "PS.PS1.2"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144896775/2020%20DCI%20-%20PS1%20Matter%20and%20Its%20Interactions",
+    "sha256": "51a3bee2f5247feeb2866a6d06c3f817578e6b01132e3d7f7af61e22538ea126",
+    "row": 11,
+    "dimension": "PS1.B Chemical Reactions",
+    "bands": [
+      [
+        "2.PS1.4"
+      ],
+      [
+        "5.PS1.2",
+        "5.PS1.4"
+      ],
+      [
+        "7.PS1.2",
+        "7.PS1.3",
+        "7.PS1.5",
+        "7.PS1.6"
+      ],
+      [
+        "CH.PS1.2",
+        "CH.PS1.4",
+        "CH.PS1.5",
+        "CH.PS1.6",
+        "CH.PS1.7",
+        "PS.PS1.2",
+        "PS.PS1.5",
+        "PS.PS1.7"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144896775/2020%20DCI%20-%20PS1%20Matter%20and%20Its%20Interactions",
+    "sha256": "51a3bee2f5247feeb2866a6d06c3f817578e6b01132e3d7f7af61e22538ea126",
+    "row": 14,
+    "dimension": "PS1.C Nuclear Processes",
+    "bands": [
+      [],
+      [],
+      [],
+      [
+        "CH.PS1.8",
+        "ES.ESS1.6",
+        "PH.PS1.8"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144898251/2020%20DCI%20-%20PS2%20Motion%20and%20Stability",
+    "sha256": "2e42fedf723758f0ca4e9b5ba1efbfc5596791002f526f41e2d2900abb359ade",
+    "row": 8,
+    "dimension": "PS2.A Forces and Motion",
+    "bands": [
+      [
+        "K.PS2.1",
+        "K.PS2.2"
+      ],
+      [
+        "3.PS2.1",
+        "3.PS2.2"
+      ],
+      [
+        "8.PS2.1",
+        "8.PS2.2"
+      ],
+      [
+        "PH.PS2.1",
+        "PH.PS2.2",
+        "PH.PS2.3",
+        "PS.PS2.1",
+        "PS.PS2.2",
+        "PS.PS2.3"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144898251/2020%20DCI%20-%20PS2%20Motion%20and%20Stability",
+    "sha256": "2e42fedf723758f0ca4e9b5ba1efbfc5596791002f526f41e2d2900abb359ade",
+    "row": 11,
+    "dimension": "PS2.B Types of Interactions",
+    "bands": [
+      [
+        "K.PS2.1"
+      ],
+      [
+        "3.PS2.1",
+        "3.PS2.3",
+        "3.PS2.4",
+        "5.PS2.1"
+      ],
+      [
+        "8.PS2.3",
+        "8.PS2.4",
+        "8.PS2.5"
+      ],
+      [
+        "CH.PS2.6",
+        "PH.PS2.4",
+        "PH.PS2.5",
+        "PS.PS2.5"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144898422/2020%20DCI%20-%20PS3%20Energy",
+    "sha256": "8db7712769de679a7a773bf85e5e359ce90431dde8650d380ee5fd202b900b77",
+    "row": 8,
+    "dimension": "PS3.A  Definition of Energy",
+    "bands": [
+      [],
+      [
+        "4.PS3.1",
+        "4.PS3.2",
+        "4.PS3.3"
+      ],
+      [
+        "6.PS1.4",
+        "6.PS3.3",
+        "6.PS3.4",
+        "7.PS3.1",
+        "7.PS3.2"
+      ],
+      [
+        "CH.PS3.3",
+        "PH.PS2.5",
+        "PH.PS3.1",
+        "PH.PS3.2",
+        "PH.PS3.3",
+        "PS.PS2.5",
+        "PS.PS3.1",
+        "PS.PS3.2",
+        "PS.PS3.3"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144898422/2020%20DCI%20-%20PS3%20Energy",
+    "sha256": "8db7712769de679a7a773bf85e5e359ce90431dde8650d380ee5fd202b900b77",
+    "row": 11,
+    "dimension": "PS3.B  Conservation of Energy & Energy Transfer",
+    "bands": [
+      [
+        "K.PS3.1",
+        "K.PS3.2"
+      ],
+      [
+        "4.PS3.2",
+        "4.PS3.3",
+        "4.PS3.4"
+      ],
+      [
+        "6.PS3.3",
+        "6.PS3.4",
+        "7.PS3.5"
+      ],
+      [
+        "CH.PS3.4",
+        "PH.PS3.1",
+        "PH.PS3.4",
+        "PS.PS3.1",
+        "PS.PS3.4"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144898422/2020%20DCI%20-%20PS3%20Energy",
+    "sha256": "8db7712769de679a7a773bf85e5e359ce90431dde8650d380ee5fd202b900b77",
+    "row": 14,
+    "dimension": "PS3.C  Relationship Between Energy & Energy Forces",
+    "bands": [
+      [
+        "K.PS2.1"
+      ],
+      [
+        "4.PS3.3"
+      ],
+      [
+        "7.PS3.2",
+        "PH.PS3.5"
+      ],
+      [
+        "PH.PS3.5"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144898422/2020%20DCI%20-%20PS3%20Energy",
+    "sha256": "8db7712769de679a7a773bf85e5e359ce90431dde8650d380ee5fd202b900b77",
+    "row": 17,
+    "dimension": "PS3.D  Energy in Chemical Processes & Everyday Life",
+    "bands": [
+      [],
+      [
+        "4.PS4.3",
+        "5.LS1.1",
+        "5.PS3.1"
+      ],
+      [
+        "7.LS1.6",
+        "7.LS1.7"
+      ],
+      [
+        "B.LS2.5",
+        "ES.ESS1.1",
+        "PH.PS4.5"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144898641/2020%20DCI%20-%20PS4%20Waves%20and%20Their%20Applications%20in%20Technologies%20for%20Information%20Transfer",
+    "sha256": "00baf413f9efe817ed17aaafc0c9ebe78d487caf0dc0cb6f097cb503d48fa831",
+    "row": 8,
+    "dimension": "PS4.A Wave Properties",
+    "bands": [
+      [
+        "1.PS4.1"
+      ],
+      [
+        "4.PS4.1"
+      ],
+      [
+        "6.PS4.2",
+        "8.PS4.1"
+      ],
+      [
+        "CH.PS4.1",
+        "CH.PS4.3",
+        "EN.ESS2.3",
+        "ES.ESS2.3",
+        "PH.PS4.1",
+        "PH.PS4.2",
+        "PH.PS4.3",
+        "PH.PS4.5",
+        "PS.PS4.1",
+        "PS.PS4.2"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144898641/2020%20DCI%20-%20PS4%20Waves%20and%20Their%20Applications%20in%20Technologies%20for%20Information%20Transfer",
+    "sha256": "00baf413f9efe817ed17aaafc0c9ebe78d487caf0dc0cb6f097cb503d48fa831",
+    "row": 11,
+    "dimension": "PS4.B Electromagnetic Radiation",
+    "bands": [
+      [
+        "1.PS4.2",
+        "1.PS4.3"
+      ],
+      [
+        "4.PS4.2"
+      ],
+      [
+        "6.PS4.2"
+      ],
+      [
+        "CH.PS4.3",
+        "ES.ESS1.2",
+        "PH.PS4.3",
+        "PH.PS4.4",
+        "PH.PS4.5",
+        "PS.PS4.4"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144898641/2020%20DCI%20-%20PS4%20Waves%20and%20Their%20Applications%20in%20Technologies%20for%20Information%20Transfer",
+    "sha256": "00baf413f9efe817ed17aaafc0c9ebe78d487caf0dc0cb6f097cb503d48fa831",
+    "row": 14,
+    "dimension": "PS4.C Information Technologies and Instrumentation",
+    "bands": [
+      [
+        "1.PS4.4"
+      ],
+      [
+        "4.PS4.3"
+      ],
+      [
+        "8.PS4.3"
+      ],
+      [
+        "PH.PS4.5"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900330/2020%20DCI%20-%20LS1%20From%20Molecules%20to%20Organisms",
+    "sha256": "aa18e085614dcf717879dffdfd7f6d46c16cc124e94eb927c1ea7092eaef22ec",
+    "row": 8,
+    "dimension": "LS1.A  Structure and Function",
+    "bands": [
+      [
+        "1.LS1.1"
+      ],
+      [
+        "4.LS1.1"
+      ],
+      [
+        "6.LS1.1",
+        "6.LS1.2",
+        "6.LS1.3"
+      ],
+      [
+        "B.LS1.1",
+        "B.LS1.2",
+        "B.LS1.3",
+        "B.LS3.1"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900330/2020%20DCI%20-%20LS1%20From%20Molecules%20to%20Organisms",
+    "sha256": "aa18e085614dcf717879dffdfd7f6d46c16cc124e94eb927c1ea7092eaef22ec",
+    "row": 11,
+    "dimension": "LS1.B  Growth and Development of Organisms",
+    "bands": [
+      [
+        "1.LS1.2"
+      ],
+      [
+        "3.LS1.1"
+      ],
+      [
+        "8.LS1.4",
+        "8.LS1.5",
+        "8.LS3.2"
+      ],
+      [
+        "B.LS1.4"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900330/2020%20DCI%20-%20LS1%20From%20Molecules%20to%20Organisms",
+    "sha256": "aa18e085614dcf717879dffdfd7f6d46c16cc124e94eb927c1ea7092eaef22ec",
+    "row": 14,
+    "dimension": "LS1.C  Organization of Matter and Energy Flow in Organisms",
+    "bands": [
+      [
+        "K.LS1.1"
+      ],
+      [
+        "5.PS3.1"
+      ],
+      [
+        "7.LS1.6",
+        "7.LS1.7"
+      ],
+      [
+        "B.LS1.5",
+        "B.LS1.6",
+        "B.LS1.7"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900330/2020%20DCI%20-%20LS1%20From%20Molecules%20to%20Organisms",
+    "sha256": "aa18e085614dcf717879dffdfd7f6d46c16cc124e94eb927c1ea7092eaef22ec",
+    "row": 17,
+    "dimension": "LS1.D  Information Processing",
+    "bands": [
+      [
+        "1.LS1.1"
+      ],
+      [
+        "4.LS1.2"
+      ],
+      [
+        "6.LS1.8"
+      ],
+      []
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900477/2020%20DCI%20-%20LS2%20Ecosystems",
+    "sha256": "7ae59d5aab22396763f81662ac5ffe403046b853e0abfc336e174ea10027e40b",
+    "row": 8,
+    "dimension": "LS2.A  Interdependent Relationships in Ecosystems",
+    "bands": [
+      [
+        "2.LS2.1",
+        "2.LS2.2"
+      ],
+      [
+        "5.LS2.1",
+        "5.LS2.2"
+      ],
+      [
+        "7.LS2.1",
+        "7.LS2.2"
+      ],
+      [
+        "B.LS2.1",
+        "B.LS2.2",
+        "EN.LS2.1",
+        "EN.LS2.2"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900477/2020%20DCI%20-%20LS2%20Ecosystems",
+    "sha256": "7ae59d5aab22396763f81662ac5ffe403046b853e0abfc336e174ea10027e40b",
+    "row": 11,
+    "dimension": "LS2.B  Cycles of Matter & Energy Transfer in Ecosystems",
+    "bands": [
+      [],
+      [
+        "5.LS2.1"
+      ],
+      [
+        "7.LS2.3"
+      ],
+      [
+        "B.LS2.3",
+        "B.LS2.4",
+        "B.LS2.5",
+        "EN.LS2.4"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900477/2020%20DCI%20-%20LS2%20Ecosystems",
+    "sha256": "7ae59d5aab22396763f81662ac5ffe403046b853e0abfc336e174ea10027e40b",
+    "row": 14,
+    "dimension": "LS2.C  Ecosystem Dynamics, Functioning, and Resilience",
+    "bands": [
+      [],
+      [
+        "3.LS4.4"
+      ],
+      [
+        "7.LS2.4",
+        "7.LS2.5"
+      ],
+      [
+        "B.LS2.2",
+        "B.LS2.6",
+        "EN.LS2.2",
+        "EN.LS2.6",
+        "EN.LS2.7"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900477/2020%20DCI%20-%20LS2%20Ecosystems",
+    "sha256": "7ae59d5aab22396763f81662ac5ffe403046b853e0abfc336e174ea10027e40b",
+    "row": 17,
+    "dimension": "LS2.D  Social Interactions and Group Behavior",
+    "bands": [
+      [],
+      [
+        "3.LS2.1"
+      ],
+      [],
+      [
+        "B.LS2.8"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900516/2020%20DCI%20-%20LS3%20Heredity",
+    "sha256": "e19cd92174e089a7a45dc152661ba3dc2afd735bdb7ef5ac3f2a24fc05ecb20b",
+    "row": 8,
+    "dimension": "LS3.A  Inheritance of Traits",
+    "bands": [
+      [
+        "1.LS3.1"
+      ],
+      [
+        "3.LS3.1",
+        "3.LS3.2"
+      ],
+      [
+        "8.LS3.1",
+        "8.LS3.2"
+      ],
+      [
+        "B.LS3.1"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900516/2020%20DCI%20-%20LS3%20Heredity",
+    "sha256": "e19cd92174e089a7a45dc152661ba3dc2afd735bdb7ef5ac3f2a24fc05ecb20b",
+    "row": 11,
+    "dimension": "LS3.B Variation of Traits",
+    "bands": [
+      [
+        "1.LS3.1"
+      ],
+      [
+        "3.LS3.1",
+        "3.LS3.2"
+      ],
+      [
+        "8.LS3.1",
+        "8.LS3.2"
+      ],
+      [
+        "8.LS3.2",
+        "B.LS3.2",
+        "B.LS3.3"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900519/2020%20DCI%20-%20LS4%20Biological%20Unity%20and%20Diversity",
+    "sha256": "950870c9ac9c0b6cebec2f89f1001ef5f35837dac7c3cb7d7597e871bfc6cd04",
+    "row": 8,
+    "dimension": "LS4.A  Evidence of Common Ancestry and Diversity",
+    "bands": [
+      [],
+      [
+        "3.LS4.1"
+      ],
+      [
+        "8.LS4.1",
+        "8.LS4.2",
+        "8.LS4.3"
+      ],
+      [
+        "B.LS4.1"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900519/2020%20DCI%20-%20LS4%20Biological%20Unity%20and%20Diversity",
+    "sha256": "950870c9ac9c0b6cebec2f89f1001ef5f35837dac7c3cb7d7597e871bfc6cd04",
+    "row": 11,
+    "dimension": "LS4.B  Natural Selection",
+    "bands": [
+      [],
+      [
+        "3.LS4.2"
+      ],
+      [
+        "8.LS4.4",
+        "8.LS4.5"
+      ],
+      [
+        "B.LS4.2",
+        "B.LS4.3"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900519/2020%20DCI%20-%20LS4%20Biological%20Unity%20and%20Diversity",
+    "sha256": "950870c9ac9c0b6cebec2f89f1001ef5f35837dac7c3cb7d7597e871bfc6cd04",
+    "row": 14,
+    "dimension": "LS4.C  Adaptation",
+    "bands": [
+      [],
+      [
+        "3.LS4.3"
+      ],
+      [
+        "8.LS4.6"
+      ],
+      [
+        "B.LS4.1",
+        "B.LS4.3",
+        "B.LS4.4",
+        "B.LS4.5"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900519/2020%20DCI%20-%20LS4%20Biological%20Unity%20and%20Diversity",
+    "sha256": "950870c9ac9c0b6cebec2f89f1001ef5f35837dac7c3cb7d7597e871bfc6cd04",
+    "row": 17,
+    "dimension": "LS4.D  Biodiversity and Humans",
+    "bands": [
+      [
+        "2.LS4.1"
+      ],
+      [
+        "3.LS4.4"
+      ],
+      [
+        "7.LS2.5"
+      ],
+      [
+        "EN.LS2.7"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900657/2020%20DCI%20-%20ESS1%20Earth's%20Place%20in%20the%20Universe",
+    "sha256": "85632a7e3a5968406ef4aef1180255de5efa6e99bed90f727a82e67b8aebe4ac",
+    "row": 8,
+    "dimension": "ESS1.A  The Universe and Its Stars",
+    "bands": [
+      [
+        "1.ESS1.1"
+      ],
+      [
+        "5.ESS1.1"
+      ],
+      [
+        "8.ESS1.1"
+      ],
+      [
+        "ES.ESS1.1",
+        "ES.ESS1.2",
+        "ES.ESS1.3"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900657/2020%20DCI%20-%20ESS1%20Earth's%20Place%20in%20the%20Universe",
+    "sha256": "85632a7e3a5968406ef4aef1180255de5efa6e99bed90f727a82e67b8aebe4ac",
+    "row": 11,
+    "dimension": "ESS1.B  Earth and the Solar System",
+    "bands": [
+      [
+        "1.ESS1.2"
+      ],
+      [
+        "5.ESS1.2"
+      ],
+      [
+        "8.ESS1.1",
+        "8.ESS1.2",
+        "8.ESS1.3"
+      ],
+      [
+        "EN.ESS2.4",
+        "ES.ESS1.4",
+        "ES.ESS2.4"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900657/2020%20DCI%20-%20ESS1%20Earth's%20Place%20in%20the%20Universe",
+    "sha256": "85632a7e3a5968406ef4aef1180255de5efa6e99bed90f727a82e67b8aebe4ac",
+    "row": 14,
+    "dimension": "ESS1.C  The History of the Planet Earth",
+    "bands": [
+      [
+        "2.ESS1.1"
+      ],
+      [
+        "4.ESS1.1"
+      ],
+      [
+        "6.ESS1.4",
+        "6.ESS2.3"
+      ],
+      [
+        "ES.ESS1.6"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900909/2020%20DCI%20-%20ESS2%20Earth%20Systems",
+    "sha256": "8fa2521ff8b8b9dc15af87c4792f1ffc6177eeb6c0ab274e668d84dc1ed282cf",
+    "row": 8,
+    "dimension": "ESS2.A  Earth Materials & Systems",
+    "bands": [
+      [
+        "2.ESS2.1"
+      ],
+      [
+        "4.ESS2.1",
+        "5.ESS2.1"
+      ],
+      [
+        "6.ESS2.1",
+        "6.ESS2.2"
+      ],
+      [
+        "EN.ESS2.1",
+        "EN.ESS2.2",
+        "EN.ESS2.3",
+        "EN.ESS2.4",
+        "ES.ESS2.1",
+        "ES.ESS2.2",
+        "ES.ESS2.3",
+        "ES.ESS2.4"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900909/2020%20DCI%20-%20ESS2%20Earth%20Systems",
+    "sha256": "8fa2521ff8b8b9dc15af87c4792f1ffc6177eeb6c0ab274e668d84dc1ed282cf",
+    "row": 11,
+    "dimension": "ESS2.B  Plate Tectonics & Large-scale System Interactions",
+    "bands": [
+      [
+        "2.ESS2.2"
+      ],
+      [
+        "4.ESS2.2"
+      ],
+      [
+        "6.ESS2.3"
+      ],
+      [
+        "EN.ESS2.1",
+        "EN.ESS2.3",
+        "ES.ESS1.5",
+        "ES.ESS2.1",
+        "ES.ESS2.3"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900909/2020%20DCI%20-%20ESS2%20Earth%20Systems",
+    "sha256": "8fa2521ff8b8b9dc15af87c4792f1ffc6177eeb6c0ab274e668d84dc1ed282cf",
+    "row": 14,
+    "dimension": "ESS2.C  The Role of Water in Earth's Surface Processes",
+    "bands": [
+      [
+        "2.ESS2.3"
+      ],
+      [
+        "5.ESS2.2"
+      ],
+      [
+        "6.ESS2.2",
+        "6.ESS2.4",
+        "6.ESS2.6"
+      ],
+      [
+        "EN.ESS2.5",
+        "ES.ESS2.5"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900909/2020%20DCI%20-%20ESS2%20Earth%20Systems",
+    "sha256": "8fa2521ff8b8b9dc15af87c4792f1ffc6177eeb6c0ab274e668d84dc1ed282cf",
+    "row": 17,
+    "dimension": "ESS2.D  Weather & Climate",
+    "bands": [
+      [
+        "K.ESS2.1"
+      ],
+      [
+        "3.ESS2.1",
+        "3.ESS2.2"
+      ],
+      [
+        "6.ESS2.5",
+        "6.ESS2.6"
+      ],
+      [
+        "EN.ESS2.2",
+        "EN.ESS2.4",
+        "EN.ESS2.6",
+        "EN.ESS2.7",
+        "ES.ESS2.2",
+        "ES.ESS2.4",
+        "ES.ESS2.6",
+        "ES.ESS2.7"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144900909/2020%20DCI%20-%20ESS2%20Earth%20Systems",
+    "sha256": "8fa2521ff8b8b9dc15af87c4792f1ffc6177eeb6c0ab274e668d84dc1ed282cf",
+    "row": 20,
+    "dimension": "ESS2.E  Biogeology",
+    "bands": [
+      [
+        "K.ESS2.2"
+      ],
+      [],
+      [],
+      [
+        "EN.ESS2.7",
+        "ES.ESS2.7"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144901341/2020%20DCI%20-%20ESS3%20Earth%20and%20Human%20Activity",
+    "sha256": "b8fd44b2713b073c71740446b100706a29b4ce2e3175e5e3efe9d03bd7760247",
+    "row": 8,
+    "dimension": "ESS3.A  Natural Resources",
+    "bands": [
+      [
+        "K.ESS3.1"
+      ],
+      [
+        "4.ESS3.1"
+      ],
+      [
+        "7.ESS3.1"
+      ],
+      [
+        "EN.ESS3.1",
+        "EN.ESS3.2",
+        "ES.ESS3.1",
+        "ES.ESS3.2",
+        "ES.ESS3.5"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144901341/2020%20DCI%20-%20ESS3%20Earth%20and%20Human%20Activity",
+    "sha256": "b8fd44b2713b073c71740446b100706a29b4ce2e3175e5e3efe9d03bd7760247",
+    "row": 11,
+    "dimension": "ESS3.B  Natural Hazards",
+    "bands": [
+      [
+        "K.ESS3.2"
+      ],
+      [
+        "3.ESS3.1",
+        "4.ESS3.2"
+      ],
+      [
+        "6.ESS3.2"
+      ],
+      [
+        "EN.ESS3.1",
+        "ES.ESS3.1"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/144901341/2020%20DCI%20-%20ESS3%20Earth%20and%20Human%20Activity",
+    "sha256": "b8fd44b2713b073c71740446b100706a29b4ce2e3175e5e3efe9d03bd7760247",
+    "row": 14,
+    "dimension": "ESS3.C  Human Impacts on Earth Systems",
+    "bands": [
+      [
+        "1.ESS3.1",
+        "K.ESS2.2"
+      ],
+      [
+        "5.ESS3.1"
+      ],
+      [
+        "7.ESS3.3",
+        "7.ESS3.4",
+        "7.ESS3.5"
+      ],
+      [
+        "EN.ESS3.3",
+        "EN.ESS3.4"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/150953262/2020%20DCI%20-%20ETS1%20Engineering%20Design",
+    "sha256": "538f786bb0b23a0ff2deb0a7692126685d05c7da418b961b02a592ab9c0c0ddf",
+    "row": 8,
+    "dimension": "ETS1.A Defining and Delimiting an Engineering Problem",
+    "bands": [
+      [
+        "K.PS2.2"
+      ],
+      [
+        "4.PS3.4"
+      ],
+      [
+        "6.PS3.3"
+      ],
+      [
+        "CH.PS3.3",
+        "PH.PS2.3",
+        "PH.PS3.3",
+        "PS.PS2.3",
+        "PS.PS3.3"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/150953262/2020%20DCI%20-%20ETS1%20Engineering%20Design",
+    "sha256": "538f786bb0b23a0ff2deb0a7692126685d05c7da418b961b02a592ab9c0c0ddf",
+    "row": 11,
+    "dimension": "ETS1.B Developing Possible Solutions",
+    "bands": [
+      [
+        "1.ESS3.1",
+        "2.LS2.2"
+      ],
+      [
+        "4.ESS3.2"
+      ],
+      [
+        "6.PS3.3",
+        "7.LS2.5",
+        "7.PS1.6"
+      ],
+      [
+        "EN.ESS3.4",
+        "EN.LS2.7",
+        "ES.ESS3.2"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/150953262/2020%20DCI%20-%20ETS1%20Engineering%20Design",
+    "sha256": "538f786bb0b23a0ff2deb0a7692126685d05c7da418b961b02a592ab9c0c0ddf",
+    "row": 14,
+    "dimension": "ETS1.C Optimizing the Design Solution",
+    "bands": [
+      [
+        "2.ESS2.1"
+      ],
+      [
+        "4.PS4.3"
+      ],
+      [
+        "7.PS1.6"
+      ],
+      [
+        "CH.PS1.6"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/150953274/2020%20DCI%20-%20ETS2%20Links%20Among%20Engineering%2C%20Technology%2C%20Science%20and%20Society",
+    "sha256": "32320168bee22a7f250f768a1bf5774b3253910e07b398e243907e97df16b06d",
+    "row": 8,
+    "dimension": "ETS2.A Interdependence of Science, Engineering, and Technology",
+    "bands": [
+      [
+        "K.ESS3.2"
+      ],
+      [
+        "3.LS4.4",
+        "3.PS2.4"
+      ],
+      [
+        "7.PS1.3",
+        "8.ESS1.3",
+        "8.LS4.5",
+        "8.PS2.1"
+      ],
+      [
+        "CH.PS3.3",
+        "PH.PS3.3",
+        "PH.PS4.2",
+        "PH.PS4.5",
+        "PS.PS3.3",
+        "PS.PS4.2"
+      ]
+    ]
+  },
+  {
+    "url": "https://okscienceframework.pbworks.com/w/page/150953274/2020%20DCI%20-%20ETS2%20Links%20Among%20Engineering%2C%20Technology%2C%20Science%20and%20Society",
+    "sha256": "32320168bee22a7f250f768a1bf5774b3253910e07b398e243907e97df16b06d",
+    "row": 11,
+    "dimension": "ETS2.B Influence of Engineering, Technology, and Science on Society and the Natural World",
+    "bands": [
+      [
+        "1.LS1.1",
+        "1.PS4.4",
+        "2.ESS2.1",
+        "2.PS1.2",
+        "K.ESS3.2"
+      ],
+      [
+        "3.ESS3.1",
+        "4.ESS3.2",
+        "4.PS3.4"
+      ],
+      [
+        "7.ESS3.3",
+        "7.LS2.5"
+      ],
+      [
+        "EN.ESS3.4"
+      ]
+    ]
+  }
+]

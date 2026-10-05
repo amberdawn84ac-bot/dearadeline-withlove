@@ -5,6 +5,7 @@ proof of mastery merely because a planner reads them.
 """
 
 import json
+
 from app.config import get_db_conn
 
 
@@ -226,9 +227,9 @@ async def record_demonstration(
         )
 
 
-async def science_foundations(student_id: str, concept_ids: list[str]) -> list[dict]:
+async def science_foundations(student_id: str, concept_ids: list[str], standard_ids: list[str] | None = None) -> list[dict]:
     """Walk real prerequisite edges, oldest foundations first; do not invent gaps."""
-    if not concept_ids:
+    if not concept_ids and not standard_ids:
         return []
     conn = await get_db_conn()
     try:
@@ -246,6 +247,26 @@ async def science_foundations(student_id: str, concept_ids: list[str]) -> list[d
             concept_ids,
             student_id,
         )
+        # Reviewed dimensional connections inform the bridge without becoming locks.
+        standard_rows = await conn.fetch(
+            '''SELECT DISTINCT standard.code AS id, standard.description AS title,
+                       COALESCE(own.status, 'missing') AS status,
+                       relation."relationType" AS relation_type,
+                       relation."sourceTitle" AS source_title,
+                       relation."sourceUrl" AS source_url,
+                       relation."evidenceNote" AS evidence_note
+                FROM "OASStandardRelation" relation
+                JOIN "OASStandard" standard ON standard.code = relation."fromStandardId"
+                LEFT JOIN "StudentSkillState" own
+                  ON own."studentId" = $2 AND own."skillId" = standard.code
+                WHERE relation."toStandardId" = ANY($1::text[])
+                  AND relation."reviewStatus" = 'VERIFIED'
+                  AND relation."relationType" IN ('PREREQUISITE_FOR', 'FEEDS_INTO')
+                  AND standard.subject = 'Science'
+                  AND standard."progressionIsTerminal" = TRUE
+                ORDER BY standard.code''', standard_ids or [], student_id,
+        ) if standard_ids else []
+        seen = {r["id"] for r in rows}
         return select_skill_work(
             subject="science",
             next_skill=None,
@@ -253,6 +274,12 @@ async def science_foundations(student_id: str, concept_ids: list[str]) -> list[d
             foundations=[
                 {"skill_id": r["id"], "title": r["title"], "status": r["status"]}
                 for r in rows
+            ] + [
+                {"skill_id": r["id"], "title": r["title"], "status": r["status"],
+                 "relation_type": r["relation_type"], "source_title": r["source_title"],
+                 "source_url": r["source_url"], "evidence_note": r["evidence_note"],
+                 "hard_prerequisite": r["relation_type"] == "PREREQUISITE_FOR"}
+                for r in standard_rows if r["id"] not in seen
             ],
         )["foundations"]
     finally:

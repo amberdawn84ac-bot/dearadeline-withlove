@@ -1328,7 +1328,12 @@ async def _advance_evaluated_targets(plan: LearningPlanResponse, grade: str) -> 
         candidates = await tool_get_zpd_candidates(plan.student_id, target.track, limit=100) if target.concept_id else []
         next_suggestion = next((_zpd_to_suggestion(c) for c in candidates if _candidate_matches_grade(c, working_grade)), None)
         if next_suggestion is None:
-            standards = await _get_grade_level_standards(plan.student_id, working_grade)
+            # A reviewed prerequisite may be below the learner's placed subject
+            # level. Resume that level's dependency path after demonstrating it.
+            subject_key = 'math' if target.track == 'APPLIED_MATHEMATICS' else 'ela'
+            placed_level = plan.placement.subject_levels.get(subject_key) if plan.placement else None
+            standard_grade = str(placed_level) if placed_level is not None else grade
+            standards = await _get_grade_level_standards(plan.student_id, standard_grade)
             next_suggestion = next((_standard_suggestion(row) for row in standards
                 if row.track == target.track and not row.mastered and row.prerequisites_met and row.progression_ready), None)
         if next_suggestion:
@@ -1761,7 +1766,7 @@ def _standard_suggestion(standard: GradeLevelStandard) -> LessonSuggestion:
         sequence = build_sequence_contract(
             source="zpd",
             concept_id=standard.standard_id,
-            prerequisite_readiness=1.0 if standard.prerequisites_met else 0.0,
+            prerequisite_readiness=1.0 if standard.prerequisites_met and standard.progression_ready else 0.0,
         )
     elif standard.progression_mode == "SEQUENTIAL":
         sequence = build_sequence_contract(
@@ -2094,7 +2099,7 @@ async def _get_grade_level_standards(student_id: str, grade_level: str) -> list[
             GradeLevelStandard(
                 standard_id=r["id"],
                 subject=r["subject"] or "General",
-                grade=int(r["grade"] or grade_num),
+                grade=int(r["grade"] if r["grade"] is not None else grade_num),
                 description=r["description"] or "",
                 mastered=bool(r["mastered"]),
                 proficiency=str(r.get("proficiency") or "NOT_STARTED"),

@@ -326,12 +326,30 @@ class CurriculumGraph:
     ) -> list[dict]:
         async with _get_session_factory()() as session:
             result = await session.execute(text('''
-                WITH s AS (
+                WITH RECURSIVE dependency_links AS (
+                    SELECT "toStandardId" AS target, "fromStandardId" AS foundation
+                    FROM "OASStandardRelation"
+                    WHERE "relationType" = 'PREREQUISITE_FOR'
+                      AND "reviewStatus" = 'VERIFIED'
+                ), reachable(code) AS (
+                    SELECT code FROM "OASStandard"
+                    WHERE grade = :grade AND "progressionIsTerminal" = TRUE
+                    UNION
+                    SELECT links.foundation
+                    FROM reachable
+                    JOIN dependency_links links ON links.target = reachable.code
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM "StudentSkillState" evidence
+                        WHERE evidence."studentId" = :student_id
+                          AND evidence."skillId" = reachable.code
+                          AND evidence.status IN ('demonstrated', 'secure')
+                    )
+                ), s AS (
                     SELECT base.*,
-                           ROW_NUMBER() OVER (PARTITION BY base.subject ORDER BY base.code) AS subject_rank
+                           ROW_NUMBER() OVER (PARTITION BY base.subject ORDER BY base.grade, base.code) AS subject_rank
                     FROM "OASStandard" base
-                    WHERE base.grade = :grade
-                      AND base."progressionIsTerminal" = TRUE
+                    JOIN reachable ON reachable.code = base.code
+                    WHERE base."progressionIsTerminal" = TRUE
                 )
                 SELECT s.code AS id, s.description, s.grade, s.subject,
                        s.track::text AS track, s.strand, s."lessonHook" AS lesson_hook,
@@ -342,19 +360,7 @@ class CurriculumGraph:
                        s."progressionSourceUrl" AS progression_source_url,
                        s."progressionSourceVersion" AS progression_source_version,
                        s."progressionReviewStatus" AS progression_review_status,
-                       NOT EXISTS (
-                           SELECT 1
-                           FROM "OASStandard" earlier
-                           LEFT JOIN (SELECT "studentId", "skillId" AS "standardId", CASE status WHEN 'secure' THEN 'EXTENDING' WHEN 'demonstrated' THEN 'UNDERSTANDING' ELSE 'DEVELOPING' END AS proficiency FROM "StudentSkillState") earlier_mastery
-                             ON earlier_mastery."standardId" = earlier.code
-                            AND earlier_mastery."studentId" = :student_id
-                           WHERE earlier."progressionLane" = s."progressionLane"
-                             AND earlier.grade = s.grade
-                             AND earlier."progressionIsTerminal" = TRUE
-                             AND earlier."progressionOrdinal" < s."progressionOrdinal"
-                             AND COALESCE(earlier_mastery.proficiency::text, '')
-                                 NOT IN ('UNDERSTANDING', 'EXTENDING')
-                       ) AS progression_ready,
+                       TRUE AS progression_ready,
                        COALESCE(ARRAY(
                            SELECT relation."fromStandardId"
                            FROM "OASStandardRelation" relation
@@ -384,7 +390,7 @@ class CurriculumGraph:
                   ON m."standardId" = s.code AND m."studentId" = :student_id
                 WHERE (CAST(:per_subject_limit AS INTEGER) IS NULL
                        OR s.subject_rank <= CAST(:per_subject_limit AS INTEGER))
-                ORDER BY s.subject, s."progressionLane", s."progressionOrdinal", s.code LIMIT :limit
+                ORDER BY s.subject, s.grade, s."progressionLane", s."progressionOrdinal", s.code LIMIT :limit
             '''), {
                 "student_id": student_id, "grade": grade, "limit": limit,
                 "per_subject_limit": per_subject_limit,
