@@ -51,16 +51,16 @@ def test_child_core_skills_attach_to_the_unit_not_the_other_way_around():
         grade_level="8",
     )
     lessons = [lesson.model_copy(update={"skill_opportunities": (
-        [{"skill_id":"math-1","task":"Measure width and length with units.","evidence_requirement":"measurement record"}] if lesson.lesson_id=="blood" else
-        [{"skill_id":"write-1","task":"Write a precise custody observation.","evidence_requirement":"written observation"}] if lesson.lesson_id=="investigation" else []
+        [{"skill_id":"math-1","lesson_id":"blood","block_ids":["blood-observe"],"task":"Measure width and length with units.","evidence_requirement":"measurement record"}] if lesson.lesson_id=="blood" else
+        [{"skill_id":"write-1","lesson_id":"investigation","block_ids":["write"],"task":"Write a precise custody observation.","evidence_requirement":"written observation"}] if lesson.lesson_id=="investigation" else []
     )}) for lesson in lessons]
     targets = [
         IndividualSkillTarget(
-            suggestion_id="math-1", domain="math", title="Measure a real length and keep the unit",
+            suggestion_id="math-1", concept_id="math-1", domain="math", title="Measure a real length and keep the unit",
             track="APPLIED_MATHEMATICS", working_level="8", sequence_state="READY", mastery_eligible=True,
         ),
         IndividualSkillTarget(
-            suggestion_id="write-1", domain="literacy", title="Write one precise observation",
+            suggestion_id="write-1", concept_id="write-1", domain="literacy", title="Write one precise observation",
             track="ENGLISH_LITERATURE", working_level="8", sequence_state="READY", mastery_eligible=True,
         ),
         IndividualSkillTarget(
@@ -110,13 +110,13 @@ def test_open_subjects_skip_to_the_year_skill_that_fits_the_unit():
         track="CREATION_SCIENCE",
         grade_level="8",
     )
-    lessons = [lesson.model_copy(update={"skill_opportunities":[{"skill_id":"witness","task":"Say what one witness can establish.","evidence_requirement":"claim with source"}] if lesson.lesson_id=="scene" else []}) for lesson in lessons]
+    lessons = [lesson.model_copy(update={"skill_opportunities":[{"skill_id":"witness","lesson_id":"scene","block_ids":["witness-check"],"task":"Say what one witness can establish.","evidence_requirement":"claim with source"}] if lesson.lesson_id=="scene" else []}) for lesson in lessons]
     next_skill = IndividualSkillTarget(
         suggestion_id="psalm", domain="discipleship", title="Read a psalm about sheep",
         track="DISCIPLESHIP", working_level="8", sequence_state="READY", progression_ordinal=1,
     )
     fitting = IndividualSkillTarget(
-        suggestion_id="witness", domain="discipleship", title="Say what one witness can establish",
+        suggestion_id="witness", concept_id="witness", domain="discipleship", title="Say what one witness can establish",
         track="DISCIPLESHIP", working_level="8", sequence_state="READY", progression_ordinal=4,
     )
     personalized = personalize_lessons(lessons, [next_skill], "8", set(), [next_skill, fitting])
@@ -166,14 +166,14 @@ def test_history_can_jump_and_then_goes_on_the_timeline():
         track="CREATION_SCIENCE",
         grade_level="8",
     )
-    lessons = [lesson.model_copy(update={"skill_opportunities":[{"skill_id":"mayfield","task":"Explain the Mayfield identification from the source record.","evidence_requirement":"source analysis and timeline"}] if lesson.lesson_id=="prints" else []}) for lesson in lessons]
+    lessons = [lesson.model_copy(update={"skill_opportunities":[{"skill_id":"mayfield","lesson_id":"prints","block_ids":["print-check"],"task":"Explain the Mayfield identification from the source record.","evidence_requirement":"source analysis and timeline"}] if lesson.lesson_id=="prints" else []}) for lesson in lessons]
     earlier = IndividualSkillTarget(
         suggestion_id="early", domain="history", title="Memorize the textbook chapter",
         track="TRUTH_HISTORY", working_level="8", sequence_state="READY",
         progression_mode="SEQUENTIAL", progression_ordinal=1,
     )
     fitting = IndividualSkillTarget(
-        suggestion_id="mayfield", domain="history", title="Explain the Mayfield identification",
+        suggestion_id="mayfield", concept_id="mayfield", domain="history", title="Explain the Mayfield identification",
         track="TRUTH_HISTORY", working_level="8", sequence_state="READY", progression_ordinal=9,
     )
     personalized = personalize_lessons(lessons, [earlier], "8", set(), [earlier, fitting])

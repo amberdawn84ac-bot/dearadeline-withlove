@@ -369,6 +369,7 @@ class IndividualLesson(BaseModel):
     assignment: str
     track: str
     kind: Literal["investigation", "gap"] = "investigation"
+    skill_target: Optional[IndividualSkillTarget] = None
     faith_talk: str = ""
     think_tank: str = ""
     connections: list[LessonConnection] = Field(default_factory=list)
@@ -1082,8 +1083,9 @@ def _content_words(text: str) -> set[str]:
 def _skill_fits_lesson(target: IndividualSkillTarget, lesson: IndividualLesson) -> bool:
     if lesson.kind != "investigation" or target.sequence_state == "LOCKED":
         return False
-    identities = {str(key) for key in (target.standard_code,target.concept_id,target.suggestion_id) if key}
-    return any(str(o.get("skill_id")) in identities and o.get("task") and o.get("evidence_requirement") for o in lesson.skill_opportunities)
+    identities = {str(key) for key in (target.standard_code,target.concept_id) if key}
+    return any(str(o.get("skill_id")) in identities and o.get("task") and o.get("evidence_requirement") and o.get("block_ids")
+               and o.get("lesson_id") == lesson.lesson_id for o in lesson.skill_opportunities)
 
 
 def _usable_target(target: IndividualSkillTarget, grade_level: str, covered_tracks: set[str]) -> bool:
@@ -1112,6 +1114,7 @@ def _own_practice(target: IndividualSkillTarget, grade_level: str) -> Individual
         assignment=assignment,
         track=target.track,
         kind="gap",
+        skill_target=target,
     )
 
 

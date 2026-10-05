@@ -14,6 +14,12 @@ Teach substantive ideas directly. A story/scene provides context, not a substitu
 for accurate explanation, sources, practice and evidence. Shared family facts stay
 the same; learner responsibilities and support vary with actual readiness.
 
+SEQUENCING: Math and foundational reading follow the learner's next evidence-ready
+step. Teach it inside the family unit only when a concrete task genuinely fits.
+Otherwise author a coherent separate mini-unit through the same canonical author.
+Check foundations, teach and model, guide practice, then elicit a fresh independent
+demonstration. A mini-unit may span sessions. Never skip prerequisites to fit a theme.
+
 SCIENCE: Identify the foundations needed to explain the phenomenon. Use verified
 prerequisite edges when available; do not invent graph relations. Briefly review
 demonstrated foundations, reinforce developing ones, and teach unverified ones

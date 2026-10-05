@@ -345,7 +345,7 @@ class CurriculumGraph:
                        NOT EXISTS (
                            SELECT 1
                            FROM "OASStandard" earlier
-                           LEFT JOIN "StandardMastery" earlier_mastery
+                           LEFT JOIN (SELECT "studentId", "skillId" AS "standardId", CASE status WHEN 'secure' THEN 'EXTENDING' WHEN 'demonstrated' THEN 'UNDERSTANDING' ELSE 'DEVELOPING' END AS proficiency FROM "StudentSkillState") earlier_mastery
                              ON earlier_mastery."standardId" = earlier.code
                             AND earlier_mastery."studentId" = :student_id
                            WHERE earlier."progressionLane" = s."progressionLane"
@@ -370,7 +370,7 @@ class CurriculumGraph:
                              AND relation."relationType" = 'PREREQUISITE_FOR'
                              AND relation."reviewStatus" = 'VERIFIED'
                              AND NOT EXISTS (
-                                 SELECT 1 FROM "StandardMastery" prerequisite_mastery
+                                 SELECT 1 FROM (SELECT "studentId", "skillId" AS "standardId", CASE status WHEN 'secure' THEN 'EXTENDING' WHEN 'demonstrated' THEN 'UNDERSTANDING' ELSE 'DEVELOPING' END AS proficiency FROM "StudentSkillState") prerequisite_mastery
                                  WHERE prerequisite_mastery."studentId" = :student_id
                                    AND prerequisite_mastery."standardId" = relation."fromStandardId"
                                    AND prerequisite_mastery.proficiency IN ('UNDERSTANDING', 'EXTENDING')
@@ -380,7 +380,7 @@ class CurriculumGraph:
                        CASE WHEN m.proficiency IN ('UNDERSTANDING', 'EXTENDING')
                             THEN true ELSE false END AS mastered
                 FROM s
-                LEFT JOIN "StandardMastery" m
+                LEFT JOIN (SELECT "studentId", "skillId" AS "standardId", CASE status WHEN 'secure' THEN 'EXTENDING' WHEN 'demonstrated' THEN 'UNDERSTANDING' ELSE 'DEVELOPING' END AS proficiency FROM "StudentSkillState") m
                   ON m."standardId" = s.code AND m."studentId" = :student_id
                 WHERE (CAST(:per_subject_limit AS INTEGER) IS NULL
                        OR s.subject_rank <= CAST(:per_subject_limit AS INTEGER))
@@ -412,7 +412,7 @@ class CurriculumGraph:
                 SELECT s.code, s.description, s.grade, s.strand, s.track
                 FROM "OASStandardRelation" r
                 JOIN "OASStandard" s ON s.code = r."toStandardId"
-                LEFT JOIN "StandardMastery" own
+                LEFT JOIN (SELECT "studentId", "skillId" AS "standardId", CASE status WHEN 'secure' THEN 'EXTENDING' WHEN 'demonstrated' THEN 'UNDERSTANDING' ELSE 'DEVELOPING' END AS proficiency FROM "StudentSkillState") own
                   ON own."standardId" = s.code AND own."studentId" = :student_id
                 WHERE r."fromStandardId" = :standard_id
                   AND r."relationType" = 'FEEDS_INTO'
@@ -425,7 +425,7 @@ class CurriculumGraph:
                       AND prereq."reviewStatus" = 'VERIFIED'
                       AND prereq."fromStandardId" <> :standard_id
                       AND NOT EXISTS (
-                        SELECT 1 FROM "StandardMastery" mastered
+                        SELECT 1 FROM (SELECT "studentId", "skillId" AS "standardId", CASE status WHEN 'secure' THEN 'EXTENDING' WHEN 'demonstrated' THEN 'UNDERSTANDING' ELSE 'DEVELOPING' END AS proficiency FROM "StudentSkillState") mastered
                         WHERE mastered."studentId" = :student_id
                           AND mastered."standardId" = prereq."fromStandardId"
                           AND mastered.proficiency IN ('UNDERSTANDING', 'EXTENDING')
@@ -443,7 +443,7 @@ class CurriculumGraph:
                             THEN true ELSE false END AS is_mastered
                 FROM "OASStandardRelation" r
                 JOIN "OASStandard" s ON s.code = r."fromStandardId"
-                LEFT JOIN "StandardMastery" m
+                LEFT JOIN (SELECT "studentId", "skillId" AS "standardId", CASE status WHEN 'secure' THEN 'EXTENDING' WHEN 'demonstrated' THEN 'UNDERSTANDING' ELSE 'DEVELOPING' END AS proficiency FROM "StudentSkillState") m
                   ON m."standardId" = s.code AND m."studentId" = :student_id
                 WHERE r."toStandardId" = :standard_id
                   AND r."relationType" = 'PREREQUISITE_FOR'
@@ -463,16 +463,16 @@ class CurriculumGraph:
                        COALESCE(array_agg(DISTINCT prereq."prerequisiteId")
                            FILTER (WHERE prereq."prerequisiteId" IS NOT NULL), ARRAY[]::text[]) AS prerequisite_ids
                 FROM "CurriculumConcept" c
-                LEFT JOIN "StudentConceptMastery" own
-                  ON own."conceptId" = c.id AND own."studentId" = :student_id
+                LEFT JOIN "StudentSkillState" own
+                  ON own."skillId" = c.id AND own."studentId" = :student_id
                 LEFT JOIN "CurriculumConceptPrerequisite" prereq ON prereq."conceptId" = c.id
-                LEFT JOIN "StudentConceptMastery" pm
-                  ON pm."conceptId" = prereq."prerequisiteId"
-                 AND pm."studentId" = :student_id AND pm.score >= 0.7
+                LEFT JOIN "StudentSkillState" pm
+                  ON pm."skillId" = prereq."prerequisiteId"
+                 AND pm."studentId" = :student_id AND pm.status IN ('demonstrated','secure')
                 LEFT JOIN "CurriculumConceptPrerequisite" dep ON dep."prerequisiteId" = c.id
-                WHERE c.track = CAST(:track AS "Track") AND COALESCE(own.score, 0) < 0.7
+                WHERE c.track = CAST(:track AS "Track") AND COALESCE(own.status, '') NOT IN ('demonstrated','secure')
                 GROUP BY c.id
-                HAVING COUNT(DISTINCT prereq."prerequisiteId") = COUNT(DISTINCT pm."conceptId")
+                HAVING COUNT(DISTINCT prereq."prerequisiteId") = COUNT(DISTINCT pm."skillId")
                 ORDER BY dependent_count DESC, prereq_count ASC
                 LIMIT :limit
             '''), {"student_id": student_id, "track": track, "limit": limit})

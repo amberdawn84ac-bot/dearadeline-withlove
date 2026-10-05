@@ -19,7 +19,6 @@ from dataclasses import dataclass, field
 
 from app.connections.knowledge_graph import (
     get_zpd_candidates,
-    get_zpd_candidates_with_bkt,
     get_prerequisite_chain,
     get_cross_track_concepts,
 )
@@ -66,60 +65,10 @@ class CrossTrackConcept:
 async def tool_get_zpd_candidates(
     student_id: str, track: str, limit: int = 5
 ) -> list[ZPDCandidate]:
+    """Prerequisites and completed skills require evaluated learner evidence.
+
+    BKT remains a support/scheduling signal and cannot unlock the next concept.
     """
-    Return the top ZPD concept candidates for a student on a given track.
-
-    Uses BKT-aware selection (SpacedRepetitionCard.masteryLevel + compute_priority)
-    when data is available, falling back to graph-only selection when not.
-
-    BKT path returns candidates with real priority scores from:
-      compute_priority(prereq_readiness, mastery_gap, leverage), with readiness
-      gating the gap and leverage terms
-    so the highest-leverage, most-ready concepts surface first.
-    """
-    from app.algorithms.bkt_tracker import get_mastery_map_with_timestamps, build_mastery_snapshots
-
-    # ── Try BKT-aware path first ───────────────────────────────────────────────
-    try:
-        mastery_map_ts = await get_mastery_map_with_timestamps(student_id, track)
-        # Need concept graph rows to build snapshots — get_zpd_candidates_with_bkt handles this
-        # We need concept rows to build snapshots: fetch them inline
-        from app.connections.knowledge_graph import get_concept_graph_for_track
-        concept_rows = await get_concept_graph_for_track(track)
-
-        if concept_rows:
-            mastery_snapshots = build_mastery_snapshots(concept_rows, mastery_map_ts)
-            zpd_concepts = await get_zpd_candidates_with_bkt(track, mastery_snapshots, limit)
-
-            if zpd_concepts:
-                candidates = [
-                    ZPDCandidate(
-                        concept_id=z.concept_id,
-                        title=z.name,
-                        description=z.description,
-                        track=z.track,
-                        difficulty="",
-                        standard_code=z.standard_code or "",
-                        grade_band=z.grade_band or "",
-                        dependent_count=0,
-                        prereq_count=0,
-                        priority=z.priority,
-                        current_mastery=z.current_mastery,
-                        prereq_readiness=z.prerequisite_readiness,
-                        prerequisite_ids=list(z.prerequisite_ids),
-                    )
-                    for z in zpd_concepts
-                ]
-                logger.info(
-                    f"[GraphQuery] BKT ZPD candidates for student={student_id[:8]}, "
-                    f"track={track}: {len(candidates)} found "
-                    f"(top priority={candidates[0].priority:.3f})"
-                )
-                return candidates
-    except Exception as e:
-        logger.warning(f"[GraphQuery] BKT ZPD path failed, using graph fallback: {e}")
-
-    # ── Graph-only fallback (binary MASTERED edges) ──────────────────────────────────
     raw = await get_zpd_candidates(student_id, track, limit)
     candidates = [
         ZPDCandidate(

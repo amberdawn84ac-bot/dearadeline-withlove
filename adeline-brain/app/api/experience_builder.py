@@ -92,6 +92,9 @@ def shared_family_canonical_slug(request: LessonRequest) -> str:
     from app.jobs.canonical_seeding import canonical_seed_for
     seed = canonical_seed_for(request.topic, request.track.value)
     topic = seed.topic if seed else request.topic
+    if request.delivery_mode == "INDIVIDUAL_SKILL":
+        from app.services.skill_path import mini_unit_key
+        topic += " / skill-path-v1 / " + mini_unit_key(request)
     return canonical_slug(topic, request.track.value)
 
 
@@ -354,8 +357,11 @@ def skill_connections_for_contract(contract: dict, targets: list[dict]) -> tuple
     the shared experience. Topic similarity alone cannot turn a math or literacy
     target into themed work.
     """
-    opportunities = {str(item["skill_id"]): item for item in contract.get("skill_opportunities") or []
-                     if isinstance(item, dict) and item.get("skill_id") and item.get("task") and item.get("evidence_requirement")}
+    from app.services.skill_path import bound_skill_tasks
+    block_ids = {bid for lesson in (contract.get("unit_plan") or {}).get("lessons", [])
+                 for stage in lesson.get("stages", []) for bid in stage.get("block_ids", [])}
+    opportunities = {task["skill_id"]: task for task in bound_skill_tasks(contract, targets,
+        [{"block_id": bid} for bid in block_ids])}
     integrated, separate = [], []
     for raw in targets:
         target = dict(raw)
@@ -453,12 +459,13 @@ async def _author(
         f"{authoring_brief.strip()}"
         if authoring_brief.strip() else ""
     )
+    from app.services.skill_path import skill_authoring_context, mini_unit_errors
     prompt = (
         f"Author the canonical shared family experience. Topic: {request.topic}. Track: {request.track.value}. "
         "This is the actual lesson, not an outline, article, sequence of narrative boxes, worksheet, or sketchnote. "
         "Use the routed resources only when useful and obey their use_mode and license. "
         "Return the exact JSON contract. Every block must directly declare experience_stage."
-        f"{brief_section}\n\n"
+        f"{brief_section}{skill_authoring_context(request)}\n\n"
         f"ROUTED OUTSIDE TOOLS AND SOURCES:\n{json.dumps(resources[:6], ensure_ascii=False)}"
     )
     last_error = None
@@ -517,6 +524,7 @@ async def _author(
                 + validate_canonical_contract(parsed)
                 + validate_flow_composition(parsed)
                 + validate_experience_substance(parsed)
+                + mini_unit_errors(request, parsed)
             )
             logger.info(
                 "[ExperienceAuthor] validated topic=%r attempt=%d contract_error_count=%d",
@@ -759,7 +767,10 @@ async def _stream(request: LessonRequest):
             str(c['concept_id']) for c in (contract.get('unit_plan') or {}).get('essential_concepts', []) if c.get('concept_id')
         ]) if request.track.value in {'CREATION_SCIENCE','HEALTH_NATUROPATHY','HOMESTEADING'} else []
         integrated_targets = list(learner_contribution_data.get("skill_connections") or [])
+        from app.services.skill_path import bound_skill_tasks, request_targets
         metadata = {
+            "skill_tasks": bound_skill_tasks(contract, request_targets(request), blocks),
+            "track": request.track.value,
             "science_foundations": foundations,
             "canonical_slug": slug, "canonical_revision": content_revision_of(canonical), "topic": request.topic, "grade_level": request.grade_level,
             "required_standard_codes": request.required_standard_codes,
@@ -866,6 +877,9 @@ async def build_experience(request: LessonRequest, authorization: str | None = H
             status_code=409,
             detail="This planned skill is still locked by an unmastered prerequisite. Open the prerequisite mission first.",
         )
+    if request.delivery_mode == "INDIVIDUAL_SKILL":
+        from app.services.skill_path import ensure_skill_ready
+        await ensure_skill_ready(request)
     await enforce_rate_limit("experience-build", request.student_id, limit=8)
     return StreamingResponse(_stream(request), media_type="text/event-stream")
 
