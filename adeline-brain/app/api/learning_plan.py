@@ -1097,19 +1097,9 @@ def _usable_target(target: IndividualSkillTarget, grade_level: str, covered_trac
 
 def _own_practice(target: IndividualSkillTarget, grade_level: str) -> IndividualLesson:
     """The next sequenced skill still happens today, just not inside the unit."""
-    domain = target.domain.replace("_", " ")
-    level = target.working_level or grade_level
-    if target.sequence_state == "BRIDGE_REQUIRED":
-        assignment = (
-            f"Today's {domain} mini lesson. The foundation for {target.title} is not secure yet. "
-            "Practice that missing piece today so the sequence does not stall."
-        )
-    else:
-        assignment = (
-            f"Today's {domain} mini lesson, level {level}. "
-            "The unit does not use this skill, so it is practiced on its own. "
-            "It is still the next skill, so this learner does not fall behind."
-        )
+    # This is a queue preview, not an authored activity. Keep planning rationale
+    # out of student copy; the existing canonical author supplies the real task.
+    assignment = ""
     return IndividualLesson(
         id=f"gap:{target.suggestion_id}",
         investigation_id=target.suggestion_id,

@@ -11,10 +11,8 @@ import styles from '@/components/nav/sites-dashboard.module.css';
 export default function TodayPage() {
   const { student, loading: studentLoading } = useStudent();
   const [todayInvestigations, setTodayInvestigations] = useState<LessonSuggestion[]>([]);
-  const [sharedWithSiblings, setSharedWithSiblings] = useState(false);
   const [individualLessons, setIndividualLessons] = useState<IndividualLesson[]>([]);
   const [finished, setFinished] = useState<TranscriptEntry[]>([]);
-  const [isNextSchoolDay, setIsNextSchoolDay] = useState(false);
   const [planLoading, setPlanLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -28,9 +26,7 @@ export default function TodayPage() {
         ? [plan.family_investigation]
         : lineup.filter((item) => item.delivery_mode === 'FAMILY_INVESTIGATION');
     setTodayInvestigations(families);
-    setSharedWithSiblings(plan.family_context.shared_with_siblings);
     setIndividualLessons(plan.individual_lessons ?? []);
-    setIsNextSchoolDay(false);
   }, []);
 
   const loadToday = useCallback(async () => {
@@ -71,13 +67,7 @@ export default function TodayPage() {
   return (
     <div className={styles.todayWorkspace}>
       <header className={styles.todayTitle}>
-        <p>{isNextSchoolDay ? 'Your next school day' : 'Ready when you are'}</p>
-        <h1>{isNextSchoolDay ? 'Coming up next' : 'Today'}</h1>
-        <span>
-          One shared unit for the whole family. The unit is the lens. This child&rsquo;s own skills are on this page, inside the unit when they fit. The next unit waits until this one is done.
-          {sharedWithSiblings ? ' The same lesson is open for the household.' : ''}
-          {unitEnding(day.unit?.track)}
-        </span>
+        <h1>Today</h1>
       </header>
 
       {error && <p className={styles.error} role="alert">{error}</p>}
@@ -93,19 +83,13 @@ export default function TodayPage() {
 
       <section className={styles.dayBoard} aria-label="Today's lesson">
         <div className={`${styles.kanbanColumn} ${styles.kanbanToday}`}>
-          <header><span>1</span><div><small>This unit, this job</small><h2>Today&rsquo;s lesson</h2></div></header>
+          <header><div><h2>Today&rsquo;s lesson</h2></div></header>
           {day.current ? (
             <article className={styles.kanbanCard}>
-              <small>Lesson {day.current.index} of {day.current.count} · a lesson can take more than one day</small>
-              <h3>{day.current.investigation_title}</h3>
-              <p><strong>{day.current.title}.</strong> {day.current.assignment}</p>
-              {day.current.faith_talk ? <p className="mt-2"><strong>Faith talk.</strong> {day.current.faith_talk}</p> : null}
-              {day.current.think_tank ? <p className="mt-2"><strong>Think tank.</strong> {day.current.think_tank}</p> : null}
-              {!!day.current.connections?.length && <ul>
-                {day.current.connections.map((connection) => <li key={connection.suggestion_id}>
-                  <b>{connection.domain === 'math' ? 'This job uses the math' : 'Also in this lesson'} · level {connection.working_level || 'yours'}:</b> {connection.title}
-                </li>)}
-              </ul>}
+              {day.current.count > 1 && <small>Lesson {day.current.index} of {day.current.count}</small>}
+              {day.current.investigation_title !== day.current.title && <small>{day.current.investigation_title}</small>}
+              <h3>{day.current.title}</h3>
+              {day.current.assignment && <p>{day.current.assignment}</p>}
               <Link href={lessonHref(day.current)}>Open this lesson →</Link>
             </article>
           ) : day.unit ? (
@@ -113,18 +97,16 @@ export default function TodayPage() {
           ) : <EmptyCard text="No unit is open yet." />}
           {day.cores.length > 0 && (
             <article className={styles.kanbanCard}>
-              <small>This child&rsquo;s next skills, not part of the unit</small>
               <h3>Your core work</h3>
               <ul>
-                {day.cores.map(({ activity, lesson }) => <li key={activity.suggestion_id}>
-                  <b>{activity.skill_title}.</b> {activity.fit === 'direct' ? `Uses ${lesson.title}.` : activity.fit === 'foundation' ? 'The foundation comes first.' : `Bridged onto ${lesson.title}.`} {activity.activity}
+                {day.cores.map(({ activity }) => <li key={activity.suggestion_id}>
+                  <b>{activity.skill_title}.</b> {activity.activity}
                 </li>)}
               </ul>
             </article>
           )}
           {day.toc.length > 1 && (
             <article className={styles.kanbanCard}>
-              <small>The jobs in this unit</small>
               <h3>Table of contents</h3>
               <ul>
                 {day.toc.map((lesson) => <li key={lesson.id}>
@@ -135,15 +117,13 @@ export default function TodayPage() {
           )}
           {day.inOrder.map((lesson) => (
             <article key={lesson.id} className={styles.kanbanCard}>
-              <small>Separate from the unit, so the sequence keeps moving</small>
-              <h3>Today&rsquo;s mini lesson</h3>
-              <p><b>{lesson.title}.</b> {lesson.assignment}</p>
+              <h3>{lesson.title}</h3>
+              {studentTask(lesson) && <p>{studentTask(lesson)}</p>}
               <Link href={lessonHref(lesson)}>Open this lesson →</Link>
             </article>
           ))}
           {day.nextChapter && (
             <article className={styles.kanbanCard}>
-              <small>Not today</small>
               <h3>Next chapter</h3>
               <p>{day.nextChapter.title}</p>
             </article>
@@ -151,12 +131,12 @@ export default function TodayPage() {
         </div>
 
         <div className={styles.kanbanColumn}>
-          <header><span>✓</span><div><small>Real recorded evidence</small><h2>Finished</h2></div></header>
+          <header><div><h2>Finished</h2></div></header>
           {finished.map((entry) => <article key={entry.id} className={`${styles.kanbanCard} ${styles.finishedCard}`}>
-            <small>{entry.track.replace(/_/g, ' ')}</small><h3>✓ {entry.courseTitle}</h3>
-            <p>{entry.completedAt ? new Date(entry.completedAt).toLocaleDateString() : 'Recorded in the learning journal'}</p>
+            <h3>✓ {entry.courseTitle}</h3>
+            <p>{entry.completedAt ? new Date(entry.completedAt).toLocaleDateString() : 'Saved in your portfolio'}</p>
           </article>)}
-          {!finished.length && <EmptyCard text="Completed lessons appear here after evidence is recorded." />}
+          {!finished.length && <EmptyCard text="Your finished lessons will appear here." />}
         </div>
       </section>
       <p className={styles.planFootnote}>
@@ -184,11 +164,11 @@ function campfireDay(
   return { current, toc, inOrder, cores, unit, nextChapter };
 }
 
-function unitEnding(track?: string) {
-  if (track === 'TRUTH_HISTORY') return ' History can jump to what fits. What you learn goes on the classroom timeline.';
-  if (track === 'JUSTICE_CHANGEMAKING') return ' This unit is not done until a real person has something they can use.';
-  if (track === 'HOMESTEADING') return ' This unit is not done on paper. The work is the garden, the greenhouse, the kitchen, or the animals.';
-  return '';
+function studentTask(lesson: IndividualLesson) {
+  // Old durable Today records contain planner rationale in this field. Hide
+  // only that known template; keep real assignments from saved lessons.
+  if (lesson.kind === 'gap' && /^Today's .+ mini lesson[.,]/.test(lesson.assignment)) return '';
+  return lesson.assignment;
 }
 
 function lessonHref(lesson: IndividualLesson) {
@@ -202,9 +182,8 @@ function InvestigationCard({ investigation }: { investigation: LessonSuggestion 
   const showHook = hook && hook.length <= 220 && hook !== question;
   return (
     <article className={styles.kanbanCard}>
-      <small>{investigation.track.replace(/_/g, ' ')}</small>
       <h3>{investigation.title}</h3>
-      {question ? <p><strong>The question:</strong> {question}</p> : null}
+      {question ? <p>{question}</p> : null}
       {showHook ? <p>{hook}</p> : null}
       <Link href={`/dashboard/spaces/${encodeURIComponent(investigation.id)}`}>Start this investigation →</Link>
     </article>

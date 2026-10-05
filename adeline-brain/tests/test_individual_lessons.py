@@ -151,7 +151,7 @@ def test_math_stays_on_the_next_skill_even_when_a_later_one_fits():
 
     assert all(not card.core_activities for card in personalized if card.kind != "gap")
     assert [card.title for card in gaps] == ["Compare ratios"]
-    assert "mini lesson" in gaps[0].assignment
+    assert gaps[0].assignment == ""
 
 
 def test_history_can_jump_and_then_goes_on_the_timeline():
