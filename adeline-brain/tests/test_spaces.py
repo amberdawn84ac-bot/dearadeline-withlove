@@ -31,6 +31,7 @@ from app.api.spaces import (
     _parse_json_response,
     _proficiency_from_evaluations,
     _resource_block_for_turn,
+    _retained_space_messages,
     _salvage_spoken_turn,
     _space_list_item,
     _space_resource_topic,
@@ -41,6 +42,42 @@ from app.api.spaces import (
     _TURN_SYSTEM_PROMPT,
     _update_space_bkt,
 )
+
+
+def test_resource_turns_survive_ordinary_chat_trimming():
+    resource_message = {"role": "assistant", "content": "Try this comparison", "resource_block": {"content": "Compare evidence"}}
+    ordinary = [{"role": "user", "content": str(i)} for i in range(45)]
+    retained = _retained_space_messages([resource_message, *ordinary])
+    assert retained[0] == resource_message
+    assert retained[1:] == ordinary[-38:]
+
+
+@pytest.mark.asyncio
+async def test_new_resource_cannot_advance_and_is_saved_with_turn(monkeypatch):
+    from app.api import spaces
+    initial = {**_space_state(), "version": 3, "student_id": "student-1"}
+    resource = {"block_type": "NARRATIVE", "content": "Classify these observations", "title": "Evidence challenge"}
+    async def identity(value):
+        return value
+    monkeypatch.setattr(spaces, "_load_or_create", AsyncMock(return_value=({}, {})))
+    monkeypatch.setattr(spaces, "_state", lambda *_: initial)
+    for name in ("_attach_offer_catalog", "_attach_mastery_context", "_attach_household_learners"):
+        monkeypatch.setattr(spaces, name, identity)
+    monkeypatch.setattr("app.services.curriculum_state.get_curriculum_state", AsyncMock(return_value={"skills": []}))
+    monkeypatch.setattr("app.services.instructional_resources.prepare_instructional_resource", AsyncMock(return_value={
+        **initial, "instructional_resource": resource, "resource_decision": {"route": "generate"},
+    }))
+    monkeypatch.setattr(spaces, "_evaluate_turn", AsyncMock(return_value=_TurnEvaluation(
+        adeline_message="Try this", evaluation="correct", recommended_action="advance", is_waiting_for_user=False,
+    )))
+    apply = AsyncMock(return_value={})
+    monkeypatch.setattr(spaces, "_apply_transition", apply)
+    result = await spaces.space_turn("student-1", "unit-1", spaces.SpaceTurnRequest(user_message="My answer", expected_version=3))
+    submitted = apply.call_args.args[2]
+    assert submitted.recommended_action == "stay"
+    assert submitted.resource_block == resource
+    assert submitted.resource_decision == {"route": "generate"}
+    assert result["resource_block"] == resource
 
 
 def test_turn_evaluation_rejects_unsupported_resource_triggers():
@@ -905,5 +942,4 @@ async def test_evaluate_turn_lists_the_offer_catalog_when_present(monkeypatch):
     assert "makecode:arcade" in captured["system"]
     assert "geogebra:math" in captured["system"]
     assert result.offered_resource_ids == ["makecode:arcade"]
-
 
