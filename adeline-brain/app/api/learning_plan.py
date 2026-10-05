@@ -784,6 +784,8 @@ def _candidate_matches_grade(candidate: ZPDCandidate, grade_level: str) -> bool:
     if not band:
         return True
     expected = {"K-2": "k2", "3-5": "35", "6-8": "68", "9-12": "912"}[_get_grade_band(grade_level)]
+    if band.isdigit() and len(band) <= 2 and candidate.grade_band and "-" not in candidate.grade_band:
+        return _get_grade_band(candidate.grade_band) == _get_grade_band(grade_level)
     return band == expected
 
 
@@ -870,7 +872,7 @@ def _learner_progression_targets(
             track=track,
             concept_id=candidate.concept_id,
             standard_code=candidate.standard_code,
-            working_level=candidate.grade_band or working_grade,
+            working_level=candidate.grade_band if candidate.grade_band and (candidate.grade_band.isdigit() or candidate.grade_band == "K") else working_grade,
             sequence_state=candidate.sequence_state,
             mastery_eligible=bool(
                 (candidate.concept_id or candidate.standard_code)
@@ -1201,7 +1203,7 @@ def personalize_lessons(
     for target in targets:
         if target.track in seen:
             continue
-        if not str(target.title or "").strip() or not _level_fits(target.working_level, grade_level):
+        if not str(target.title or "").strip() or (not _stays_in_sequence(target) and not _level_fits(target.working_level, grade_level)):
             continue
         seen.add(target.track)
         next_by_track.append(target)
@@ -1301,6 +1303,53 @@ async def individual_lessons_for(
     return cards
 
 
+async def _advance_evaluated_targets(plan: LearningPlanResponse, grade: str) -> LearningPlanResponse:
+    """Refresh completed sequential targets without regenerating the dated family plan."""
+    from app.services.curriculum_state import get_curriculum_state
+    targets = list(plan.progression_checklist or [])
+    if not targets:
+        return plan
+    try:
+        state = await get_curriculum_state(plan.student_id)
+    except Exception:
+        logger.warning("[LearningPlan] Skill evidence unavailable; preserve the saved target")
+        return plan
+    demonstrated = {row['skillId'] for row in state.get('skills') or [] if row['status'] in {'demonstrated', 'secure'}}
+    updated = []
+    replacement_suggestions = []
+    retired = set()
+    for target in targets:
+        identity = target.concept_id or target.standard_code
+        if target.track not in _SEQUENCE_TRACKS or identity not in demonstrated:
+            updated.append(target)
+            continue
+        retired.add(target.suggestion_id)
+        working_grade = target.working_level or grade
+        candidates = await tool_get_zpd_candidates(plan.student_id, target.track, limit=100)
+        next_suggestion = next((_zpd_to_suggestion(c) for c in candidates if _candidate_matches_grade(c, working_grade)), None)
+        if next_suggestion is None:
+            standards = await _get_grade_level_standards(plan.student_id, working_grade)
+            next_suggestion = next((_standard_suggestion(row) for row in standards
+                if row.track == target.track and not row.mastered and row.prerequisites_met and row.progression_ready), None)
+        if next_suggestion:
+            replacement_suggestions.append(next_suggestion)
+            updated.extend(_learner_progression_targets([next_suggestion], working_grade))
+    if not retired:
+        return plan
+    def with_targets(item):
+        return item.model_copy(update={'learner_progression_targets': updated,
+            'individual_skill_targets': [t for t in updated if t.track in _SEQUENCE_TRACKS]}) if item.delivery_mode == 'FAMILY_INVESTIGATION' else item
+
+    return plan.model_copy(update={
+        'family_investigation': with_targets(plan.family_investigation) if plan.family_investigation else None,
+        'family_investigations': [with_targets(item) for item in plan.family_investigations],
+        'progression_checklist': updated,
+        'progression_map_status': _progression_map_status(updated),
+        'individual_skills': [item for item in plan.individual_skills if item.id not in retired] + replacement_suggestions,
+        'suggestions': [with_targets(item) for item in plan.suggestions if item.id not in retired] + replacement_suggestions,
+    })
+
+
 async def _attach_individual_lessons(plan: LearningPlanResponse, *, refresh_family: bool = False) -> LearningPlanResponse:
     if refresh_family:
         grade = plan.placement.working_grade if plan.placement else "8"
@@ -1322,6 +1371,7 @@ async def _attach_individual_lessons(plan: LearningPlanResponse, *, refresh_fami
         ]
     grade = plan.placement.working_grade if plan.placement else "8"
     try:
+        plan = await _advance_evaluated_targets(plan, grade)
         lessons = await individual_lessons_for(investigations, grade)
         targets = list(plan.progression_checklist or []) or _learner_progression_targets(plan.suggestions, grade)
         year_skills = list(plan.year_skills or []) or _targets_from_standards(plan.grade_standards)

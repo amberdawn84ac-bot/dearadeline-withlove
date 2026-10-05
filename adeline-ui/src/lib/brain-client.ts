@@ -157,7 +157,7 @@ export function lessonRequestFromSuggestion(
     // approved family lesson, and generates a duplicate generic lesson instead.
     topic: suggestion.canonical_topic ?? suggestion.title,
     track: suggestion.track,
-    grade_level: suggestion.delivery_mode === "INDIVIDUAL_SKILL" ? suggestion.grade_band || gradeLevel : gradeLevel,
+    grade_level: suggestion.delivery_mode === "INDIVIDUAL_SKILL" && /^(K|[0-9]{1,2})$/.test(suggestion.grade_band || "") ? suggestion.grade_band! : gradeLevel,
     is_homestead: suggestion.track === "HOMESTEADING",
     required_standard_codes: requiredStandardCodes,
     concept_id: suggestion.concept_id,

@@ -102,3 +102,34 @@ async def test_only_the_independent_bound_block_can_record_evidence():
             metadata={'skill_tasks': tasks}, completed=['teach'], block_evaluations={'teach': 'correct'},
             block_id='teach', evaluation='correct', user_message='Yes, I understand.')
         write.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_returning_to_today_selects_next_skill_without_regenerating_family_unit():
+    from app.api.learning_plan import LearningPlanResponse, _advance_evaluated_targets
+    from app.tools.graph_query import ZPDCandidate
+    from tests.test_today_persistence import _saved_plan
+    data = _saved_plan()
+    data['progression_checklist'] = [target().model_dump()]
+    plan = LearningPlanResponse(**data)
+    candidate = ZPDCandidate(concept_id='ratio-2', title='Equivalent ratios', description='Compare equivalent ratios',
+        track='APPLIED_MATHEMATICS', difficulty='', standard_code='', grade_band='6', dependent_count=0, prereq_count=1,
+        prerequisite_ids=['ratio-1'])
+    with patch('app.services.curriculum_state.get_curriculum_state', new=AsyncMock(return_value={'skills': [{'skillId': 'ratio-1', 'status': 'developing'}]})) as state, patch('app.api.learning_plan.tool_get_zpd_candidates', new=AsyncMock(return_value=[candidate])) as query:
+        unchanged = await _advance_evaluated_targets(plan, '6')
+        assert unchanged is plan
+        query.assert_not_awaited()
+        state.return_value = {'skills': [{'skillId': 'ratio-1', 'status': 'demonstrated'}]}
+        updated = await _advance_evaluated_targets(plan, '6')
+        assert updated.progression_checklist[0].concept_id == 'ratio-2'
+        assert updated.suggestions[0] == plan.suggestions[0]
+        assert updated.family_investigation == plan.family_investigation
+
+
+def test_a_lower_subject_working_level_still_gets_its_next_step():
+    lower = target().model_copy(update={'working_level': '3'})
+    lesson = IndividualLesson(id='unit', investigation_id='unit', investigation_title='Plants',
+        lesson_id='plants', index=1, count=1, title='Observe plants', assignment='Measure growth.', track='CREATION_SCIENCE')
+    work = personalize_lessons([lesson], [lower], '8', {'CREATION_SCIENCE'})
+    assert work[1].skill_target.working_level == '3'
+    assert work[1].skill_target.concept_id == 'ratio-1'
