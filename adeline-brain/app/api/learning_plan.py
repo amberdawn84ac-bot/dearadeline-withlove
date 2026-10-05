@@ -1325,7 +1325,7 @@ async def _advance_evaluated_targets(plan: LearningPlanResponse, grade: str) -> 
             continue
         retired.add(target.suggestion_id)
         working_grade = target.working_level or grade
-        candidates = await tool_get_zpd_candidates(plan.student_id, target.track, limit=100)
+        candidates = await tool_get_zpd_candidates(plan.student_id, target.track, limit=100) if target.concept_id else []
         next_suggestion = next((_zpd_to_suggestion(c) for c in candidates if _candidate_matches_grade(c, working_grade)), None)
         if next_suggestion is None:
             standards = await _get_grade_level_standards(plan.student_id, working_grade)
