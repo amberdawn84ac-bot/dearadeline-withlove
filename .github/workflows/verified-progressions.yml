@@ -1,0 +1,31 @@
+name: Verified curriculum progressions
+on:
+  pull_request:
+  push:
+    branches: [main, codex/verified-prerequisite-mapping]
+jobs:
+  mapping:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: adeline
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: mapping_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_DSN: postgresql://adeline:testpassword@localhost:5432/mapping_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pytest pytest-asyncio 'sqlalchemy[asyncio]' asyncpg python-dotenv
+      - working-directory: adeline-brain
+        run: python -m pytest tests/test_progression_import.py tests/test_progression_placement.py tests/test_verified_progression_seed.py tests/test_complete_progression_review.py -q

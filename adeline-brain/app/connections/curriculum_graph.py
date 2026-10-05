@@ -331,15 +331,6 @@ class CurriculumGraph:
                     FROM "OASStandardRelation"
                     WHERE "relationType" = 'PREREQUISITE_FOR'
                       AND "reviewStatus" = 'VERIFIED'
-                    UNION
-                    SELECT later.code, earlier.code
-                    FROM "OASStandard" later
-                    JOIN "OASStandard" earlier
-                      ON earlier."progressionLane" = later."progressionLane"
-                     AND earlier.grade = later.grade
-                     AND earlier."progressionOrdinal" < later."progressionOrdinal"
-                     AND earlier."progressionIsTerminal" = TRUE
-                    WHERE later."progressionMode" = 'SEQUENTIAL'
                 ), reachable(code) AS (
                     SELECT code FROM "OASStandard"
                     WHERE grade = :grade AND "progressionIsTerminal" = TRUE
@@ -369,19 +360,7 @@ class CurriculumGraph:
                        s."progressionSourceUrl" AS progression_source_url,
                        s."progressionSourceVersion" AS progression_source_version,
                        s."progressionReviewStatus" AS progression_review_status,
-                       NOT EXISTS (
-                           SELECT 1
-                           FROM "OASStandard" earlier
-                           LEFT JOIN (SELECT "studentId", "skillId" AS "standardId", CASE status WHEN 'secure' THEN 'EXTENDING' WHEN 'demonstrated' THEN 'UNDERSTANDING' ELSE 'DEVELOPING' END AS proficiency FROM "StudentSkillState") earlier_mastery
-                             ON earlier_mastery."standardId" = earlier.code
-                            AND earlier_mastery."studentId" = :student_id
-                           WHERE earlier."progressionLane" = s."progressionLane"
-                             AND earlier.grade = s.grade
-                             AND earlier."progressionIsTerminal" = TRUE
-                             AND earlier."progressionOrdinal" < s."progressionOrdinal"
-                             AND COALESCE(earlier_mastery.proficiency::text, '')
-                                 NOT IN ('UNDERSTANDING', 'EXTENDING')
-                       ) AS progression_ready,
+                       TRUE AS progression_ready,
                        COALESCE(ARRAY(
                            SELECT relation."fromStandardId"
                            FROM "OASStandardRelation" relation

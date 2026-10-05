@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Verify that the complete Oklahoma standards set exists in Postgres."""
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -17,15 +18,17 @@ from app.connections.postgres import _get_session_factory
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-EXPECTED_OAS_COUNT = 3043
-MINIMUM_ACCEPTABLE_COUNT = 3000
+SEED_PATH = Path(__file__).resolve().parents[1] / "data" / "seeds" / "oas_to_8track.json"
 
 
 async def verify_oas_count() -> bool:
     async with _get_session_factory()() as session:
-        count = (await session.execute(text('SELECT COUNT(*) FROM "OASStandard"'))).scalar_one()
-    logger.info("Postgres OAS standards: %s/%s", count, EXPECTED_OAS_COUNT)
-    return count >= MINIMUM_ACCEPTABLE_COUNT
+        actual = set((await session.execute(text('SELECT code FROM "OASStandard"'))).scalars().all())
+    mappings = json.loads(SEED_PATH.read_text(encoding="utf-8"))["mappings"]
+    expected = {(row.get("standard_node") or row.get("neo4j_node"))["properties"]["id"] for row in mappings}
+    missing = expected - actual
+    logger.info("Postgres curriculum identities: %s/%s; missing: %s", len(actual & expected), len(expected), len(missing))
+    return not missing
 
 
 async def main() -> None:

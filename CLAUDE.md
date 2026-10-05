@@ -300,3 +300,16 @@ pnpm build
 cd adeline-brain && pytest tests/ -m "not slow"   # see CI's --ignore list for known exclusions
 cd adeline-ui && pnpm exec tsc --noEmit
 ```
+
+## Source-reviewed curriculum mapping (October 5, 2026)
+
+The catalog now retains 4,129 stable identities with exhaustive review metadata:
+2,861 current published ELA/math/science/social-studies/health standard records,
+31 explicit sequential literacy subskills, and clearly identified local,
+legacy, container and supporting records. Reviewed prerequisite gates and
+flexible progressions are separate; numeric standards order never creates a
+hard lock. Mathematics courses no longer all sit at grade 7. Existing evidence
+IDs survive corrected grade placement. Science standards feed the existing
+foundation bridge with learner-specific REVIEW/REINFORCE/TEACH and sources.
+See [the mapping review](docs/VERIFIED_CURRICULUM_MAPPING.md) for source versions,
+coverage, dispositions, reproducibility and real-Postgres validation.

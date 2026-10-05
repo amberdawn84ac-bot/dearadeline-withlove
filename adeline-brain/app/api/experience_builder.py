@@ -765,7 +765,7 @@ async def _stream(request: LessonRequest):
         from app.services.curriculum_state import science_foundations
         foundations = await science_foundations(request.student_id, [
             str(c['concept_id']) for c in (contract.get('unit_plan') or {}).get('essential_concepts', []) if c.get('concept_id')
-        ]) if request.track.value in {'CREATION_SCIENCE','HEALTH_NATUROPATHY','HOMESTEADING'} else []
+        ], standard_ids=request.required_standard_codes) if request.track.value in {'CREATION_SCIENCE','HEALTH_NATUROPATHY','HOMESTEADING'} else []
         integrated_targets = list(learner_contribution_data.get("skill_connections") or [])
         from app.services.skill_path import bound_skill_tasks, request_targets
         metadata = {

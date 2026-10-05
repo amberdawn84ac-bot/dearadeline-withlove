@@ -5,14 +5,15 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.connections.curriculum_graph import curriculum_graph
 from app.curriculum.progression_import import (
-    load_progression_file, prerequisite_cycles, validate_known_standards,
+    load_progression_file,
+    prerequisite_cycles,
+    validate_known_standards,
 )
 from scripts.import_standard_progressions import run
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 SEED_DIRECTORY = Path(__file__).resolve().parents[1] / 'data' / 'seeds'
 MAPPING = SEED_DIRECTORY / 'verified_standard_progressions.json'
@@ -22,11 +23,11 @@ def test_shipped_mapping_has_reviewed_sources_and_existing_terminal_ids():
     edges = load_progression_file(MAPPING)
     catalog = json.loads((SEED_DIRECTORY / 'oas_to_8track.json').read_text())['mappings']
     known = {(row.get('standard_node') or row.get('neo4j_node'))['properties']['id'] for row in catalog}
-    assert len(edges) == 30
+    assert len(edges) > 2000
     assert validate_known_standards(edges, known) == []
     assert prerequisite_cycles(edges) == []
     assert all(edge.review_status == 'VERIFIED' for edge in edges)
-    assert len({(e.from_standard_id, e.to_standard_id) for e in edges}) == len(edges)
+    assert len({(e.from_standard_id, e.relation_type, e.to_standard_id) for e in edges}) == len(edges)
 
 
 @pytest.mark.asyncio
@@ -65,7 +66,13 @@ async def test_imported_map_backtracks_and_unlocks_only_after_this_childs_eviden
                 await run(MAPPING, apply=True, allow_verified=True)
                 await run(MAPPING, apply=True, allow_verified=True)
             count = (await connection.execute(text('SELECT count(*) FROM "OASStandardRelation"'))).scalar_one()
-            assert count == 30  # restart must not duplicate or discard reviewed provenance
+            assert count == len(load_progression_file(MAPPING))  # restart must not duplicate or discard reviewed provenance
+            # Satisfy the map's additional dependencies while keeping the exact
+            # foundation under test unproved for this learner.
+            excluded = {'MATHEM_G5_5.N.1.3', 'MATHEM_G6_6.N.3.1'}
+            other_foundations = sorted({edge.from_standard_id for edge in load_progression_file(MAPPING) if edge.relation_type == 'PREREQUISITE_FOR'} - excluded - {'MATHEM_G5_5.A.1.1'})
+            await connection.execute(text('INSERT INTO "StudentSkillState" VALUES (:student,:skill,:status)'),
+                [{'student':'child','skill':skill,'status':'demonstrated'} for skill in other_foundations])
             await connection.execute(text('''INSERT INTO "StudentSkillState" VALUES
                 ('child','MATHEM_G5_5.N.1.3','developing'),
                 ('sibling','MATHEM_G5_5.N.1.3','secure'),
@@ -76,6 +83,7 @@ async def test_imported_map_backtracks_and_unlocks_only_after_this_childs_eviden
                 by_id = {row['id']: row for row in rows}
                 assert by_id['MATHEM_G5_5.N.1.3']['grade'] == 5
                 assert not by_id['MATHEM_G6_6.N.3.1']['prerequisites_met']
+                assert by_id['MATHEM_G6_6.N.3.1']['progression_ready']
                 assert not by_id['MATHEM_G6_6.N.3.2']['prerequisites_met']
                 await connection.execute(text('''UPDATE "StudentSkillState" SET status='demonstrated'
                     WHERE "studentId"='child' AND "skillId"='MATHEM_G5_5.N.1.3' '''))

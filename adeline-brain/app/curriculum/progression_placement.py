@@ -7,9 +7,11 @@ may create additional locks across lanes.
 """
 from __future__ import annotations
 
+import json
 import re
 from collections import defaultdict
-
+from functools import lru_cache
+from pathlib import Path
 
 SOURCE_BY_SUBJECT = {
     "English Language Arts": (
@@ -93,6 +95,12 @@ def _source(mapping: dict) -> tuple[str, str, str]:
     )
 
 
+@lru_cache(maxsize=1)
+def reviewed_placements() -> dict[str, dict]:
+    path = Path(__file__).resolve().parents[2] / "data" / "seeds" / "standard_progression_review.json"
+    return json.loads(path.read_text(encoding="utf-8"))["standards"] if path.exists() else {}
+
+
 def build_progression_placements(mappings: list[dict]) -> dict[str, dict]:
     """Return a complete placement record for every standard in the seed."""
     grouped: dict[str, list[dict]] = defaultdict(list)
@@ -147,6 +155,20 @@ def build_progression_placements(mappings: list[dict]) -> dict[str, dict]:
             "progression_parent_id": parent_id,
             "progression_is_terminal": is_terminal,
         }
+        review = reviewed_placements().get(standard_id)
+        if review:
+            lane = review["lane"]
+            prepared[standard_id].update({
+                "progression_lane": lane,
+                "progression_mode": review["mode"],
+                "progression_source_title": review["source_title"],
+                "progression_source_url": review["source_url"],
+                "progression_source_version": review["source_version"],
+                "progression_review_status": review["review_status"],
+                "progression_evidence_note": review["evidence_note"],
+                "progression_is_terminal": review["terminal"],
+                "progression_parent_id": review["parent_id"] or parent_id,
+            })
         grouped[lane].append(mapping)
 
     difficulty_rank = {"EMERGING": 0, "DEVELOPING": 1, "EXPANDING": 2, "MASTERING": 3}
