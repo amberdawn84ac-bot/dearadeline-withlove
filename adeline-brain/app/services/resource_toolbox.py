@@ -6,6 +6,15 @@ maker receives only the selected contract.
 """
 
 RESOURCE_TOOLBOX = {
+    "science_lab": {
+        "definition": "A complete safe investigation with a learner-owned data notebook and evidence-based conclusion.",
+        "use_when": "The canonical objective requires testing or observing a phenomenon and collecting interpretable evidence.",
+        "avoid_when": "A short observation suffices, essential materials are unavailable, or the proposed procedure is unsafe.",
+        "must_include": ["Question and prediction", "Variables and controls for experiments, limits for observations", "Safe materials and procedure", "Blank labeled data table with units", "Graph only for appropriate numeric measurements", "Claim, evidence and reasoning prompts"],
+        "success": "Learner collects actual data, interprets it proportionately, and explains the claim with scientific reasoning and limits.",
+        "exit": "Save the notebook, review the actual evidence, then resume the canonical investigation. Completing a table is not mastery.",
+        "max_minutes": 60,
+    },
     "mini_lesson": {
         "definition": "Brief explicit teaching of one idea needed for the current activity.",
         "use_when": "A new concept or observed concept gap blocks the saved objective.",

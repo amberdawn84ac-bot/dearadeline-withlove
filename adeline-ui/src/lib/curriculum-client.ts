@@ -31,6 +31,12 @@ export interface StudentCharacter { name: string; identity: string; role_prefere
 export const saveStudentCharacter = (student: string, body: StudentCharacter) => request(`/students/${encodeURIComponent(student)}/character`, body, 'PUT');
 export const getStudentCharacter = (student: string) => request<{ name: string; identity: string; rolePreferences: string[] | string; persistentTraits: string[] | string; visualData: Record<string, unknown> } | null>(`/students/${encodeURIComponent(student)}/character`);
 export const enqueueFamilyUnit = (household: string, title: string, experiences: Array<{canonical_topic:string;track:string}>) => request(`/households/${encodeURIComponent(household)}/units`, {title,experiences});
+export interface InvestigationSequence {
+  title: string; shared_question: string;
+  sessions: Array<{ title: string; objective: string; investigation: string; evidence_required: string; resource_hint: string; depends_on: number[] }>;
+  experiences: Array<{ canonical_topic: string; track: string }>;
+}
+export const planFamilyInvestigation = (household: string, topic: string, session_count: number, available_materials: string) => request<InvestigationSequence>(`/households/${encodeURIComponent(household)}/units/plan`, { topic, session_count, available_materials });
 export const evaluateEvidence = (student: string, attempt: string, skillId: string, result: 'developing'|'demonstrated'|'secure', reasoning: string) => request(`/students/${encodeURIComponent(student)}/evidence/${encodeURIComponent(attempt)}/evaluate`, {skill_id:skillId,result,reasoning});
 export interface TimelineCard {id:string;dateStart:string;dateEnd?:string;claim:string;studentName:string;uncertainty:string;sources:Array<{url?:string}>;omittedPerspectives:string[]}
 export const getFamilyTimeline = (household:string) => request<TimelineCard[]>(`/households/${encodeURIComponent(household)}/timeline`);

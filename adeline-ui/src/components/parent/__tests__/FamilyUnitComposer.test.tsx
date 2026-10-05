@@ -1,8 +1,8 @@
 import {render,screen,fireEvent,waitFor} from '@testing-library/react';
 import {beforeEach,describe,expect,it,vi} from 'vitest';
 import {FamilyUnitComposer} from '../FamilyUnitComposer';
-import {enqueueFamilyUnit} from '@/lib/curriculum-client';
-vi.mock('@/lib/curriculum-client',()=>({enqueueFamilyUnit:vi.fn()}));
+import {enqueueFamilyUnit,planFamilyInvestigation} from '@/lib/curriculum-client';
+vi.mock('@/lib/curriculum-client',()=>({enqueueFamilyUnit:vi.fn(),planFamilyInvestigation:vi.fn()}));
 
 describe('multi-experience family unit',()=>{
   beforeEach(()=>vi.clearAllMocks());
@@ -31,5 +31,18 @@ describe('multi-experience family unit',()=>{
     await screen.findByRole('alert');
     expect(screen.getByLabelText('Unit title')).toHaveValue('Water');
     expect(screen.getByLabelText('Experience 1')).toHaveValue('Measure runoff');
+  });
+  it('previews generated sessions before queueing through the existing unit store',async()=>{
+    vi.mocked(planFamilyInvestigation).mockResolvedValue({title:'Forensic scientist',shared_question:'What does evidence show?',sessions:[{title:'Measure',objective:'Test a claim',investigation:'Compare samples',evidence_required:'Actual data',resource_hint:'science_lab',depends_on:[]}],experiences:[{canonical_topic:'Forensic scientist / Measure. Resource: science_lab.',track:'CREATION_SCIENCE'}]});
+    vi.mocked(enqueueFamilyUnit).mockResolvedValue({});
+    render(<FamilyUnitComposer householdId="family" tracks={{CREATION_SCIENCE:'Science'}} onChange={vi.fn()}/>);
+    fireEvent.change(screen.getByLabelText('Unit title'),{target:{value:'Forensic scientist'}});
+    fireEvent.change(screen.getByLabelText('Materials you have'),{target:{value:'paper and ruler'}});
+    fireEvent.click(screen.getByRole('button',{name:'Let Adeline plan the sessions'}));
+    expect(await screen.findByText('What does evidence show?')).toBeInTheDocument();
+    expect(enqueueFamilyUnit).not.toHaveBeenCalled();
+    expect(planFamilyInvestigation).toHaveBeenCalledWith('family','Forensic scientist',4,'paper and ruler');
+    fireEvent.click(screen.getByRole('button',{name:'Queue unit'}));
+    await waitFor(()=>expect(enqueueFamilyUnit).toHaveBeenCalledWith('family','Forensic scientist',[{canonical_topic:'Forensic scientist / Measure. Resource: science_lab.',track:'CREATION_SCIENCE'}]));
   });
 });

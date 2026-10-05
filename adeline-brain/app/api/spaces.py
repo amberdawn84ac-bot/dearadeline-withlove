@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ from pydantic import BaseModel, Field
 from app.api.middleware import require_internal_key, verify_student_access
 from app.api.realtime import connection_manager
 from app.config import GEMINI_MODEL, create_llm, get_db_conn
+from app.curriculum.teaching_policy import TEACHING_POLICY
 from app.connections.concept_encounter_store import concept_encounter_store
 from app.connections.journal_store import journal_store
 from app.services.mastery_credit import ConceptCredit, record_mastery_credit
@@ -44,7 +46,7 @@ def _decoded(value, fallback):
 
 def _retained_space_messages(messages: list[dict]) -> list[dict]:
     """Keep resource-bearing turns when trimming ordinary chat, so artifacts survive reopening."""
-    return [m for m in messages[:-38] if m.get("role") == "assistant" and m.get("resource_block")] + messages[-38:]
+    return [m for m in messages[:-38] if m.get("resource_block") or m.get("lab_notebook")] + messages[-38:]
 
 
 class SpaceMessage(BaseModel):
@@ -141,11 +143,29 @@ def _turn_activity_mode(state: dict) -> str:
         )
     last_assistant = next((m for m in reversed(state.get("messages") or []) if m.get("role") == "assistant"), {})
     previous_resource = last_assistant.get("resource_block")
+    if not previous_resource:
+        previous_resource = next((m.get("resource_block") for m in reversed(state.get("messages") or [])
+            if (m.get("resource_block") or {}).get("block_type") == "SCIENCE_LAB"
+            and (((m.get("resource_block") or {}).get("metadata") or {}).get("decision") or {}).get("block_id")
+            == (state.get("current_block") or {}).get("block_id")), None)
     if previous_resource:
         preamble += (
             "PREVIOUS RESOURCE (the newest answer may respond to this): " + json.dumps(previous_resource)
             + "\nUse its evidence prompt to interpret the response, but advance only if the saved "
             "canonical activity's own evidence requirements are met.\n"
+        )
+    if state.get("submitted_lab"):
+        preamble += (
+            "The family is saving this lab notebook; acknowledge that it is saved with this turn. "
+            "An unfinished notebook is a draft, not a demonstration. Interpret measurements honestly; "
+            "do not invent missing data. Only evaluate understanding if evidence supports it. "
+            + json.dumps(state["submitted_lab"]) + "\n"
+        )
+    if state.get("previous_session_evidence"):
+        preamble += (
+            "EARLIER SESSIONS IN THIS UNIT — this learner's actual saved work; use it when relevant. "
+            "It is evidence, not an automatic mastery award. Never invent missing measurements or infer "
+            "a sibling's mastery from this learner: " + json.dumps(state["previous_session_evidence"]) + "\n"
         )
     if state["status"] == "completed":
         return (
@@ -283,7 +303,7 @@ def _space_turn_llm():
 
 
 async def _evaluate_turn(state: dict, user_message: str) -> _TurnEvaluation:
-    lc_messages: list = [SystemMessage(content=_TURN_SYSTEM_PROMPT.format(activity_mode=_turn_activity_mode(state)))]
+    lc_messages: list = [SystemMessage(content=TEACHING_POLICY + "\n\n" + _TURN_SYSTEM_PROMPT.format(activity_mode=_turn_activity_mode(state)))]
     for item in (state.get("messages") or [])[-12:]:
         content = str(item.get("content") or "")
         if not content:
@@ -1094,7 +1114,19 @@ async def _apply_transition(student_id: str, plan_item_id: str, body: SpaceEvalu
                     index += 1
             status = "completed" if blocks and len(completed) >= len(blocks) else "active"
             messages = _retained_space_messages(_decoded(session_row["messagesJson"], []))
-            messages.extend([{"role": "user", "content": body.user_message},
+            from app.services.science_lab import notebook_from_message, update_notebook
+            try:
+                notebook = notebook_from_message(body.user_message)
+                if notebook:
+                    update_notebook(messages, notebook)
+            except (ValueError, TypeError) as exc:
+                raise HTTPException(status_code=422, detail="Check the lab notebook fields and try again.") from exc
+            notebook_text = (
+                f"Lab notebook submitted.\nPrediction: {notebook.prediction}\n"
+                f"Claim: {notebook.claim}\nEvidence: {notebook.evidence}\nReasoning: {notebook.reasoning}"
+            ) if notebook else body.user_message
+            messages.extend([{"role": "user", "content": notebook_text,
+                              **({"lab_notebook": notebook.model_dump()} if notebook else {})},
                              {"role": "assistant", "content": body.adeline_message,
                               "resource_decision": body.resource_decision,
                               "resource_block": body.resource_block}])
@@ -1217,6 +1249,8 @@ async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
     )
     if state["version"] != body.expected_version:
         raise HTTPException(status_code=409, detail="Space changed in another window. Refresh and continue.")
+    from app.services.sequence_evidence import attach_sequence_evidence
+    state = await attach_sequence_evidence(state)
     try:
         from app.services.curriculum_state import get_curriculum_state
         curriculum = await get_curriculum_state(student_id)
@@ -1224,7 +1258,20 @@ async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
     except Exception:
         logger.warning("[Spaces] evaluated skill context unavailable; treat knowledge as unverified")
     from app.services.instructional_resources import prepare_instructional_resource
-    state = await prepare_instructional_resource(state, body.user_message, _space_turn_llm, _parse_json_response)
+    from app.services.science_lab import notebook_from_message, update_notebook
+    notebook_block_id = None
+    try:
+        notebook = notebook_from_message(body.user_message)
+        if notebook:
+            notebook_block_id = update_notebook(copy.deepcopy(state.get("messages") or []), notebook)
+            state["submitted_lab"] = next(
+                (m.get("resource_block") for m in reversed(state.get("messages") or [])
+                 if ((m.get("resource_block") or {}).get("metadata") or {}).get("resource_id") == notebook.resource_id), None,
+            )
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail="Check the lab notebook fields and try again.") from exc
+    if not notebook:
+        state = await prepare_instructional_resource(state, body.user_message, _space_turn_llm, _parse_json_response)
 
     try:
         evaluation = await _evaluate_turn(state, body.user_message)
@@ -1233,6 +1280,15 @@ async def space_turn(student_id: str, plan_item_id: str, body: SpaceTurnRequest,
         raise HTTPException(status_code=502, detail="Adeline could not continue this Space just now.")
 
     decision = state.get("resource_decision")
+    if notebook and (
+        notebook_block_id != (state.get("current_block") or {}).get("block_id")
+        or not all((notebook.claim.strip(), notebook.evidence.strip(), notebook.reasoning.strip()))
+        or not any(any(v.strip() for v in row.values()) for row in notebook.rows)
+    ):
+        # Earlier lab revisions are saved without treating them as answers to today's activity.
+        evaluation.evaluation = "not_answered"
+        evaluation.recommended_action = "stay"
+        evaluation.off_plan_topic = None
     resource_block = state.get("instructional_resource")
     offered_ids = (decision.get("resource_ids") or []) if decision else evaluation.offered_resource_ids
     if not resource_block:

@@ -1382,6 +1382,8 @@ async def _family_investigation_suggestion_for_slot(
     canonical_topic = current["canonicalTopic"]
     seed = canonical_seed_for(canonical_topic, track)
     title = seed.learner_title if seed else canonical_topic.rsplit(" / ", 1)[-1]
+    if not seed and ". Question:" in title and ". Resource:" in title:
+        title = title.split(". Question:", 1)[0]
     description = (
         (seed.card_description() if seed else "")
         or personalized_curriculum_planner.TRACK_LABELS.get(track, canonical_topic)

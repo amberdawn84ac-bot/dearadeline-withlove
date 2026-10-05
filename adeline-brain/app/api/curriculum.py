@@ -8,6 +8,7 @@ from app.api.middleware import verify_household_access, verify_student_access
 from app.config import get_db_conn
 from app.connections.family_unit_store import family_unit_store
 from app.schemas.api_models import Track
+from app.services.investigation_sequence import SequenceRequest, plan_investigation
 
 router = APIRouter(prefix="/curriculum", tags=["curriculum"])
 
@@ -30,13 +31,30 @@ def _record(row) -> dict:
 
 
 class UnitExperience(BaseModel):
-    canonical_topic: str = Field(min_length=1, max_length=500)
+    canonical_topic: str = Field(min_length=1, max_length=1000)
     track: Track
 
 
 class UnitRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     experiences: list[UnitExperience] = Field(min_length=1, max_length=50)
+
+
+
+
+@router.post("/households/{household_id}/units/plan")
+async def plan_family_unit(household_id: str, body: SequenceRequest, _: str = Depends(verify_household_access)):
+    """Preview an ordered outline; queueing it uses the ordinary unit endpoint."""
+    from app.api.spaces import _space_turn_llm, _parse_json_response
+    conn = await get_db_conn()
+    try:
+        learners = await conn.fetch('SELECT "gradeLevel" FROM "User" WHERE "parentId"=$1 AND role=\'STUDENT\'', household_id)
+    finally:
+        await conn.close()
+    try:
+        return await plan_investigation(body, [dict(r) for r in learners], _space_turn_llm, _parse_json_response)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="The sequence could not be prepared. Your current unit is unchanged; try again.") from exc
 
 
 @router.get("/households/{household_id}/unit")
