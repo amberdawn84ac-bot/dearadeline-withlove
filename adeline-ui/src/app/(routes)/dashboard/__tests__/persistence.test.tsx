@@ -121,6 +121,39 @@ describe('durable Today and experience reopening', () => {
     );
   });
 
+  it('keeps real tasks and lesson links while hiding planner copy from saved Today records', async () => {
+    const savedPlan = {
+      ...plan,
+      individual_lessons: [
+        { ...plan.individual_lessons![0], faith_talk: 'A discussion inside the lesson.', think_tank: 'A question inside the lesson.' },
+        {
+          id: 'gap:math-1', investigation_id: 'math-1', investigation_title: 'Stays in order',
+          slot: 'gap', lesson_id: 'gap', index: 1, count: 1, title: 'Compare ratios',
+          assignment: "Today's math mini lesson, level 6. The unit does not use this skill, so it is practiced on its own. It is still the next skill, so this learner does not fall behind.",
+          track: 'APPLIED_MATHEMATICS', kind: 'gap',
+        },
+        {
+          id: 'gap:ela-1', investigation_id: 'ela-1', investigation_title: 'Stays in order',
+          slot: 'gap', lesson_id: 'gap', index: 1, count: 1, title: 'Listen and respond',
+          assignment: 'Listen to the recording and summarize the main point.',
+          track: 'LITERATURE_LANGUAGE', kind: 'gap',
+        },
+      ],
+    } as brain.LearningPlanResponse;
+    vi.mocked(brain.peekLearningPlan).mockReturnValue(savedPlan);
+    vi.mocked(brain.getSavedTodayPlan).mockResolvedValue(savedPlan);
+
+    render(<TodayPage />);
+    await screen.findByRole('heading', { name: 'Compare ratios' });
+    expect(screen.getByRole('heading', { name: 'The crime scene' })).toBeInTheDocument();
+    expect(screen.getByText('Walk the boundary and sketch what you see.')).toBeInTheDocument();
+    expect(screen.getByText('Listen to the recording and summarize the main point.')).toBeInTheDocument();
+    expect(screen.queryByText(/fall behind|level 6|sequence keeps moving|unit is the lens|Faith talk|Think tank/)).not.toBeInTheDocument();
+    expect(screen.queryByText('A discussion inside the lesson.')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Open this lesson →' })[1]).toHaveAttribute('href', '/dashboard/lesson/math-1');
+    expect(brain.getLearningPlan).not.toHaveBeenCalled();
+  });
+
   it('reopens a ready experience with zero build/author requests', async () => {
     const first = render(<CanonicalLessonPage />);
     await screen.findByText('Saved lesson: Creek evidence');
