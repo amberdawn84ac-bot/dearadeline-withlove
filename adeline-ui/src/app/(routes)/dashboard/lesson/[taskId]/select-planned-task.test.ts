@@ -71,11 +71,17 @@ describe('selectPlannedTask', () => {
         assignment: "Today's math mini lesson, level 8.",
         track: 'APPLIED_MATHEMATICS',
         kind: 'gap',
+        skill_target: { suggestion_id: 'ratios', domain: 'math', title: 'Compare ratios', track: 'APPLIED_MATHEMATICS', concept_id: 'ratio-1', standard_code: 'MATH.6.R.1', sequence_state: 'READY', prerequisite_ids: ['fraction-1'], working_level: '6', integration_status: 'PENDING_FIT_CHECK', integration_rule: 'Use only a genuine fit.', mastery_eligible: true },
       }],
     }, 'ratios');
 
     expect(selected?.title).toBe('Compare ratios');
     expect(selected?.delivery_mode).toBe('INDIVIDUAL_SKILL');
+    expect(selected?.concept_id).toBe('ratio-1');
+    expect(selected?.standard_code).toBe('MATH.6.R.1');
+    expect(selected?.sequence_policy).toBe('HARD');
+    expect(selected?.prerequisite_concept_ids).toEqual(['fraction-1']);
+    expect(selected?.learner_progression_targets?.[0].concept_id).toBe('ratio-1');
   });
 
   it('does not throw when roadmap months are missing', () => {

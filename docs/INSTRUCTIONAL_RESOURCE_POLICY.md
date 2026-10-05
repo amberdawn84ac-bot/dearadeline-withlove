@@ -88,3 +88,28 @@ existing canonical author builds each experience. Earlier sessions' saved lab
 notebooks and learner responses provide context for the same learner in later
 sessions; siblings' evidence is not cross-credited. A session may span multiple
 days. Advancement remains the existing explicit completion flow.
+
+## Exact skill sequencing and mini-units
+
+Sequential math/literacy work retains its concept or standard ID, working level,
+readiness and prerequisites when it is projected into a separate Today card.
+The single canonical author receives current targets and an explicit fit rule.
+A mini-unit must bind the exact target to a real lesson and independent
+demonstration block; an unrelated or unbound draft enters the author's repair
+loop instead of becoming a ready learner experience. Mini-unit cache identity
+includes target and level, while shared family canonicals remain shared.
+
+The Space teacher sees the bound evidence requirements. Correct independent
+responses on those blocks record the exact skill in StudentSkillState. Guided
+responses, teaching-block acknowledgments, partial responses and unrelated
+lesson scores do not award that skill. Bound progression work is not credited
+by a nearest-topic standards search. Server-side opening checks reject stale
+readiness claims. Concept prerequisites and placed/verified standards sequences
+use evaluated skill state, not BKT estimates or a sibling's performance.
+
+This does not invent missing prerequisite edges or certify unmapped sequences.
+Older probability/legacy mastery records alone no longer unlock the next skill;
+existing evaluated evidence remains authoritative. Tests cover inside/outside
+unit routing, target preservation, author binding, partial/independent evidence,
+stale requests and the actual concept-prerequisite SQL in GitHub Postgres.
+Live model quality and the deployed browser flow still need hands-on review.

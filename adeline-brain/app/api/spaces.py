@@ -126,6 +126,13 @@ def _turn_activity_mode(state: dict) -> str:
     teaching = _teaching_context(state)
     offers = _offer_catalog_prompt(state)
     preamble = f"{teaching}\n\n{offers}\n\n" if offers else f"{teaching}\n\n"
+    foundations = (state.get("metadata") or {}).get("science_foundations") or []
+    if foundations:
+        preamble += "VERIFIED SCIENCE FOUNDATIONS, oldest first: " + json.dumps(foundations) + "\nBriefly review demonstrated foundations, reinforce developing ones, and teach/check missing foundations before dependent reasoning. Do not pretend this list proves mastery or invent prerequisite edges.\n"
+    skill_tasks = [t for t in (state.get("metadata") or {}).get("skill_tasks") or []
+                   if (state.get("current_block") or {}).get("block_id") in t["block_ids"]]
+    if skill_tasks:
+        preamble += "EXACT SKILL DEMONSTRATION: " + json.dumps(skill_tasks) + "\nJudge the newest independent response against these evidence requirements. Help requests, guided repetition, and acknowledgments are not correct demonstrations. Teach or guide when needed; then ask for a fresh independent attempt.\n"
     decision = state.get("resource_decision")
     resource = state.get("instructional_resource")
     if decision:
@@ -901,8 +908,12 @@ async def _credit_newly_completed_lesson(
         # Finishing navigation without a correct demonstration cannot raise BKT.
         if proficiency not in {"UNDERSTANDING", "EXTENDING"}:
             concept_credits = []
+        exact_ids = {t["skill_id"] for t in metadata.get("skill_tasks") or []}
+        concept_credits = [c for c in concept_credits if c.concept_id not in exact_ids]
         grade = _grade_from_metadata(metadata)
-        oas_standards = await _topic_oas_standards(track, grade, _lesson_content(blocks, lesson))
+        # Exact progression work is credited at its bound demonstration blocks,
+        # never by topic similarity or the whole lesson's average score.
+        oas_standards = [] if metadata.get("skill_tasks") or track in {"APPLIED_MATHEMATICS", "ENGLISH_LITERATURE"} else await _topic_oas_standards(track, grade, _lesson_content(blocks, lesson))
 
         await record_mastery_credit(
             student_id=student_id,
@@ -1146,6 +1157,15 @@ async def _apply_transition(student_id: str, plan_item_id: str, body: SpaceEvalu
                       "track": experience_row["track"] or "", "blocks": blocks, "metadata": metadata}
         result = _state(updated_session, experience)
         result["resource_triggers"] = body.resource_triggers
+
+        from app.services.skill_path import record_skill_response
+        try:
+            await record_skill_response(student_id=student_id, plan_item_id=plan_item_id,
+                session_id=session_row["id"], metadata=metadata, completed=completed,
+                block_evaluations=block_evaluations, block_id=current_id,
+                evaluation=body.evaluation, user_message=body.user_message)
+        except Exception:
+            logger.exception("[Spaces] Exact skill evidence write failed")
 
         credited_this_session: list[str] = []
         if current_id:

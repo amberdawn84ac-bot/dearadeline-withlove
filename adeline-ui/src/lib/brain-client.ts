@@ -144,7 +144,7 @@ export interface LessonRequest {
  * planned title, description, track, grade adaptation, or homestead handling.
  */
 export function lessonRequestFromSuggestion(
-  suggestion: Pick<LessonSuggestion, "id" | "title" | "description" | "track" | "canonical_topic" | "concept_id" | "sequence_target_id" | "sequence_policy" | "sequence_state" | "prerequisite_concept_ids" | "prerequisite_standard_ids" | "bridge_required" | "delivery_mode" | "shared_investigation_id" | "individual_skill_targets" | "learner_progression_targets" | "resource_packet">,
+  suggestion: Pick<LessonSuggestion, "id" | "title" | "description" | "track" | "grade_band" | "canonical_topic" | "concept_id" | "sequence_target_id" | "sequence_policy" | "sequence_state" | "prerequisite_concept_ids" | "prerequisite_standard_ids" | "bridge_required" | "delivery_mode" | "shared_investigation_id" | "individual_skill_targets" | "learner_progression_targets" | "resource_packet">,
   studentId: string,
   gradeLevel: string,
   requiredStandardCodes: string[] = [],
@@ -157,7 +157,7 @@ export function lessonRequestFromSuggestion(
     // approved family lesson, and generates a duplicate generic lesson instead.
     topic: suggestion.canonical_topic ?? suggestion.title,
     track: suggestion.track,
-    grade_level: gradeLevel,
+    grade_level: suggestion.delivery_mode === "INDIVIDUAL_SKILL" && /^(K|[0-9]{1,2})$/.test(suggestion.grade_band || "") ? suggestion.grade_band! : gradeLevel,
     is_homestead: suggestion.track === "HOMESTEADING",
     required_standard_codes: requiredStandardCodes,
     concept_id: suggestion.concept_id,
@@ -1496,6 +1496,7 @@ export interface IndividualLesson {
   assignment: string;
   track: Track;
   kind?: 'investigation' | 'gap';
+  skill_target?: IndividualSkillTarget;
   faith_talk?: string;
   think_tank?: string;
   connections?: LessonConnection[];

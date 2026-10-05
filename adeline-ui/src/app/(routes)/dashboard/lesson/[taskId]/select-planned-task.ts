@@ -6,6 +6,7 @@ export type PlanLookup = {
   family_investigation?: LearningPlanResponse['family_investigation'];
   individual_skills?: LearningPlanResponse['individual_skills'];
   individual_lessons?: IndividualLesson[];
+  progression_checklist?: LearningPlanResponse['progression_checklist'];
   roadmap?: LearningPlanResponse['roadmap'] | null;
 };
 
@@ -56,8 +57,9 @@ export function selectPlannedTask(plan: PlanLookup, requestedId: string): {
       (lesson) => lesson.kind === 'gap' && (lesson.investigation_id === requestedId || lesson.id === requestedId),
     );
     if (!mini) return { selected: undefined, requiredStandardCodes: [] };
+    const target = mini.skill_target ?? plan.progression_checklist?.find((item) => item.suggestion_id === mini.investigation_id);
     return {
-      requiredStandardCodes: [],
+      requiredStandardCodes: target?.standard_code ? [target.standard_code] : [],
       selected: {
         id: mini.investigation_id,
         title: mini.title,
@@ -70,14 +72,19 @@ export function selectPlannedTask(plan: PlanLookup, requestedId: string): {
         canonical_ready: false,
         mission_kind: 'learning_mission',
         success_criteria: [],
-        sequence_policy: 'OPEN',
-        sequence_state: 'READY',
+        grade_band: target?.working_level,
+        concept_id: target?.concept_id,
+        standard_code: target?.standard_code,
+        sequence_target_id: target?.concept_id ?? target?.standard_code,
+        sequence_policy: target ? 'HARD' : 'SUPPORTED',
+        sequence_state: target?.sequence_state ?? 'BRIDGE_REQUIRED',
         prerequisite_readiness: 1,
-        prerequisite_concept_ids: [],
-        prerequisite_standard_ids: [],
-        bridge_required: false,
+        prerequisite_concept_ids: target?.concept_id ? target.prerequisite_ids ?? [] : [],
+        prerequisite_standard_ids: target?.standard_code ? target.prerequisite_ids ?? [] : [],
+        bridge_required: !target,
         delivery_mode: 'INDIVIDUAL_SKILL',
-        individual_skill_targets: [],
+        individual_skill_targets: target ? [target] : [],
+        learner_progression_targets: target ? [target] : [],
       },
     };
   }
