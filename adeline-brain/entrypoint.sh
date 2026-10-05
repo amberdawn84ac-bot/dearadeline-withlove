@@ -37,6 +37,9 @@ python scripts/seed_knowledge_graph.py || { echo "[entrypoint] Curriculum graph 
 echo "[entrypoint] Ensuring Oklahoma standards are seeded in Postgres..."
 python scripts/seed_oas_standards.py || { echo "[entrypoint] OAS standards seed failed - EXITING"; exit 1; }
 
+echo "[entrypoint] Ensuring reviewed standards prerequisites are seeded..."
+PYTHONPATH=/app python -m scripts.import_standard_progressions data/seeds/verified_standard_progressions.json --apply --allow-verified || { echo "[entrypoint] Verified progression seed failed - EXITING"; exit 1; }
+
 # Run seeds if RUN_SEEDS env var is set (case-insensitive)
 if [ "$RUN_SEEDS" = "true" ] || [ "$RUN_SEEDS" = "TRUE" ]; then
     echo "[entrypoint] Verifying OAS standards count..."
