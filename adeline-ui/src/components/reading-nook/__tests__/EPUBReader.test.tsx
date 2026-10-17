@@ -3,21 +3,29 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { EPUBReader } from '../EPUBReader';
 import { ReaderProvider } from '@/lib/reader-context';
 
+const epubMocks = vi.hoisted(() => ({
+  open: vi.fn(), renderTarget: vi.fn(), generate: vi.fn(), destroy: vi.fn(), handlers: {} as Record<string, (arg: unknown) => void>,
+}));
+
 // Mock EPUB.js at top of file before describe block
 vi.mock('epubjs', () => {
   const makeBook = () => ({
-    open: vi.fn().mockResolvedValue(undefined),
-    renderTo: vi.fn(() => ({
+    open: epubMocks.open,
+    destroy: epubMocks.destroy,
+    renderTo: vi.fn((target: HTMLElement | null) => {
+      if (!target) throw new Error('Reader container missing');
+      epubMocks.renderTarget(target);
+      return ({
       display: vi.fn().mockResolvedValue(undefined),
       prev: vi.fn().mockResolvedValue(undefined),
       next: vi.fn().mockResolvedValue(undefined),
-      on: vi.fn(),
+      on: vi.fn((name: string, handler: (arg: unknown) => void) => { epubMocks.handlers[name] = handler; }),
       off: vi.fn(),
-    })),
+    }); }),
     spine: { get: vi.fn(() => ({ next: vi.fn(() => null) })) },
     locations: {
-      generate: vi.fn().mockResolvedValue(undefined),
-      percentage: vi.fn(() => 0.5),
+      generate: epubMocks.generate,
+      percentageFromCfi: vi.fn(() => 0.5),
     },
     ready: Promise.resolve(),
     navigation: { toc: [] },
@@ -56,6 +64,8 @@ describe('EPUBReader', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    epubMocks.open.mockResolvedValue(undefined);
+    epubMocks.generate.mockResolvedValue(undefined);
 
     // Mock fetch
     vi.stubGlobal('fetch', vi.fn());
@@ -131,47 +141,33 @@ describe('EPUBReader', () => {
     });
   });
 
+  it('opens extensionless proxy URLs as EPUB files in a mounted viewer', async () => {
+    renderReader({ ...mockProps, book: { ...mockBook, source_url: '/api/reading-books/classic-1' } });
+    await waitFor(() => expect(epubMocks.open).toHaveBeenCalledWith('/api/reading-books/classic-1', 'epub'));
+    await waitFor(() => expect(epubMocks.renderTarget).toHaveBeenCalledWith(screen.getByTestId('epub-viewer')));
+    await waitFor(() => expect(screen.queryByText('Loading book...')).not.toBeInTheDocument());
+  });
+
+  it('shows the book while the progress index is still building and destroys it on exit', async () => {
+    epubMocks.generate.mockReturnValue(new Promise(() => {}));
+    const view = renderReader();
+    await waitFor(() => expect(epubMocks.generate).toHaveBeenCalled());
+    expect(screen.queryByText('Loading book...')).not.toBeInTheDocument();
+    view.unmount();
+    expect(epubMocks.destroy).toHaveBeenCalledOnce();
+  });
+
+  it('uses the EPUB location API without crashing on the first page', async () => {
+    renderReader();
+    await waitFor(() => expect(epubMocks.renderTarget).toHaveBeenCalled());
+    expect(() => epubMocks.handlers.relocated({ start: { cfi: 'epubcfi(test)', href: 'chapter.xhtml' }, atEnd: false })).not.toThrow();
+    expect(await screen.findByText('50% complete')).toBeInTheDocument();
+  });
+
   it('handles error state gracefully', async () => {
-    // Create a custom mock for this test that rejects on open
-    const EPubMock = vi.fn(() => ({
-      open: vi.fn().mockRejectedValue(new Error('404')),
-      renderTo: vi.fn(() => ({
-        display: vi.fn().mockResolvedValue(undefined),
-        prev: vi.fn().mockResolvedValue(undefined),
-        next: vi.fn().mockResolvedValue(undefined),
-        on: vi.fn(),
-        off: vi.fn(),
-      })),
-      spine: { get: vi.fn(() => ({ next: vi.fn(() => null) })) },
-      locations: {
-        generate: vi.fn().mockResolvedValue(undefined),
-        percentage: vi.fn(() => 0.5),
-      },
-      ready: Promise.resolve(),
-      navigation: { toc: [] },
-    }));
-
-    vi.doMock('epubjs', () => ({
-      default: EPubMock,
-    }));
-
-    const errorProps = {
-      ...mockProps,
-      book: {
-        ...mockBook,
-        source_url: 'https://example.com/nonexistent.epub',
-      },
-    };
-
-    // Mock fetch to return 404
-    (global.fetch as any).mockRejectedValueOnce(
-      new Error('Failed to load book')
-    );
-
-    renderReader(errorProps);
-
-    await waitFor(() => {
-      expect(screen.getByText('Back to Shelf')).toBeInTheDocument();
-    });
+    epubMocks.open.mockRejectedValueOnce(new Error('Readable edition unavailable'));
+    renderReader();
+    expect(await screen.findByText('Back to Shelf')).toBeInTheDocument();
+    expect(screen.getByText('Readable edition unavailable')).toBeInTheDocument();
   });
 });

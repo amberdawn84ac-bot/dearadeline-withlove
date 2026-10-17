@@ -123,6 +123,8 @@ export function EPUBReader({
 
   // Initialize EPUB.js
   useEffect(() => {
+    let cancelled = false;
+    let activeBook: any = null;
     const initEPUB = async () => {
       try {
         setLoading(true);
@@ -130,18 +132,21 @@ export function EPUBReader({
 
         // Dynamic import to avoid SSR issues
         const EPub = (await import('epubjs')).default;
+        if (cancelled) return;
 
         // Create new book
         const newBook = new (EPub as any)({
-          openAs: 'default',
-          withCredentials: false,
+          requestCredentials: true,
         });
 
+        activeBook = newBook;
         bookRef.current = newBook;
         epubRef.current = EPub;
 
         // Load book from source_url
-        await newBook.open(book.source_url);
+        // The authenticated proxy URL has no .epub suffix; never infer a folder.
+        await newBook.open(book.source_url, 'epub');
+        if (cancelled) return;
 
         // Create rendition
         const rendition = newBook.renderTo(viewerRef.current, {
@@ -200,20 +205,15 @@ export function EPUBReader({
               cfi,
               chapterTitle,
               href,
-              progress: Math.round(newBook.locations.percentage(cfi) * 100),
+              progress: Math.round(Math.max(0, newBook.locations.percentageFromCfi(cfi) || 0) * 100),
             });
           }
 
-          // Check if at end of book
-          if (newBook.spine.get(location.start.spine).next() === null) {
-            setIsAtEnd(true);
-          } else {
-            setIsAtEnd(false);
-          }
+          setIsAtEnd(Boolean(location.atEnd));
 
           // Update progress percentage
-          const progress = newBook.locations.percentage(cfi);
-          setProgress(Math.round(progress * 100));
+          const progress = newBook.locations.percentageFromCfi(cfi);
+          setProgress(Math.round(Math.max(0, progress || 0) * 100));
         };
         
         // Handle text selection for "Discuss with Adeline" feature
@@ -255,6 +255,8 @@ export function EPUBReader({
 
         // Display first page
         await rendition.display();
+        if (cancelled) return;
+        setLoading(false);
         
         // Set current book in context
         if (readerContext) {
@@ -267,27 +269,25 @@ export function EPUBReader({
           });
         }
 
-        // Generate locations for progress tracking
-        await newBook.ready.then(() => {
-          return newBook.locations.generate();
-        });
-
-        setLoading(false);
-
-        // Cleanup event listeners when component unmounts
-        return () => {
-          rendition.off('relocated', handleRelocated);
-          rendition.off('error', handleError);
-          rendition.off('selected', handleSelected);
-        };
+        // Index chapters in the background; the first page is already readable.
+        void newBook.ready.then(() => {
+          if (!cancelled) return newBook.locations.generate();
+        }).catch((err: unknown) => console.warn('Book progress index unavailable:', err));
       } catch (err: any) {
+        if (cancelled) return;
         console.error('Error initializing EPUB:', err);
         setError(err.message || 'Failed to load book');
         setLoading(false);
       }
     };
 
-    initEPUB();
+    void initEPUB();
+    return () => {
+      cancelled = true;
+      activeBook?.destroy?.();
+      bookRef.current = null;
+      renditionRef.current = null;
+    };
   }, [book.source_url]);
 
   // Handle previous chapter
@@ -341,14 +341,6 @@ export function EPUBReader({
 
   // Get track color
   const trackColor = TRACK_CONFIG[book.track as keyof typeof TRACK_CONFIG]?.color || '#2F4731';
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center w-full h-screen bg-[#FFFEF7]">
-        <p className="text-[#2F4731]/60">Loading book...</p>
-      </div>
-    );
-  }
 
   if (error) {
     if (htmlUrl) {
@@ -446,7 +438,11 @@ export function EPUBReader({
         </div>
 
         {/* EPUB viewer */}
-        <div ref={viewerRef} className="flex-1 overflow-auto relative">
+        <div className="flex-1 overflow-auto relative" aria-busy={loading}>
+          <div ref={viewerRef} data-testid="epub-viewer" className="absolute inset-0" />
+          {loading && <div role="status" className="absolute inset-0 z-10 flex items-center justify-center bg-[#FFFEF7]">
+            <p className="text-[#2F4731]/60">Loading book...</p>
+          </div>}
           {/* Floating Discuss Button - appears when text is selected */}
           {selectedText && selectionPosition && (
             <button
