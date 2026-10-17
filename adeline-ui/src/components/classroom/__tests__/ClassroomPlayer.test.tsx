@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import ClassroomPlayer from '../ClassroomPlayer';
 import type { ClassroomScene, ClassroomState } from '@/lib/classroom-client';
 const mocks = vi.hoisted(() => ({ submit: vi.fn(), talk: vi.fn() }));
@@ -20,6 +20,29 @@ const state: ClassroomState = { phase: 'ready', title: 'Mixtures', classroom: {
 } };
 
 describe('Fresh classroom', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('shows the lesson once while preserving spoken narration and distinct assistant dialogue', async () => {
+    const speak = vi.fn();
+    vi.stubGlobal('speechSynthesis', { cancel: vi.fn(), speak });
+    vi.stubGlobal('SpeechSynthesisUtterance', class { constructor(public text: string) {} });
+    const narratedState: ClassroomState = { ...state, classroom: {
+      ...state.classroom!,
+      blueprint: { ...state.classroom!.blueprint, roster: [
+        ...state.classroom!.blueprint.roster,
+        { id: 'helper', name: 'Research partner', role: 'assistant', persona: 'Asks focused questions.' },
+      ] },
+      scenes: [{ ...scene, actions: [
+        { role_id: 'adeline', text: scene.content },
+        { role_id: 'helper', text: 'Which quantities would you compare?' },
+      ] }],
+    } };
+    render(<ClassroomPlayer state={narratedState} studentId="child" itemId="unit" grade="8" />);
+    expect(screen.getAllByText(scene.content)).toHaveLength(1);
+    expect(screen.getByText('Which quantities would you compare?')).toBeInTheDocument();
+    expect(screen.getByLabelText('Talk it through with Adeline')).toBeInTheDocument();
+    fireEvent.click(await screen.findByText('Listen'));
+    expect(speak).toHaveBeenCalledWith(expect.objectContaining({ text: scene.content }));
+  });
   it('keeps a quiz answer on the page until it is saved and shows server feedback', async () => {
     mocks.submit.mockResolvedValue({ saved: true, correct: true, review: 'Both quantities doubled.' });
     render(<ClassroomPlayer state={state} studentId="child" itemId="unit" grade="8" />);

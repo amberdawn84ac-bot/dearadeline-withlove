@@ -27,6 +27,10 @@ export default function ClassroomPlayer({ state, studentId, itemId, grade }: { s
   const classroom = state.classroom!;
   const [index, setIndex] = useState(0);
   const scene = classroom.scenes[index];
+  // Teacher actions are the spoken narration, not a second written lesson.
+  const discussionActions = scene.actions.filter(action =>
+    classroom.blueprint.roster.some(role => role.id === action.role_id && role.role !== 'teacher'),
+  );
   const [response, setResponse] = useState('');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [saving, setSaving] = useState(false);
@@ -93,7 +97,7 @@ export default function ClassroomPlayer({ state, studentId, itemId, grade }: { s
         {dirty && <p className="mt-4 text-sm">Save your response before changing pages.</p>}
         <nav aria-label="Exploration pages" className="mt-8 flex justify-between gap-3"><button disabled={index === 0 || saving || asking || dirty} onClick={() => setIndex(i => i - 1)} className="min-h-11 rounded-xl border px-5 disabled:opacity-40">Previous</button><button disabled={index === classroom.scenes.length - 1 || saving || asking || dirty} onClick={() => setIndex(i => i + 1)} className="min-h-11 rounded-xl border px-5 disabled:opacity-40">Next</button></nav>
       </article>
-      <aside className="space-y-4" aria-label="Talk with Adeline"><h2 className="text-lg font-semibold">At the table</h2>{scene.actions.map((action, i) => { const role = classroom.blueprint.roster.find(r => r.id === action.role_id); return <div key={`${scene.id}-${i}`} className="rounded-2xl border border-[#d9cfbc] bg-white p-5"><p className="font-semibold">{role?.name ?? 'Adeline'}</p><p className="mt-2 leading-7">{action.text}</p></div>; })}
+      <aside className="space-y-4" aria-label="Talk with Adeline"><h2 className="text-lg font-semibold">Adeline</h2>{discussionActions.map((action, i) => { const role = classroom.blueprint.roster.find(r => r.id === action.role_id); return <div key={`${scene.id}-${i}`} className="rounded-2xl border border-[#d9cfbc] bg-white p-5"><p className="font-semibold">{role?.name ?? 'Adeline'}</p><p className="mt-2 leading-7">{action.text}</p></div>; })}
         {(dialogue[scene.id] ?? []).map(turn => <div key={turn.key} className="space-y-3 rounded-2xl border border-[#d9cfbc] bg-white p-5"><p className="text-sm"><b>You:</b> {turn.question}</p><p className="leading-7"><b>Adeline:</b> {turn.answer}</p></div>)}
         <form onSubmit={e => { e.preventDefault(); void ask(); }} className="grid gap-3 rounded-2xl border border-[#d9cfbc] bg-white p-5"><label htmlFor="classroom-question" className="font-semibold">Talk it through with Adeline</label><textarea id="classroom-question" rows={3} maxLength={4000} value={question} disabled={asking} onChange={e => setQuestion(e.target.value)} className="rounded-xl border p-3" placeholder="Ask a question, or explain your thinking…" /><button disabled={asking || !question.trim()} className="min-h-11 rounded-xl bg-[#183d32] px-4 py-3 text-white disabled:opacity-50">{asking ? 'Adeline is thinking…' : 'Send'}</button></form>
       </aside>
