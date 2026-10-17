@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import text, Column, String, Integer, Text, DateTime
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
@@ -61,8 +62,9 @@ class JournalStore:
                 self._engine = create_async_engine(
                     ASYNC_DSN,
                     echo=False,
+                    # Supabase already pools connections; do not retain a second idle pool.
+                    poolclass=NullPool,
                     pool_pre_ping=True,   # validate connections before use
-                    pool_recycle=300,     # recycle stale connections every 5 min
                     connect_args={"ssl": ctx, "statement_cache_size": 0},
                 )
                 self._session_factory = async_sessionmaker(

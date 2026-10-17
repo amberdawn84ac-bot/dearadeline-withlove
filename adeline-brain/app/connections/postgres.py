@@ -9,9 +9,10 @@ Uses the same DSN as pgvector_client for consistency.
 import logging
 from typing import AsyncGenerator
 
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
-from app.config import ASYNC_POSTGRES_DSN, DB_POOL_MAX_SIZE, _db_ssl_context
+from app.config import ASYNC_POSTGRES_DSN, _db_ssl_context
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +28,9 @@ def _get_engine():
         _engine = create_async_engine(
             ASYNC_POSTGRES_DSN,
             echo=False,
+            # Supabase already pools connections; do not retain a second idle pool.
+            poolclass=NullPool,
             pool_pre_ping=True,
-            pool_recycle=300,
-            pool_size=max(1, min(5, DB_POOL_MAX_SIZE)),
-            max_overflow=max(0, min(5, DB_POOL_MAX_SIZE)),
-            pool_timeout=30,
             connect_args={"ssl": ctx, "statement_cache_size": 0},
         )
     return _engine

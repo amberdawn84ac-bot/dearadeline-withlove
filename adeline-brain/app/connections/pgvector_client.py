@@ -9,6 +9,7 @@ from typing import Optional
 
 from sqlalchemy import text, Column, String, Integer, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from pgvector.sqlalchemy import Vector
@@ -64,6 +65,8 @@ class HippocampusClient:
         self._engine = create_async_engine(
             ASYNC_DSN,
             echo=False,
+            # Supabase already pools connections; do not retain a second idle pool.
+            poolclass=NullPool,
             connect_args={"ssl": ctx, "statement_cache_size": 0},
         )
         self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
