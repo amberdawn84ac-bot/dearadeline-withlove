@@ -5,7 +5,7 @@ import TodayPage from '../page';
 import CanonicalLessonPage from '../lesson/[taskId]/page';
 import * as brain from '@/lib/brain-client';
 import * as classroom from '@/lib/classroom-client';
-vi.mock('@/lib/classroom-client', () => ({ getClassroom: vi.fn(), prepareClassroom: vi.fn() }));
+vi.mock('@/lib/classroom-client', () => ({ getClassroom: vi.fn(), prepareClassroom: vi.fn(), listClassrooms: vi.fn() }));
 vi.mock('@/components/classroom/ClassroomPlayer', () => ({ default: ({ state }: {state: {title:string}}) => <div>Saved classroom: {state.title}</div> }));
 
 vi.mock('next/navigation', () => ({ useParams: () => ({ taskId: 'today-1' }) }));
@@ -88,6 +88,7 @@ const savedExperience = {
 describe('durable Today and experience reopening', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(classroom.listClassrooms).mockResolvedValue([{ item_id: 'fresh-1', title: 'Matter and measurement', phase: 'ready' }]);
     vi.mocked(brain.peekLearningPlan).mockReturnValue(plan);
     vi.mocked(brain.getSavedTodayPlan).mockResolvedValue(plan);
     vi.mocked(brain.getLearningPlan).mockResolvedValue(plan);
@@ -96,65 +97,15 @@ describe('durable Today and experience reopening', () => {
     vi.mocked(classroom.getClassroom).mockResolvedValue({phase:'ready',title:'Creek evidence',classroom: {blueprint: {} as never, scenes: []}});
   });
 
-  it('reopens Today from the saved plan with zero planner-generation calls', async () => {
-    const first = render(<TodayPage />);
-    await screen.findByText('Creek evidence');
-    first.unmount();
-
+  it('loads only fresh classrooms, never the retired lesson planner', async () => {
     render(<TodayPage />);
-    await screen.findByText('Creek evidence');
-
-    expect(brain.getSavedTodayPlan).toHaveBeenCalledTimes(2);
-    expect(brain.getLearningPlan).not.toHaveBeenCalled();
-  });
-
-  it('shows this learner’s part of the family investigation, not a standards list', async () => {
-    render(<TodayPage />);
-
-    await screen.findByText('Creek evidence');
-    expect(screen.getByRole('heading', { name: 'Today’s lesson' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Science together' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'History together' })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Next chapter' })).toBeInTheDocument();
-    expect(screen.getByText(/Poison Squad/)).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Your lessons' })).not.toBeInTheDocument();
-    expect(screen.getByText(/Walk the boundary and sketch what you see/)).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Math & reading practice' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open this lesson →' })).toHaveAttribute(
-      'href', '/dashboard/lesson/family-1-week-1#lesson-scene',
-    );
-  });
-
-  it('keeps real tasks and lesson links while hiding planner copy from saved Today records', async () => {
-    const savedPlan = {
-      ...plan,
-      individual_lessons: [
-        { ...plan.individual_lessons![0], faith_talk: 'A discussion inside the lesson.', think_tank: 'A question inside the lesson.' },
-        {
-          id: 'gap:math-1', investigation_id: 'math-1', investigation_title: 'Stays in order',
-          slot: 'gap', lesson_id: 'gap', index: 1, count: 1, title: 'Compare ratios',
-          assignment: "Today's math mini lesson, level 6. The unit does not use this skill, so it is practiced on its own. It is still the next skill, so this learner does not fall behind.",
-          track: 'APPLIED_MATHEMATICS', kind: 'gap',
-        },
-        {
-          id: 'gap:ela-1', investigation_id: 'ela-1', investigation_title: 'Stays in order',
-          slot: 'gap', lesson_id: 'gap', index: 1, count: 1, title: 'Listen and respond',
-          assignment: 'Listen to the recording and summarize the main point.',
-          track: 'LITERATURE_LANGUAGE', kind: 'gap',
-        },
-      ],
-    } as brain.LearningPlanResponse;
-    vi.mocked(brain.peekLearningPlan).mockReturnValue(savedPlan);
-    vi.mocked(brain.getSavedTodayPlan).mockResolvedValue(savedPlan);
-
-    render(<TodayPage />);
-    await screen.findByRole('heading', { name: 'Compare ratios' });
-    expect(screen.getByRole('heading', { name: 'The crime scene' })).toBeInTheDocument();
-    expect(screen.getByText('Walk the boundary and sketch what you see.')).toBeInTheDocument();
-    expect(screen.getByText('Listen to the recording and summarize the main point.')).toBeInTheDocument();
-    expect(screen.queryByText(/fall behind|level 6|sequence keeps moving|unit is the lens|Faith talk|Think tank/)).not.toBeInTheDocument();
-    expect(screen.queryByText('A discussion inside the lesson.')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: 'Open this lesson →' })[1]).toHaveAttribute('href', '/dashboard/lesson/math-1');
+    expect(await screen.findByText('Matter and measurement')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Matter and measurement/ })).toHaveAttribute('href', '/dashboard/lesson/fresh-1');
+    expect(screen.getByRole('link', { name: /Create a classroom/ })).toBeInTheDocument();
+    expect(screen.queryByText('Creek evidence')).not.toBeInTheDocument();
+    expect(screen.queryByText('The crime scene')).not.toBeInTheDocument();
+    expect(brain.peekLearningPlan).not.toHaveBeenCalled();
+    expect(brain.getSavedTodayPlan).not.toHaveBeenCalled();
     expect(brain.getLearningPlan).not.toHaveBeenCalled();
   });
 
