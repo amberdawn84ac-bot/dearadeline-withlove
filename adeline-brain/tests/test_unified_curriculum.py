@@ -215,24 +215,12 @@ async def test_evidence_review_updates_state_only_after_evaluation():
     assert conn.execute.await_args.args[-1] == "a"
 
 
-def test_forensic_unit_contains_ten_distinct_canonicals():
+def test_forensic_topic_does_not_restore_the_rejected_lesson_sequence():
     from app.curriculum.builtin_canonicals import unit_experiences, builtin_canonical
     from app.curriculum.kitchen_case_file import TOPIC, TRACK, _slug
-    from app.curriculum.family_style import is_current_family_canonical
-
     experiences = unit_experiences(TOPIC, TRACK)
-    assert len(experiences) == 10
-    records = [
-        builtin_canonical(_slug(e["canonical_topic"], e["track"])) for e in experiences
-    ]
-    assert len({r["topic_slug"] for r in records}) == 10
-    for record in records:
-        assert is_current_family_canonical(record["blocks"])
-        assert not validate_learning_method(
-            record["stages"], {b["block_id"] for b in record["blocks"]}
-        )
-        contract = record["blocks"][0]["metadata"]["canonical_contract"]
-        assert len(contract["unit_plan"]["lessons"]) == 1
+    assert experiences == [{"canonical_topic": TOPIC, "track": TRACK}]
+    assert builtin_canonical(_slug(TOPIC, TRACK)) is None
 
 
 @pytest.mark.asyncio

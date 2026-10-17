@@ -1,3 +1,11 @@
+> **October 17 classroom rebuild:** the active lesson/Space screen now uses the fresh
+> classroom engine (`/classroom`): plan, cast, scenes, saved learner responses, and
+> scene conversation with Adeline. All ten tracks and her persona remain. Prior
+> generated content is retired by migration `20261017_reset_legacy_lessons`; the old
+> experience/Space authoring routers and built-in lesson fallback are disabled.
+> See [the implementation map](docs/OPENMAIC_IMPLEMENTATION_MAP.md) for the reset
+> scope, supported classroom activities, validation and deployment limitations.
+
 # Dear Adeline 2.0
 
 **An interest-led AI learning companion for Christian homeschool families, ages 5–18.**

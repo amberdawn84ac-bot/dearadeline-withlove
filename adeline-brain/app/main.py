@@ -61,12 +61,11 @@ from app.api.auth import router as auth_router
 from app.api.realtime import router as realtime_router
 from app.api.conversation import router as conversation_router
 from app.api.learning_path import router as learning_path_router
-from app.api.experience_builder import router as experience_builder_router
+from app.api.classrooms import router as classrooms_router
 from app.api.standards import router as standards_router
 from app.api.agent_team import router as agent_team_router
 from app.api.resources import router as resources_router
 from app.api.family import router as family_router
-from app.api.spaces import router as spaces_router
 from app.connections.journal_store import journal_store
 from app.connections.conversation_store import conversation_store
 from app.connections.postgres import init_postgres
@@ -249,8 +248,8 @@ def _mount(router) -> None:
 
 
 _mount(lessons_router)
-_mount(experience_builder_router)
-_mount(spaces_router)
+_mount(classrooms_router)
+# Legacy Space delivery retired; classroom scenes own teaching and responses.
 _mount(opportunities_router)
 _mount(journal_router)
 _mount(transcripts_router)

@@ -470,9 +470,8 @@ def canonical_seed_for(topic: str, track: str) -> CanonicalSeed | None:
 
 
 def canonical_seeding_enabled() -> bool:
-    return os.getenv("CANONICAL_SEEDING_ENABLED", "false").strip().lower() in {
-        "1", "true", "yes", "on",
-    }
+    """Old authored lessons are retired; no environment flag may restore them."""
+    return False
 
 
 def configured_batch_size() -> int:

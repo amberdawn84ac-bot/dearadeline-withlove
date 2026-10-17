@@ -2152,7 +2152,7 @@ async def _get_available_projects(track: str = None, limit: int = 3) -> list[Pro
 # ── Redis sliding-window helpers ──────────────────────────────────────────────
 
 def _plan_cache_key(student_id: str) -> str:
-    return f"learning_plan:v9:{student_id}"
+    return f"learning_plan:classroom-v1:{student_id}"
 
 
 async def pop_completed_lesson(student_id: str, lesson_title: str) -> None:

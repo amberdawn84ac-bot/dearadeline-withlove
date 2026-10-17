@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TodayPage from '../page';
 import CanonicalLessonPage from '../lesson/[taskId]/page';
 import * as brain from '@/lib/brain-client';
+import * as classroom from '@/lib/classroom-client';
+vi.mock('@/lib/classroom-client', () => ({ getClassroom: vi.fn(), prepareClassroom: vi.fn() }));
+vi.mock('@/components/classroom/ClassroomPlayer', () => ({ default: ({ state }: {state: {title:string}}) => <div>Saved classroom: {state.title}</div> }));
 
 vi.mock('next/navigation', () => ({ useParams: () => ({ taskId: 'today-1' }) }));
 vi.mock('@/lib/useStudent', () => ({
@@ -90,6 +93,7 @@ describe('durable Today and experience reopening', () => {
     vi.mocked(brain.getLearningPlan).mockResolvedValue(plan);
     vi.mocked(brain.getRecentTranscript).mockResolvedValue([]);
     vi.mocked(brain.getSavedExperience).mockResolvedValue(savedExperience);
+    vi.mocked(classroom.getClassroom).mockResolvedValue({phase:'ready',title:'Creek evidence',classroom: {blueprint: {} as never, scenes: []}});
   });
 
   it('reopens Today from the saved plan with zero planner-generation calls', async () => {
@@ -156,13 +160,14 @@ describe('durable Today and experience reopening', () => {
 
   it('reopens a ready experience with zero build/author requests', async () => {
     const first = render(<CanonicalLessonPage />);
-    await screen.findByText('Saved lesson: Creek evidence');
+    await screen.findByText('Saved classroom: Creek evidence');
     first.unmount();
 
     render(<CanonicalLessonPage />);
-    await screen.findByText('Saved lesson: Creek evidence');
+    await screen.findByText('Saved classroom: Creek evidence');
 
-    await waitFor(() => expect(brain.getSavedExperience).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(classroom.getClassroom).toHaveBeenCalledTimes(2));
     expect(brain.buildExperience).not.toHaveBeenCalled();
+    expect(classroom.prepareClassroom).not.toHaveBeenCalled();
   });
 });

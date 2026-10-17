@@ -1,0 +1,98 @@
+{
+  "spiral-curriculum": {
+    "uploaded_archive": "spiral-curriculum-skill.zip",
+    "skill_sha256": "fe6fe978ab5ac583fcccb9293d410d8da9e3cd7bb393900698095c2387da5b93"
+  },
+  "stage-design": {
+    "uploaded_archive": "stage-design-skill.zip",
+    "skill_sha256": "7275ef6f005eb071e3c943edf3d4355c98a491ea13347c9320995cbfe3370609"
+  },
+  "slide-dsl": {
+    "uploaded_archive": "slide-dsl-skill(1).zip",
+    "skill_sha256": "7234933c646c6d6436f8db2bd36862378c89d924a496a1db9ad485171180091a"
+  },
+  "openmaic": {
+    "uploaded_archive": "openmaic-skill.zip",
+    "skill_sha256": "d0d389091551613b0bc4ee480e8699b11b5bacb54830bf94c6dcdfe2a437b992"
+  },
+  "page-clone": {
+    "uploaded_archive": "page-clone-skill.zip",
+    "skill_sha256": "eeb220cf64b6f18c82bb0fe6298603b4626463c401c5170594e80e88ec5561db"
+  },
+  "fact-check": {
+    "uploaded_archive": "fact-check-skill.zip",
+    "skill_sha256": "44979669a1873ed393f249b06352fa37e01c608ce6a3f611368e1502f9ad4427"
+  },
+  "learning-to-learn": {
+    "uploaded_archive": "learning-to-learn-skill.zip",
+    "skill_sha256": "fe8be28613d01efe49a858bb89bf97f84273bd20311c805c36e2bfd28519c2ce"
+  },
+  "vocational": {
+    "uploaded_archive": "vocational-skill.zip",
+    "skill_sha256": "0544506924e469b49c89295fe414da440cd081adca520ff584049fafff25a43c"
+  },
+  "k12-core-literacy-planning": {
+    "uploaded_archive": "k12-core-literacy-planning-skill.zip",
+    "skill_sha256": "fbc03e9245406bac2d5b312f1a5711de311d17dc98eeb30d8eab298ee397c08f"
+  },
+  "pptx-import": {
+    "uploaded_archive": "pptx-import-skill.zip",
+    "skill_sha256": "f62f063784886b75c67b299b458f5e936f931503b464f0db716113c9fface1a3"
+  },
+  "lecture-style": {
+    "uploaded_archive": "lecture-style-skill.zip",
+    "skill_sha256": "540e7a4b34cd8d5de66861ebe96c73a14fcd87bc9c020e75edfc92080b23c42a"
+  },
+  "social-emotional-learning": {
+    "uploaded_archive": "social-emotional-learning-skill.zip",
+    "skill_sha256": "4aea1736a8855c2ef32767bf4e5e8428bc573a0d5b1cb9816c84d1ae34e86284"
+  },
+  "stage-dsl": {
+    "uploaded_archive": "stage-dsl-skill.zip",
+    "skill_sha256": "53a7d94da2b872076c448771d9cc48471ab5aad82dfe13bcc542cd16be7ce713"
+  },
+  "feynman-learning": {
+    "uploaded_archive": "feynman-learning-skill.zip",
+    "skill_sha256": "af7d9eaca12896a498259cbae3fa09d196d455b4e72af75d63ed1d1575ca944e"
+  },
+  "understanding-by-design": {
+    "uploaded_archive": "understanding-by-design-skill.zip",
+    "skill_sha256": "75af8be3ec7772b6ae97ac70ceedbb00fcfbb16a6d4addceb5f62ec0b3614808"
+  },
+  "pro-editing": {
+    "uploaded_archive": "pro-editing-skill.zip",
+    "skill_sha256": "546a67da5c595646daea06722ff3d6bb183eeef63a0feb49e8d656d24a6f3df7"
+  },
+  "teacher-style-clone": {
+    "uploaded_archive": "teacher-style-clone-skill.zip",
+    "skill_sha256": "9bf4ae1bb9a484d4d426818821bd0530ca20f6f158390280c10c883b750e427b"
+  },
+  "deep-research": {
+    "uploaded_archive": "deep-research-skill.zip",
+    "skill_sha256": "063ce7f57f178e8e3f4e5cdf52a34a78b9cfbd82c29e45d5ee93325c54f25ca0"
+  },
+  "deep-interactive": {
+    "uploaded_archive": "deep-interactive-skill.zip",
+    "skill_sha256": "bb26d6b34f34bad37a76fef7f9863e1e67a2d4a5fbdf89d4ef08734c74db97bb"
+  },
+  "style-clone": {
+    "uploaded_archive": "style-clone-skill.zip",
+    "skill_sha256": "a8001f7b4c55ef37de6fd00200a43ab58090d5abe8fb1d9aaa426b4cf74a2df6"
+  },
+  "slide-craft": {
+    "uploaded_archive": "slide-craft-skill.zip",
+    "skill_sha256": "cf35eea56909b1427f171c6798ba55392761edb081603138892368d1bd727081"
+  },
+  "workshop-style": {
+    "uploaded_archive": "workshop-style-skill.zip",
+    "skill_sha256": "002a4c9842069fb6f24da4b2d3ed0b6a65b0cef08298f5ae05d5905e661d884a"
+  },
+  "zone-of-proximal-development": {
+    "uploaded_archive": "zone-of-proximal-development-skill.zip",
+    "skill_sha256": "cac0ff39f207570c3a40410fe2b61536ce4a9a5e54b33779a96015e45aab4049"
+  },
+  "curriculum-planner": {
+    "uploaded_archive": "curriculum-planner-skill.zip",
+    "skill_sha256": "661a274f60d2a18fcf320715e8390cde178b2deb7a07c77669c4f1ce658ed1fb"
+  }
+}

@@ -30,11 +30,11 @@ class _LockConnection:
         self.closed = True
 
 
-def test_canonical_seeding_is_explicitly_controlled(monkeypatch):
+def test_retired_canonical_seeding_cannot_be_reenabled(monkeypatch):
     monkeypatch.delenv("CANONICAL_SEEDING_ENABLED", raising=False)
     assert canonical_seeding_enabled() is False
     monkeypatch.setenv("CANONICAL_SEEDING_ENABLED", "YES")
-    assert canonical_seeding_enabled() is True
+    assert canonical_seeding_enabled() is False
 
 
 def test_batch_size_is_bounded(monkeypatch):

@@ -1,93 +1,22 @@
 'use client';
-
-import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useStudent } from '@/lib/useStudent';
-import { getLearningPlan, getSavedTodayPlan, listSpaces } from '@/lib/brain-client';
-import type { SpaceListItem, UpcomingInvestigation } from '@/lib/brain-client';
-import styles from '@/components/nav/sites-dashboard.module.css';
+import { listClassrooms } from '@/lib/classroom-client';
 
-export default function SpacesListPage() {
-  const { student, loading: studentLoading } = useStudent();
-  const [spaces, setSpaces] = useState<SpaceListItem[]>([]);
-  const [upcoming, setUpcoming] = useState<UpcomingInvestigation[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function ClassroomsPage() {
+  const { student, loading } = useStudent();
+  const [items, setItems] = useState<Array<{item_id:string;title:string;phase:string}>>([]);
   const [error, setError] = useState('');
-
-  const studentId = student?.id ?? '';
-
-  const load = useCallback(async () => {
-    if (!studentId) return;
-    setLoading(true);
-    setError('');
-    try {
-      const [spacesList, plan] = await Promise.all([
-        listSpaces(studentId),
-        getSavedTodayPlan(studentId).then((saved) => saved ?? getLearningPlan(studentId, 6)),
-      ]);
-      setSpaces(spacesList);
-      setUpcoming(plan.upcoming_family_investigations ?? []);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Adeline could not load your Spaces yet.');
-    } finally {
-      setLoading(false);
-    }
-  }, [studentId]);
-
-  useEffect(() => { void load(); }, [load]);
-
-  if (studentLoading || loading) return <div className={styles.loading}>Adeline is gathering your Spaces…</div>;
-  if (!student) return <div className={styles.loading}>Your session has ended. Please sign in again.</div>;
-
-  const active = spaces.filter((item) => item.status === 'active');
-  const completed = spaces.filter((item) => item.status === 'completed');
-
-  return (
-    <div className={styles.todayWorkspace}>
-      <header className={styles.todayTitle}>
-        <p>Every unit Space you&apos;ve opened</p>
-        <h1>Your Spaces</h1>
-        <span>Active Spaces are still in progress. Completed ones stay open — you can keep talking with Adeline in any of them.</span>
-      </header>
-
-      {error && <p className={styles.error} role="alert">{error}</p>}
-
-      <section className={styles.kanban} aria-label="Your Spaces">
-        <div className={`${styles.kanbanColumn} ${styles.kanbanToday}`}>
-          <header><span>1</span><div><small>In progress</small><h2>Active</h2></div></header>
-          {active.length ? active.map((space) => <SpaceCard key={space.plan_item_id} space={space} />)
-            : <EmptyCard text="No active Spaces right now." />}
-        </div>
-
-        <div className={styles.kanbanColumn}>
-          <header><span>✓</span><div><small>Still open for conversation</small><h2>Completed</h2></div></header>
-          {completed.length ? completed.map((space) => <SpaceCard key={space.plan_item_id} space={space} />)
-            : <EmptyCard text="Nothing completed yet." />}
-        </div>
-
-        <div className={styles.kanbanColumn}>
-          <header><span>…</span><div><small>Not started yet</small><h2>Up Next</h2></div></header>
-          {upcoming.length ? upcoming.map((item) => <article key={`${item.slot}-${item.position}`} className={`${styles.kanbanCard} ${styles.emptyKanban}`}>
-            <small>{item.slot} · {item.track.replace(/_/g, ' ')}</small>
-            <h3>{item.canonical_topic}</h3>
-            <p>Queued — begins once the current {item.slot} investigation is finished.</p>
-          </article>) : <EmptyCard text="Nothing queued beyond what's active now." />}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function SpaceCard({ space }: { space: SpaceListItem }) {
-  const progress = space.total_blocks ? Math.round((space.completed_blocks / space.total_blocks) * 100) : 0;
-  return <article className={styles.kanbanCard}>
-    <small>{space.track.replace(/_/g, ' ')}</small>
-    <h3>{space.title}</h3>
-    <p>{progress}% explored{space.updated_at ? ` · last active ${new Date(space.updated_at).toLocaleDateString()}` : ''}</p>
-    <Link href={`/dashboard/spaces/${encodeURIComponent(space.plan_item_id)}`}>{space.status === 'completed' ? 'Reopen this Space →' : 'Continue this Space →'}</Link>
-  </article>;
-}
-
-function EmptyCard({ text }: { text: string }) {
-  return <div className={`${styles.kanbanCard} ${styles.emptyKanban}`}><p>{text}</p></div>;
+  const [newId, setNewId] = useState('');
+  useEffect(() => { setNewId(`new-${crypto.randomUUID()}`); }, []);
+  useEffect(() => {
+    if (!student) return;
+    let active = true;
+    listClassrooms(student.id).then(rows => { if (active) setItems(rows); }).catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'Could not load classrooms.'); });
+    return () => { active = false; };
+  }, [student]);
+  if (loading) return <p>Opening your classrooms…</p>;
+  if (!student) return <p>Please sign in to open your classrooms.</p>;
+  return <main className="mx-auto max-w-5xl space-y-7 text-[#183d32]"><header className="rounded-3xl bg-[#183d32] p-8 text-[#fff9ec]"><p className="text-xs uppercase tracking-[.25em]">Dear Adeline</p><h1 className="mt-3 text-4xl">Your classrooms</h1><p className="mt-4">Explore, make, question, and learn with Adeline.</p>{newId && <Link href={`/dashboard/lesson/${newId}`} className="mt-6 inline-block rounded-xl bg-[#d8b976] px-5 py-3 font-semibold text-[#183d32]">Create a classroom</Link>}</header>{error && <p role="alert">{error}</p>}<div className="grid gap-5 sm:grid-cols-2">{items.map(item => <Link key={item.item_id} href={`/dashboard/lesson/${encodeURIComponent(item.item_id)}`} className="rounded-2xl border border-[#d9cfbc] bg-[#fffdf7] p-6"><h2 className="text-2xl">{item.title}</h2><p className="mt-3 text-sm">{item.phase === 'ready' ? 'Open classroom' : item.phase === 'planned' ? 'Review your plan' : item.phase === 'failed' ? 'Resume building' : 'Building…'}</p></Link>)}</div>{!items.length && !error && <p>Your new classrooms will appear here.</p>}</main>;
 }

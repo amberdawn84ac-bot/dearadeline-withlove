@@ -123,13 +123,15 @@ def test_justice_investigation_also_requires_supplied_primary_records():
     assert query.limit == 8
 
 
-def test_only_direct_experience_builder_is_mounted():
+def test_only_fresh_classroom_builder_is_mounted():
     from app.main import app
     paths = {route.path for route in app.routes}
-    assert "/experience/build" in paths
-    assert "/brain/experience/build" in paths
-    assert "/experience/printable" in paths
-    assert "/brain/experience/printable" in paths
+    assert "/experience/build" not in paths
+    assert "/brain/experience/build" not in paths
+    assert "/classroom/{student_id}/{plan_item_id}" in paths
+    assert "/brain/classroom/{student_id}/{plan_item_id}" in paths
+    assert "/experience/printable" not in paths
+    assert "/brain/experience/printable" not in paths
     assert "/lesson/build" not in paths
     assert "/brain/lesson/build" not in paths
 
