@@ -10,27 +10,27 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.agents.persona import ADELINE_CLASSROOM_PERSONA
 from app.api.middleware import verify_student_access
 from app.config import (
-    get_db_conn,
     GEMINI_API_KEY,
-    GOOGLE_API_KEY,
     GEMINI_BASE_URL,
     GEMINI_MODEL,
+    GOOGLE_API_KEY,
+    get_db_conn,
 )
 from app.connections.canonical_store import canonical_store
 from app.connections.student_experience_store import student_experience_store
 from app.curriculum.classroom import (
     CLASSROOM_VERSION,
-    Blueprint,
-    Scene,
-    Classroom,
-    public_classroom,
     PLAN_POLICY,
     SCENE_POLICY,
+    Blueprint,
+    Classroom,
+    Scene,
+    public_classroom,
 )
 from app.schemas.api_models import Track
-from app.agents.persona import ADELINE_CLASSROOM_PERSONA
 
 router = APIRouter(prefix="/classroom", tags=["classroom"])
 logger = logging.getLogger(__name__)
@@ -104,6 +104,10 @@ def public_state(record):
         result["classroom"] = public_classroom(
             Classroom(blueprint=blueprint, scenes=doc["scenes"])
         )
+        for scene in result["classroom"]["scenes"]:
+            stored = next(s for s in doc["scenes"] if s["id"] == scene["id"])
+            if stored.get("resources"):
+                scene["resources"] = stored["resources"]
     else:
         result["plan"] = blueprint.model_dump()
     return result
@@ -323,7 +327,7 @@ async def prepare_classroom(
                 "responses": {},
             }
         else:
-            from app.services.resource_router import resource_router, ResourceQuery
+            from app.services.resource_router import ResourceQuery, resource_router
 
             packet = await resource_router.search(
                 ResourceQuery(topic=body.topic, track=body.track.value, limit=5)
@@ -597,5 +601,57 @@ Return JSON only.""",
                 json.dumps(doc),
             )
             return turn
+    finally:
+        await conn.close()
+
+
+class MaterialRequest(BaseModel):
+    scene_id: str
+
+
+@router.post("/{student_id}/{plan_item_id}/materials")
+async def scene_materials(student_id: str, plan_item_id: str, body: MaterialRequest,
+                          _user=Depends(verify_student_access)):
+    from app.curriculum.scene_materials import (
+        MATERIAL_POLICY,
+        MaterialDraft,
+        attached_sources,
+        available_sources,
+        resolve_materials,
+    )
+    from app.services.rate_limit import enforce_rate_limit
+    await enforce_rate_limit("scene-materials", student_id, limit=12)
+    conn = await get_db_conn()
+    try:
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                'SELECT id,"metadataJson" FROM "StudentExperience" WHERE "studentId"=$1 AND "planItemId"=$2 FOR UPDATE',
+                student_id, plan_key(plan_item_id),
+            )
+            doc = row["metadataJson"] if row else None
+            if isinstance(doc, str):
+                doc = json.loads(doc)
+            if not doc or doc.get("format_version") != CLASSROOM_VERSION or doc.get("phase") != "ready":
+                raise HTTPException(409, "Open a complete exploration first.")
+            scene = next((s for s in doc["scenes"] if s["id"] == body.scene_id), None)
+            if not scene:
+                raise HTTPException(404, "Scene not found.")
+            if scene.get("resources"):
+                return scene["resources"]
+            resources = attached_sources(scene)
+            if not resources:
+                safe_scene = {k: v for k, v in scene.items() if k != "question"}
+                sources = available_sources(doc.get("source_context", []), include_catalog=False)
+                draft = await generate_json(MATERIAL_POLICY, MaterialDraft, {
+                    "scene": safe_scene, "available_sources": list(sources.values()),
+                    "understanding": doc["blueprint"]["understanding"],
+                })
+                resources = resolve_materials(draft, sources)
+            scene["resources"] = resources
+            await conn.execute(
+                'UPDATE "StudentExperience" SET "metadataJson"=$2::jsonb,"updatedAt"=NOW() WHERE id=$1',
+                row["id"], json.dumps(doc),
+            )
+            return resources
     finally:
         await conn.close()

@@ -5,7 +5,9 @@ lesson blocks or five-stage envelopes are accepted by this document model.
 """
 
 from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
+
 from app.schemas.api_models import Track
 
 CLASSROOM_VERSION = "openmaic-classroom-v1"
@@ -167,9 +169,11 @@ class Classroom(BaseModel):
 
 
 def public_classroom(classroom: Classroom):
+    from app.curriculum.scene_materials import attached_sources
     data = classroom.model_dump()
     # Do not put answer keys or teacher planning briefs in the browser document.
     for scene in data["scenes"]:
+        scene["resources"] = attached_sources(scene)
         if scene["question"]:
             scene["question"].pop("answer")
             scene["question"].pop("explanation")
@@ -202,6 +206,9 @@ SCENE_POLICY = """Create exactly the requested scene using the supplied schema.
 Follow the classroom blueprint and roster, preserve scene id/type and the common
 facts. Learner-facing title names an action or real question, not planning jargon.
 Slides explain with a concrete example; narration teaches instead of reciting.
+Assistant dialogue must contain its actual examples, not say "I prepared examples" without giving them.
+Never claim a map, book, image, file or other resource is displayed or ready when it is not attached.
+Use supplied sources by name; do not invent resource availability.
 Ask one useful question then leave room for a response. No fake student answers
 or prefilled observations. Projects have usable steps/materials and inspectable
 outputs. Quizzes target reasoning or a misconception; correct answer must exist.

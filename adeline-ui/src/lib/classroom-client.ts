@@ -11,13 +11,14 @@ export type ClassroomTrack = keyof typeof TRACKS;
 export type ClassroomRequest = { topic: string; track: ClassroomTrack; level: string; targets: string[]; materials: string; action: 'plan' | 'build' };
 export type SceneType = 'slide' | 'interactive' | 'quiz' | 'pbl';
 type Variable = { label: string; unit: string; minimum: number; maximum: number; initial: number; step: number };
+export type SceneMaterial = { id: string; kind: 'text' | 'link' | 'image'; title: string; content?: string; url?: string; image_url?: string; attribution?: string; license_url?: string };
 export type ClassroomScene = {
   id: string; title: string; type: SceneType; content: string; key_points: string[];
   actions: { role_id: string; text: string }[]; learner_task: string; success_criteria: string[];
   family_roles: Record<'elementary' | 'middle' | 'high_school', string>;
   question: { prompt: string; choices: { id: string; label: string }[] } | null;
   simulation: { model: 'proportional' | 'rectangle_area' | 'mixture_fraction'; x: Variable; y: Variable; output_label: string; output_unit: string; explanation: string; prediction_prompt: string; observation_prompt: string } | null;
-  materials: string[]; steps: string[];
+  materials: string[]; steps: string[]; resources?: SceneMaterial[];
 };
 export type Blueprint = { title: string; understanding: string; essential_question: string; demonstration: string; integrated_tracks: ClassroomTrack[]; next_revisit: string; roster: { id: string; name: string; role: string; persona: string }[]; scenes?: { id: string; title: string; type: SceneType; objective: string; brief: string }[] };
 export type Feedback = { saved: boolean; review: string; correct?: boolean };
@@ -44,3 +45,5 @@ export const submitClassroomResponse = (student: string, item: string, scene_id:
 export type ClassroomTurn = { key: string; question: string; answer: string; teaching_move: string };
 export const talkToClassroom = (student: string, item: string, scene_id: string, message: string, submission_key: string) => request<ClassroomTurn>(student, item, { scene_id, message, submission_key }, '/conversation');
 export const listClassrooms = (student: string) => request<Array<{ item_id: string; title: string; phase: string }>>(student, '');
+
+export const getSceneMaterials = (student: string, item: string, scene_id: string) => request<SceneMaterial[]>(student, item, { scene_id }, '/materials');

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { ClassroomScene, ClassroomState, Feedback, ClassroomTurn, talkToClassroom, submitClassroomResponse } from '@/lib/classroom-client';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ClassroomScene, ClassroomState, Feedback, ClassroomTurn, SceneMaterial, getSceneMaterials, talkToClassroom, submitClassroomResponse } from '@/lib/classroom-client';
 
 function Simulation({ scene }: { scene: ClassroomScene }) {
   const spec = scene.simulation!;
@@ -31,6 +31,30 @@ export default function ClassroomPlayer({ state, studentId, itemId, grade }: { s
   const discussionActions = scene.actions.filter(action =>
     classroom.blueprint.roster.some(role => role.id === action.role_id && role.role !== 'teacher'),
   );
+  const [materialsByScene, setMaterialsByScene] = useState<Record<string, SceneMaterial[]>>({});
+  const [materialErrors, setMaterialErrors] = useState<Record<string, string>>({});
+  const materialRequests = useRef(new Set<string>());
+  const [materialLoading, setMaterialLoading] = useState<Record<string, boolean>>({});
+  const pageMaterials = materialsByScene[scene.id] ?? scene.resources ?? [];
+  const promisesMaterial = discussionActions.some(action => /\b(?:prepared|displayed|i(?:'|’)ve got|i have|i(?:'|’)ve brought)\b/i.test(action.text));
+  const loadMaterials = useCallback(async (sceneId: string) => {
+    if (materialRequests.current.has(sceneId)) return;
+    materialRequests.current.add(sceneId);
+    setMaterialLoading(current => ({ ...current, [sceneId]: true }));
+    setMaterialErrors(current => ({ ...current, [sceneId]: '' }));
+    try {
+      const resources = await getSceneMaterials(studentId, itemId, sceneId);
+      setMaterialsByScene(current => ({ ...current, [sceneId]: resources }));
+    } catch (reason) {
+      setMaterialErrors(current => ({ ...current, [sceneId]: reason instanceof Error ? reason.message : 'These materials could not be loaded.' }));
+      materialRequests.current.delete(sceneId);
+    } finally {
+      setMaterialLoading(current => ({ ...current, [sceneId]: false }));
+    }
+  }, [studentId, itemId]);
+  useEffect(() => {
+    if (promisesMaterial && !pageMaterials.length && !materialErrors[scene.id]) void loadMaterials(scene.id);
+  }, [scene.id, promisesMaterial, pageMaterials.length, loadMaterials, materialErrors]);
   const [response, setResponse] = useState('');
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [saving, setSaving] = useState(false);
@@ -86,6 +110,19 @@ export default function ClassroomPlayer({ state, studentId, itemId, grade }: { s
         {scene.simulation && <Simulation key={scene.id} scene={scene} />}
         {scene.materials.length > 0 && <p className="mt-5 text-sm"><b>Bring:</b> {scene.materials.join(', ')}</p>}
         {scene.steps.length > 0 && <ol className="mt-5 list-decimal space-y-3 pl-5">{scene.steps.map(step => <li key={step}>{step}</li>)}</ol>}
+        {(pageMaterials.length > 0 || promisesMaterial) && <section id={`scene-materials-${scene.id}`} aria-label="Materials for this page" className="mt-7 space-y-4">
+          <h3 className="text-xl font-semibold">Materials for this page</h3>
+          {materialLoading[scene.id] && <p role="status">Preparing the materials mentioned on this page…</p>}
+          {materialErrors[scene.id] && <div role="alert"><p>{materialErrors[scene.id]}</p><button onClick={() => void loadMaterials(scene.id)} className="mt-2 rounded-lg border px-4 py-2">Try loading materials again</button></div>}
+          {pageMaterials.map(material => <article key={material.id} className="space-y-3 rounded-2xl border border-[#d9cfbc] bg-white p-5">
+            <h4 className="font-semibold">{material.title}</h4>
+            {material.kind === 'image' && material.image_url && <a href={material.image_url} target="_blank" rel="noopener noreferrer"><img src={material.image_url} alt={material.title} className="h-auto w-full rounded-lg bg-white" loading="lazy" /></a>}
+            {material.content && <p className="whitespace-pre-line leading-7">{material.content}</p>}
+            {material.url && <a href={material.url} target="_blank" rel="noopener noreferrer" className="inline-block font-semibold underline">{material.kind === 'image' ? 'Map source and full details' : 'Open the reading or source'} →</a>}
+            {material.attribution && <p className="text-xs leading-5">{material.attribution}</p>}
+            {material.license_url && <a href={material.license_url} target="_blank" rel="noopener noreferrer" className="text-xs underline">License</a>}
+          </article>)}
+        </section>}
         <section className="mt-7 rounded-2xl bg-[#f2ead7] p-5"><h3 className="font-semibold">Your part</h3><p className="mt-2 leading-7">{scene.family_roles[band]}</p><p className="mt-3 leading-7">{scene.learner_task}</p></section>
         <fieldset className="mt-6 space-y-3" disabled={saving}><legend className="mb-3 font-semibold">{scene.question?.prompt ?? 'Keep your explanation, observations, or project notes'}</legend>
           {scene.question ? scene.question.choices.map(choice => <label key={choice.id} className="flex cursor-pointer gap-3 rounded-xl border border-[#c9bfa9] p-4"><input type="radio" name={`answer-${scene.id}`} value={choice.id} checked={response === choice.id} onChange={() => { setResponse(choice.id); setFeedback(null); }} />{choice.label}</label>) : <textarea aria-label="Your response" rows={5} value={response} onChange={e => { setResponse(e.target.value); setFeedback(null); }} className="w-full rounded-xl border border-[#c9bfa9] bg-white p-4" />}
@@ -97,7 +134,7 @@ export default function ClassroomPlayer({ state, studentId, itemId, grade }: { s
         {dirty && <p className="mt-4 text-sm">Save your response before changing pages.</p>}
         <nav aria-label="Exploration pages" className="mt-8 flex justify-between gap-3"><button disabled={index === 0 || saving || asking || dirty} onClick={() => setIndex(i => i - 1)} className="min-h-11 rounded-xl border px-5 disabled:opacity-40">Previous</button><button disabled={index === classroom.scenes.length - 1 || saving || asking || dirty} onClick={() => setIndex(i => i + 1)} className="min-h-11 rounded-xl border px-5 disabled:opacity-40">Next</button></nav>
       </article>
-      <aside className="space-y-4" aria-label="Talk with Adeline"><h2 className="text-lg font-semibold">Adeline</h2>{discussionActions.map((action, i) => { const role = classroom.blueprint.roster.find(r => r.id === action.role_id); return <div key={`${scene.id}-${i}`} className="rounded-2xl border border-[#d9cfbc] bg-white p-5"><p className="font-semibold">{role?.name ?? 'Adeline'}</p><p className="mt-2 leading-7">{action.text}</p></div>; })}
+      <aside className="space-y-4" aria-label="Talk with Adeline"><h2 className="text-lg font-semibold">Adeline</h2>{(pageMaterials.length > 0 || promisesMaterial) && <a href={`#scene-materials-${scene.id}`} className="block font-semibold underline">View this page’s materials ↓</a>}{discussionActions.map((action, i) => { const role = classroom.blueprint.roster.find(r => r.id === action.role_id); return <div key={`${scene.id}-${i}`} className="rounded-2xl border border-[#d9cfbc] bg-white p-5"><p className="font-semibold">{role?.name ?? 'Adeline'}</p><p className="mt-2 leading-7">{action.text}</p></div>; })}
         {(dialogue[scene.id] ?? []).map(turn => <div key={turn.key} className="space-y-3 rounded-2xl border border-[#d9cfbc] bg-white p-5"><p className="text-sm"><b>You:</b> {turn.question}</p><p className="leading-7"><b>Adeline:</b> {turn.answer}</p></div>)}
         <form onSubmit={e => { e.preventDefault(); void ask(); }} className="grid gap-3 rounded-2xl border border-[#d9cfbc] bg-white p-5"><label htmlFor="classroom-question" className="font-semibold">Talk it through with Adeline</label><textarea id="classroom-question" rows={3} maxLength={4000} value={question} disabled={asking} onChange={e => setQuestion(e.target.value)} className="rounded-xl border p-3" placeholder="Ask a question, or explain your thinking…" /><button disabled={asking || !question.trim()} className="min-h-11 rounded-xl bg-[#183d32] px-4 py-3 text-white disabled:opacity-50">{asking ? 'Adeline is thinking…' : 'Send'}</button></form>
       </aside>
