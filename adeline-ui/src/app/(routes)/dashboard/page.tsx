@@ -140,7 +140,7 @@ export default function TodayPage() {
         </div>
       </section>
       <p className={styles.planFootnote}>
-        <Link href="/dashboard/spaces">Browse all your Spaces →</Link>
+        <Link href="/dashboard/classrooms">Browse your classrooms →</Link>
         {' · '}
         <Link href="/dashboard/portfolio">See what you have made and learned →</Link>
       </p>
@@ -185,7 +185,7 @@ function InvestigationCard({ investigation }: { investigation: LessonSuggestion 
       <h3>{investigation.title}</h3>
       {question ? <p>{question}</p> : null}
       {showHook ? <p>{hook}</p> : null}
-      <Link href={`/dashboard/spaces/${encodeURIComponent(investigation.id)}`}>Start this investigation →</Link>
+      <Link href={`/dashboard/lesson/${encodeURIComponent(investigation.id)}`}>Start this investigation →</Link>
     </article>
   );
 }

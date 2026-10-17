@@ -1797,7 +1797,7 @@ export async function* streamConversation(params: {
       message: params.message,
       track: params.track ?? null,
       grade_level: params.gradeLevel,
-      conversation_history: params.history.map((m) => ({
+      conversation_history: params.history.slice(-20).map((m) => ({
         role: m.role === "adeline" ? "assistant" : "user",
         content: m.content,
       })),
@@ -1805,7 +1805,9 @@ export async function* streamConversation(params: {
   });
 
   if (!resp.ok) {
-    yield { type: "error", message: `HTTP ${resp.status}` };
+    yield { type: "error", message: resp.status === 401 || resp.status === 403
+      ? "Your learner session could not be authorized. Please sign out and sign back in to this learner account."
+      : "Adeline could not connect just now. Please try again." };
     return;
   }
 
@@ -1813,6 +1815,7 @@ export async function* streamConversation(params: {
   const decoder = new TextDecoder();
   let buf = "";
 
+  let eventName = "";
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -1821,7 +1824,6 @@ export async function* streamConversation(params: {
     const lines = buf.split("\n");
     buf = lines.pop()!;
 
-    let eventName = "";
     for (const line of lines) {
       if (line.startsWith("event: ")) {
         eventName = line.slice(7).trim();

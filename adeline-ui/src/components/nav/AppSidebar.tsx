@@ -11,6 +11,7 @@ import styles from './sites-dashboard.module.css';
 
 const NAV_ITEMS = [
   ['☀', 'Today', '/dashboard'],
+  ['▥', 'Classrooms', '/dashboard/classrooms'],
   ['☕', 'Family Room', '/dashboard/family'],
   ['⚒', 'Project Workshop', '/dashboard/projects'],
   ['▧', 'Portfolio', '/dashboard/portfolio'],

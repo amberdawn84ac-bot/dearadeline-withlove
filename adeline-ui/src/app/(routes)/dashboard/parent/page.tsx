@@ -112,7 +112,7 @@ function ChildOverview({ student, portfolio, portfolioLoading, onClose }: {
         <div className="space-y-6">
           <section className="rounded-2xl border border-[#DED1BD] p-5">
             <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[.14em] text-[#5B314E]"><BookHeart className="h-4 w-4" /> Portfolio evidence</p>
-            {portfolioLoading ? <div className="mt-5 flex items-center gap-2 text-sm text-[#2F4731]/55"><Loader2 className="h-4 w-4 animate-spin" /> Loading this learner&rsquo;s authorized portfolio…</div> : <div className="mt-4 space-y-3">{portfolio.slice(0, 5).map((item) => <div key={item.lesson_id} className="rounded-xl bg-[#F7F0E5] p-4"><p className="font-bold">{item.title}</p><p className="mt-1 text-xs font-semibold text-[#9A3F4A]">{trackLabel(item.track)}</p>{item.reflection && <p className="mt-2 line-clamp-3 text-sm leading-5 text-[#2F4731]/62">“{item.reflection}”</p>}{item.artifact_description && <p className="mt-2 text-xs text-[#2F4731]/52">Evidence: {item.artifact_description}</p>}{item.plan_item_id && <Link href={`/dashboard/spaces/${encodeURIComponent(item.plan_item_id)}`} className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-[#2F6542]">Open the Space this came from <ArrowRight className="h-3 w-3" /></Link>}</div>)}{portfolio.length === 0 && <p className="text-sm leading-6 text-[#2F4731]/60">Portfolio evidence will appear as {student.student_name} creates, investigates, reflects, and demonstrates understanding.</p>}</div>}
+            {portfolioLoading ? <div className="mt-5 flex items-center gap-2 text-sm text-[#2F4731]/55"><Loader2 className="h-4 w-4 animate-spin" /> Loading this learner&rsquo;s authorized portfolio…</div> : <div className="mt-4 space-y-3">{portfolio.slice(0, 5).map((item) => <div key={item.lesson_id} className="rounded-xl bg-[#F7F0E5] p-4"><p className="font-bold">{item.title}</p><p className="mt-1 text-xs font-semibold text-[#9A3F4A]">{trackLabel(item.track)}</p>{item.reflection && <p className="mt-2 line-clamp-3 text-sm leading-5 text-[#2F4731]/62">“{item.reflection}”</p>}{item.artifact_description && <p className="mt-2 text-xs text-[#2F4731]/52">Evidence: {item.artifact_description}</p>}{item.plan_item_id && <Link href={`/dashboard/lesson/${encodeURIComponent(item.plan_item_id)}`} className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-[#2F6542]">Open this classroom <ArrowRight className="h-3 w-3" /></Link>}</div>)}{portfolio.length === 0 && <p className="text-sm leading-6 text-[#2F4731]/60">Portfolio evidence will appear as {student.student_name} creates, investigates, reflects, and demonstrates understanding.</p>}</div>}
           </section>
 
           <section className="rounded-2xl border border-[#DED1BD] p-5">
@@ -232,9 +232,9 @@ function SpacesInsightsFeed({ students }: { students: Array<{ id: string; name: 
     <>
       {students.map((student) => <StudentInsightBridge key={student.id} studentId={student.id} studentName={student.name} onInsight={handleLiveInsight} />)}
     <section className="rounded-[26px] border border-[#D4C3A7] bg-[#FFFDF7] p-6">
-      <p className="text-xs font-black uppercase tracking-[.14em] text-[#5B314E]">From the Spaces</p>
+      <p className="text-xs font-black uppercase tracking-[.14em] text-[#5B314E]">Learning activity</p>
       <h2 className="mt-1 text-2xl font-bold" style={{ fontFamily: 'var(--font-emilys-candy), cursive' }}>What&rsquo;s happening right now</h2>
-      <p className="mt-2 text-sm leading-6 text-[#2F4731]/62">Concepts demonstrated and questions explored across every child&rsquo;s Spaces, most recent first. Updates automatically.</p>
+      <p className="mt-2 text-sm leading-6 text-[#2F4731]/62">Concepts demonstrated and questions explored across every child&rsquo;s learning, most recent first. Updates automatically.</p>
       {loading ? <p className="mt-4 text-sm text-[#2F4731]/55">Gathering recent activity…</p> : (
         insights.length ? <ul className="mt-4 space-y-3">
           {insights.map((item, index) => <li key={index} className="flex items-start gap-3 border-b border-[#E7DAC3] pb-3 last:border-0">
@@ -248,7 +248,7 @@ function SpacesInsightsFeed({ students }: { students: Array<{ id: string; name: 
               <p className="mt-0.5 text-xs text-[#2F4731]/45">{item.track.replace(/_/g, ' ')} · {item.kind === 'credited' ? 'credited to the transcript' : 'not yet mastered'} · {timeAgo(item.at)}</p>
             </div>
           </li>)}
-        </ul> : <p className="mt-4 text-sm text-[#2F4731]/60">Nothing from the Spaces yet — activity will appear here as your family works through them.</p>
+        </ul> : <p className="mt-4 text-sm text-[#2F4731]/60">No learning activity yet — activity will appear here as your family works through them.</p>
       )}
     </section>
     </>

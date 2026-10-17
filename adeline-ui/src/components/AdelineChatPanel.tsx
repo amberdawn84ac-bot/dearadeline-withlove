@@ -712,7 +712,7 @@ export function AdelineChatPanel({
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === streamingId
-                    ? { ...m, content: event.message, streaming: false }
+                    ? { ...m, content: event.message, segments: undefined, streaming: false }
                     : m
                 )
               );
@@ -722,12 +722,18 @@ export function AdelineChatPanel({
           setMessages((prev) =>
             prev.map((m) =>
               m.id === streamingId
-                ? { ...m, content: "I could not reach the conversation service just now. Your message is still here—please try once more.", streaming: false }
+                ? { ...m, content: "I could not reach the conversation service just now. Your message is still here—please try once more.", segments: undefined, streaming: false }
                 : m
             )
           );
         }
 
+        setMessages((prev) => prev.map((m) => m.id === streamingId ? {
+          ...m, streaming: false,
+          ...(m.streaming && !m.content && !m.segments?.length ? {
+            content: "Adeline’s connection ended before an answer arrived. Please try again.", segments: undefined,
+          } : {}),
+        } : m));
         setConversationHistory((prev) => [
           ...prev,
           { role: "user", content: text },

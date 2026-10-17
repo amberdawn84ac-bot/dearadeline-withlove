@@ -52,6 +52,26 @@ describe('AdelineChatPanel teaching intent', () => {
     expect(await screen.findByText(/Cancer begins when changes in a cell/)).toBeInTheDocument();
   });
 
+  it('shows authorization errors instead of an empty Adeline bubble', async () => {
+    mocks.streamConversation.mockImplementation(async function* () {
+      yield { type: 'error', message: 'Your learner session could not be authorized.' };
+    });
+    render(<AdelineChatPanel studentId="student-1" gradeLevel="8" />);
+    const input = screen.getByPlaceholderText('Ask Adeline or enter a topic…');
+    fireEvent.change(input, { target: { value: 'What is matter?' } });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    expect(await screen.findByText('Your learner session could not be authorized.')).toBeInTheDocument();
+  });
+
+  it('shows interrupted connections instead of leaving a spinner forever', async () => {
+    mocks.streamConversation.mockImplementation(async function* () {});
+    render(<AdelineChatPanel studentId="student-1" gradeLevel="8" />);
+    const input = screen.getByPlaceholderText('Ask Adeline or enter a topic…');
+    fireEvent.change(input, { target: { value: 'What is matter?' } });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    expect(await screen.findByText(/connection ended before an answer arrived/)).toBeInTheDocument();
+  });
+
   it('reopens a generated resource alongside its saved conversation', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
