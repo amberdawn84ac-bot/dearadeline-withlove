@@ -34,7 +34,7 @@ async function request<T>(student: string, item: string, body?: unknown, suffix 
   if (response.status === 404 && body === undefined) return null as T;
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(typeof error.detail === 'string' ? error.detail : 'The classroom could not be opened.');
+    throw new Error(typeof error.detail === 'string' ? error.detail : 'Your exploration could not be opened.');
   }
   return response.json();
 }

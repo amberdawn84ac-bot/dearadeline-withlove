@@ -80,7 +80,7 @@ def document_from(record):
 def public_state(record):
     doc = document_from(record)
     if not doc:
-        raise HTTPException(404, "No new classroom has been planned yet.")
+        raise HTTPException(404, "No new exploration has been planned yet.")
     result = {
         "id": record["id"],
         "phase": doc["phase"],
@@ -152,7 +152,7 @@ async def generate_json(policy, schema, context):
                     "\nRepair the previous draft to satisfy these errors: "
                     + str(exc)[:2500]
                 )
-    raise ValueError("The classroom draft did not pass its content checks.")
+    raise ValueError("The exploration draft did not pass its content checks.")
 
 
 async def save_document(student_id, item_id, record, doc):
@@ -251,7 +251,7 @@ async def build_document(student_id, item_id):
             if doc:
                 doc.update(
                     phase="failed",
-                    error="This classroom could not be completed. Saved scenes can be resumed.",
+                    error="This exploration could not be completed. Saved scenes can be resumed.",
                 )
                 await save_document(student_id, item_id, record, doc)
     finally:
@@ -283,7 +283,7 @@ async def prepare_classroom(
     doc = document_from(record)
     if body.action == "build":
         if not doc:
-            raise HTTPException(409, "Plan this classroom first.")
+            raise HTTPException(409, "Plan this exploration first.")
         if doc["phase"] == "ready":
             return public_state(record)
         task = asyncio.create_task(build_document(student_id, plan_item_id))
@@ -293,7 +293,7 @@ async def prepare_classroom(
     if doc:
         # Stable plan item is idempotent; an existing classroom is never overwritten.
         if classroom_slug(body) != doc["canonical_slug"]:
-            raise HTTPException(409, "Use a new classroom id for a different topic.")
+            raise HTTPException(409, "Use a new exploration id for a different topic.")
         return public_state(record)
     slug = classroom_slug(body)
     claim = await student_experience_store.claim(
@@ -301,7 +301,7 @@ async def prepare_classroom(
     )
     if not claim.claimed:
         raise HTTPException(
-            409, "This classroom is being planned. Try opening it shortly."
+            409, "This exploration is being planned. Try opening it shortly."
         )
     planning_conn = await get_db_conn()
     shared_lock = int.from_bytes(
@@ -423,7 +423,7 @@ async def save_response(
                 or doc.get("phase") != "ready"
             ):
                 raise HTTPException(
-                    409, "Open a complete new classroom before submitting work."
+                    409, "Open a complete new exploration before submitting work."
                 )
             classroom = Classroom(blueprint=doc["blueprint"], scenes=doc["scenes"])
             scene = next((s for s in classroom.scenes if s.id == body.scene_id), None)
@@ -544,7 +544,7 @@ async def converse(
                 or doc.get("format_version") != CLASSROOM_VERSION
                 or doc.get("phase") != "ready"
             ):
-                raise HTTPException(409, "Open a complete classroom first.")
+                raise HTTPException(409, "Open a complete exploration first.")
             scene = next((s for s in doc["scenes"] if s["id"] == body.scene_id), None)
             if not scene:
                 raise HTTPException(404, "Scene not found.")

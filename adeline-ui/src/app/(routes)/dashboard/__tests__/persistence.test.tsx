@@ -101,7 +101,7 @@ describe('durable Today and experience reopening', () => {
     render(<TodayPage />);
     expect(await screen.findByText('Matter and measurement')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Matter and measurement/ })).toHaveAttribute('href', '/dashboard/lesson/fresh-1');
-    expect(screen.getByRole('link', { name: /Create a classroom/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Start exploring/ })).toBeInTheDocument();
     expect(screen.queryByText('Creek evidence')).not.toBeInTheDocument();
     expect(screen.queryByText('The crime scene')).not.toBeInTheDocument();
     expect(brain.peekLearningPlan).not.toHaveBeenCalled();
