@@ -278,9 +278,9 @@ export default function Bookshelf({
     try {
       // Check if book is already in a session (reading, finished, or wishlist)
       const allBooks = [
-        ...shelf!.reading,
-        ...shelf!.finished,
-        ...shelf!.wishlist,
+        ...(shelf?.reading ?? []),
+        ...(shelf?.finished ?? []),
+        ...(shelf?.wishlist ?? []),
       ];
       const existingSession = allBooks.find((b) => b.id === bookId);
 
@@ -328,6 +328,7 @@ export default function Bookshelf({
       // Navigate to reader
       onBookClick(bookId);
     } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not open this book.');
       console.error("[Bookshelf] Book click failed:", err);
     }
   };

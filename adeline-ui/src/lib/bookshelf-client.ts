@@ -120,7 +120,7 @@ async function fetchAPI<T>(
     throw new BookshelfAPIError(
       response.status,
       errorData.code || 'UNKNOWN_ERROR',
-      errorData.message || response.statusText
+      errorData.detail || errorData.message || response.statusText
     );
   }
 

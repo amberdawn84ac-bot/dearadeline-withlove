@@ -15,6 +15,7 @@ export default function ReadingNookPage() {
   const { student } = useStudent();
   const studentId = student?.id ?? '';
   const [refreshKey, setRefreshKey] = useState(0);
+  const [error, setError] = useState('');
   const [addingClassic, setAddingClassic] = useState<string | null>(null);
 
   const handleBookClick = useCallback((bookId: string) => {
@@ -28,10 +29,13 @@ export default function ReadingNookPage() {
   const addClassicToList = useCallback(async (book: { id: string; title: string; author: string }) => {
     if (!studentId) return;
     setAddingClassic(book.id);
+    setError('');
     try {
       const imported = await addBook(book.title, book.author);
       await startReading(studentId, imported.id, 'wishlist');
       setRefreshKey((key) => key + 1);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not add this book.');
     } finally {
       setAddingClassic(null);
     }
@@ -52,6 +56,7 @@ export default function ReadingNookPage() {
           <AddBookDialog onBookAdded={handleBookAdded} />
         </div>
 
+        {error && <p role="alert" className="px-6 pt-4 text-[#8b3434]">{error}</p>}
         <div className="px-6 py-8">
           <Bookshelf key={refreshKey} studentId={studentId} onBookClick={handleBookClick} onSessionUpdate={() => setRefreshKey((k) => k + 1)} />
         </div>

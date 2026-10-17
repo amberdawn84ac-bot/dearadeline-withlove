@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { resolveBrainBaseUrl } from '@/lib/server/brain-url';
-import { epubUrlsFromSource, findCuratedBook } from '@/lib/public-domain-books';
+import { epubUrlsFromSource, findCuratedBook, findCuratedEdition } from '@/lib/public-domain-books';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -29,10 +29,12 @@ async function fetchFirstEpub(urls: string[]): Promise<Response | null> {
   for (const url of urls) {
     const allowed = allowedEpubUrl(url);
     if (!allowed) continue;
-    const response = await fetch(allowed, { redirect: 'follow', cache: 'force-cache' });
-    const contentType = response.headers.get('content-type') || '';
-    if (response.ok && response.body && !contentType.includes('text/html')) {
-      return response;
+    try {
+      const response = await fetch(allowed, { redirect: 'follow', cache: 'force-cache', signal: AbortSignal.timeout(12000) });
+      const contentType = response.headers.get('content-type') || '';
+      if (response.ok && response.body && !contentType.includes('text/html')) return response;
+    } catch {
+      // A missing edition must not prevent trying the next public-domain source.
     }
   }
   return null;
@@ -79,8 +81,9 @@ export async function GET(
     return NextResponse.json({ message: 'Book not found' }, { status: metadataResponse.status });
   }
 
-  const book = (await metadataResponse.json()) as { source_url?: string; title?: string };
-  const epub = await fetchFirstEpub(epubUrlsFromSource(book.source_url || ''));
+  const book = (await metadataResponse.json()) as { source_url?: string; title?: string; author?: string };
+  const edition = findCuratedEdition(book.title || '', book.author || '');
+  const epub = await fetchFirstEpub(epubUrlsFromSource(book.source_url || edition?.sourceUrl || ''));
   if (epub?.body) {
     return epubResponse(epub.body, book.title || 'book', 'public, max-age=86400, s-maxage=604800');
   }

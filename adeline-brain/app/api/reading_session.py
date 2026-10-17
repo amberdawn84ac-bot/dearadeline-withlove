@@ -11,7 +11,6 @@ All endpoints require Authorization header with student_id or X-User-Id header.
 """
 import logging
 import uuid
-from datetime import datetime, timezone
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Query, Depends
@@ -92,11 +91,6 @@ class ShelfResponse(BaseModel):
 
 # ── Helpers ─────────────────────────────────────────────────────────────────────
 
-def _now_iso() -> str:
-    """Return current timestamp in ISO format."""
-    return datetime.now(timezone.utc).isoformat()
-
-
 from contextlib import asynccontextmanager  # noqa: E402
 
 @asynccontextmanager
@@ -152,7 +146,6 @@ async def create_reading_session(
             detail=f"status must be one of {valid_statuses}",
         )
 
-    now = _now_iso()
     session_id = str(uuid.uuid4())
 
     async with _get_conn() as conn:
@@ -174,13 +167,13 @@ async def create_reading_session(
             """
             INSERT INTO "ReadingSession" (
                 id, "studentId", "bookId", status, "startedAt", "updatedAt"
-            ) VALUES ($1, $2, $3, $4, $5::timestamp, $6::timestamp)
+            ) VALUES ($1, $2, $3, $4, NOW(), NOW())
             ON CONFLICT ("studentId", "bookId") DO NOTHING
             RETURNING id, "studentId", "bookId", status, "startedAt",
                       "completedAt", "pagesRead", "totalPages",
                       "currentLocation", "studentReflection", "minutesRead"
             """,
-            session_id, student_id, payload.book_id, payload.status, now, now,
+            session_id, student_id, payload.book_id, payload.status,
         )
 
         # If no rows returned, session already exists — fetch it
@@ -298,7 +291,6 @@ async def update_reading_session(
                 detail=f"status must be one of {valid_statuses}",
             )
 
-    now = _now_iso()
 
     async with _get_conn() as conn:
         await _ensure_reading_session_columns(conn)
@@ -329,57 +321,29 @@ async def update_reading_session(
                 detail="This reading session does not belong to you",
             )
 
-        # Build dynamic UPDATE with only non-null fields
-        # Auto-set completed_at if transitioning to finished
-        update_cols = ["\"updatedAt\" = $11::timestamp"]
-        params = [now]  # param 11
-        param_idx = 1
+        # Bind only supplied fields, with contiguous parameter positions.
+        # Prisma stores these IDs as text and timestamps are generated in Postgres.
+        update_cols = ['"updatedAt" = NOW()']
+        params = []
+        for field, column in (
+            ("status", "status"), ("current_location", "currentLocation"),
+            ("pages_read", "pagesRead"), ("reading_minutes", "minutesRead"),
+            ("student_reflection", "studentReflection"), ("total_pages", "totalPages"),
+        ):
+            value = getattr(payload, field)
+            if value is not None:
+                params.append(value)
+                update_cols.append(f'"{column}" = ${len(params)}')
 
-        if payload.status is not None:
-            update_cols.append(f"status = ${param_idx}::text")
-            params.insert(0, payload.status)
-            param_idx += 1
-
-        if payload.current_location is not None:
-            update_cols.append(f'"currentLocation" = ${param_idx}::text')
-            params.insert(param_idx - 1, payload.current_location)
-            param_idx += 1
-
-        if payload.pages_read is not None:
-            update_cols.append(f'"pagesRead" = ${param_idx}::int')
-            params.insert(param_idx - 1, payload.pages_read)
-            param_idx += 1
-
-        if payload.reading_minutes is not None:
-            update_cols.append(f'"minutesRead" = ${param_idx}::int')
-            params.insert(param_idx - 1, payload.reading_minutes)
-            param_idx += 1
-
-        if payload.student_reflection is not None:
-            update_cols.append(f'"studentReflection" = ${param_idx}::text')
-            params.insert(param_idx - 1, payload.student_reflection)
-            param_idx += 1
-
-        if payload.total_pages is not None:
-            update_cols.append(f'"totalPages" = ${param_idx}::int')
-            params.insert(param_idx - 1, payload.total_pages)
-            param_idx += 1
-
-        # Auto-set completed_at if status is 'finished' and not already set
         if payload.status == "finished" and not existing["completedAt"]:
-            update_cols.append(f'"completedAt" = ${param_idx}::timestamp')
-            params.insert(param_idx - 1, now)
-            param_idx += 1
+            update_cols.append('"completedAt" = NOW()')
 
-        # Build final query
+        params.extend((session_id, student_id))
         update_clause = ", ".join(update_cols)
-        params.append(session_id)  # final WHERE clause
-        params.append(student_id)   # WHERE "studentId" = $N
-
         query = f"""
             UPDATE "ReadingSession"
             SET {update_clause}
-            WHERE id = ${param_idx}::uuid AND "studentId" = ${param_idx + 1}::uuid
+            WHERE id = ${len(params) - 1} AND "studentId" = ${len(params)}
             RETURNING id, "studentId", "bookId", status, "startedAt",
                       "completedAt", "pagesRead", "totalPages",
                       "currentLocation", "studentReflection", "minutesRead"

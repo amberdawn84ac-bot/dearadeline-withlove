@@ -38,3 +38,8 @@ export function curatedBookAsReaderData(book: LibraryBook) {
     html_url: book.readingUrl,
   };
 }
+
+export function findCuratedEdition(title: string, author: string): LibraryBook | undefined {
+  const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
+  return CURATED_PUBLIC_DOMAIN_BOOKS.find(book => normalize(book.title) === normalize(title) && normalize(book.author) === normalize(author));
+}

@@ -47,8 +47,8 @@ class BookListItem(BaseModel):
     id: str
     title: str
     author: str
-    lexile_level: int
-    grade_band: str
+    lexile_level: Optional[int] = None
+    grade_band: Optional[str] = None
     track: str
     cover_url: Optional[str] = None
     source_library: Optional[str] = None
@@ -66,8 +66,8 @@ class BookDetailResponse(BaseModel):
     title: str
     author: str
     description: Optional[str] = None
-    lexile_level: int
-    grade_band: str
+    lexile_level: Optional[int] = None
+    grade_band: Optional[str] = None
     track: str
     cover_url: Optional[str] = None
     source_url: Optional[str] = None
@@ -80,8 +80,8 @@ class BookRecommendation(BaseModel):
     id: str
     title: str
     author: str
-    lexile_level: int
-    grade_band: str
+    lexile_level: Optional[int] = None
+    grade_band: Optional[str] = None
     track: str
     cover_url: Optional[str] = None
     relevance_score: float
