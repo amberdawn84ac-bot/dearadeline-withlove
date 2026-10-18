@@ -30,8 +30,8 @@ export enum xAPIVerb {
 }
 
 export const LearningActivitySchema = z.object({
-  id:         z.string().uuid(),
-  studentId:  z.string().uuid(),
+  id:         z.guid(),
+  studentId:  z.guid(),
 
   // xAPI: Verb + Object
   verb:       z.nativeEnum(xAPIVerb),

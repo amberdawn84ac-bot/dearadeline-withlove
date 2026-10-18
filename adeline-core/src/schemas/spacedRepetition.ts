@@ -19,8 +19,8 @@ import { z } from "zod";
 import { Track } from "../types";
 
 export const SpacedRepetitionCardSchema = z.object({
-  id:          z.string().uuid(),
-  studentId:   z.string().uuid(),
+  id:          z.guid(),
+  studentId:   z.guid(),
 
   /** Matches CurriculumConcept.id in Postgres */
   conceptId:   z.string(),

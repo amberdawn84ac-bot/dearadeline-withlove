@@ -36,8 +36,8 @@ export enum GradeLetter {
 }
 
 export const TranscriptEntrySchema = z.object({
-  id:                  z.string().uuid(),
-  studentId:           z.string().uuid(),
+  id:                  z.guid(),
+  studentId:           z.guid(),
   courseTitle:         z.string().min(1),
   track:               z.nativeEnum(Track),
 
@@ -61,7 +61,7 @@ export const TranscriptEntrySchema = z.object({
   evidence:            z.array(EvidenceSchema).default([]),
 
   /** UUID of the xAPI LearningActivity that generated this entry */
-  xapiStatementId:     z.string().uuid().optional(),
+  xapiStatementId:     z.guid().optional(),
 
   isHomesteadCredit:   z.boolean().default(false).describe(
     "True when credit was earned through a real homestead or farm activity"

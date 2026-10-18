@@ -102,8 +102,10 @@ export const WitnessCitationSchema = z.object({
 
 export type WitnessCitation = z.infer<typeof WitnessCitationSchema>;
 
+// Zod 4 UUIDs enforce version/variant bits. GUID preserves the existing
+// hexadecimal identifier contract, including historical seeded identifiers.
 export const WitnessEvidenceSchema = z.object({
-  sourceId:        z.string().uuid(),
+  sourceId:        z.guid(),
   sourceTitle:     z.string().min(1),
   sourceUrl:       z.string().url(),
   witnessCitation: WitnessCitationSchema,
@@ -135,7 +137,7 @@ export const WitnessEvidenceSchema = z.object({
 });
 
 export const CitationEvidenceSchema = z.object({
-  sourceId:                   z.string().uuid().optional(),
+  sourceId:                   z.guid().optional(),
   sourceTitle:                z.string().min(1),
   sourceUrl:                  z.string().url(),
   sourceType:                 z.string().default("PRIMARY_SOURCE"),
@@ -164,7 +166,7 @@ export enum UserRole {
 }
 
 export const UserSchema = z.object({
-  id:          z.string().uuid(),
+  id:          z.guid(),
   name:        z.string().min(1),
   email:       z.string().email(),
   role:        z.enum(["STUDENT", "PARENT", "ADMIN"]),
@@ -202,7 +204,7 @@ export const WEIGHT_TIER_COLORS: Record<WeightTier, { bg: string; text: string; 
 };
 
 export const DistortionFlagSchema = z.object({
-  id:                  z.string().uuid(),
+  id:                  z.guid(),
   commonClaim:         z.string().min(10),
   whatsHidden:         z.string().min(10),
   whatActuallyHappens: z.string().min(10),
@@ -212,7 +214,7 @@ export const DistortionFlagSchema = z.object({
 export type DistortionFlag = z.infer<typeof DistortionFlagSchema>;
 
 export const KeystoneConceptSchema = z.object({
-  id:               z.string().uuid(),
+  id:               z.guid(),
   concept:          z.string().min(5),
   firstIntroduced:  z.boolean().default(false),
   context:          z.string().optional(),
@@ -222,7 +224,7 @@ export const KeystoneConceptSchema = z.object({
 export type KeystoneConcept = z.infer<typeof KeystoneConceptSchema>;
 
 export const DistractionBoxSchema = z.object({
-  id:           z.string().uuid(),
+  id:           z.guid(),
   topic:        z.string().min(5),
   reason:       z.string().min(10),
   whenToReturn: z.string().optional(),
@@ -364,13 +366,13 @@ const HomesteadVariantSchema = z.object({
 export const GenUIAssemblyBlockSchema = z.object({
   blockType: z.literal(BlockType.GENUI_ASSEMBLY),
   componentType: GenUIComponentType,
-  props: z.record(z.any()).describe("Component-specific props"),
-  initialState: z.record(z.any()).optional().describe("Local state (e.g., currentStep, hintsUsed)"),
+  props: z.record(z.string(), z.any()).describe("Component-specific props"),
+  initialState: z.record(z.string(), z.any()).optional().describe("Local state (e.g., currentStep, hintsUsed)"),
   callbacks: z.array(z.string()).optional().describe("Callback names (e.g., onAnswer, onComplete)"),
   reRenderTriggers: z.array(z.string()).optional().describe("Events that trigger re-render"),
   // Standard block fields
-  id: z.string().uuid(),
-  lessonId: z.string().uuid(),
+  id: z.guid(),
+  lessonId: z.guid(),
   track: z.nativeEnum(Track),
   difficulty: z.nativeEnum(DifficultyLevel),
   order: z.number().int().min(0),
@@ -381,8 +383,8 @@ export const GenUIAssemblyBlockSchema = z.object({
 });
 
 export const LessonBlockSchema = z.object({
-  id:         z.string().uuid(),
-  lessonId:   z.string().uuid(),
+  id:         z.guid(),
+  lessonId:   z.guid(),
   track:      z.nativeEnum(Track),
   blockType:  z.nativeEnum(BlockType),
   difficulty: z.nativeEnum(DifficultyLevel),
@@ -428,7 +430,7 @@ export const LessonBlockSchema = z.object({
 export type LessonBlock = z.infer<typeof LessonBlockSchema>;
 
 export const LessonSchema = z.object({
-  id:               z.string().uuid(),
+  id:               z.guid(),
   title:            z.string().min(1),
   tracks:           z.array(z.nativeEnum(Track)).min(1),
   blocks:           z.array(LessonBlockSchema),

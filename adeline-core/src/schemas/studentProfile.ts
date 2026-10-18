@@ -25,7 +25,7 @@ export enum LearningStyle {
 }
 
 export const StudentProfileSchema = z.object({
-  id: z.string().uuid(),
+  id: z.guid(),
   name: z.string().min(1),
   gradeLevel: z.nativeEnum(GradeLevel),
   learningStyle: z.nativeEnum(LearningStyle).optional(),
@@ -38,8 +38,8 @@ export const StudentProfileSchema = z.object({
   isHomestead: z.boolean().default(false),
 
   activeTracks: z.array(z.nativeEnum(Track)).min(1).describe("Curriculum tracks this student is currently enrolled in"),
-  completedLessonIds: z.array(z.string().uuid()).default([]),
-  researchMissions: z.array(z.string().uuid()).default([]).describe("Pending research missions from ARCHIVE_SILENT pivots"),
+  completedLessonIds: z.array(z.guid()).default([]),
+  researchMissions: z.array(z.guid()).default([]).describe("Pending research missions from ARCHIVE_SILENT pivots"),
 
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),

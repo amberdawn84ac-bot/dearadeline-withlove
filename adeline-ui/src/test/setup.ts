@@ -1,4 +1,4 @@
-import "@testing-library/jest-dom";
+import "@testing-library/jest-dom/vitest";
 
 // jsdom does not implement scrollIntoView; AdelineChatPanel calls it on every
 // message update. Stub it once so dashboard/chat tests do not crash.

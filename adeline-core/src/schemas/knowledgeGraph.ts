@@ -40,7 +40,7 @@ export enum EdgeType {
 }
 
 export const KnowledgeEdgeSchema = z.object({
-  id:               z.string().uuid(),
+  id:               z.guid(),
   fromNodeId:       z.string(),
   toNodeId:         z.string(),
   relationshipType: z.nativeEnum(EdgeType),

@@ -6,3 +6,8 @@ allowBuilds:
   es5-ext: true
   esbuild: true
   sharp: true
+# EPUB.js and upstream CSS tooling still request older vulnerable transitive versions.
+overrides:
+  '@xmldom/xmldom': '0.8.15'
+  'source-map-js': '1.2.2'
+  'postcss-selector-parser': '7.1.6'

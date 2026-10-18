@@ -10,12 +10,12 @@
     "lint": "pnpm -r lint"
   },
   "devDependencies": {
-    "@hygraph/management-sdk": "^1.5.2",
-    "typescript": "^5.9.3"
+    "@hygraph/management-sdk": "^1.6.1",
+    "typescript": "5.9.3"
   },
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@11.25.0",
   "engines": {
-    "node": ">=20",
-    "pnpm": ">=9"
+    "node": ">=24.0.0 <25",
+    "pnpm": ">=11.25.0 <12"
   }
 }

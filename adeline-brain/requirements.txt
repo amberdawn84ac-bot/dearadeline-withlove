@@ -1,59 +1,53 @@
-fastapi==0.136.3
-python-multipart>=0.0.9
-uvicorn[standard]==0.48.0
-pydantic==2.13.4
-pydantic-settings==2.14.1
+fastapi==0.143.3
+python-multipart>=0.0.32,<1
+uvicorn[standard]==0.54.0
+pydantic==2.14.1
+pydantic-settings==2.16.0
 
-openai>=1.68.2,<2.0.0
+openai>=3.35.1,<4.0.0
 
-# LangChain — LLM orchestration (used by daily_bread.py and config.py)
-# Minimum floors set to fix: CVE-2025-65106, CVE-2025-68664, CVE-2026-26013,
-# CVE-2026-40087, CVE-2026-44843 (langchain-core), PYSEC-2026-76 (langchain-openai)
-langchain-core>=0.3.85
-langchain-google-genai>=2.0.0
-langchain-openai>=0.3.0,<1.0.0
+# LLM orchestration; complete tested versions are pinned in requirements.lock.
+langchain-core>=1.6.12,<2
+langchain-google-genai>=4.4.2,<5
+langchain-openai>=1.7.2,<2
 
 # Database — Hippocampus (pgvector)
-pgvector==0.4.2
-asyncpg==0.31.0
-sqlalchemy==2.0.50
+pgvector==0.5.1
+asyncpg==0.32.0
+sqlalchemy[asyncio]==2.1.5
 prisma==0.15.0
 
-# GraphRAG
-
 # Auth + sessions + rate-limiting
-redis==5.0.4
-slowapi==0.1.9
-PyJWT[crypto]==2.13.0
-bcrypt==4.2.1
+redis>=5.3.1,<6
+slowapi==0.1.10
+PyJWT[crypto]==2.15.1
+bcrypt==5.0.0
 
 # Background jobs and scheduling
-APScheduler==3.11.2
+APScheduler==3.11.3
 arq==0.28.0
 
 # Utilities
-python-dotenv==1.2.2
+python-dotenv==1.2.4
 httpx==0.28.1
 
 # Researcher tool — auto primary-source search (DuckDuckGo, free/no API key)
-duckduckgo-search==6.2.13
-beautifulsoup4==4.14.3
-numpy==1.26.4
+duckduckgo-search==8.1.1
+beautifulsoup4==4.15.0
+numpy==2.5.4
 
 # PDF generation
-reportlab==4.5.1
+reportlab==5.0.1
 
 # Observability
-sentry-sdk[fastapi]==2.61.0
-python-json-logger==2.0.7
-gunicorn==23.0.0
+sentry-sdk[fastapi]==2.72.0
+python-json-logger==4.2.0
+gunicorn==26.2.0
 
 # CI / dev tools
-ruff==0.15.15
-pytest==8.2.0
-pytest-asyncio==0.23.7
-pytest-httpx==0.35.0
+ruff==0.17.1
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-httpx==0.36.2
 
-# Living Sketchnote Lessons — AI generation (Gemini) + offline TTS
-google-generativeai>=0.7.0
-pyttsx3>=2.90
+# Gemini is supplied through langchain-google-genai; unused legacy Google/TTS SDKs removed.

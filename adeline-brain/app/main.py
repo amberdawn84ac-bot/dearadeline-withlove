@@ -73,11 +73,11 @@ from app.config import close_db_pool, db_pool_status, init_db_pool
 from app.jobs.seed_scheduler import startup_seed_scheduler, shutdown_seed_scheduler
 from app.jobs.privacy_cleanup import start_privacy_cleanup, stop_privacy_cleanup
 
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger.json import JsonFormatter
 
 def _configure_logging():
     handler = logging.StreamHandler()
-    formatter = jsonlogger.JsonFormatter(
+    formatter = JsonFormatter(
         fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
         rename_fields={"asctime": "timestamp", "levelname": "level", "name": "logger"},
     )

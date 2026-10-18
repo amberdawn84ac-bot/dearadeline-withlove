@@ -43,7 +43,7 @@ export const WitnessCitationSchema = z.object({
 export type WitnessCitation = z.infer<typeof WitnessCitationSchema>;
 
 export const EvidenceSchema = z.object({
-  sourceId:        z.string().uuid().describe("Unique ID of the source document in the vector store"),
+  sourceId:        z.guid().describe("Unique ID of the source document in the vector store"),
   sourceTitle:     z.string().min(1),
   sourceUrl:       z.string().url(),
   witnessCitation: WitnessCitationSchema,

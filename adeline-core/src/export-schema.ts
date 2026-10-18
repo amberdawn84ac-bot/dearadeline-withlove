@@ -5,7 +5,7 @@
  * adeline-brain's Pydantic models are validated against this output in CI
  * to ensure the Python layer stays in sync with the TypeScript source of truth.
  */
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { z } from "zod";
 import { EvidenceSchema, UserSchema, LessonBlockSchema, LessonSchema } from "./types";
 
 const bridge = {
@@ -13,10 +13,10 @@ const bridge = {
   title: "adeline-core Bridge Schema",
   description: "Generated from Zod — do not edit manually. Re-run export-schema.ts to update.",
   definitions: {
-    Evidence:    zodToJsonSchema(EvidenceSchema,    { name: "Evidence" }),
-    User:        zodToJsonSchema(UserSchema,        { name: "User" }),
-    LessonBlock: zodToJsonSchema(LessonBlockSchema, { name: "LessonBlock" }),
-    Lesson:      zodToJsonSchema(LessonSchema,      { name: "Lesson" }),
+    Evidence:    z.toJSONSchema(EvidenceSchema, { target: "draft-7", unrepresentable: "any" }),
+    User:        z.toJSONSchema(UserSchema, { target: "draft-7", unrepresentable: "any" }),
+    LessonBlock: z.toJSONSchema(LessonBlockSchema, { target: "draft-7", unrepresentable: "any" }),
+    Lesson:      z.toJSONSchema(LessonSchema, { target: "draft-7", unrepresentable: "any" }),
   },
 };
 

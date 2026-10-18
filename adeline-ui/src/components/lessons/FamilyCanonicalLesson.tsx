@@ -151,7 +151,7 @@ function NoteBox({ label, prompt }: { label: string; prompt: string }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const context = useContext(NoteContext);
-  const pendingKey = useRef<{ text: string; key: string }>();
+  const pendingKey = useRef<{ text: string; key: string } | undefined>(undefined);
   useEffect(() => {
     if (!context) return;
     const previous = context.attempts.filter(a => a.lessonId === context.lessonId && a.canonicalSlug === context.canonicalSlug && a.content?.label === label).at(-1);
