@@ -125,6 +125,8 @@ jobs:
           version: "11.25.0"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build shared types
+        run: pnpm build:core
       - name: Type check
         run: cd adeline-ui && pnpm exec tsc --noEmit
 
@@ -141,5 +143,9 @@ jobs:
           version: "11.25.0"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build shared types
+        run: pnpm build:core
       - name: Unit tests
-        run: cd adeline-ui && pnpm test
+        run: |
+          pnpm --filter @adeline/core test
+          pnpm --filter adeline-ui test
