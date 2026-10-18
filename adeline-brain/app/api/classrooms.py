@@ -22,6 +22,7 @@ from app.config import (
 from app.connections.canonical_store import canonical_store
 from app.connections.student_experience_store import student_experience_store
 from app.curriculum.classroom import (
+    CLASSROOM_AUTHORING_REVISION,
     CLASSROOM_VERSION,
     PLAN_POLICY,
     SCENE_POLICY,
@@ -30,6 +31,7 @@ from app.curriculum.classroom import (
     Scene,
     public_classroom,
 )
+from app.curriculum.interactive_models import ActivityWork, checked_work
 from app.schemas.api_models import Track
 
 router = APIRouter(prefix="/classroom", tags=["classroom"])
@@ -50,6 +52,7 @@ class Submission(BaseModel):
     scene_id: str
     text: str = Field(min_length=1, max_length=8000)
     submission_key: str = Field(min_length=8, max_length=200)
+    activity: ActivityWork | None = None
 
 
 def classroom_slug(request):
@@ -58,6 +61,7 @@ def classroom_slug(request):
         json.dumps(
             [
                 CLASSROOM_VERSION,
+                CLASSROOM_AUTHORING_REVISION,
                 request.topic.strip().lower(),
                 request.track.value,
                 request.level.strip().lower(),
@@ -440,10 +444,73 @@ async def save_response(
             scene = next((s for s in classroom.scenes if s.id == body.scene_id), None)
             if not scene:
                 raise HTTPException(404, "Scene not found.")
+            # Replay a saved request before applying current-stage rules.
+            prior = await conn.fetchrow(
+                'SELECT content,"lessonId" FROM "EvidenceAttempt" WHERE "studentId"=$1 AND "submissionKey"=$2',
+                student_id,
+                body.submission_key,
+            )
+            if prior:
+                prior_content = (
+                    prior["content"]
+                    if isinstance(prior["content"], dict)
+                    else json.loads(prior["content"])
+                )
+                old_activity = prior_content.get("activity")
+                original_work = (
+                    {
+                        k: old_activity[k]
+                        for k in ("stage", "prediction", "inputs", "trials")
+                    }
+                    if old_activity
+                    else None
+                )
+                if (
+                    prior["lessonId"] != str(row["id"])
+                    or prior_content.get("text") != body.text
+                    or prior_content.get("scene_id") != scene.id
+                    or original_work
+                    != (body.activity.model_dump() if body.activity else None)
+                ):
+                    raise HTTPException(
+                        409, "This submission key already identifies different work."
+                    )
+                return prior_content["feedback"]
             if scene.question and body.text not in {
                 c.id for c in scene.question.choices
             }:
                 raise HTTPException(422, "Choose one of the available answers.")
+            activity = None
+            if scene.interaction or scene.simulation:
+                if body.activity is None:
+                    raise HTTPException(
+                        422,
+                        "Save a prediction and recorded observations for this activity.",
+                    )
+                if not body.text.strip() or (
+                    body.activity.stage == "prediction"
+                    and body.text != body.activity.prediction
+                ):
+                    raise HTTPException(
+                        422, "Submit the original prediction or your own observations."
+                    )
+                try:
+                    activity = checked_work(
+                        scene,
+                        body.activity,
+                        doc.get("responses", {}).get(scene.id, {}).get("activity")
+                        or (
+                            {"earlier_notes": doc["responses"][scene.id]["text"]}
+                            if doc.get("responses", {}).get(scene.id, {}).get("text")
+                            else None
+                        ),
+                    )
+                except ValueError as exc:
+                    raise HTTPException(422, str(exc)) from exc
+            elif body.activity is not None:
+                raise HTTPException(
+                    422, "This scene does not accept model activity data."
+                )
             sorting_feedback = None
             if scene.sorting:
                 from app.curriculum.classroom_evidence import check_sorting
@@ -456,6 +523,12 @@ async def save_response(
                 "saved": True,
                 "review": "Saved for review. Completion is separate from understanding.",
             }
+            if activity:
+                feedback["review"] = (
+                    "Prediction saved. Now explore, record a result, and explain what changed."
+                    if activity["stage"] == "prediction"
+                    else "Observations and model results saved for review. A model shows its assumptions; this does not award mastery."
+                )
             if scene.question:
                 feedback.update(
                     correct=body.text == scene.question.answer,
@@ -479,6 +552,8 @@ async def save_response(
                 if support
                 else "no_recorded_coach_support",
             }
+            if activity:
+                content["activity"] = activity
             inserted = await conn.fetchval(
                 """INSERT INTO "EvidenceAttempt"("studentId","canonicalSlug","canonicalRevision","lessonId",kind,content,"submissionKey")
                 VALUES ($1,$2,$3,$4,'note',$5::jsonb,$6) ON CONFLICT ("studentId","submissionKey") DO NOTHING RETURNING id""",
@@ -504,6 +579,7 @@ async def save_response(
                     prior["lessonId"] != str(row["id"])
                     or prior_content.get("text") != body.text
                     or prior_content.get("scene_id") != scene.id
+                    or prior_content.get("activity") != activity
                 ):
                     raise HTTPException(
                         409, "This submission key already identifies different work."
@@ -660,8 +736,12 @@ class MaterialRequest(BaseModel):
 
 
 @router.post("/{student_id}/{plan_item_id}/materials")
-async def scene_materials(student_id: str, plan_item_id: str, body: MaterialRequest,
-                          _user=Depends(verify_student_access)):
+async def scene_materials(
+    student_id: str,
+    plan_item_id: str,
+    body: MaterialRequest,
+    _user=Depends(verify_student_access),
+):
     from app.curriculum.scene_materials import (
         MATERIAL_POLICY,
         MaterialDraft,
@@ -670,18 +750,24 @@ async def scene_materials(student_id: str, plan_item_id: str, body: MaterialRequ
         resolve_materials,
     )
     from app.services.rate_limit import enforce_rate_limit
+
     await enforce_rate_limit("scene-materials", student_id, limit=12)
     conn = await get_db_conn()
     try:
         async with conn.transaction():
             row = await conn.fetchrow(
                 'SELECT id,"metadataJson" FROM "StudentExperience" WHERE "studentId"=$1 AND "planItemId"=$2 FOR UPDATE',
-                student_id, plan_key(plan_item_id),
+                student_id,
+                plan_key(plan_item_id),
             )
             doc = row["metadataJson"] if row else None
             if isinstance(doc, str):
                 doc = json.loads(doc)
-            if not doc or doc.get("format_version") != CLASSROOM_VERSION or doc.get("phase") != "ready":
+            if (
+                not doc
+                or doc.get("format_version") != CLASSROOM_VERSION
+                or doc.get("phase") != "ready"
+            ):
                 raise HTTPException(409, "Open a complete exploration first.")
             scene = next((s for s in doc["scenes"] if s["id"] == body.scene_id), None)
             if not scene:
@@ -690,17 +776,29 @@ async def scene_materials(student_id: str, plan_item_id: str, body: MaterialRequ
                 return scene["resources"]
             resources = attached_sources(scene)
             if not resources:
-                safe_scene = {k: v for k, v in scene.items() if k not in {"question", "sorting"}}
-                sources = available_sources(doc.get("source_context", []), include_catalog=False)
-                draft = await generate_json(MATERIAL_POLICY, MaterialDraft, {
-                    "scene": safe_scene, "available_sources": list(sources.values()),
-                    "understanding": doc["blueprint"]["understanding"],
-                })
+                safe_scene = {
+                    k: v
+                    for k, v in scene.items()
+                    if k not in {"question", "sorting", "interaction"}
+                }
+                sources = available_sources(
+                    doc.get("source_context", []), include_catalog=False
+                )
+                draft = await generate_json(
+                    MATERIAL_POLICY,
+                    MaterialDraft,
+                    {
+                        "scene": safe_scene,
+                        "available_sources": list(sources.values()),
+                        "understanding": doc["blueprint"]["understanding"],
+                    },
+                )
                 resources = resolve_materials(draft, sources)
             scene["resources"] = resources
             await conn.execute(
                 'UPDATE "StudentExperience" SET "metadataJson"=$2::jsonb,"updatedAt"=NOW() WHERE id=$1',
-                row["id"], json.dumps(doc),
+                row["id"],
+                json.dumps(doc),
             )
             return resources
     finally:

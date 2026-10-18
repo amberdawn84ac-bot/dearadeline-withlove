@@ -24,6 +24,10 @@ this workspace. A staged migration and deploy are required to enact the wipe.
 
 ## Additions on 18 October 2026
 
+The [interactive model library](INTERACTIVE_CLASSROOM_MODELS.md) now adds water
+heating, stoichiometric mass accounting, linked diagrams and molecular composition,
+with prediction gates, server-recomputed trials and segmented narration.
+
 See [skill application audit](OPENMAIC_SKILL_APPLICATION.md) for typed teaching
 design, independent checks, sorting activities, evidence support conditions,
 level-aware reuse and narration emphasis. These extend the baseline below.

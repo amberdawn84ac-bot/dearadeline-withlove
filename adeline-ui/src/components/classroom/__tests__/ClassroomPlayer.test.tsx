@@ -130,4 +130,40 @@ describe('Fresh classroom', () => {
     expect(mocks.talk).toHaveBeenLastCalledWith('child', 'unit', 'one', expect.stringContaining('different example'), expect.any(String));
   });
 
+  it('saves a prediction before showing the lab and protects unsaved model changes during navigation', async () => {
+    mocks.submit.mockResolvedValue({ saved: true, review: 'Saved.' });
+    const labState: ClassroomState = { ...state, classroom: { ...state.classroom!, scenes: [{ ...scene, question: null, type: 'interactive', interaction: { kind: 'water_heating', prediction_prompt: 'What will change?', observation_prompt: 'Explain your result.', nodes: [], edges: [], formula: 'H2O' } }, state.classroom!.scenes[1]] } };
+    render(<ClassroomPlayer state={labState} studentId="child" itemId="unit" grade="8" />);
+    fireEvent.change(screen.getByLabelText('Your prediction'), { target: { value: 'The temperature will rise.' } });
+    expect(screen.getByText('Next')).toBeDisabled();
+    fireEvent.click(screen.getByText('Save prediction and explore'));
+    await screen.findByLabelText('Energy added');
+    expect(mocks.submit).toHaveBeenLastCalledWith('child', 'unit', 'one', 'The temperature will rise.', expect.any(String), expect.objectContaining({ stage: 'prediction' }));
+    fireEvent.change(screen.getByLabelText('Energy added'), { target: { value: '20.9' } });
+    expect(screen.getByText('Next')).toBeDisabled();
+    fireEvent.click(screen.getByText('Record this result'));
+    fireEvent.change(screen.getByLabelText('Your observations'), { target: { value: 'Energy changed the phase while temperature stayed zero.' } });
+    fireEvent.click(screen.getByText('Save observations and results'));
+    await waitFor(() => expect(screen.getByText('Next')).not.toBeDisabled());
+    fireEvent.click(screen.getByText('Next')); fireEvent.click(screen.getByText('Previous'));
+    expect(screen.getByLabelText('Energy added')).toHaveValue('20.9');
+    expect(screen.getByLabelText('Your observations')).toHaveValue('Energy changed the phase while temperature stayed zero.');
+  });
+  it('pauses after each narration part and offers learner-controlled continuation', async () => {
+    const speak = vi.fn(), pause = vi.fn(), resume = vi.fn();
+    vi.stubGlobal('speechSynthesis', { cancel: vi.fn(), speak, pause, resume });
+    vi.stubGlobal('SpeechSynthesisUtterance', class { constructor(public text: string) {} });
+    const pages = { ...state, classroom: { ...state.classroom!, scenes: [{ ...scene, actions: [{ role_id: 'adeline', text: 'First, make a prediction.' }, { role_id: 'adeline', text: 'Now inspect the result.' }] }] } };
+    render(<ClassroomPlayer state={pages} studentId="child" itemId="unit" grade="8" />);
+    fireEvent.click(await screen.findByText('Listen'));
+    expect(speak).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText('Pause narration')); expect(pause).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText('Resume narration')); expect(resume).toHaveBeenCalledTimes(1);
+    const { act } = await import('@testing-library/react');
+    act(() => speak.mock.calls[0][0].onend());
+    expect(speak).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText('Continue narration'));
+    expect(speak).toHaveBeenLastCalledWith(expect.objectContaining({ text: 'Now inspect the result.' }));
+  });
+
 });

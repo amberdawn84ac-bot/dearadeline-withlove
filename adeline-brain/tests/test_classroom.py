@@ -2,8 +2,6 @@ from copy import deepcopy
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from pydantic import ValidationError
-
 from app.agents.persona import ADELINE_CLASSROOM_PERSONA
 from app.api.classrooms import (
     ClassroomRequest,
@@ -19,6 +17,7 @@ from app.curriculum.classroom import (
     public_classroom,
 )
 from app.schemas.api_models import Track
+from pydantic import ValidationError
 
 
 def blueprint():
@@ -412,7 +411,7 @@ async def test_saved_sorting_evidence_records_real_support_and_prior_feedback(he
     }
     conn = AsyncMock()
     conn.transaction = MagicMock(return_value=AsyncMock())
-    conn.fetchrow.return_value = {"id": "experience", "metadataJson": doc}
+    conn.fetchrow.side_effect = [{"id": "experience", "metadataJson": doc}, None]
     conn.fetchval.return_value = "attempt"
     with patch("app.api.classrooms.get_db_conn", new=AsyncMock(return_value=conn)):
         result = await save_response(

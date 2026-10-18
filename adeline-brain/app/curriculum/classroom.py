@@ -6,11 +6,12 @@ lesson blocks or five-stage envelopes are accepted by this document model.
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
-
+from app.curriculum.interactive_models import Interaction
 from app.schemas.api_models import Track
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 CLASSROOM_VERSION = "openmaic-classroom-v1"
+CLASSROOM_AUTHORING_REVISION = "interactive-models-v2"
 
 
 class Role(BaseModel):
@@ -115,6 +116,7 @@ class Speech(BaseModel):
     role_id: str
     text: str = Field(min_length=1, max_length=1600)
     focus: Literal["content", "activity", "task"] | None = None
+    node_id: str | None = None
 
 
 class Choice(BaseModel):
@@ -137,6 +139,7 @@ class Question(BaseModel):
 
 
 class Variable(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
     label: str = Field(min_length=1)
     unit: str = ""
     minimum: float
@@ -211,6 +214,7 @@ class Scene(BaseModel):
     question: Question | None = None
     simulation: Simulation | None = None
     sorting: Sorting | None = None
+    interaction: Interaction | None = None
     materials: list[str] = Field(default_factory=list, max_length=10)
     steps: list[str] = Field(default_factory=list, max_length=8)
 
@@ -226,17 +230,34 @@ class Scene(BaseModel):
             raise ValueError("Question belongs only to a quiz")
         if (
             self.type == "interactive"
-            and sum(x is not None for x in (self.simulation, self.sorting)) != 1
+            and sum(
+                x is not None for x in (self.simulation, self.sorting, self.interaction)
+            )
+            != 1
         ):
             raise ValueError(
                 "An interactive scene needs exactly one supported mechanism"
             )
+        if self.type != "interactive" and self.interaction:
+            raise ValueError("Interaction belongs only to an interactive scene")
         if self.type != "interactive" and self.sorting:
             raise ValueError("Sorting belongs only to an interactive scene")
         if self.type != "interactive" and self.simulation:
             raise ValueError("Simulation belongs only to an interactive scene")
-        if any(a.focus == "activity" for a in self.actions) and not (self.simulation or self.sorting):
+        if any(a.focus == "activity" for a in self.actions) and not (
+            self.simulation or self.sorting or self.interaction
+        ):
             raise ValueError("Activity narration focus requires a rendered activity")
+        if any(
+            a.node_id
+            and (
+                not self.interaction
+                or self.interaction.kind != "diagram"
+                or a.node_id not in {n.id for n in self.interaction.nodes}
+            )
+            for a in self.actions
+        ):
+            raise ValueError("Narration node_id must reference a real diagram node")
         if self.type == "pbl" and not self.steps:
             raise ValueError("A project needs actionable steps")
         return self
@@ -292,8 +313,21 @@ Prefer meaningful learner actions over pages of exposition. Every concept should
 have explanation/evidence and a chance to use it. A later revisit must add a
 relationship, model, representation or boundary. Do not fabricate prior learning.
 No fixed five-stage sequence or arbitrary number of activities of each type.
-Available scene types: slide, interactive, quiz, pbl. Interactive supports ONLY
+Available scene types: slide, interactive, quiz, pbl. Numeric simulations support
 proportional (x*y), rectangle_area (x*y), mixture_fraction (x/(x+y)) simulations.
+Other supported interactions (set interaction.kind, leave simulation/sorting null):
+water_heating: 100 g pure water heated from ice at -20 C at 1 atm, energy control,
+0 C melting plateau, 100 C boiling plateau, constant mass, particle representation.
+mass_balance: baking soda + 5%-by-mass vinegar, adjustable amounts and reaction
+progress, open or flexible gas collector, stoichiometric CO2 and full mass accounting.
+diagram: 2–10 linked nodes with short labels, detailed explanations and relationships;
+use for conceptual relationships, source reasoning, systems, processes across tracks.
+molecule_builder: exact H/O/C counts for H2O, CO2 or CH4, accounting for extra atoms;
+a molecular composition model, not a real reaction simulator.
+These mechanisms have code-owned constants/controls; never invent input fields,
+substances, pressures, physics, 3D capabilities or outputs they do not implement.
+Every model/diagram first saves a prediction, then reveals controls/results, records
+trials and saves observations. Do not announce results in the opening or narration.
 Interactive also supports sorting: 2–6 named categories and 2–12 concrete items,
 each with a correct category and a reason. Use sorting for meaningful classification
 or comparison, never ambiguous cases that require multiple correct categories.
@@ -357,4 +391,24 @@ not issue an unearned mastery certificate. Internal method labels belong in the
 plan, not learner-facing headings. Keep analogies accurate and identify limits.
 Narration can set focus to content, activity or task to highlight that real section
 while speaking. Use activity only when this scene has a simulation or sorting task.
+"""
+
+SCENE_POLICY += """
+For interaction.kind water_heating or mass_balance, use the fixed supported model
+and state its conditions and limitations; do not supply generated constants.
+A model illustrates its assumptions; never say running it proves a physical law.
+Water vapor is invisible; visible mist is condensed droplets. Wind is moving air;
+sand grains are solids that can pour collectively. Do not call milk a true solution.
+For diagrams, name meaningful relationships and give each node its real detail.
+For molecule_builder, distinguish composition from a chemical synthesis recipe.
+Narration should usually be 1–2 short sentences per action; stop after asking the
+learner to act. End with a fresh explanation or demonstration and open questions,
+not a mastery certificate or praise for an attempt that has not happened.
+"""
+
+SCENE_POLICY += """
+For a diagram action you may set node_id to an existing node id to emphasize and
+explain that exact part during narration. Never name an absent control or node.
+Keep new scene content concise (usually under 900 characters); let the activity
+carry the work. Reading/source passages may be longer when the task needs them.
 """
