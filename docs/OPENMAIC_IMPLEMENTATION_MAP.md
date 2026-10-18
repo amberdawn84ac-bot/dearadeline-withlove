@@ -22,6 +22,12 @@ not reachable through a legacy teaching endpoint. The migration runs through the
 existing Prisma deploy sequence; it has NOT been executed against production in
 this workspace. A staged migration and deploy are required to enact the wipe.
 
+## Additions on 18 October 2026
+
+See [skill application audit](OPENMAIC_SKILL_APPLICATION.md) for typed teaching
+design, independent checks, sorting activities, evidence support conditions,
+level-aware reuse and narration emphasis. These extend the baseline below.
+
 ## New authoring and delivery
 
 1. Choose a topic, starting track, learners and available materials.

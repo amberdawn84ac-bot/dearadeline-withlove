@@ -14,14 +14,15 @@ type Variable = { label: string; unit: string; minimum: number; maximum: number;
 export type SceneMaterial = { id: string; kind: 'text' | 'link' | 'image'; title: string; content?: string; url?: string; image_url?: string; attribution?: string; license_url?: string };
 export type ClassroomScene = {
   id: string; title: string; type: SceneType; content: string; key_points: string[];
-  actions: { role_id: string; text: string }[]; learner_task: string; success_criteria: string[];
+  actions: { role_id: string; text: string; focus?: 'content' | 'activity' | 'task' | null }[]; learner_task: string; success_criteria: string[];
   family_roles: Record<'elementary' | 'middle' | 'high_school', string>;
   question: { prompt: string; choices: { id: string; label: string }[] } | null;
   simulation: { model: 'proportional' | 'rectangle_area' | 'mixture_fraction'; x: Variable; y: Variable; output_label: string; output_unit: string; explanation: string; prediction_prompt: string; observation_prompt: string } | null;
+  sorting?: { instruction: string; categories: { id: string; label: string }[]; items: { id: string; label: string }[] } | null;
   materials: string[]; steps: string[]; resources?: SceneMaterial[];
 };
 export type Blueprint = { title: string; understanding: string; essential_question: string; demonstration: string; integrated_tracks: ClassroomTrack[]; next_revisit: string; roster: { id: string; name: string; role: string; persona: string }[]; scenes?: { id: string; title: string; type: SceneType; objective: string; brief: string }[] };
-export type Feedback = { saved: boolean; review: string; correct?: boolean };
+export type Feedback = { saved: boolean; review: string; correct?: boolean; items?: { item_id: string; correct: boolean; explanation: string }[] };
 export type ClassroomState = { id?: string; request?: ClassroomRequest; phase: 'planned' | 'building' | 'ready' | 'failed'; title: string; built_scenes?: number; error?: string; plan?: Blueprint; classroom?: { blueprint: Blueprint; scenes: ClassroomScene[] }; responses?: Record<string, { text: string; feedback: Feedback }>; dialogue?: Record<string, ClassroomTurn[]> };
 
 async function request<T>(student: string, item: string, body?: unknown, suffix = ''): Promise<T> {

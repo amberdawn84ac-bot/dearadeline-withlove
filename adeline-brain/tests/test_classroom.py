@@ -1,22 +1,24 @@
 from copy import deepcopy
 from unittest.mock import AsyncMock, patch
+
 import pytest
 from pydantic import ValidationError
-from app.curriculum.classroom import (
-    Blueprint,
-    Scene,
-    Classroom,
-    public_classroom,
-    CLASSROOM_VERSION,
-)
+
+from app.agents.persona import ADELINE_CLASSROOM_PERSONA
 from app.api.classrooms import (
     ClassroomRequest,
+    build_document,
     classroom_slug,
     public_state,
-    build_document,
+)
+from app.curriculum.classroom import (
+    CLASSROOM_VERSION,
+    Blueprint,
+    Classroom,
+    Scene,
+    public_classroom,
 )
 from app.schemas.api_models import Track
-from app.agents.persona import ADELINE_CLASSROOM_PERSONA
 
 
 def blueprint():
@@ -142,9 +144,9 @@ def test_identity_tracks_and_legacy_boundary():
     assert len(Track) == 10
     assert "Warm, sharp-witted" in ADELINE_CLASSROOM_PERSONA
     assert "SCRIPTURE" in ADELINE_CLASSROOM_PERSONA
+    from app.api.classrooms import document_from
     from app.curriculum.builtin_canonicals import builtin_canonical
     from app.jobs.canonical_seeding import canonical_seeding_enabled
-    from app.api.classrooms import document_from
 
     assert builtin_canonical("old") is None
     assert not canonical_seeding_enabled()
@@ -220,6 +222,7 @@ async def test_generation_injects_adeline_persona_and_exact_ten_tracks():
     import json
     from types import SimpleNamespace
     from unittest.mock import MagicMock
+
     from app.api.classrooms import generate_json
 
     client = MagicMock()
@@ -248,3 +251,185 @@ async def test_generation_injects_adeline_persona_and_exact_ten_tracks():
     for track in Track:
         assert track.value in prompt
     assert result.roster[0].name == "Adeline"
+
+
+def sorting_scene():
+    data = scene(0)
+    data.update(
+        type="interactive",
+        sorting={
+            "instruction": "Sort each sample by its observed state.",
+            "categories": [
+                {"id": "solid", "label": "Solid"},
+                {"id": "liquid", "label": "Liquid"},
+            ],
+            "items": [
+                {
+                    "id": "rock",
+                    "label": "Rock at room temperature",
+                    "category_id": "solid",
+                    "explanation": "The rock retains its shape.",
+                },
+                {
+                    "id": "water",
+                    "label": "Water at room temperature",
+                    "category_id": "liquid",
+                    "explanation": "Water flows and takes its container's shape.",
+                },
+            ],
+        },
+    )
+    return data
+
+
+def test_level_changes_reuse_identity():
+    req = ClassroomRequest(
+        topic="Matter", track=Track.CREATION_SCIENCE, level="3rd grade"
+    )
+    assert classroom_slug(req) != classroom_slug(
+        req.model_copy(update={"level": "8th grade"})
+    )
+    assert classroom_slug(req) == classroom_slug(
+        req.model_copy(update={"level": " 3RD GRADE "})
+    )
+
+
+def test_sorting_hides_keys_and_requires_one_real_mechanism():
+    scenes = [Scene(**sorting_scene()), *[Scene(**scene(i)) for i in range(1, 4)]]
+    bp = blueprint()
+    bp["scenes"][0]["type"] = "interactive"
+    result = public_classroom(Classroom(blueprint=Blueprint(**bp), scenes=scenes))
+    assert result["scenes"][0]["sorting"]["items"][0] == {
+        "id": "rock",
+        "label": "Rock at room temperature",
+    }
+    bad = sorting_scene()
+    bad["sorting"]["items"][0]["category_id"] = "gas"
+    with pytest.raises(ValidationError):
+        Scene(**bad)
+    bad = sorting_scene()
+    bad["sorting"]["items"][1]["id"] = "rock"
+    with pytest.raises(ValidationError):
+        Scene(**bad)
+
+
+def test_sorting_feedback_is_server_checked_and_rejects_partial_or_invalid_work():
+    from app.curriculum.classroom_evidence import check_sorting
+
+    spec = Scene(**sorting_scene()).sorting
+    assert check_sorting(spec, '{"rock":"solid","water":"liquid"}')["correct"]
+    feedback = check_sorting(spec, '{"rock":"liquid","water":"liquid"}')
+    assert not feedback["correct"]
+    assert feedback["items"][0]["explanation"] == "The rock retains its shape."
+    for text in [
+        "{}",
+        "[]",
+        "invalid",
+        '{"rock":"solid"}',
+        '{"rock":[],"water":"liquid"}',
+        '{"rock":"gas","water":"liquid"}',
+    ]:
+        with pytest.raises(ValueError):
+            check_sorting(spec, text)
+
+
+def test_teaching_contract_requires_independent_checks_and_workshop_application():
+    data = blueprint()
+    data["teaching_design"] = {
+        "approach": "workshop",
+        "rationale": "Test and compare mixtures directly.",
+        "initial_attempt": "Explain an unfamiliar mixture before help.",
+        "likely_difficulty": "May confuse absolute amounts with ratios.",
+        "support": "Compare a different example with equal groups.",
+        "independent_check": "Compare fresh ratios without step hints.",
+        "learning_strategy": "Predict the result before changing amounts.",
+        "revisit_adds": "Connect mixture ratios to coordinate graphs.",
+    }
+    with pytest.raises(ValidationError):
+        Blueprint(**data)
+    data["scenes"][0].update(type="pbl", purpose="independent_attempt")
+    data["scenes"][3].update(purpose="independent_check")
+    assert Blueprint(**data).teaching_design.approach == "workshop"
+    data["scenes"][3].update(type="slide")
+    with pytest.raises(ValidationError):
+        Blueprint(**data)
+
+
+@pytest.mark.asyncio
+async def test_existing_classroom_reopens_after_level_identity_fix():
+    from app.api.classrooms import prepare_classroom
+
+    req = ClassroomRequest(topic="Mixtures", track=Track.CREATION_SCIENCE)
+    record = {
+        "id": "old",
+        "title": "Mixtures",
+        "metadata": {
+            "format_version": CLASSROOM_VERSION,
+            "phase": "planned",
+            "blueprint": blueprint(),
+            "canonical_slug": "pre-level-identity-slug",
+            "request": req.model_dump(mode="json"),
+        },
+    }
+    with (
+        patch("app.services.rate_limit.enforce_rate_limit", new=AsyncMock()),
+        patch(
+            "app.api.classrooms.student_experience_store.get",
+            new=AsyncMock(return_value=record),
+        ),
+    ):
+        result = await prepare_classroom("child", "unit", req)
+        assert result["id"] == "old"
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc:
+            await prepare_classroom(
+                "child", "unit", req.model_copy(update={"level": "3rd grade"})
+            )
+        assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("helped", [False, True])
+async def test_saved_sorting_evidence_records_real_support_and_prior_feedback(helped):
+    import json
+    from unittest.mock import MagicMock
+
+    from app.api.classrooms import Submission, save_response
+
+    bp = blueprint()
+    bp["scenes"][0]["type"] = "interactive"
+    doc = {
+        "format_version": CLASSROOM_VERSION,
+        "phase": "ready",
+        "blueprint": bp,
+        "scenes": [sorting_scene(), *[scene(i) for i in range(1, 4)]],
+        "canonical_slug": "matter",
+        "responses": {"s0": {"text": "prior"}} if helped else {},
+        "dialogue": {"s0": [{"key": "hint-1", "teaching_move": "scaffold"}]}
+        if helped
+        else {},
+    }
+    conn = AsyncMock()
+    conn.transaction = MagicMock(return_value=AsyncMock())
+    conn.fetchrow.return_value = {"id": "experience", "metadataJson": doc}
+    conn.fetchval.return_value = "attempt"
+    with patch("app.api.classrooms.get_db_conn", new=AsyncMock(return_value=conn)):
+        result = await save_response(
+            "child",
+            "unit",
+            Submission(
+                scene_id="s0",
+                text='{"rock":"solid","water":"liquid"}',
+                submission_key="attempt-1",
+            ),
+        )
+    assert result["correct"]
+    content = json.loads(conn.fetchval.await_args.args[5])
+    assert content["previous_feedback_available"] is helped
+    assert bool(content["support"]) is helped
+    assert content["conditions"] == (
+        "coach_conversation" if helped else "no_recorded_coach_support"
+    )
+    stored = json.loads(conn.execute.await_args.args[2])
+    assert stored["responses"]["s0"]["text"] == '{"rock":"solid","water":"liquid"}'

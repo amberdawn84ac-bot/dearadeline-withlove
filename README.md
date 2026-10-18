@@ -1,4 +1,6 @@
 > **October 17 classroom rebuild:** the active lesson/Space screen now uses the fresh
+
+Classroom teaching methods and interactions: [uploaded skill application audit](docs/OPENMAIC_SKILL_APPLICATION.md).
 > classroom engine (`/classroom`): plan, cast, scenes, saved learner responses, and
 > scene conversation with Adeline. All ten tracks and her persona remain. Prior
 > generated content is retired by migration `20261017_reset_legacy_lessons`; the old

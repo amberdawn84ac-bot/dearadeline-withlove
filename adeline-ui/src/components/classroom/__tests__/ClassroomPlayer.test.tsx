@@ -32,7 +32,7 @@ describe('Fresh classroom', () => {
         { id: 'helper', name: 'Research partner', role: 'assistant', persona: 'Asks focused questions.' },
       ] },
       scenes: [{ ...scene, actions: [
-        { role_id: 'adeline', text: scene.content },
+        { role_id: 'adeline', text: scene.content, focus: 'content' },
         { role_id: 'helper', text: 'Which quantities would you compare?' },
       ] }],
     } };
@@ -42,6 +42,12 @@ describe('Fresh classroom', () => {
     expect(screen.getByLabelText('Talk it through with Adeline')).toBeInTheDocument();
     fireEvent.click(await screen.findByText('Listen'));
     expect(speak).toHaveBeenCalledWith(expect.objectContaining({ text: scene.content }));
+    const utterance = speak.mock.calls[0][0];
+    const { act } = await import('@testing-library/react');
+    act(() => utterance.onstart());
+    expect(screen.getByText(scene.content).className).toContain('ring-2');
+    act(() => utterance.onend());
+    expect(screen.getByText(scene.content).className).not.toContain('ring-2');
   });
   it('shows attached book and map resources on their own page only', async () => {
     const pages: ClassroomState = { ...state, classroom: { ...state.classroom!, scenes: [
@@ -95,4 +101,33 @@ describe('Fresh classroom', () => {
     await waitFor(() => expect(screen.getByText('Compare equal groups.')).toBeTruthy());
     expect(mocks.talk).toHaveBeenCalledWith('child', 'unit', 'one', 'Why multiply?', expect.any(String));
   });
+  it('saves sorting choices, shows feedback only after submission, and restores choices after reopening', async () => {
+    const sorting = { instruction: 'Sort these samples.', categories: [{ id: 'solid', label: 'Solid' }, { id: 'liquid', label: 'Liquid' }], items: [{ id: 'rock', label: 'Rock' }, { id: 'water', label: 'Water' }] };
+    const sortingState: ClassroomState = { ...state, classroom: { ...state.classroom!, scenes: [{ ...scene, type: 'interactive', question: null, sorting }, state.classroom!.scenes[1]] } };
+    mocks.submit.mockResolvedValue({ saved: true, correct: true, review: '2 of 2 classifications match.', items: [{ item_id: 'rock', correct: true, explanation: 'The rock retains its shape.' }] });
+    const view = render(<ClassroomPlayer state={sortingState} studentId="child" itemId="unit" grade="3" />);
+    expect(screen.queryByText(/retains its shape/)).not.toBeInTheDocument();
+    expect(screen.getByText('Check and save')).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Category for Rock'), { target: { value: 'solid' } });
+    expect(screen.getByText('Check and save')).toBeDisabled();
+    expect(screen.getByText('Next')).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Category for Water'), { target: { value: 'liquid' } });
+    fireEvent.click(screen.getByText('Check and save'));
+    await screen.findByText(/retains its shape/);
+    expect(mocks.submit).toHaveBeenLastCalledWith('child', 'unit', 'one', '{"rock":"solid","water":"liquid"}', expect.any(String));
+    fireEvent.click(screen.getByText('Next'));
+    fireEvent.click(screen.getByText('Previous'));
+    expect(screen.getByLabelText('Category for Rock')).toHaveValue('solid');
+    view.unmount();
+    render(<ClassroomPlayer state={{ ...sortingState, responses: { one: { text: '{"rock":"solid","water":"liquid"}', feedback: { saved: true, review: 'Saved.' } } } }} studentId="child" itemId="unit" grade="3" />);
+    await waitFor(() => expect(screen.getByLabelText('Category for Water')).toHaveValue('liquid'));
+  });
+  it('requests a small hint through the saved coaching conversation', async () => {
+    mocks.talk.mockResolvedValue({ key: 'hint', question: 'A hint', answer: 'Try comparing equal groups in another example.', teaching_move: 'scaffold' });
+    render(<ClassroomPlayer state={state} studentId="child" itemId="unit" grade="8" />);
+    fireEvent.click(screen.getByText('Give me a hint'));
+    await screen.findByText('Try comparing equal groups in another example.');
+    expect(mocks.talk).toHaveBeenLastCalledWith('child', 'unit', 'one', expect.stringContaining('different example'), expect.any(String));
+  });
+
 });
