@@ -198,7 +198,7 @@ Return ONLY this JSON object with no other text:
 
 async def _ground_close_rendering(reference: str, source_text: str) -> str | None:
     """Create a labeled close rendering only after the source text is available."""
-    if not GOOGLE_API_KEY or not source_text.strip():
+    if not (GEMINI_API_KEY or GOOGLE_API_KEY) or not source_text.strip():
         return None
     prompt = f"""Reference: {reference}
 Surviving Masoretic Hebrew source text:
@@ -353,6 +353,22 @@ Never call a generated rendering "Everett Fox." Fox is shown only when the sourc
 Respond in JSON only — no markdown fences, no prose outside the JSON."""
 
 
+_STUDY_GUIDANCE_PREFIXES = (
+    "Compare named translations with the source wording.",
+    "Compare important translation choices. If the supplied evidence",
+    "Walk through the original wording and close rendering.",
+    "Explain the original Hebrew or Greek word in depth",
+    "Historical and cultural context. Who was speaking",
+    "Look up the original Hebrew or Greek word for deeper meaning.",
+    "Research the historical context of this passage.",
+)
+
+
+def _is_study_guidance(content: str) -> bool:
+    normalized = " ".join(content.split()).casefold()
+    return any(normalized.startswith(prefix.casefold()) for prefix in _STUDY_GUIDANCE_PREFIXES)
+
+
 async def _build_deep_dive_study(
     reference: str,
     fox_text: Optional[str],
@@ -361,6 +377,7 @@ async def _build_deep_dive_study(
     original_meaning: Optional[str],
     context: Optional[str],
     grade_level: str,
+    source_version: str | None = None,
 ) -> tuple[str | None, list[DeepDiveSection]]:
     """Build a source-grounded close rendering and study sections."""
     grade_descriptions = {
@@ -373,7 +390,7 @@ async def _build_deep_dive_study(
 
     text_block = ""
     if fox_text:
-        text_block += f"Published English source comparison: {fox_text}\n"
+        text_block += f"Published English source comparison ({source_version or 'version not identified'}): {fox_text}\n"
     if hebrew_text:
         text_block += f"Original Hebrew/Greek: {hebrew_text}\n"
     if not text_block:
@@ -387,7 +404,10 @@ async def _build_deep_dive_study(
 {text_block}{word_block}{f"Historical context: {context}" if context else ""}
 Student grade level: {grade_desc}
 
-First produce a close English rendering from the supplied source text. Preserve YHWH, Elohim, Yeshua and original names when applicable; do not substitute LORD, God, Jesus, or Anglicized names inside the rendering. Then generate exactly these 4 study sections.
+First produce a close English rendering from the supplied source text. Preserve YHWH, Elohim, Yeshua and original names when applicable; do not substitute LORD, God, Jesus, or Anglicized names inside the rendering. Then write finished, passage-specific study sections for the reader. The JSON content descriptions below are authoring instructions, never text to copy into the response.
+Use ONLY the supplied published English version for comparisons. Do not invent wording or attributions for other translations.
+Omit Translation and Textual History if no substantive comparison is supported by both the supplied original and published English text. Do not replace missing analysis with instructions to compare or research.
+Do not infer a manuscript alteration from a difference in English translation.
 Return ONLY this JSON (no other text):
 {{
   "direct_translation": "Close English rendering grounded in the supplied source text; original names retained",
@@ -411,35 +431,28 @@ Return ONLY this JSON (no other text):
   ]
 }}"""
 
-    fallback_sections = [
-            DeepDiveSection(
-                heading="What the Source Text Says",
-                content=f"{hebrew_text or reference} — read the surviving source wording slowly and distinguish it from later interpretation.",
-            ),
-            DeepDiveSection(
-                heading="The Key Word",
-                content=original_meaning or "Look up the original Hebrew or Greek word for deeper meaning.",
-            ),
-            DeepDiveSection(
-                heading="Context and Intended Meaning",
-                content=context or "Research the historical context of this passage.",
-            ),
-            DeepDiveSection(
-                heading="Translation and Textual History",
-                content="Compare named translations with the source wording. Record only documented variants or changes; label disputed claims and unknown motives honestly.",
-            ),
-        ]
-    if not hebrew_text or not GOOGLE_API_KEY:
-        return None, fallback_sections
+    # The sourced passage, key word and context already appear on the page.
+    # Failed generation must not turn its authoring instructions into a lesson.
+    if not hebrew_text or not (GEMINI_API_KEY or GOOGLE_API_KEY):
+        return None, []
 
     try:
         raw = await _gemini_json(
             _DEEP_DIVE_SYSTEM, user_prompt, max_tokens=4096, temperature=0.2,
         )
-        return raw.get("direct_translation"), [DeepDiveSection(**s) for s in raw["sections"]]
+        sections = []
+        for item in raw.get("sections", []):
+            section = DeepDiveSection(**item)
+            content = section.content.strip()
+            if not content or _is_study_guidance(content):
+                continue
+            if "translation" in section.heading.casefold() and not fox_text:
+                continue
+            sections.append(section.model_copy(update={"content": content}))
+        return raw.get("direct_translation"), sections
     except Exception as e:
         logger.error(f"[DeepDive] LLM synthesis failed: {e}")
-        return None, fallback_sections
+        return None, []
 
 
 @router.post("/daily-bread/deep-dive", response_model=DeepDiveResponse)
@@ -483,6 +496,7 @@ async def deep_dive(body: DeepDiveRequest):
         original_meaning=body.original_meaning,
         context=body.context,
         grade_level=body.grade_level,
+        source_version=source_version,
     )
 
     return DeepDiveResponse(
