@@ -93,3 +93,8 @@ describe('selectPlannedTask', () => {
     expect(selected).toBeUndefined();
   });
 });
+
+it('retains a direct concept target even when no target list is attached', () => {
+  const item = { ...family('ratios', 'Compare mixtures'), concept_id: 'ratio-1', learner_progression_targets: [] };
+  expect(selectPlannedTask({ suggestions: [item] }, 'ratios').requiredStandardCodes).toEqual(['ratio-1']);
+});

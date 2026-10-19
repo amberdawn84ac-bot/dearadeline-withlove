@@ -46,6 +46,7 @@ export function selectPlannedTask(plan: PlanLookup, requestedId: string): {
       selected: fromPlan,
       requiredStandardCodes: Array.from(new Set([
         ...(fromPlan.standard_code ? [fromPlan.standard_code] : []),
+        ...(fromPlan.concept_id ? [fromPlan.concept_id] : []),
         ...(fromPlan.learner_progression_targets ?? fromPlan.individual_skill_targets ?? []).map(t => t.concept_id || t.standard_code).filter((id): id is string => Boolean(id)),
       ])),
     };
