@@ -27,10 +27,15 @@ export function CanonicalExperiencePage({ view: _view = 'lesson' }: { view?: 'le
         const saved = await getClassroom(student.id, itemId);
         if (!active) return;
         if (saved) { setState(saved); if (saved.request) setRequest(saved.request); return; }
-        if (itemId.startsWith('new-')) return;
+        if (itemId.startsWith('new-')) {
+          const query = new URLSearchParams(window.location.search);
+          const topic = query.get('topic'); const target = query.get('target'); const track = query.get('track');
+          if (topic && track && track in TRACKS) setRequest({ topic: topic.slice(0, 500), track: track as ClassroomTrack, level: student.gradeLevel ?? '8', targets: target ? [target] : [], materials: '', action: 'plan' });
+          return;
+        }
         const plan = await getSavedTodayPlan(student.id) ?? await getLearningPlan(student.id, 12);
         const { selected, requiredStandardCodes } = selectPlannedTask(plan, decodeURIComponent(itemId));
-        if (active && selected) setRequest({ topic: selected.title, track: selected.track as ClassroomTrack, level: 'Family ages 11–16', targets: requiredStandardCodes, materials: '', action: 'plan' });
+        if (active && selected) setRequest({ topic: selected.title, track: selected.track as ClassroomTrack, level: selected.grade_band || student.gradeLevel || '8', targets: requiredStandardCodes, materials: '', learning_need: selected.description?.slice(0, 2000), action: 'plan' });
       } catch (reason) { if (active) setError(reason instanceof Error ? reason.message : 'Could not open your exploration.'); }
       finally { if (active) setOpening(false); }
     })();

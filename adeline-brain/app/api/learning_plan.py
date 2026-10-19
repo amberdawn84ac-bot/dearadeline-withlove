@@ -1355,6 +1355,41 @@ async def _advance_evaluated_targets(plan: LearningPlanResponse, grade: str) -> 
     })
 
 
+async def _attach_evidence_practice(plan: LearningPlanResponse, lessons: list[IndividualLesson]) -> list[IndividualLesson]:
+    """Diagnosed gaps stay on this child's current sequence and get a concrete task."""
+    from app.config import get_db_conn
+    conn = await get_db_conn()
+    try:
+        rows = await conn.fetch('''SELECT a."attemptId",f.value AS finding
+            FROM "ClassroomAssessment" a CROSS JOIN LATERAL jsonb_array_elements(a.review->'findings') f
+            JOIN "StudentSkillState" s ON s."studentId"=a."studentId" AND s."skillId"=f.value->>'skill_id'
+            WHERE a."studentId"=$1 AND s.status='developing' AND s."lastEvidenceId"=a."attemptId"
+              AND f.value->>'result'='developing' ORDER BY a."createdAt" DESC''', plan.student_id)
+    finally:
+        await conn.close()
+    targets = {t.concept_id or t.standard_code: t for t in plan.progression_checklist}
+    practices = []
+    seen = set()
+    for row in rows:
+        finding = row['finding']
+        if isinstance(finding, str):
+            finding = json.loads(finding)
+        identity = finding['skill_id']
+        target = targets.get(identity)
+        if not target or identity in seen or target.sequence_state == 'LOCKED':
+            continue
+        seen.add(identity)
+        practices.append(IndividualLesson(
+            id='gap-review-'+row['attemptId']+':'+identity, investigation_id=target.suggestion_id,
+            investigation_title='Practice from your saved work', slot='gap', lesson_id='gap', index=1, count=1,
+            title='Practice: '+target.title, assignment=finding['next_step'], track=target.track,
+            kind='gap', skill_target=target))
+    # Keep other planned work; replace only generic practice for the same diagnosed target.
+    return [*practices, *[lesson for lesson in lessons if not (
+        lesson.kind == 'gap' and lesson.skill_target and
+        (lesson.skill_target.concept_id or lesson.skill_target.standard_code) in seen)]]
+
+
 async def _attach_individual_lessons(plan: LearningPlanResponse, *, refresh_family: bool = False) -> LearningPlanResponse:
     if refresh_family:
         grade = plan.placement.working_grade if plan.placement else "8"
@@ -1390,6 +1425,18 @@ async def _attach_individual_lessons(plan: LearningPlanResponse, *, refresh_fami
     except Exception as exc:
         logger.warning("[LearningPlan] Could not attach individual lessons: %s", exc)
         return plan
+    try:
+        lessons = await _attach_evidence_practice(plan, lessons)
+    except Exception:
+        logger.warning('Saved review practice unavailable; retain the existing individual plan', exc_info=True)
+    if refresh_family:
+        credits = await _get_credits_by_bucket(plan.student_id)
+        academic_grade = plan.placement.declared_level if plan.placement else grade
+        graduation = _calculate_graduation_progress(credits, academic_grade)
+        plan = plan.model_copy(update={
+            'credit_gaps': _calculate_credit_gaps(credits, academic_grade) if graduation.is_high_school else [],
+            'graduation_progress': graduation,
+        })
     return plan.model_copy(update={"individual_lessons": lessons})
 
 
@@ -1956,29 +2003,24 @@ async def _get_credits_by_bucket(student_id: str) -> dict[str, float]:
     
     try:
         conn = await get_db_conn()
-        rows = await conn.fetch(
-            """
-            SELECT track, SUM("creditHours") as hours
-            FROM "TranscriptEntry" 
-            WHERE "studentId" = $1
-            GROUP BY track
-            """,
-            student_id,
-        )
-        await conn.close()
-        
+        try:
+            rows = await conn.fetch(
+                '''SELECT t.track,t."creditHours" AS hours,s.bucket
+                FROM "TranscriptEntry" t
+                LEFT JOIN "CourseAward" a ON a."transcriptId"=t.id
+                LEFT JOIN "CourseScope" s ON s.id=a."scopeId"
+                WHERE t."studentId"=$1 AND t."sealedAt" IS NOT NULL''', student_id)
+        finally:
+            await conn.close()
         for row in rows:
-            track = row["track"]
-            hours = float(row["hours"] or 0)
-            bucket = TRACK_TO_BUCKET.get(track)
-            if bucket:
-                if isinstance(bucket, list):
-                    # Track maps to multiple buckets - count toward ALL of them
-                    for b in bucket:
-                        credits_by_bucket[b] += hours
-                else:
-                    credits_by_bucket[bucket] += hours
-                
+            bucket = row["bucket"]
+            if not bucket:
+                legacy = TRACK_TO_BUCKET.get(row["track"])
+                # Legacy mixed-track credits have one primary allocation, never all buckets.
+                bucket = legacy[0] if isinstance(legacy, list) else legacy
+            if bucket in credits_by_bucket:
+                credits_by_bucket[bucket] += float(row["hours"] or 0)
+
     except Exception as e:
         logger.warning(f"[LearningPlan] Failed to get credits by bucket: {e}")
         

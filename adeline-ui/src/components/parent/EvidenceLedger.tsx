@@ -1,15 +1,15 @@
 'use client';
 import { TimelineCardEditor } from "@/components/parent/TimelineCardEditor";
 import { useEffect, useState } from 'react';
-import { EvidenceAttempt, evaluateEvidence, getEvidencePortfolio } from '@/lib/curriculum-client';
+import { EvidenceAttempt, EvidenceEvaluation, evaluateEvidence, getEvidencePortfolio } from '@/lib/curriculum-client';
 
-function EvidenceReview({studentId,attempt}:{studentId:string;attempt:EvidenceAttempt}) {
-  const [skill,setSkill]=useState('');const [reasoning,setReasoning]=useState('');
+function EvidenceReview({studentId,attempt,suggestedSkill,onReviewed}:{studentId:string;attempt:EvidenceAttempt;suggestedSkill?:string;onReviewed:()=>void}) {
+  const [skill,setSkill]=useState(suggestedSkill ?? '');const [reasoning,setReasoning]=useState('');
   const [result,setResult]=useState<'developing'|'demonstrated'|'secure'>('developing');
   const [busy,setBusy]=useState(false);const [message,setMessage]=useState('');
   async function review() {
     setBusy(true);setMessage('');
-    try {await evaluateEvidence(studentId,attempt.id,skill.trim(),result,reasoning.trim());setMessage('Evidence reviewed.');}
+    try {await evaluateEvidence(studentId,attempt.id,skill.trim(),result,reasoning.trim());setMessage('Evidence reviewed. The next plan read uses this finding.');onReviewed();}
     catch {setMessage('Could not save this review. Try again.');}finally {setBusy(false);}
   }
   return <details className="mt-3 text-sm"><summary className="cursor-pointer font-bold">Review demonstrated learning</summary>
@@ -24,11 +24,14 @@ function EvidenceReview({studentId,attempt}:{studentId:string;attempt:EvidenceAt
 export function EvidenceLedger({ studentId }: { studentId: string }) {
   const [attempts, setAttempts] = useState<EvidenceAttempt[]>([]);
   const [error, setError] = useState('');
+  const [evaluations,setEvaluations] = useState<EvidenceEvaluation[]>([]);
+  const [assessments,setAssessments] = useState<Awaited<ReturnType<typeof getEvidencePortfolio>>['assessments']>([]);
+  const [revision,setRevision] = useState(0);
   useEffect(() => {
     let active = true;
-    getEvidencePortfolio(studentId).then(data => { if (active) setAttempts(data.attempts); }).catch(() => { if (active) setError('Could not load evidence.'); });
+    getEvidencePortfolio(studentId).then(data => { if (active) { setAttempts(data.attempts);setEvaluations(data.evaluations);setAssessments(data.assessments ?? []); } }).catch(() => { if (active) setError('Could not load evidence.'); });
     return () => { active = false; };
-  }, [studentId]);
+  }, [studentId,revision]);
   return <section className="rounded-2xl border border-[#DED1BD] p-5">
     <h3 className="font-bold">Evidence and revisions</h3>
     <p className="mt-2 text-sm">Earlier attempts stay in the record as thinking changes.</p>
@@ -38,7 +41,9 @@ export function EvidenceLedger({ studentId }: { studentId: string }) {
       {typeof attempt.content.text === 'string' && <p className="mt-2 whitespace-pre-wrap text-sm">{attempt.content.text}</p>}
       {typeof attempt.content.proficiency === 'string' && <p className="mt-2 text-sm">Review: {attempt.content.proficiency.toLowerCase()}</p>}
       {typeof attempt.content.claim === 'string' && <p className="mt-2 text-sm">{attempt.content.claim}</p>}
-      <EvidenceReview studentId={studentId} attempt={attempt} />
+      {evaluations.filter(e => e.attemptId === attempt.id).map(e => <p key={e.id} className="mt-2 text-sm"><strong>{e.skillId} · {e.result}</strong>: {e.reasoning}</p>)}
+      {assessments?.filter(a => a.attemptId === attempt.id).flatMap(a => a.review.findings).map(f => <p key={f.skill_id} className="mt-2 text-sm">Adeline’s review · {f.skill_id}: {f.reasoning} Next: {f.next_step}</p>)}
+      <EvidenceReview studentId={studentId} attempt={attempt} suggestedSkill={assessments?.find(a=>a.attemptId===attempt.id)?.review.findings[0]?.skill_id} onReviewed={()=>setRevision(n=>n+1)} />
     </li>)}</ol>
     <TimelineCardEditor studentId={studentId} attempts={attempts} />
     {error && <p role="alert" className="mt-2 text-sm">{error}</p>}

@@ -1,0 +1,27 @@
+name: Learning loop regression
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  evidence-to-credit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r adeline-brain/requirements.txt pytest pytest-asyncio
+      - working-directory: adeline-brain
+        run: python -m pytest tests/test_learning_loop.py tests/test_skill_path.py tests/test_today_persistence.py tests/test_classroom.py tests/test_interactive_models.py tests/test_credits_api.py -q

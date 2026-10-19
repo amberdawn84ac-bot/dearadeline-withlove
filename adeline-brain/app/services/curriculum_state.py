@@ -105,6 +105,7 @@ async def evaluate_evidence(
     conn = await get_db_conn()
     try:
         async with conn.transaction():
+            await conn.fetchval('SELECT id FROM "User" WHERE id=$1 FOR UPDATE', student_id)
             attempt = await conn.fetchrow(
                 'SELECT * FROM "EvidenceAttempt" WHERE id=$1 AND "studentId"=$2',
                 attempt_id,
@@ -144,7 +145,10 @@ async def evaluate_evidence(
                     VALUES ($1,$2,$3,$4,1,CASE WHEN $3 IN ('demonstrated','secure') THEN NOW() END)
                     ON CONFLICT ("studentId","skillId") DO UPDATE SET status=EXCLUDED.status,"lastEvidenceId"=EXCLUDED."lastEvidenceId",
                     "evidenceCount"="StudentSkillState"."evidenceCount"+1,
-                    "lastDemonstratedAt"=COALESCE(EXCLUDED."lastDemonstratedAt","StudentSkillState"."lastDemonstratedAt")""",
+                    "lastDemonstratedAt"=COALESCE(EXCLUDED."lastDemonstratedAt","StudentSkillState"."lastDemonstratedAt")
+                    WHERE (SELECT "createdAt" FROM "EvidenceAttempt" WHERE id="StudentSkillState"."lastEvidenceId")
+                        <= (SELECT "createdAt" FROM "EvidenceAttempt" WHERE id=EXCLUDED."lastEvidenceId")
+                       OR "StudentSkillState"."lastEvidenceId" IS NULL""",
                     student_id,
                     skill_id,
                     result,
@@ -153,6 +157,8 @@ async def evaluate_evidence(
             return {"evaluated": True, "new_evaluation": bool(evaluation)}
     finally:
         await conn.close()
+        from app.services.learning_loop import refresh_learning_projection
+        await refresh_learning_projection(student_id)
 
 
 async def record_demonstration(

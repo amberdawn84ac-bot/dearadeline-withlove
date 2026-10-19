@@ -11,7 +11,7 @@ from app.schemas.api_models import Track
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 CLASSROOM_VERSION = "openmaic-classroom-v1"
-CLASSROOM_AUTHORING_REVISION = "interactive-models-v2"
+CLASSROOM_AUTHORING_REVISION = "learning-loop-v3"
 
 
 class Role(BaseModel):

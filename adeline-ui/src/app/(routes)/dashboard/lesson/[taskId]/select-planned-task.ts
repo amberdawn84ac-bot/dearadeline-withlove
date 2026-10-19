@@ -44,7 +44,10 @@ export function selectPlannedTask(plan: PlanLookup, requestedId: string): {
   if (fromPlan) {
     return {
       selected: fromPlan,
-      requiredStandardCodes: fromPlan.standard_code ? [fromPlan.standard_code] : [],
+      requiredStandardCodes: Array.from(new Set([
+        ...(fromPlan.standard_code ? [fromPlan.standard_code] : []),
+        ...(fromPlan.learner_progression_targets ?? fromPlan.individual_skill_targets ?? []).map(t => t.concept_id || t.standard_code).filter((id): id is string => Boolean(id)),
+      ])),
     };
   }
 
@@ -59,7 +62,7 @@ export function selectPlannedTask(plan: PlanLookup, requestedId: string): {
     if (!mini) return { selected: undefined, requiredStandardCodes: [] };
     const target = mini.skill_target ?? plan.progression_checklist?.find((item) => item.suggestion_id === mini.investigation_id);
     return {
-      requiredStandardCodes: target?.standard_code ? [target.standard_code] : [],
+      requiredStandardCodes: target?.concept_id || target?.standard_code ? [target.concept_id || target.standard_code!] : [],
       selected: {
         id: mini.investigation_id,
         title: mini.title,

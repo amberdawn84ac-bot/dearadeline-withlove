@@ -10,6 +10,7 @@
     "lint": "pnpm -r lint"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.10",
     "@hygraph/management-sdk": "^1.6.1",
     "typescript": "5.9.3"
   },

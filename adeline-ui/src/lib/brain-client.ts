@@ -1164,6 +1164,14 @@ export interface CreditBucketState {
 }
 
 export interface CourseProposal {
+  targets?: { id:string;title:string }[];
+  creditUnits?: number;
+  ready?: boolean;
+  missingSkills?: string[];
+  conflictingSkills?: string[];
+  independentLessons?: number;
+  rationale?: string;
+  evidenceCount?: number;
   proposalId: string;
   bucket: string;
   externalCourseName: string;
@@ -1891,4 +1899,17 @@ export async function fetchLearningPath(
     if (!res.ok) throw new Error(`Learning path fetch failed: ${res.status}`);
     return res.json() as Promise<LearningPathResponse>;
   });
+}
+
+export type CourseTarget = { id: string; title: string; status: string };
+export async function getCourseTargets(studentId: string, q = ''): Promise<CourseTarget[]> {
+  const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}/targets?q=${encodeURIComponent(q)}`, { headers: await getBrainHeaders(), cache: 'no-store' });
+  if (!res.ok) throw new Error('Could not load reviewed curriculum targets.');
+  return res.json();
+}
+export async function defineCourseScope(studentId: string, body: { title: string; track: string; bucket: string; credit_units: number; skill_ids: string[]; rationale: string }): Promise<{id: string}> {
+  const res = await fetch(`${BRAIN_URL}/credits/${encodeURIComponent(studentId)}/courses`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...await getBrainHeaders() }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error('Could not save the course scope. Check the targets and try again.');
+  clearStudentDataCaches(studentId);
+  return res.json();
 }

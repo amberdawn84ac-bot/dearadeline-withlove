@@ -45,6 +45,7 @@ class ClassroomRequest(BaseModel):
     level: str = Field(default="family ages 11–16", max_length=100)
     targets: list[str] = Field(default_factory=list, max_length=30)
     materials: str = Field(default="", max_length=2000)
+    learning_need: str = Field(default="", max_length=2000)
     action: Literal["plan", "build"] = "plan"
 
 
@@ -67,6 +68,7 @@ def classroom_slug(request):
                 request.level.strip().lower(),
                 sorted(request.targets),
                 request.materials,
+                request.learning_need,
             ],
             ensure_ascii=False,
         ).encode()
@@ -222,6 +224,7 @@ async def build_document(student_id, item_id):
                     "previous_scenes": [s.model_dump() for s in scenes],
                     "request": doc["request"],
                     "supplied_resources": doc.get("source_context", []),
+                    "curriculum_targets": doc.get("curriculum_targets", []),
                 },
             )
             if (scene.id, scene.type) != (brief.id, brief.type):
@@ -322,6 +325,8 @@ async def prepare_classroom(
     )
     try:
         await planning_conn.execute("SELECT pg_advisory_lock($1)", shared_lock)
+        from app.services.learning_loop import known_skills
+        curriculum_targets = await known_skills(planning_conn, body.targets)
         canonical = await canonical_store.get(slug)
         shared = (
             ((canonical or {}).get("blocks") or [{}])[0].get("metadata") or {}
@@ -356,6 +361,7 @@ async def prepare_classroom(
                     {
                         **body.model_dump(mode="json"),
                         "supplied_resources": source_context,
+                        "curriculum_targets": curriculum_targets,
                     },
                 )
             )
@@ -370,6 +376,7 @@ async def prepare_classroom(
                 "scenes": [],
                 "request": body.model_dump(mode="json"),
                 "source_context": source_context,
+                "curriculum_targets": curriculum_targets,
                 "canonical_slug": slug,
                 "responses": {},
             }
@@ -521,6 +528,7 @@ async def save_response(
                     raise HTTPException(422, str(exc)) from exc
             feedback = {
                 "saved": True,
+                "submission_key": body.submission_key,
                 "review": "Saved for review. Completion is separate from understanding.",
             }
             if activity:
@@ -803,3 +811,21 @@ async def scene_materials(
             return resources
     finally:
         await conn.close()
+
+
+class AssessmentRequest(BaseModel):
+    submission_key: str = Field(min_length=8, max_length=200)
+
+
+@router.post('/{student_id}/{plan_item_id}/assessment')
+async def assess_response(student_id: str, plan_item_id: str, body: AssessmentRequest, _user=Depends(verify_student_access)):
+    from app.services.classroom_assessment import assess_saved_work
+    from app.services.rate_limit import enforce_rate_limit
+    await enforce_rate_limit('classroom-assessment', student_id, limit=30)
+    try:
+        return await assess_saved_work(student_id, plan_item_id, body.submission_key, generate_json)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        logger.warning('Work saved; assessment unavailable', exc_info=True)
+        raise HTTPException(503, 'Your work is saved. Review is unavailable; retry the review later.') from exc

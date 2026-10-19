@@ -885,3 +885,47 @@ model TimelineCard {
   uncertainty         String @default("")
   createdAt           DateTime @default(now())
 }
+
+model StudentCreditProfile {
+  studentId String @id
+  profileKey String
+  updatedAt DateTime @updatedAt
+}
+
+model CourseScope {
+  id String @id @default(uuid())
+  studentId String
+  title String
+  track Track
+  bucket String
+  creditUnits Float
+  skillIds String[]
+  rationale String
+  createdBy String
+  createdAt DateTime @default(now())
+  @@index([studentId])
+}
+
+model CourseAward {
+  scopeId String @id
+  studentId String
+  approvedBy String
+  snapshot Json
+  transcriptId String @unique
+  approvedAt DateTime @default(now())
+}
+
+model CourseSkillAllocation {
+  studentId String
+  skillId String
+  scopeId String
+  @@id([studentId, skillId])
+}
+
+model ClassroomAssessment {
+  attemptId String @id
+  studentId String
+  status String
+  review Json
+  createdAt DateTime @default(now())
+}

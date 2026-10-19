@@ -1,5 +1,6 @@
 "use client";
 
+import CourseScopeForm from "@/components/parent/CourseScopeForm";
 import { useEffect, useState } from "react";
 import { getCreditDashboard, approveCourseProposal, listAvailableProfiles } from "@/lib/brain-client";
 import type { CreditDashboard, OklahomaProfile } from "@/lib/brain-client";
@@ -32,7 +33,10 @@ export function CreditDashboardComponent({ studentId }: Props) {
       }
     }
 
-    loadData();
+    void loadData();
+    const refresh = (event: Event) => { if ((event as CustomEvent<string>).detail === studentId) void loadData(); };
+    window.addEventListener('adeline-evidence-reviewed', refresh);
+    return () => window.removeEventListener('adeline-evidence-reviewed', refresh);
   }, [studentId]);
 
   const handleApproveProposal = async (proposalId: string) => {
@@ -60,7 +64,7 @@ export function CreditDashboardComponent({ studentId }: Props) {
       <div className="rounded-lg border border-gray-200 bg-white p-6">
         <h2 className="text-2xl font-bold text-gray-900">Academic Portfolio</h2>
         <p className="mt-2 text-sm text-gray-600">
-          Portfolio-first transcript. Progress comes from reviewed demonstrations and mastery evidence; time is shown only as conventional equivalency.
+          Progress comes from reviewed demonstrations against a defined course scope. Course credits require parent approval.
         </p>
         {currentProfile && (
           <div className="mt-4 flex items-center gap-2">
@@ -70,6 +74,7 @@ export function CreditDashboardComponent({ studentId }: Props) {
         )}
       </div>
 
+      <CourseScopeForm studentId={studentId} onSaved={() => { void getCreditDashboard(studentId).then(setDashboard).catch(() => setError('Could not refresh course progress.')); }} />
       {/* Credit Buckets section with progress bars */}
       <div className="rounded-lg border border-gray-200 bg-white p-6">
         <h3 className="text-lg font-semibold text-gray-900">Mastery Evidence by Bucket</h3>
@@ -80,7 +85,7 @@ export function CreditDashboardComponent({ studentId }: Props) {
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-gray-900">{bucket.bucket}</span>
                   <span className="text-sm text-gray-600">
-                    {bucket.hoursEarned !== undefined ? `${bucket.hoursEarned.toFixed(1)} conventional hours` : 'No equivalency yet'}
+                    {bucket.creditEarned ?? 0} approved credits
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -99,15 +104,17 @@ export function CreditDashboardComponent({ studentId }: Props) {
           <h3 className="text-lg font-semibold text-gray-900">Pending Course Proposals</h3>
           <div className="mt-4 space-y-3">
             {dashboard.pendingProposals.map((proposal) => (
-              <div key={proposal.proposalId} className="flex items-center justify-between rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+              <div key={proposal.proposalId} className="flex flex-col gap-4 rounded-lg border border-yellow-200 bg-yellow-50 p-4">
                 <div>
                   <p className="font-medium text-gray-900">{proposal.externalCourseName}</p>
                   <p className="text-sm text-gray-600">{proposal.bucket}</p>
-                  <p className="mt-1 text-xs text-gray-500">{proposal.masteryPercentage}% mastery · {proposal.hoursEarned} conventional hours</p>
+                  <details className="mt-2 text-sm"><summary className="cursor-pointer">Review course scope</summary><p className="mt-2">{proposal.rationale}</p><ul className="mt-2 list-disc pl-5">{proposal.targets?.map(t => <li key={t.id}>{t.title}</li>)}</ul></details>
+                  <p className="mt-1 text-xs text-gray-500">{proposal.masteryPercentage}% of course targets demonstrated · {proposal.creditUnits ?? 0} proposed credits</p>
                 </div>
+                {proposal.ready === false && <p className="text-sm">{proposal.missingSkills?.length ?? 0} objectives still need evidence. At least two independent lessons are required.{Boolean(proposal.conflictingSkills?.length) && ' Some targets are already credited elsewhere.'}</p>}
                 <button
                   onClick={() => handleApproveProposal(proposal.proposalId)}
-                  disabled={approvingProposalId === proposal.proposalId}
+                  disabled={approvingProposalId === proposal.proposalId || proposal.ready === false}
                   className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                 >
                   {approvingProposalId === proposal.proposalId ? "Approving..." : "Approve"}
@@ -121,16 +128,16 @@ export function CreditDashboardComponent({ studentId }: Props) {
       {/* Approved Courses section */}
       {dashboard.approvedCourses.length > 0 && (
         <div className="rounded-lg border border-gray-200 bg-white p-6">
-          <h3 className="text-lg font-semibold text-gray-900">Official Transcript</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Parent-approved transcript</h3>
           <div className="mt-4 space-y-3">
             {dashboard.approvedCourses.map((course) => (
-              <div key={course.proposalId} className="flex items-center justify-between rounded-lg border border-green-200 bg-green-50 p-4">
+              <div key={course.proposalId} className="flex flex-col gap-4 rounded-lg border border-green-200 bg-green-50 p-4">
                 <div>
                   <p className="font-medium text-gray-900">{course.externalCourseName}</p>
                   <p className="text-sm text-gray-600">{course.bucket}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-semibold text-green-900">{course.hoursEarned} conventional hours</p>
+                  <p className="font-semibold text-green-900">{course.creditUnits ?? 0} course credits</p>
                   <p className="text-xs text-gray-500">Grade: {course.masteryGrade}</p>
                 </div>
               </div>

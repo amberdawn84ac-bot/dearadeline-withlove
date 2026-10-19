@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ActivityLab from './ActivityLab';
+import LearningReviewPanel from './LearningReview';
 import { ActivityWork, ClassroomScene, ClassroomState, Feedback, ClassroomTurn, SceneMaterial, getSceneMaterials, talkToClassroom, submitClassroomResponse } from '@/lib/classroom-client';
 
 function sortingChoices(response: string): Record<string, string> {
@@ -186,6 +187,7 @@ export default function ClassroomPlayer({ state, studentId, itemId, grade }: { s
         <details className="mt-6"><summary className="cursor-pointer font-semibold">What to show</summary><ul className="mt-3 list-disc space-y-2 pl-5">{scene.success_criteria.map(c => <li key={c}>{c}</li>)}</ul></details>
         <details className="mt-6" onToggle={e => setShowTranscript(e.currentTarget.open)}><summary className="cursor-pointer font-semibold">Read or replay the narration</summary>{showTranscript && <ol className="mt-3 space-y-3">{scene.actions.map((action, i) => <li key={i} className="rounded-xl border border-[#d9cfbc] p-3"><p>{action.text}</p>{speechAvailable && <button className="mt-2 min-h-11 rounded-lg border px-3 text-sm" onClick={() => listen(i)}>Replay part {i + 1}</button>}</li>)}</ol>}<p className="mt-3 text-sm">Narration pauses after each part so you can try the task. Press Continue narration when ready.</p></details>
         {dirty && <p className="mt-4 text-sm">Save your response before changing pages.</p>}
+        {feedback?.submission_key && <LearningReviewPanel key={feedback.submission_key} feedback={feedback} studentId={studentId} itemId={itemId} track={state.request?.track ?? classroom.blueprint.integrated_tracks[0]} />}
         <nav aria-label="Exploration pages" className="mt-8 flex justify-between gap-3"><button disabled={index === 0 || saving || asking || dirty} onClick={() => setIndex(i => i - 1)} className="min-h-11 rounded-xl border px-5 disabled:opacity-40">Previous</button><button disabled={index === classroom.scenes.length - 1 || saving || asking || dirty} onClick={() => setIndex(i => i + 1)} className="min-h-11 rounded-xl border px-5 disabled:opacity-40">Next</button></nav>
       </article>
       <aside className="space-y-4" aria-label="Talk with Adeline"><h2 className="text-lg font-semibold">Adeline</h2>{(pageMaterials.length > 0 || promisesMaterial) && <a href={`#scene-materials-${scene.id}`} className="block font-semibold underline">View this page’s materials ↓</a>}{discussionActions.map((action, i) => { const role = classroom.blueprint.roster.find(r => r.id === action.role_id); return <div key={`${scene.id}-${i}`} className="rounded-2xl border border-[#d9cfbc] bg-white p-5"><p className="font-semibold">{role?.name ?? 'Adeline'}</p><p className="mt-2 leading-7">{action.text}</p></div>; })}

@@ -1,5 +1,6 @@
 'use client';
 
+import { CreditDashboardComponent } from "@/components/dashboard/CreditDashboard";
 import { EvidenceLedger } from "@/components/parent/EvidenceLedger";
 import { StudentCharacterEditor } from "@/components/parent/StudentCharacterEditor";
 import { FamilyTimeline } from "@/components/parent/FamilyTimeline";
@@ -85,7 +86,8 @@ function ChildOverview({ student, portfolio, portfolioLoading, onClose }: {
       </div>
 
       <StudentCharacterEditor studentId={student.student_id} />
-      <EvidenceLedger studentId={student.student_id} />
+      <EvidenceLedger key={student.student_id} studentId={student.student_id} />
+      <CreditDashboardComponent key={student.student_id} studentId={student.student_id} />
       <div className="mt-7 grid gap-6 lg:grid-cols-2">
         <div className="space-y-6">
           <section className="rounded-2xl border border-[#DED1BD] p-5">

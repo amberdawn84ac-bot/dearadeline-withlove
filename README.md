@@ -405,3 +405,5 @@ IDs survive corrected grade placement. Science standards feed the existing
 foundation bridge with learner-specific REVIEW/REINFORCE/TEACH and sources.
 See [the mapping review](docs/VERIFIED_CURRICULUM_MAPPING.md) for source versions,
 coverage, dispositions, reproducibility and real-Postgres validation.
+
+Learning-loop implementation and acceptance limits: [Evidence, practice, plans and course credit](docs/LEARNING_LOOP.md).

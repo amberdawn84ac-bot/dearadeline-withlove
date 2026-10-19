@@ -1,9 +1,11 @@
 """Curriculum records: explicit progression, append-only evidence and character."""
 
 import json
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from typing import Literal
+
 from app.api.middleware import verify_household_access, verify_student_access
 from app.config import get_db_conn
 from app.connections.family_unit_store import family_unit_store
@@ -45,7 +47,7 @@ class UnitRequest(BaseModel):
 @router.post("/households/{household_id}/units/plan")
 async def plan_family_unit(household_id: str, body: SequenceRequest, _: str = Depends(verify_household_access)):
     """Preview an ordered outline; queueing it uses the ordinary unit endpoint."""
-    from app.api.spaces import _space_turn_llm, _parse_json_response
+    from app.api.spaces import _parse_json_response, _space_turn_llm
     conn = await get_db_conn()
     try:
         learners = await conn.fetch('SELECT "gradeLevel" FROM "User" WHERE "parentId"=$1 AND role=\'STUDENT\'', household_id)
@@ -276,6 +278,8 @@ async def portfolio(student_id: str, _: str = Depends(verify_student_access)):
         return {
             "attempts": [_record(r) for r in attempts],
             "evaluations": [_record(r) for r in evaluations],
+            "assessments": [dict(r) | {'review': json.loads(r['review']) if isinstance(r['review'], str) else r['review']} for r in await conn.fetch(
+                'SELECT * FROM "ClassroomAssessment" WHERE "studentId"=$1 ORDER BY "createdAt"', student_id)],
         }
     finally:
         await conn.close()
@@ -328,6 +332,25 @@ async def review_evidence(
         raise HTTPException(
             403, "A parent or authorized reviewer must evaluate evidence."
         )
+    from app.services.learning_loop import known_skills
+    conn = await get_db_conn()
+    try:
+        if not await known_skills(conn, [body.skill_id]):
+            raise HTTPException(422, 'Choose an existing curriculum concept ID or standard code.')
+        # A human finding supersedes an automated finding through a preserved revision,
+        # never by rewriting the earlier attempt or evaluation.
+        automatic = await conn.fetchrow('''SELECT e.id FROM "EvidenceEvaluation" e
+            WHERE e."attemptId"=$1 AND e."skillId"=$2 AND e."evaluatorId"='adeline-classroom-review-v1' ''', attempt_id, body.skill_id)
+        if automatic:
+            revised = await conn.fetchval('''INSERT INTO "EvidenceAttempt"("studentId","canonicalSlug","canonicalRevision","lessonId","skillId","parentAttemptId",kind,content,"submissionKey")
+                SELECT "studentId","canonicalSlug","canonicalRevision","lessonId",$3,id,'revision',content,$4
+                FROM "EvidenceAttempt" WHERE id=$1 AND "studentId"=$2
+                ON CONFLICT ("studentId","submissionKey") DO NOTHING RETURNING id''', attempt_id, student_id, body.skill_id, 'review:'+attempt_id+':'+body.skill_id)
+            if not revised:
+                revised = await conn.fetchval('SELECT id FROM "EvidenceAttempt" WHERE "studentId"=$1 AND "submissionKey"=$2', student_id, 'review:'+attempt_id+':'+body.skill_id)
+            attempt_id = revised
+    finally:
+        await conn.close()
     from app.services.curriculum_state import evaluate_evidence
 
     try:

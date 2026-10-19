@@ -1,3 +1,4 @@
+import { clearStudentDataCaches } from '@/lib/brain-client';
 import { supabase } from '@/lib/supabase';
 const BASE = '/brain/curriculum';
 
@@ -25,7 +26,7 @@ export interface CurrentUnit {
 export const getFamilyUnit = (household: string) => request<{ current: CurrentUnit | null; upcoming: Array<{ id: string; title: string }> }>(`/households/${encodeURIComponent(household)}/unit`);
 export const completeUnitExperience = (household: string, queue: string, experience: string) => request(`/households/${encodeURIComponent(household)}/units/${encodeURIComponent(queue)}/experiences/${encodeURIComponent(experience)}/complete`, {});
 export const advanceFamilyUnit = (household: string, queue: string) => request(`/households/${encodeURIComponent(household)}/units/${encodeURIComponent(queue)}/advance`, {});
-export const getEvidencePortfolio = (student: string) => request<{ attempts: EvidenceAttempt[]; evaluations: unknown[] }>(`/students/${encodeURIComponent(student)}/portfolio`);
+export const getEvidencePortfolio = (student: string) => request<{ attempts: EvidenceAttempt[]; evaluations: EvidenceEvaluation[]; assessments?: {attemptId:string;review:{findings:{skill_id:string;result:string;reasoning:string;next_step:string}[]}}[] }>(`/students/${encodeURIComponent(student)}/portfolio`);
 export const saveEvidenceNote = (student: string, body: { canonical_slug: string; canonical_revision?: string; lesson_id: string; parent_attempt_id?: string; kind: 'note' | 'revision'; content: { text: string; label: string }; submission_key: string }) => request<EvidenceAttempt>(`/students/${encodeURIComponent(student)}/evidence`, body);
 export interface StudentCharacter { name: string; identity: string; role_preferences: string[]; persistent_traits: string[]; visual_data: Record<string, unknown> }
 export const saveStudentCharacter = (student: string, body: StudentCharacter) => request(`/students/${encodeURIComponent(student)}/character`, body, 'PUT');
@@ -37,7 +38,14 @@ export interface InvestigationSequence {
   experiences: Array<{ canonical_topic: string; track: string }>;
 }
 export const planFamilyInvestigation = (household: string, topic: string, session_count: number, available_materials: string) => request<InvestigationSequence>(`/households/${encodeURIComponent(household)}/units/plan`, { topic, session_count, available_materials });
-export const evaluateEvidence = (student: string, attempt: string, skillId: string, result: 'developing'|'demonstrated'|'secure', reasoning: string) => request(`/students/${encodeURIComponent(student)}/evidence/${encodeURIComponent(attempt)}/evaluate`, {skill_id:skillId,result,reasoning});
+export interface EvidenceEvaluation { id:string;attemptId:string;skillId:string;result:string;reasoning:string;evaluatorId:string }
+export const evaluateEvidence = async (student:string,attempt:string,skillId:string,result:'developing'|'demonstrated'|'secure',reasoning:string) => {
+  const review = await request(`/students/${encodeURIComponent(student)}/evidence/${encodeURIComponent(attempt)}/evaluate`, {skill_id:skillId,result,reasoning});
+  clearStudentDataCaches(student);
+  window.dispatchEvent(new CustomEvent('adeline-evidence-reviewed', { detail: student }));
+  return review;
+};
+
 export interface TimelineCard {id:string;dateStart:string;dateEnd?:string;claim:string;studentName:string;uncertainty:string;sources:Array<{url?:string}>;omittedPerspectives:string[]}
 export const getFamilyTimeline = (household:string) => request<TimelineCard[]>(`/households/${encodeURIComponent(household)}/timeline`);
 export const saveTimelineCard = (student:string,attempt:EvidenceAttempt,card:{date_start:string;date_end?:string;claim:string;sources:Array<{url:string}>;omitted_perspectives:string[];uncertainty:string}) => request(`/students/${encodeURIComponent(student)}/evidence`, {canonical_slug:attempt.canonicalSlug,canonical_revision:attempt.canonicalRevision,lesson_id:attempt.lessonId,parent_attempt_id:attempt.id,kind:'timeline',content:card,submission_key:crypto.randomUUID()});

@@ -42,6 +42,7 @@ const mockCreditDashboard = {
   approvedCourses: [
     {
       proposalId: "course-1",
+      creditUnits: 1,
       bucket: "Mathematics",
       externalCourseName: "Geometry Mastery",
       hoursEarned: 1,
@@ -62,6 +63,7 @@ const mockProfiles = [
 describe("CreditDashboardComponent", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(brainClient.getCourseTargets).mockResolvedValue([]);
   });
 
   it("should display loading state initially", () => {
@@ -94,8 +96,8 @@ describe("CreditDashboardComponent", () => {
     expect(screen.getByText("Mastery Evidence by Bucket")).toBeDefined();
     expect(screen.getByText("Standard Courses")).toBeDefined();
     expect(screen.getByText("Electives")).toBeDefined();
-    expect(screen.getByText("45.5 conventional hours")).toBeDefined();
-    expect(screen.getByText("120.0 conventional hours")).toBeDefined();
+    expect(screen.getByText("0 approved credits")).toBeDefined();
+    expect(screen.getByText("1 approved credits")).toBeDefined();
 
     // Check pending proposals
     expect(screen.getByText("Pending Course Proposals")).toBeDefined();
@@ -103,9 +105,9 @@ describe("CreditDashboardComponent", () => {
     expect(screen.getByText("Science")).toBeDefined();
 
     // Check approved courses
-    expect(screen.getByText("Official Transcript")).toBeDefined();
+    expect(screen.getByText("Parent-approved transcript")).toBeDefined();
     expect(screen.getByText("Geometry Mastery")).toBeDefined();
-    expect(screen.getByText("1 conventional hours")).toBeDefined();
+    expect(screen.getByText("1 course credits")).toBeDefined();
   });
 
   it("should handle approve proposal button click", async () => {
