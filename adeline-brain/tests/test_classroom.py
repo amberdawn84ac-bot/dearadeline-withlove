@@ -2,6 +2,8 @@ from copy import deepcopy
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from pydantic import ValidationError
+
 from app.agents.persona import ADELINE_CLASSROOM_PERSONA
 from app.api.classrooms import (
     ClassroomRequest,
@@ -17,7 +19,6 @@ from app.curriculum.classroom import (
     public_classroom,
 )
 from app.schemas.api_models import Track
-from pydantic import ValidationError
 
 
 def blueprint():
@@ -204,6 +205,12 @@ async def test_build_checkpoints_and_honest_completion(fail):
         assert saved[-1]["scenes"] == []
         canonical.assert_not_awaited()
     else:
+        from app.curriculum.runtime_capabilities import authoring_capabilities
+
+        assert all(
+            call.args[2]["runtime_capabilities"] == authoring_capabilities()
+            for call in generated.await_args_list
+        )
         assert [len(d["scenes"]) for d in saved] == [0, 1, 2, 3, 4, 4]
         assert saved[-1]["phase"] == "ready"
         assert canonical.await_args.args[1]["contract_version"] == 100

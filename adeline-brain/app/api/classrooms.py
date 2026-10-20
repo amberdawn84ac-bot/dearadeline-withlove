@@ -32,6 +32,7 @@ from app.curriculum.classroom import (
     public_classroom,
 )
 from app.curriculum.interactive_models import ActivityWork, checked_work
+from app.curriculum.runtime_capabilities import authoring_capabilities
 from app.schemas.api_models import Track
 
 router = APIRouter(prefix="/classroom", tags=["classroom"])
@@ -63,6 +64,7 @@ def classroom_slug(request):
             [
                 CLASSROOM_VERSION,
                 CLASSROOM_AUTHORING_REVISION,
+                authoring_capabilities()["fingerprint"],
                 request.topic.strip().lower(),
                 request.track.value,
                 request.level.strip().lower(),
@@ -225,6 +227,7 @@ async def build_document(student_id, item_id):
                     "request": doc["request"],
                     "supplied_resources": doc.get("source_context", []),
                     "curriculum_targets": doc.get("curriculum_targets", []),
+                    "runtime_capabilities": authoring_capabilities(),
                 },
             )
             if (scene.id, scene.type) != (brief.id, brief.type):
@@ -362,6 +365,7 @@ async def prepare_classroom(
                         **body.model_dump(mode="json"),
                         "supplied_resources": source_context,
                         "curriculum_targets": curriculum_targets,
+                        "runtime_capabilities": authoring_capabilities(),
                     },
                 )
             )
@@ -377,6 +381,7 @@ async def prepare_classroom(
                 "request": body.model_dump(mode="json"),
                 "source_context": source_context,
                 "curriculum_targets": curriculum_targets,
+                "runtime_capabilities": authoring_capabilities(),
                 "canonical_slug": slug,
                 "responses": {},
             }

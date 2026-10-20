@@ -1,5 +1,7 @@
 > **October 17 classroom rebuild:** the active lesson/Space screen now uses the fresh
 
+Richer teaching: [current foundation, implementation phases and acceptance gates](docs/RICHER_TEACHING_IMPLEMENTATION_PLAN.md).
+
 Interactive classroom models: [models, saved work and verification](docs/INTERACTIVE_CLASSROOM_MODELS.md).
 
 Classroom teaching methods and interactions: [uploaded skill application audit](docs/OPENMAIC_SKILL_APPLICATION.md).
