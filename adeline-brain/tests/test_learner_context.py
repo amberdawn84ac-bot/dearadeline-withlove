@@ -1,12 +1,15 @@
 """Learner adaptation inputs, resource audience, and privacy-safe reuse."""
 
 import pytest
-from pydantic import ValidationError
-
 from app.api.classrooms import ClassroomRequest, classroom_slug
-from app.curriculum.learner_context import LearnerContext, from_legacy_level, resolve_context
+from app.curriculum.learner_context import (
+    LearnerContext,
+    from_legacy_level,
+    resolve_context,
+)
 from app.schemas.api_models import Track
 from app.services.resource_router import _grade_number
+from pydantic import ValidationError
 
 
 @pytest.mark.parametrize(("label", "grade"), [("3", "3"), ("3rd grade", "3"), ("GRADE 8", "8"), ("8th grade", "8"), ("Kindergarten", "K"), ("K", "K")])
