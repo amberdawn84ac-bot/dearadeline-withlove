@@ -4,7 +4,8 @@ This is the first implementation slice of the richer-teaching plan.
 
 ## Changed behavior
 
-- The exploration form now offers optional individual/family controls, declared and\n  working grades, functional supports and available time. New requests may supply a strict, versioned learner_context: individual/family
+- The exploration form now offers optional individual/family controls, declared and
+  working grades, functional supports and available time. New requests may supply a strict, versioned learner_context: individual/family
   mode, declared grades, an individual working grade, functional support preferences,
   language tag and available minutes. Names, account IDs and diagnoses are not
   accepted in this shareable context.
@@ -28,13 +29,17 @@ working-level, context-validation and private-reuse cases. Its planning integrat
 test checks both the model context and the ResourceQuery grade. Existing checkpoint,
 saved-document, SQL evidence, plan and credit tests remain in that workflow.
 
-No local execution environment was available for this slice. Validate on the
-isolated pull-request branch in GitHub Actions before advancing main. A passing
+GitHub Actions verified 87 backend tests, 225 UI tests, 42 shared-core tests and
+UI type checking on the implementation branch. The general backend lint job remains
+blocked by its existing repository-wide backlog; its dependent general backend test
+job is skipped. No local execution environment or browser verification was available.
+A passing
 controlled-model regression establishes transport and persistence rules, not that
 live generated lessons meet the reference teaching quality.
 
 ## Still to implement
 
-The compatible free-text field remains alongside explicit preferences. The renderer\ntrial and full generated third-grade/eighth-grade/family reference review follow next. This change does not
+The compatible free-text field remains alongside explicit preferences. The renderer
+trial and full generated third-grade/eighth-grade/family reference review follow next. This change does not
 install the visual renderer, add new game mechanisms or assert complete curriculum
 coverage. See RICHER_TEACHING_IMPLEMENTATION_PLAN.md for the full acceptance sequence.
