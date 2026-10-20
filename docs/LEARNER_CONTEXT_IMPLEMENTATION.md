@@ -4,7 +4,7 @@ This is the first implementation slice of the richer-teaching plan.
 
 ## Changed behavior
 
-- New requests may supply a strict, versioned learner_context: individual/family
+- The exploration form now offers optional individual/family controls, declared and\n  working grades, functional supports and available time. New requests may supply a strict, versioned learner_context: individual/family
   mode, declared grades, an individual working grade, functional support preferences,
   language tag and available minutes. Names, account IDs and diagnoses are not
   accepted in this shareable context.
@@ -35,8 +35,6 @@ live generated lessons meet the reference teaching quality.
 
 ## Still to implement
 
-The current UI retains its compatible free-text field. A deliberate individual/family
-selector and functional-support/time controls, renderer trial and full generated
-third-grade/eighth-grade/family reference review follow next. This change does not
+The compatible free-text field remains alongside explicit preferences. The renderer\ntrial and full generated third-grade/eighth-grade/family reference review follow next. This change does not
 install the visual renderer, add new game mechanisms or assert complete curriculum
 coverage. See RICHER_TEACHING_IMPLEMENTATION_PLAN.md for the full acceptance sequence.

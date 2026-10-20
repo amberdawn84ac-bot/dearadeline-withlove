@@ -9,7 +9,13 @@ export const TRACKS = {
   APPLIED_MATHEMATICS: 'Real-World Mathematics', CREATIVE_ECONOMY: 'Creative Economy',
 } as const;
 export type ClassroomTrack = keyof typeof TRACKS;
-export type ClassroomRequest = { topic: string; track: ClassroomTrack; level: string; targets: string[]; materials: string; learning_need?: string; action: 'plan' | 'build' };
+export type LearnerContext = {
+  version: 'learner-context-v1'; mode: 'individual' | 'family' | 'unspecified';
+  declared_grades: string[]; working_grade?: string | null;
+  supports: ('reading_support' | 'extra_time' | 'keyboard_input' | 'screen_reader')[];
+  language: string; minutes?: number | null;
+};
+export type ClassroomRequest = { topic: string; track: ClassroomTrack; level: string; targets: string[]; materials: string; learning_need?: string; learner_context?: LearnerContext | null; action: 'plan' | 'build' };
 export type SceneType = 'slide' | 'interactive' | 'quiz' | 'pbl';
 type Variable = { label: string; unit: string; minimum: number; maximum: number; initial: number; step: number };
 export type SceneMaterial = { id: string; kind: 'text' | 'link' | 'image'; title: string; content?: string; url?: string; image_url?: string; attribution?: string; license_url?: string };
