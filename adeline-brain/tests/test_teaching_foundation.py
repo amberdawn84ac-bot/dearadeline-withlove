@@ -84,7 +84,7 @@ async def test_planning_receives_and_preserves_actual_delivery_capabilities():
         patch(
             "app.services.resource_router.resource_router.search",
             new=AsyncMock(return_value={"resources": []}),
-        ),
+        ) as searched,
         patch("app.api.classrooms.generate_json", new=generated),
     ):
         result = await prepare_classroom(
@@ -97,4 +97,7 @@ async def test_planning_receives_and_preserves_actual_delivery_capabilities():
         generated.await_args.args[2]["runtime_capabilities"] == authoring_capabilities()
     )
     assert saved[0]["runtime_capabilities"] == authoring_capabilities()
+    assert searched.await_args.args[0].grade_level == "3"
+    assert generated.await_args.args[2]["learner_context"]["declared_grades"] == ["3"]
+    assert saved[0]["learner_context"]["resource_grade"] == "3"
     conn.close.assert_awaited_once()

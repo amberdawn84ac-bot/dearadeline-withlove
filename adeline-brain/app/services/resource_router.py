@@ -22,7 +22,7 @@ import httpx
 class ResourceQuery:
     topic: str
     track: str
-    grade_level: str = "8"
+    grade_level: str | None = "8"
     objective: str = ""
     resource_types: tuple[str, ...] = ()
     interactive_preferred: bool = True
@@ -69,7 +69,9 @@ def _terms(text: str) -> set[str]:
     return {word.strip(".,:;!?()[]{}\"'").lower() for word in text.split() if len(word) > 1}
 
 
-def _grade_number(value: str) -> int:
+def _grade_number(value: str | None) -> int:
+    if value is None:
+        return -1  # Unknown audience: do not select a grade-gated game.
     normalized = str(value).strip().upper()
     if normalized in {"K", "KINDERGARTEN", "K-2", "PLACEMENT"}:
         return 0
@@ -338,7 +340,7 @@ async def _curated(query: ResourceQuery, _client: httpx.AsyncClient) -> list[Rou
             mastery_prompt="Show the rule in your code that represents the concept and explain what changes when you alter it.",
             portfolio_output="Publish the playable project and save its share link with a design or debugging explanation.",
         ))
-    if wants_game and grade <= 2:
+    if wants_game and 0 <= grade <= 2:
         output.append(RoutedResource(
             id="pbskids:games", title=f"Explore a playful {query.topic} challenge", provider="PBS KIDS",
             resource_type="GAME", source_url="https://pbskids.org/games/",

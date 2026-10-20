@@ -24,4 +24,4 @@ jobs:
           python-version: '3.12'
       - run: pip install -r adeline-brain/requirements.lock
       - working-directory: adeline-brain
-        run: python -m pytest tests/test_learning_loop.py tests/test_skill_path.py tests/test_today_persistence.py tests/test_classroom.py tests/test_interactive_models.py tests/test_teaching_foundation.py tests/test_credits_api.py -q
+        run: python -m pytest tests/test_learning_loop.py tests/test_skill_path.py tests/test_today_persistence.py tests/test_classroom.py tests/test_interactive_models.py tests/test_teaching_foundation.py tests/test_learner_context.py tests/test_credits_api.py -q

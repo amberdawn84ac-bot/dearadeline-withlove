@@ -32,6 +32,7 @@ from app.curriculum.classroom import (
     public_classroom,
 )
 from app.curriculum.interactive_models import ActivityWork, checked_work
+from app.curriculum.learner_context import LearnerContext, private_authoring, resolve_context
 from app.curriculum.runtime_capabilities import authoring_capabilities
 from app.schemas.api_models import Track
 
@@ -47,6 +48,7 @@ class ClassroomRequest(BaseModel):
     targets: list[str] = Field(default_factory=list, max_length=30)
     materials: str = Field(default="", max_length=2000)
     learning_need: str = Field(default="", max_length=2000)
+    learner_context: LearnerContext | None = None
     action: Literal["plan", "build"] = "plan"
 
 
@@ -57,7 +59,7 @@ class Submission(BaseModel):
     activity: ActivityWork | None = None
 
 
-def classroom_slug(request):
+def classroom_slug(request, learner_id=None):
     # Namespace is a hard boundary against all previous canonical seeds/caches.
     return hashlib.sha256(
         json.dumps(
@@ -68,9 +70,11 @@ def classroom_slug(request):
                 request.topic.strip().lower(),
                 request.track.value,
                 request.level.strip().lower(),
+                resolve_context(request.level, request.learner_context).model_dump(mode="json"),
                 sorted(request.targets),
                 request.materials,
                 request.learning_need,
+                learner_id if private_authoring(request.level, request.materials, request.learning_need) else None,
             ],
             ensure_ascii=False,
         ).encode()
@@ -225,6 +229,11 @@ async def build_document(student_id, item_id):
                     "requested_scene": brief.model_dump(),
                     "previous_scenes": [s.model_dump() for s in scenes],
                     "request": doc["request"],
+                    "learner_context": resolve_context(
+                        doc["request"].get("level", ""),
+                        LearnerContext.model_validate(doc["request"]["learner_context"])
+                        if doc["request"].get("learner_context") else None,
+                    ).authoring_context(),
                     "supplied_resources": doc.get("source_context", []),
                     "curriculum_targets": doc.get("curriculum_targets", []),
                     "runtime_capabilities": authoring_capabilities(),
@@ -307,14 +316,14 @@ async def prepare_classroom(
         return {"phase": "building", "title": record["title"]}
     if doc:
         # Stable plan item is idempotent; an existing classroom is never overwritten.
-        if classroom_slug(body) != doc["canonical_slug"] and (
+        if classroom_slug(body, student_id) != doc["canonical_slug"] and (
             not doc.get("request")
-            or classroom_slug(body)
-            != classroom_slug(ClassroomRequest.model_validate(doc["request"]))
+            or classroom_slug(body, student_id)
+            != classroom_slug(ClassroomRequest.model_validate(doc["request"]), student_id)
         ):
             raise HTTPException(409, "Use a new exploration id for a different topic.")
         return public_state(record)
-    slug = classroom_slug(body)
+    slug = classroom_slug(body, student_id)
     claim = await student_experience_store.claim(
         student_id, plan_key(plan_item_id), slug
     )
@@ -346,8 +355,13 @@ async def prepare_classroom(
         else:
             from app.services.resource_router import ResourceQuery, resource_router
 
+            learners = resolve_context(body.level, body.learner_context)
             packet = await resource_router.search(
-                ResourceQuery(topic=body.topic, track=body.track.value, limit=5)
+                ResourceQuery(
+                    topic=body.topic, track=body.track.value,
+                    grade_level=learners.resource_grade(),
+                    limit=5,
+                )
             )
             source_context = (
                 packet.get("resources", []) if isinstance(packet, dict) else []
@@ -363,6 +377,7 @@ async def prepare_classroom(
                     Blueprint,
                     {
                         **body.model_dump(mode="json"),
+                        "learner_context": learners.authoring_context(),
                         "supplied_resources": source_context,
                         "curriculum_targets": curriculum_targets,
                         "runtime_capabilities": authoring_capabilities(),
@@ -380,6 +395,7 @@ async def prepare_classroom(
                 "scenes": [],
                 "request": body.model_dump(mode="json"),
                 "source_context": source_context,
+                "learner_context": learners.authoring_context(),
                 "curriculum_targets": curriculum_targets,
                 "runtime_capabilities": authoring_capabilities(),
                 "canonical_slug": slug,
