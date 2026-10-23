@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { massBalance, waterHeating } from '../classroom-models';
+import { airVolume, massBalance, waterHeating } from '../classroom-models';
 
 describe('Classroom model invariants', () => {
   it('has ice warming, melting, liquid warming, boiling and vapor warming', () => {
@@ -30,5 +30,10 @@ describe('Classroom model invariants', () => {
   it('uses the limiting reactant to calculate carbon dioxide', () => {
     expect(massBalance({ soda_g: .840066, vinegar_g: 120.104, progress: 1, system: 'open' }).gas).toBeCloseTo(.440095);
     expect(massBalance({ soda_g: 50, vinegar_g: 10, progress: 1, system: 'open' }).gas).toBeCloseTo(.5 / 60.052 * 44.0095);
+  });
+  it('keeps sealed-air pressure times volume constant', () => {
+    for (const volume of [20, 50, 75, 100]) expect(airVolume(volume).product).toBeCloseTo(5066.25);
+    expect(airVolume(50).pressure).toBeCloseTo(101.325);
+    expect(airVolume(25).pressure).toBeCloseTo(202.65);
   });
 });

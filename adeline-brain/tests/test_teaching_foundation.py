@@ -19,7 +19,7 @@ def test_catalog_is_json_safe_and_returns_isolated_snapshots():
     assert json.loads(json.dumps(first)) == first
     assert len(first["fingerprint"]) == 20
     first["mechanisms"].clear()
-    assert len(authoring_capabilities()["mechanisms"]) == 8
+    assert len(authoring_capabilities()["mechanisms"]) == 13
     assert "generated_html_or_javascript_execution" in first["not_available"]
     assert first["delivery"]["slide"].startswith("Responsive prose")
     assert "parent" in first["evidence"]["credit"]

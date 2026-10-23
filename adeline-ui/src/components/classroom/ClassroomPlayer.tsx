@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ActivityLab from './ActivityLab';
+import SceneVisual from './SceneVisual';
 import LearningReviewPanel from './LearningReview';
 import { ActivityWork, ClassroomScene, ClassroomState, Feedback, ClassroomTurn, SceneMaterial, getSceneMaterials, talkToClassroom, submitClassroomResponse } from '@/lib/classroom-client';
+import { matterMenu } from '@/lib/classroom-models';
 
 function sortingChoices(response: string): Record<string, string> {
   try {
@@ -35,6 +37,8 @@ export default function ClassroomPlayer({ state, studentId, itemId, grade }: { s
   const [index, setIndex] = useState(0);
   const [focus, setFocus] = useState<string | null>(null);
   const [narratedNode, setNarratedNode] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [annotation, setAnnotation] = useState<string | null>(null);
   const [narrationIndex, setNarrationIndex] = useState(0);
   const [speaking, setSpeaking] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -108,7 +112,7 @@ export default function ClassroomPlayer({ state, studentId, itemId, grade }: { s
     if (restoredScene.current === scene.id) return;
     restoredScene.current = scene.id;
     narrationToken.current += 1; setShowTranscript(false);
-    setFocus(null); setNarratedNode(null); setNarrationIndex(0); setSpeaking(false); setPaused(false); setActivityDirty(false);
+    setFocus(null); setNarratedNode(null); setHighlightId(null); setAnnotation(null); setNarrationIndex(0); setSpeaking(false); setPaused(false); setActivityDirty(false);
     setQuestion(''); questionKey.current = null;
     setResponse(saved[scene.id]?.text ?? ''); setFeedback(saved[scene.id]?.feedback ?? null); setError(''); pending.current = null;
     window.speechSynthesis?.cancel();
@@ -117,15 +121,32 @@ export default function ClassroomPlayer({ state, studentId, itemId, grade }: { s
     narrationToken.current += 1;
     window.speechSynthesis?.cancel(); setSpeaking(false); setPaused(false); setFocus(null); setNarratedNode(null);
   }
+  function applyAction(action: ClassroomScene['actions'][number]) {
+    if (action.kind === 'clear') {
+      setFocus(null); setNarratedNode(null); setHighlightId(null); setAnnotation(null);
+      return;
+    }
+    setFocus(action.focus ?? (action.target_id ? 'visual' : null));
+    setNarratedNode(action.node_id ?? null);
+    setHighlightId(action.target_id ?? null);
+    setAnnotation(action.kind === 'annotate' ? action.note || action.text : action.kind === 'pause' ? action.text : null);
+  }
+  function showPart(part = narrationIndex) {
+    stopNarration();
+    const current = part >= scene.actions.length ? 0 : part;
+    applyAction(scene.actions[current]);
+    setNarrationIndex(current + 1);
+  }
   function listen(part = narrationIndex) {
     stopNarration();
     const token = narrationToken.current;
     const current = part >= scene.actions.length ? 0 : part;
     const action = scene.actions[current];
+    if (!speechAvailable) { applyAction(action); setNarrationIndex(current + 1); return; }
     const utterance = new SpeechSynthesisUtterance(action.text);
-    utterance.onstart = () => { if (token !== narrationToken.current) return; setFocus(action.focus ?? null); setNarratedNode(action.node_id ?? null); setSpeaking(true); };
-    utterance.onend = () => { if (token !== narrationToken.current) return; setFocus(null); setNarratedNode(null); setSpeaking(false); setPaused(false); setNarrationIndex(current + 1); };
-    utterance.onerror = () => { if (token !== narrationToken.current) return; setFocus(null); setNarratedNode(null); setSpeaking(false); setPaused(false); };
+    utterance.onstart = () => { if (token !== narrationToken.current) return; applyAction(action); setSpeaking(true); };
+    utterance.onend = () => { if (token !== narrationToken.current) return; if (action.kind !== 'pause' && action.kind !== 'annotate') { setFocus(null); setHighlightId(null); } setSpeaking(false); setPaused(false); setNarrationIndex(current + 1); };
+    utterance.onerror = () => { if (token !== narrationToken.current) return; setFocus(null); setHighlightId(null); setSpeaking(false); setPaused(false); };
     setSpeaking(true); window.speechSynthesis.speak(utterance);
   }
   async function saveActivity(text: string, activity: ActivityWork) {
@@ -154,8 +175,10 @@ export default function ClassroomPlayer({ state, studentId, itemId, grade }: { s
     <header className="rounded-3xl bg-[#183d32] p-7 text-[#fff9ec] md:p-10"><p className="text-xs uppercase tracking-[.25em] text-[#d8b976]">Dear Adeline · Explore</p><h1 className="mt-3 text-3xl md:text-4xl">{classroom.blueprint.title}</h1><p className="mt-4 max-w-3xl text-lg">{classroom.blueprint.essential_question}</p></header>
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <article className="min-w-0 rounded-3xl border border-[#d9cfbc] bg-[#fffdf7] p-6 md:p-9">
-        <div className="flex items-start justify-between gap-3"><p className="text-sm">{index + 1} / {classroom.scenes.length}</p>{speechAvailable && <div className="flex flex-wrap gap-2">{!speaking ? <button onClick={() => listen()} className="min-h-11 rounded-lg border border-[#bba978] px-3 py-2 text-sm">{narrationIndex === 0 ? 'Listen' : narrationIndex >= scene.actions.length ? 'Listen again' : 'Continue narration'}</button> : <button className="min-h-11 rounded-lg border border-[#bba978] px-3 py-2 text-sm" onClick={() => { if (paused) window.speechSynthesis.resume(); else window.speechSynthesis.pause(); setPaused(p => !p); }}>{paused ? 'Resume narration' : 'Pause narration'}</button>}{speaking && <button className="min-h-11 rounded-lg border px-3 py-2 text-sm" onClick={stopNarration}>Stop narration</button>}</div>}</div>
+        <div className="flex items-start justify-between gap-3"><p className="text-sm">{index + 1} / {classroom.scenes.length}</p><div className="flex flex-wrap gap-2">{!speaking ? <button onClick={() => listen()} className="min-h-11 rounded-lg border border-[#bba978] px-3 py-2 text-sm">{speechAvailable ? (narrationIndex === 0 ? 'Listen' : narrationIndex >= scene.actions.length ? 'Listen again' : 'Continue narration') : (narrationIndex === 0 ? 'Show the teaching steps' : 'Next part')}</button> : <button className="min-h-11 rounded-lg border border-[#bba978] px-3 py-2 text-sm" onClick={() => { if (paused) window.speechSynthesis.resume(); else window.speechSynthesis.pause(); setPaused(p => !p); }}>{paused ? 'Resume narration' : 'Pause narration'}</button>}{speaking && <button className="min-h-11 rounded-lg border px-3 py-2 text-sm" onClick={stopNarration}>Stop narration</button>}{speechAvailable && <button onClick={() => showPart()} className="min-h-11 rounded-lg border px-3 py-2 text-sm">Next part</button>}</div></div>
         <h2 className="mt-5 text-3xl">{scene.title}</h2><p className={`mt-5 whitespace-pre-line text-lg leading-8 ${focus === 'content' ? 'rounded-xl ring-2 ring-[#bba978] ring-offset-4' : ''}`}>{scene.content}</p>
+        {scene.visual && <div className={focus === 'visual' ? 'rounded-2xl ring-2 ring-[#bba978] ring-offset-4' : ''}><SceneVisual visual={scene.visual} activeId={highlightId} /></div>}
+        {annotation && <p role="status" className="mt-4 rounded-xl bg-[#f2ead7] p-4">{annotation}</p>}
         {scene.key_points.length > 0 && <ul className="my-5 list-disc space-y-2 pl-5">{scene.key_points.map(point => <li key={point}>{point}</li>)}</ul>}
         <div className={focus === 'activity' ? 'rounded-2xl ring-2 ring-[#bba978] ring-offset-4' : ''}>
         {scene.sorting && <SortingActivity scene={scene} response={response} disabled={saving} onChange={value => { setResponse(value); setFeedback(null); }} />}
@@ -182,7 +205,7 @@ export default function ClassroomPlayer({ state, studentId, itemId, grade }: { s
           <button onClick={save} disabled={!response.trim() || saving || !sortingComplete} className="min-h-11 rounded-xl bg-[#183d32] px-5 py-3 text-white disabled:opacity-50">{saving ? 'Saving…' : scene.question || scene.sorting ? 'Check and save' : 'Save my work'}</button>
         </fieldset>}
         {feedback && <p role="status" className="mt-4 rounded-xl bg-[#e7efdf] p-4">{feedback.correct === undefined ? '' : feedback.correct ? 'That matches the evidence. ' : 'Try another explanation. '}{feedback.review}</p>}
-        {feedback?.items && <ul aria-label="Classification feedback" className="mt-4 space-y-3">{feedback.items.map(item => <li key={item.item_id} className="rounded-xl border border-[#d9cfbc] p-4"><b>{scene.sorting?.items.find(i => i.id === item.item_id)?.label}:</b> {item.correct ? 'Matches. ' : 'Reconsider. '}{item.explanation}</li>)}</ul>}
+        {feedback?.items && <ul aria-label="Classification feedback" className="mt-4 space-y-3">{feedback.items.map(item => { const label = scene.sorting?.items.find(i => i.id === item.item_id)?.label ?? scene.interaction?.steps?.find(step => step.id === item.item_id)?.label ?? scene.interaction?.pairs?.find(pair => pair.id === item.item_id)?.prompt ?? matterMenu.find(([id]) => id === item.item_id)?.[1] ?? item.item_id; return <li key={item.item_id} className="rounded-xl border border-[#d9cfbc] p-4"><b>{label}:</b> {item.correct ? 'Matches. ' : 'Reconsider. '}{item.explanation}</li>; })}</ul>}
         {error && <p role="alert" className="mt-4 text-red-800">{error}</p>}
         <details className="mt-6"><summary className="cursor-pointer font-semibold">What to show</summary><ul className="mt-3 list-disc space-y-2 pl-5">{scene.success_criteria.map(c => <li key={c}>{c}</li>)}</ul></details>
         <details className="mt-6" onToggle={e => setShowTranscript(e.currentTarget.open)}><summary className="cursor-pointer font-semibold">Read or replay the narration</summary>{showTranscript && <ol className="mt-3 space-y-3">{scene.actions.map((action, i) => <li key={i} className="rounded-xl border border-[#d9cfbc] p-3"><p>{action.text}</p>{speechAvailable && <button className="mt-2 min-h-11 rounded-lg border px-3 text-sm" onClick={() => listen(i)}>Replay part {i + 1}</button>}</li>)}</ol>}<p className="mt-3 text-sm">Narration pauses after each part so you can try the task. Press Continue narration when ready.</p></details>
