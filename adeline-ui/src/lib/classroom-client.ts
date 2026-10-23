@@ -19,23 +19,35 @@ export type ClassroomRequest = { topic: string; track: ClassroomTrack; level: st
 export type SceneType = 'slide' | 'interactive' | 'quiz' | 'pbl';
 type Variable = { label: string; unit: string; minimum: number; maximum: number; initial: number; step: number };
 export type SceneMaterial = { id: string; kind: 'text' | 'link' | 'image'; title: string; content?: string; url?: string; image_url?: string; attribution?: string; license_url?: string };
+export type VisualElement = {
+  id: string; type: 'text' | 'image' | 'shape' | 'line' | 'table' | 'formula' | 'chart';
+  text?: string; alt?: string; url?: string | null; labels?: string[]; values?: number[];
+  headers?: string[]; rows?: string[][];
+};
+export type SceneVisual = { reading: string; elements: VisualElement[] };
 export type Interaction = {
-  kind: 'water_heating' | 'mass_balance' | 'diagram' | 'molecule_builder';
+  kind: 'water_heating' | 'mass_balance' | 'diagram' | 'molecule_builder' | 'air_volume' | 'graph_compare' | 'sequence' | 'matching' | 'matter_properties';
   prediction_prompt: string; observation_prompt: string;
   nodes: { id: string; label: string; detail: string }[];
   edges: { source: string; target: string; label: string }[];
   formula: 'H2O' | 'CO2' | 'CH4';
+  steps?: { id: string; label: string }[];
+  choices?: { id: string; label: string }[];
+  pairs?: { id: string; prompt: string }[];
+  series_a?: number[]; series_b?: number[]; series_a_label?: string; series_b_label?: string;
+  sample?: 'ice_cube' | 'liquid_water' | 'sealed_air' | 'dry_sand';
 };
 export type ActivityInputs = Record<string, number | string>;
 export type ActivityWork = { stage: 'prediction' | 'observation'; prediction: string; inputs: ActivityInputs; trials: ActivityInputs[] };
 export type SavedActivity = ActivityWork & { earlier_notes?: string; output?: Record<string, unknown>; results?: { inputs: ActivityInputs; output: Record<string, unknown> }[] };
 export type ClassroomScene = {
   id: string; title: string; type: SceneType; content: string; key_points: string[];
-  actions: { role_id: string; text: string; focus?: 'content' | 'activity' | 'task' | null; node_id?: string | null }[]; learner_task: string; success_criteria: string[];
+  actions: { role_id: string; text: string; focus?: 'content' | 'activity' | 'task' | 'visual' | null; node_id?: string | null; kind?: 'speak' | 'focus' | 'annotate' | 'pause' | 'clear'; target_id?: string | null; note?: string | null }[]; learner_task: string; success_criteria: string[];
   family_roles: Record<'elementary' | 'middle' | 'high_school', string>;
   question: { prompt: string; choices: { id: string; label: string }[] } | null;
   simulation: { model: 'proportional' | 'rectangle_area' | 'mixture_fraction'; x: Variable; y: Variable; output_label: string; output_unit: string; explanation: string; prediction_prompt: string; observation_prompt: string } | null;
   interaction?: Interaction | null;
+  visual?: SceneVisual | null;
   sorting?: { instruction: string; categories: { id: string; label: string }[]; items: { id: string; label: string }[] } | null;
   materials: string[]; steps: string[]; resources?: SceneMaterial[];
 };

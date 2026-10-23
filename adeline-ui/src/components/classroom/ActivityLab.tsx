@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { ActivityInputs, ActivityWork, ClassroomScene, SavedActivity } from '@/lib/classroom-client';
-import { initialInputs, massBalance, moleculeTargets, waterHeating } from '@/lib/classroom-models';
+import { initialInputs, airVolume, massBalance, matterMenu, matterSamples, moleculeTargets, waterHeating } from '@/lib/classroom-models';
 
 const button = 'min-h-11 rounded-xl border border-[#bba978] px-4 py-2 disabled:opacity-50';
 const primary = 'min-h-11 rounded-xl bg-[#183d32] px-5 py-3 text-white disabled:opacity-50';
@@ -65,6 +65,83 @@ function DiagramView({ scene, inputs, change, narratedNode }: { scene: Classroom
   </div>;
 }
 
+function AirView({ volume, change }: { volume: number; change: (n: number) => void }) {
+  const model = airVolume(volume);
+  return <div className="space-y-4">
+    <p>A sealed syringe holds the same amount of air. Temperature stays the same, and nothing leaks. Move the plunger.</p>
+    <Slider label="Volume" value={volume} min={20} max={100} unit="mL" change={change} />
+    <div className="grid gap-3 sm:grid-cols-2" aria-live="polite">
+      <output className="rounded-xl bg-white p-4 text-3xl">{number(model.pressure)} kPa<span className="block text-sm">Pressure</span></output>
+      <p className="rounded-xl bg-white p-4 text-3xl">{number(model.product)}<span className="block text-sm">Pressure × volume</span></p>
+    </div>
+    <p className="text-sm">This classroom model keeps pressure times volume constant. It illustrates that assumption. It does not prove a gas law, and it ignores temperature change and leaks.</p>
+  </div>;
+}
+
+function GraphView({ scene, inputs, change }: { scene: ClassroomScene; inputs: ActivityInputs; change: (key: string, value: number | string) => void }) {
+  const spec = scene.interaction!, seriesA = spec.series_a ?? [], seriesB = spec.series_b ?? [];
+  const max = Math.max(...seriesA, ...seriesB, 1);
+  const index = Number(inputs.index);
+  return <div className="space-y-4">
+    <p>Compare {spec.series_a_label} and {spec.series_b_label} at one position. The numbers are the graph; read them rather than guessing a rule that is not shown.</p>
+    <svg viewBox={`0 0 360 ${seriesA.length * 28 + 28}`} role="img" aria-label="Two series drawn as bars" className="w-full rounded-xl bg-white">
+      {seriesA.map((value, i) => <g key={i}>
+        <text x="4" y={20 + i * 28} fontSize="12" fill="#183d32">{i + 1}</text>
+        <rect x="28" y={8 + i * 28} height="8" width={(Math.abs(value) / max) * 150} fill="#183d32" />
+        <rect x="28" y={18 + i * 28} height="8" width={(Math.abs(seriesB[i]) / max) * 150} fill="#a27e32" />
+      </g>)}
+    </svg>
+    <p className="text-sm"><span className="mr-4 inline-block h-3 w-3 bg-[#183d32]" />{spec.series_a_label}<span className="ml-4 mr-4 inline-block h-3 w-3 bg-[#a27e32]" />{spec.series_b_label}</p>
+    <Slider label="Position" value={index + 1} min={1} max={seriesA.length} change={v => change('index', v - 1)} />
+    <fieldset className="flex flex-wrap gap-3"><legend className="mb-2 font-semibold">Which is greater here?</legend>
+      {([['a', spec.series_a_label ?? 'A'], ['b', spec.series_b_label ?? 'B'], ['same', 'They are equal']] as const).map(([value, label]) => <label key={value} className="flex min-h-11 items-center gap-2 rounded-xl border border-[#bba978] bg-white px-4"><input type="radio" name="graph-choice" checked={inputs.choice === value} onChange={() => change('choice', value)} />{label}</label>)}
+    </fieldset>
+  </div>;
+}
+
+function SequenceView({ scene, inputs, change }: { scene: ClassroomScene; inputs: ActivityInputs; change: (key: string, value: string) => void }) {
+  const steps = scene.interaction?.steps ?? [];
+  const order = String(inputs.order || steps.map(step => step.id).join(',')).split(',').filter(Boolean);
+  function move(index: number, direction: -1 | 1) {
+    const next = [...order];
+    const target = index + direction;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    change('order', next.join(','));
+  }
+  return <div className="space-y-3"><p>Put the steps in an order you can explain. The starting list is not a hint.</p>
+    <ol aria-label="Step order" className="space-y-2">{order.map((id, index) => <li key={id} className="flex flex-wrap items-center gap-2 rounded-xl bg-white p-3"><span className="min-w-0 flex-1">{steps.find(step => step.id === id)?.label ?? id}</span><button type="button" className={button} onClick={() => move(index, -1)} disabled={index === 0}>Earlier</button><button type="button" className={button} onClick={() => move(index, 1)} disabled={index === order.length - 1}>Later</button></li>)}</ol>
+  </div>;
+}
+
+function MatchingView({ scene, inputs, change }: { scene: ClassroomScene; inputs: ActivityInputs; change: (key: string, value: string) => void }) {
+  const pairs = scene.interaction?.pairs ?? [], choices = scene.interaction?.choices ?? [];
+  const selected = Object.fromEntries(String(inputs.matches || '').split(',').filter(part => part.includes(':')).map(part => part.split(':')));
+  function choose(pairId: string, choiceId: string) {
+    change('matches', pairs.map(pair => `${pair.id}:${pair.id === pairId ? choiceId : selected[pair.id] ?? ''}`).join(','));
+  }
+  return <div className="space-y-3">{pairs.map(pair => <label key={pair.id} className="grid gap-2 rounded-xl bg-white p-4 sm:grid-cols-2 sm:items-center"><span>{pair.prompt}</span>
+    <select aria-label={`Match for ${pair.prompt}`} className="min-h-11 rounded-lg border p-2" value={selected[pair.id] ?? ''} onChange={e => choose(pair.id, e.target.value)}>
+      <option value="">Choose</option>{choices.map(choice => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+    </select></label>)}</div>;
+}
+
+function MatterView({ scene, inputs, change }: { scene: ClassroomScene; inputs: ActivityInputs; change: (key: string, value: string) => void }) {
+  const sample = matterSamples[scene.interaction?.sample ?? 'ice_cube'];
+  const selected = new Set(String(inputs.selected || '').split(',').filter(Boolean));
+  function toggle(id: string) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    change('selected', [...next].join(','));
+  }
+  return <div className="space-y-3"><h4 className="text-xl font-semibold">{sample.title}</h4><p>{sample.detail}</p>
+    <fieldset className="grid gap-2"><legend className="font-semibold">Which observations fit this sample?</legend>
+      {matterMenu.map(([id, label]) => <label key={id} className="flex min-h-11 items-center gap-3 rounded-xl bg-white px-4"><input type="checkbox" checked={selected.has(id)} onChange={() => toggle(id)} />{label}</label>)}
+    </fieldset>
+    <p className="text-sm">This menu is only for these four classroom samples. It is not a complete list of properties of matter.</p>
+  </div>;
+}
+
 function MoleculeView({ scene, inputs, change }: { scene: ClassroomScene; inputs: ActivityInputs; change: (key: string, value: number) => void }) {
   const formula = scene.interaction!.formula, target = moleculeTargets[formula];
   const matches = (['H', 'O', 'C'] as const).every(atom => Number(inputs[atom]) === target[atom]);
@@ -89,6 +166,11 @@ function describeTrial(scene: ClassroomScene, trial: ActivityInputs) {
   if (scene.interaction?.kind === 'mass_balance') { const m = massBalance(trial); return `${trial.system === 'open' ? 'Open' : 'Closed'}; soda ${trial.soda_g} g, vinegar ${trial.vinegar_g} g, reaction ${number(Number(trial.progress) * 100)}% → scale ${number(m.scale)} g, escaped gas ${number(m.escaped)} g`; }
   if (scene.interaction?.kind === 'diagram') return `Inspected: ${scene.interaction.nodes.find(n => n.id === trial.node_id)?.label ?? ''}`;
   if (scene.interaction?.kind === 'molecule_builder') return `Hydrogen ${trial.H}; oxygen ${trial.O}; carbon ${trial.C}`;
+  if (scene.interaction?.kind === 'air_volume') { const model = airVolume(Number(trial.volume_ml)); return `${trial.volume_ml} mL → ${number(model.pressure)} kPa`; }
+  if (scene.interaction?.kind === 'graph_compare') return `Position ${Number(trial.index) + 1}: chose ${trial.choice}`;
+  if (scene.interaction?.kind === 'sequence') return `Order: ${trial.order}`;
+  if (scene.interaction?.kind === 'matching') return `Matches: ${trial.matches}`;
+  if (scene.interaction?.kind === 'matter_properties') return `Selected: ${trial.selected || 'none'}`;
   const spec = scene.simulation!, x = Number(trial.x), y = Number(trial.y);
   return `${spec.x.label}: ${x} ${spec.x.unit}; ${spec.y.label}: ${y} ${spec.y.unit} → ${spec.output_label}: ${number(spec.model === 'mixture_fraction' ? x / (x + y) : x * y)} ${spec.output_unit}`;
 }
@@ -122,6 +204,11 @@ export default function ActivityLab({ scene, saved, saving, onSave, onDirty, nar
         {scene.interaction?.kind === 'mass_balance' && <MassView inputs={inputs} change={change} />}
         {scene.interaction?.kind === 'diagram' && <DiagramView scene={scene} inputs={inputs} change={change} narratedNode={narratedNode} />}
         {scene.interaction?.kind === 'molecule_builder' && <MoleculeView scene={scene} inputs={inputs} change={change} />}
+        {scene.interaction?.kind === 'air_volume' && <AirView volume={Number(inputs.volume_ml)} change={v => change('volume_ml', v)} />}
+        {scene.interaction?.kind === 'graph_compare' && <GraphView scene={scene} inputs={inputs} change={change} />}
+        {scene.interaction?.kind === 'sequence' && <SequenceView scene={scene} inputs={inputs} change={change} />}
+        {scene.interaction?.kind === 'matching' && <MatchingView scene={scene} inputs={inputs} change={change} />}
+        {scene.interaction?.kind === 'matter_properties' && <MatterView scene={scene} inputs={inputs} change={change} />}
         <button className={button} disabled={trials.length >= 12} onClick={() => { setTrials(current => [...current, { ...inputs }]); onDirty(true); }}>Record this result</button>
         {trials.length > 0 && <ol aria-label="Recorded trials" className="list-decimal space-y-2 pl-5">{trials.map((trial, i) => <li key={i} className="break-words text-sm">{describeTrial(scene, trial)}</li>)}</ol>}
         {trials.length > 0 && <button className={button} onClick={() => { setTrials([]); onDirty(true); }}>Start a new comparison</button>}

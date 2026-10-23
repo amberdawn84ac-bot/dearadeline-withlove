@@ -565,6 +565,13 @@ async def save_response(
                 )
             if sorting_feedback:
                 feedback.update(sorting_feedback)
+            output = (activity or {}).get("output") or {}
+            if output.get("review"):
+                feedback["review"] = output["review"]
+            if output.get("items"):
+                feedback["items"] = output["items"]
+            if output.get("correct") is True or output.get("correct") is False:
+                feedback["correct"] = output["correct"]
             # Snapshot only assistance that actually occurred before this attempt.
             support_turns = doc.get("dialogue", {}).get(scene.id, [])
             support = [
@@ -719,11 +726,18 @@ async def converse(
                         for item in context_scene["sorting"]["items"]
                     ],
                 }
+            if context_scene.get("interaction"):
+                from app.curriculum.interactive_models import redact_interaction
+
+                context_scene["interaction"] = json.loads(
+                    json.dumps(context_scene["interaction"])
+                )
+                redact_interaction(context_scene["interaction"])
             reply = await generate_json(
                 """Teach inside this saved scene. Respond to the learner's actual question or explanation.
 Explain missing facts directly, model another example, or ask ONE targeted question.
 Use teach-back and fresh comparable checks when appropriate. Do not assume a misconception.
-Never disclose current quiz or sorting answers; explain the underlying idea with a different example.
+Never disclose current quiz, sorting, sequence, matching, or property answers; explain the underlying idea with a different example.
 If no work has been attempted, invite one small attempt before diagnosing. Use the
 actual saved work and learner words to identify at most one gap; distinguish a
 possible explanation from a confirmed difficulty. Give one usable piece of help,

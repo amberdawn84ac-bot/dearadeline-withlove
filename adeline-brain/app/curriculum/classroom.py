@@ -12,7 +12,7 @@ from app.curriculum.interactive_models import Interaction
 from app.schemas.api_models import Track
 
 CLASSROOM_VERSION = "openmaic-classroom-v1"
-CLASSROOM_AUTHORING_REVISION = "learning-loop-v3"
+CLASSROOM_AUTHORING_REVISION = "rich-lessons-v1"
 
 
 class Role(BaseModel):
@@ -116,8 +116,56 @@ class Blueprint(BaseModel):
 class Speech(BaseModel):
     role_id: str
     text: str = Field(min_length=1, max_length=1600)
-    focus: Literal["content", "activity", "task"] | None = None
+    focus: Literal["content", "activity", "task", "visual"] | None = None
     node_id: str | None = None
+    kind: Literal["speak", "focus", "annotate", "pause", "clear"] = "speak"
+    target_id: str | None = None
+    note: str | None = Field(default=None, max_length=240)
+
+
+class VisualElement(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+    id: str = Field(min_length=1, max_length=40)
+    type: Literal["text", "image", "shape", "line", "table", "formula", "chart"]
+    text: str = ""
+    alt: str = ""
+    url: str | None = None
+    labels: list[str] = Field(default_factory=list, max_length=8)
+    values: list[float] = Field(default_factory=list, max_length=8)
+    headers: list[str] = Field(default_factory=list, max_length=6)
+    rows: list[list[str]] = Field(default_factory=list, max_length=8)
+
+    @model_validator(mode="after")
+    def readable(self):
+        if self.url and not self.url.startswith("https://"):
+            raise ValueError("Visual images must use an https URL")
+        if self.type == "image" and not self.alt.strip():
+            raise ValueError("An image needs alternative text")
+        if self.type in {"text", "formula", "shape", "line"} and not self.text.strip():
+            raise ValueError("This visual element needs readable text")
+        if self.type == "chart" and (
+            not 2 <= len(self.labels) == len(self.values) <= 8
+            or any(not label.strip() for label in self.labels)
+        ):
+            raise ValueError("A chart needs 2–8 labelled finite values")
+        if self.type == "table" and (
+            not self.headers
+            or not self.rows
+            or any(len(row) != len(self.headers) for row in self.rows)
+        ):
+            raise ValueError("A table needs headers and matching rows")
+        return self
+
+
+class Visual(BaseModel):
+    reading: str = Field(min_length=10, max_length=2000)
+    elements: list[VisualElement] = Field(min_length=1, max_length=8)
+
+    @model_validator(mode="after")
+    def unique_ids(self):
+        if len({element.id for element in self.elements}) != len(self.elements):
+            raise ValueError("Visual element ids must be unique")
+        return self
 
 
 class Choice(BaseModel):
@@ -216,6 +264,7 @@ class Scene(BaseModel):
     simulation: Simulation | None = None
     sorting: Sorting | None = None
     interaction: Interaction | None = None
+    visual: Visual | None = None
     materials: list[str] = Field(default_factory=list, max_length=10)
     steps: list[str] = Field(default_factory=list, max_length=8)
 
@@ -261,6 +310,16 @@ class Scene(BaseModel):
             raise ValueError("Narration node_id must reference a real diagram node")
         if self.type == "pbl" and not self.steps:
             raise ValueError("A project needs actionable steps")
+        targets = {element.id for element in self.visual.elements} if self.visual else set()
+        if self.interaction and self.interaction.kind == "diagram":
+            targets.update(node.id for node in self.interaction.nodes)
+        for action in self.actions:
+            if action.target_id and action.target_id not in targets:
+                raise ValueError("An action must target a visual element or diagram node on this scene")
+            if action.kind in {"focus", "annotate"} and not (action.target_id or action.node_id):
+                raise ValueError("Focus and notes need a real target")
+            if action.kind == "annotate" and not (action.note and action.note.strip()):
+                raise ValueError("A note action needs note text")
         return self
 
 
@@ -284,6 +343,7 @@ class Classroom(BaseModel):
 
 
 def public_classroom(classroom: Classroom):
+    from app.curriculum.interactive_models import redact_interaction
     from app.curriculum.scene_materials import attached_sources
 
     data = classroom.model_dump()
@@ -297,6 +357,8 @@ def public_classroom(classroom: Classroom):
         if scene["question"]:
             scene["question"].pop("answer")
             scene["question"].pop("explanation")
+        if scene.get("interaction"):
+            redact_interaction(scene["interaction"])
     data["blueprint"].pop("scenes")
     data["blueprint"].pop("teaching_design", None)
     return data
@@ -336,6 +398,15 @@ molecule_builder: exact H/O/C counts for H2O, CO2 or CH4, accounting for extra a
 a molecular composition model, not a real reaction simulator.
 These mechanisms have code-owned constants/controls; never invent input fields,
 substances, pressures, physics, 3D capabilities or outputs they do not implement.
+Also supported, still one mechanism per interactive scene:
+air_volume: sealed air, volume 20–100 mL, fixed amount and temperature; pressure
+times volume stays constant. State the assumptions. It does not prove a gas law.
+graph_compare: two equal series of 2–8 finite numbers with labels. The learner
+compares heights at one position. Do not hide a series that the graph displays.
+sequence: 3–8 steps with positions 1..n and a reason per step. Reasons stay server-side.
+matching: 2–6 prompts, each with one existing choice and a reason.
+matter_properties: sample is ice_cube, liquid_water, sealed_air, or dry_sand.
+The property menu and which properties apply are code-owned. Do not invent samples.
 Every model/diagram first saves a prediction, then reveals controls/results, records
 trials and saves observations. Do not announce results in the opening or narration.
 Interactive also supports sorting: 2–6 named categories and 2–12 concrete items,
@@ -426,4 +497,12 @@ For a diagram action you may set node_id to an existing node id to emphasize and
 explain that exact part during narration. Never name an absent control or node.
 Keep new scene content concise (usually under 900 characters); let the activity
 carry the work. Reading/source passages may be longer when the task needs them.
+When a slide or explanation is visual, include visual.reading plus elements of
+type text, image, shape, line, table, formula, or chart. Images need alt text and
+an https URL only when a real image exists; never invent a historical photograph.
+Charts use 2–8 labels and finite values. Every element id is unique. Actions may
+set kind to speak, focus, annotate, pause, or clear. focus and annotate must use
+target_id or node_id that exists on this scene. annotate needs note text. pause
+means stop for the learner; do not continue into the answer. clear removes emphasis.
+Do not put answer keys in visual text, notes, or narration.
 """

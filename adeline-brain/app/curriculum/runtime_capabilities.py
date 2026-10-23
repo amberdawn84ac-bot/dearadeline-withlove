@@ -12,7 +12,7 @@ from typing import get_args
 from app.curriculum.classroom import Scene, Simulation, Speech
 from app.curriculum.interactive_models import Interaction
 
-CAPABILITY_REVISION = "native-teaching-v1"
+CAPABILITY_REVISION = "native-teaching-v2"
 
 _MECHANISMS = {
     "proportional": ("simulation", "Two nonnegative inputs; output is x*y."),
@@ -41,6 +41,26 @@ _MECHANISMS = {
         "interaction",
         "Whole H/O/C counts 0–10 for H2O, CO2 or CH4; composition and remaining atoms, not chemical synthesis.",
     ),
+    "air_volume": (
+        "interaction",
+        "Sealed air, volume 20–100 mL, fixed amount and temperature. Pressure times volume stays constant at 5066.25 kPa·mL. Not a proof of a gas law.",
+    ),
+    "graph_compare": (
+        "interaction",
+        "Two labelled series of 2–8 finite numbers. Learner compares one plotted position: A greater, B greater, or the same.",
+    ),
+    "sequence": (
+        "interaction",
+        "Order 3–8 steps. Correct positions and reasons stay on the server.",
+    ),
+    "matching": (
+        "interaction",
+        "Match 2–6 prompts to existing choices. Correct pairs and reasons stay on the server.",
+    ),
+    "matter_properties": (
+        "interaction",
+        "Observable properties for ice_cube, liquid_water, sealed_air, or dry_sand. The menu and answers are code-owned.",
+    ),
 }
 
 
@@ -60,15 +80,15 @@ def authoring_capabilities() -> dict:
             for name, (field, behavior) in _MECHANISMS.items()
         ],
         "delivery": {
-            "slide": "Responsive prose and key points; no fixed visual canvas or arbitrary HTML.",
+            "slide": "Responsive prose and key points, plus an optional responsive visual reading view. No fixed visual canvas or arbitrary HTML.",
             "project": "Materials, ordered steps and saved text work; no file/audio upload is provided by this player.",
             "quiz": "One single-choice question per scene, with server-side answer and explanation.",
             "sources": "Attached text, source links and images; do not promise an attachment unless actually provided.",
         },
         "narration": {
             "fields": list(Speech.model_fields),
-            "behavior": "Device speech, one part at a time; pause/resume/stop and manual continuation. Text remains available.",
-            "targets": "Optional content/activity/task focus; optional existing diagram node_id. No generic widget state actions or element-level canvas spotlight.",
+            "behavior": "Device speech, one part at a time, or the same parts stepped through as text. Pause, resume, stop, and manual continuation. Text remains available.",
+            "targets": "speak, focus, annotate, pause, and clear. Optional content/activity/task/visual focus. target_id must be an existing visual element or diagram node. No widget writes into learner trials.",
         },
         "evidence": {
             "activity": "Save prediction before exploration; observations include recorded trials. Server recomputes model outputs.",

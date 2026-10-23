@@ -39,7 +39,4 @@ live generated lessons meet the reference teaching quality.
 
 ## Still to implement
 
-The compatible free-text field remains alongside explicit preferences. The renderer
-trial and full generated third-grade/eighth-grade/family reference review follow next. This change does not
-install the visual renderer, add new game mechanisms or assert complete curriculum
-coverage. See RICHER_TEACHING_IMPLEMENTATION_PLAN.md for the full acceptance sequence.
+October 23 added the next rich-lesson slice on the same player: optional responsive visuals (text, image, shape, line, table, formula, chart) with a reading equivalent; narration actions speak, focus, annotate, pause, and clear aimed at real element ids; and five more mechanisms (sealed-air volume, graph comparison, sequencing, matching, and code-owned matter-property samples). Answer keys for sequence, matching, and matter stay on the server. This is not the OpenMAIC canvas, not generated HTML, and not a durable ARQ job. Source-claim audit, cross-unit review scheduling, Daily Bread/Reading Nook visual reuse, parent deck editing, and pptx import remain later phases in RICHER_TEACHING_IMPLEMENTATION_PLAN.md.
