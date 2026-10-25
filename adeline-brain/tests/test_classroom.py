@@ -259,6 +259,110 @@ async def test_generation_injects_adeline_persona_and_exact_ten_tracks():
     assert result.roster[0].name == "Adeline"
 
 
+def _completion(payload):
+    import json
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))]
+    )
+
+
+@pytest.mark.asyncio
+async def test_generation_accepts_a_wrapped_draft_and_adelines_full_name():
+    from unittest.mock import MagicMock
+
+    from app.api.classrooms import generate_json
+
+    wrapped = blueprint()
+    wrapped["roster"][0]["name"] = "Adeline, the mentor"
+    client = MagicMock()
+    client.chat.completions.create = AsyncMock(return_value=_completion({"blueprint": wrapped}))
+    manager = MagicMock()
+    manager.__aenter__ = AsyncMock(return_value=client)
+    manager.__aexit__ = AsyncMock(return_value=False)
+    with (
+        patch("app.api.classrooms.GEMINI_API_KEY", "test-only"),
+        patch("openai.AsyncOpenAI", return_value=manager),
+    ):
+        result = await generate_json("Plan a classroom.", Blueprint, {"topic": "Mixtures"})
+    assert result.roster[0].name == "Adeline"
+    assert client.chat.completions.create.await_args.kwargs["response_format"]["type"] == "json_schema"
+
+
+@pytest.mark.asyncio
+async def test_rejected_draft_keeps_the_validation_reason():
+    from unittest.mock import MagicMock
+
+    from app.api.classrooms import generate_json
+
+    client = MagicMock()
+    client.chat.completions.create = AsyncMock(return_value=_completion({"title": "Only a title"}))
+    manager = MagicMock()
+    manager.__aenter__ = AsyncMock(return_value=client)
+    manager.__aexit__ = AsyncMock(return_value=False)
+    with (
+        patch("app.api.classrooms.GEMINI_API_KEY", "test-only"),
+        patch("openai.AsyncOpenAI", return_value=manager),
+    ):
+        with pytest.raises(ValueError, match="understanding"):
+            await generate_json("Plan a classroom.", Blueprint, {"topic": "Mixtures"})
+    assert client.chat.completions.create.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_generation_retries_a_transient_model_error_then_reads_the_draft():
+    from unittest.mock import MagicMock
+
+    from app.api.classrooms import generate_json
+
+    class Unavailable(Exception):
+        status_code = 503
+
+    client = MagicMock()
+    client.chat.completions.create = AsyncMock(
+        side_effect=[Unavailable("busy"), _completion(blueprint())]
+    )
+    manager = MagicMock()
+    manager.__aenter__ = AsyncMock(return_value=client)
+    manager.__aexit__ = AsyncMock(return_value=False)
+    with (
+        patch("app.api.classrooms.GEMINI_API_KEY", "test-only"),
+        patch("openai.AsyncOpenAI", return_value=manager),
+    ):
+        result = await generate_json("Plan a classroom.", Blueprint, {"topic": "Mixtures"})
+    assert result.title == "Mixtures"
+    assert client.chat.completions.create.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_generation_falls_back_when_the_provider_rejects_the_schema():
+    from unittest.mock import MagicMock
+
+    from app.api.classrooms import generate_json
+
+    class SchemaRejected(Exception):
+        status_code = 400
+
+    client = MagicMock()
+    client.chat.completions.create = AsyncMock(
+        side_effect=[SchemaRejected("unsupported schema"), _completion(blueprint())]
+    )
+    manager = MagicMock()
+    manager.__aenter__ = AsyncMock(return_value=client)
+    manager.__aexit__ = AsyncMock(return_value=False)
+    with (
+        patch("app.api.classrooms.GEMINI_API_KEY", "test-only"),
+        patch("openai.AsyncOpenAI", return_value=manager),
+    ):
+        await generate_json("Plan a classroom.", Blueprint, {"topic": "Mixtures"})
+    formats = [
+        call.kwargs["response_format"]["type"]
+        for call in client.chat.completions.create.await_args_list
+    ]
+    assert formats == ["json_schema", "json_object"]
+
+
 def sorting_scene():
     data = scene(0)
     data.update(

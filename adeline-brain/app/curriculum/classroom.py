@@ -342,6 +342,28 @@ class Classroom(BaseModel):
         return self
 
 
+def coerce_draft(data):
+    """Accept a wrapped draft and the teacher's real name before validation."""
+    if not isinstance(data, dict):
+        return data
+    if "title" not in data:
+        for key in ("blueprint", "classroom", "plan", "lesson", "scene"):
+            inner = data.get(key)
+            if isinstance(inner, dict) and "title" in inner:
+                data = inner
+                break
+    roster = data.get("roster")
+    if isinstance(roster, list):
+        for role in roster:
+            if (
+                isinstance(role, dict)
+                and str(role.get("role", "")).lower() == "teacher"
+                and "adeline" in str(role.get("name") or "").lower()
+            ):
+                role["name"] = "Adeline"
+    return data
+
+
 def public_classroom(classroom: Classroom):
     from app.curriculum.interactive_models import redact_interaction
     from app.curriculum.scene_materials import attached_sources

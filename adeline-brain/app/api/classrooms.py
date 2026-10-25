@@ -126,8 +126,27 @@ def public_state(record):
     return result
 
 
+def _response_format(schema, structured):
+    if not structured:
+        return {"type": "json_object"}
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": schema.__name__,
+            "schema": schema.model_json_schema(),
+            "strict": True,
+        },
+    }
+
+
+def _status_code(exc):
+    return getattr(exc, "status_code", None)
+
+
 async def generate_json(policy, schema, context):
     import openai
+
+    from app.curriculum.classroom import coerce_draft
 
     key = GEMINI_API_KEY or GOOGLE_API_KEY
     if not key:
@@ -138,38 +157,62 @@ async def generate_json(policy, schema, context):
         api_key=key, base_url=GEMINI_BASE_URL, max_retries=0, timeout=90
     ) as client:
         repair = ""
+        structured = True
+        last_error = "The model returned nothing the classroom checks could accept."
         for _ in range(2):
-            response = await client.chat.completions.create(
-                model=GEMINI_MODEL,
-                max_tokens=6500,
-                response_format={"type": "json_object"},
-                messages=[
-                    {
-                        "role": "system",
-                        "content": ADELINE_CLASSROOM_PERSONA
-                        + "\n"
-                        + policy
-                        + "\nTEN TRACKS: "
-                        + ", ".join(t.value for t in Track)
-                        + "\nIntegrate only tracks with a substantive connection; never force all ten into one lesson.\nJSON schema:\n"
-                        + json.dumps(schema.model_json_schema()),
-                    },
-                    {
-                        "role": "user",
-                        "content": json.dumps(context, ensure_ascii=False) + repair,
-                    },
-                ],
-            )
+            response = None
+            attempt = 0
+            while attempt < 3:
+                try:
+                    response = await client.chat.completions.create(
+                        model=GEMINI_MODEL,
+                        max_tokens=6500,
+                        response_format=_response_format(schema, structured),
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": ADELINE_CLASSROOM_PERSONA
+                                + "\n"
+                                + policy
+                                + "\nTEN TRACKS: "
+                                + ", ".join(t.value for t in Track)
+                                + "\nIntegrate only tracks with a substantive connection; never force all ten into one lesson.\nJSON schema:\n"
+                                + json.dumps(schema.model_json_schema()),
+                            },
+                            {
+                                "role": "user",
+                                "content": json.dumps(context, ensure_ascii=False) + repair,
+                            },
+                        ],
+                    )
+                    break
+                except Exception as exc:
+                    status = _status_code(exc)
+                    if status == 400 and structured:
+                        structured = False
+                        logger.warning(
+                            "Classroom schema was rejected; continuing with JSON object mode."
+                        )
+                        continue
+                    if status in {429, 500, 503} and attempt < 2:
+                        attempt += 1
+                        await asyncio.sleep(0.25 * attempt)
+                        continue
+                    raise
+            if response is None:
+                raise ValueError(last_error)
             try:
-                return schema.model_validate_json(
-                    response.choices[0].message.content or ""
-                )
+                raw = response.choices[0].message.content or ""
+                return schema.model_validate(coerce_draft(json.loads(raw)))
             except ValueError as exc:
+                last_error = str(exc)[:2500]
+                logger.warning("Classroom draft rejected: %s", last_error)
                 repair = (
-                    "\nRepair the previous draft to satisfy these errors: "
-                    + str(exc)[:2500]
+                    "\nRepair the previous draft to satisfy these errors: " + last_error
                 )
-    raise ValueError("The exploration draft did not pass its content checks.")
+    raise ValueError(
+        "The exploration draft did not pass its content checks: " + last_error[:1500]
+    )
 
 
 async def save_document(student_id, item_id, record, doc):
@@ -266,16 +309,17 @@ async def build_document(student_id, item_id):
                 "agent_name": "Adeline Classroom Author",
             },
         )
-    except Exception:
-        logger.exception("Classroom generation failed")
+    except Exception as exc:
+        logger.exception("Classroom generation failed: %s", exc)
         if record:
             doc = document_from(
                 await student_experience_store.get(student_id, plan_key(item_id))
             )
             if doc:
+                reason = str(exc).strip()[:500]
                 doc.update(
                     phase="failed",
-                    error="This exploration could not be completed. Saved scenes can be resumed.",
+                    error=reason or "This exploration could not be completed. Saved scenes can be resumed.",
                 )
                 await save_document(student_id, item_id, record, doc)
     finally:
@@ -431,10 +475,16 @@ async def prepare_classroom(
             metadata=doc,
         )
         return public_state(record)
-    except Exception:
+    except Exception as exc:
+        message = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        message = str(message).strip()[:500] or "Classroom planning failed."
         await student_experience_store.mark_failed(
-            student_id, plan_key(plan_item_id), "Classroom planning failed."
+            student_id, plan_key(plan_item_id), message
         )
+        if isinstance(exc, HTTPException):
+            raise
+        if isinstance(exc, ValueError):
+            raise HTTPException(422, message) from exc
         raise
 
     finally:
