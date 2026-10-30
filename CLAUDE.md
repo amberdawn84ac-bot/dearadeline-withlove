@@ -313,3 +313,25 @@ IDs survive corrected grade placement. Science standards feed the existing
 foundation bridge with learner-specific REVIEW/REINFORCE/TEACH and sources.
 See [the mapping review](docs/VERIFIED_CURRICULUM_MAPPING.md) for source versions,
 coverage, dispositions, reproducibility and real-Postgres validation.
+
+
+## Generation reliability (October 30, 2026)
+
+Classroom authoring repairs the actual rejected JSON draft, including scene/cast
+identity checks, without relaxing content validators. Gemini remains primary;
+when its API is throttled, a configured OpenAI key permits backup generation with
+`gpt-4o-mini` (also used by book recommendations). Both routes use the same schema
+and teaching policies. Rate limits open a bounded provider cooldown; duplicate
+builds do not queue behind an active canonical build. Scene checkpoints remain
+resumable, with a periodic heartbeat for slow authoring.
+
+Embedding quota exhaustion opens a circuit rather than retrying every query.
+Nightly seeding propagates dependency outages as job failures; live research
+returns no verified evidence during that outage and never bypasses the Witness
+Protocol. Saved `/reading-nook/reader/{id}` links redirect to the curated-aware
+dashboard reader. No database migration is required for these changes.
+
+Validation: focused classroom, materials, teaching and research-outage tests;
+public-domain reader/proxy checks. Live provider calls and production deployment
+must still be verified separately; mocked tests do not establish live quota or
+lesson quality.

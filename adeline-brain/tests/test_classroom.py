@@ -2,8 +2,6 @@ from copy import deepcopy
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from pydantic import ValidationError
-
 from app.agents.persona import ADELINE_CLASSROOM_PERSONA
 from app.api.classrooms import (
     ClassroomRequest,
@@ -19,6 +17,7 @@ from app.curriculum.classroom import (
     public_classroom,
 )
 from app.schemas.api_models import Track
+from pydantic import ValidationError
 
 
 def blueprint():
@@ -236,7 +235,8 @@ async def test_generation_injects_adeline_persona_and_exact_ten_tracks():
         return_value=SimpleNamespace(
             choices=[
                 SimpleNamespace(
-                    message=SimpleNamespace(content=json.dumps(blueprint()))
+                    message=SimpleNamespace(content=json.dumps(blueprint())),
+                    finish_reason="stop",
                 )
             ]
         )
@@ -439,3 +439,181 @@ async def test_saved_sorting_evidence_records_real_support_and_prior_feedback(he
     )
     stored = json.loads(conn.execute.await_args.args[2])
     assert stored["responses"]["s0"]["text"] == '{"rock":"solid","water":"liquid"}'
+
+
+@pytest.mark.asyncio
+async def test_invalid_draft_is_sent_back_for_repair():
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from app.api import classrooms as api
+
+    bad = scene(0)
+    bad["id"] = "wrong-scene"
+    client = MagicMock()
+    client.chat.completions.create = AsyncMock(
+        side_effect=[
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content=json.dumps(value)),
+                        finish_reason="stop",
+                    )
+                ]
+            )
+            for value in [bad, scene(0)]
+        ]
+    )
+    manager = MagicMock()
+    manager.__aenter__ = AsyncMock(return_value=client)
+    manager.__aexit__ = AsyncMock(return_value=False)
+    with (
+        patch.object(api, "GEMINI_API_KEY", "test"),
+        patch("openai.AsyncOpenAI", return_value=manager),
+    ):
+        result = await api.generate_json(
+            "Teach.",
+            Scene,
+            {"requested_scene": blueprint()["scenes"][0], "blueprint": blueprint()},
+        )
+    assert result.id == "s0"
+    messages = client.chat.completions.create.await_args.kwargs["messages"]
+    assert json.loads(messages[-2]["content"])["id"] == "wrong-scene"
+    assert "scene id and type" in messages[-1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_provider_429_sets_cooldown_without_retrying():
+    from unittest.mock import MagicMock
+
+    import httpx
+    import openai
+    from app.api import classrooms as api
+    from fastapi import HTTPException
+
+    response = httpx.Response(
+        429,
+        headers={"retry-after": "120"},
+        request=httpx.Request("POST", "https://provider.test"),
+    )
+    client = MagicMock()
+    client.chat.completions.create = AsyncMock(
+        side_effect=openai.RateLimitError(
+            "Too many requests",
+            response=response,
+            body={"error": {"status": "RESOURCE_EXHAUSTED"}},
+        )
+    )
+    manager = MagicMock()
+    manager.__aenter__ = AsyncMock(return_value=client)
+    manager.__aexit__ = AsyncMock(return_value=False)
+    with (
+        patch.object(api, "GEMINI_API_KEY", "test"),
+        patch.object(api, "_provider_retry_at", 0),
+        patch("openai.AsyncOpenAI", return_value=manager),
+    ):
+        for _ in range(2):
+            with pytest.raises(HTTPException) as exc:
+                await api.generate_json("Plan.", Blueprint, {})
+            assert exc.value.status_code == 503
+            assert int(exc.value.headers["Retry-After"]) >= 119
+        client.chat.completions.create.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_build_does_not_wait_or_generate_when_other_worker_owns_it():
+    from app.api import classrooms as api
+
+    record = {
+        "metadata": {"format_version": CLASSROOM_VERSION, "canonical_slug": "shared"}
+    }
+    conn = AsyncMock()
+    conn.fetchval.return_value = False
+    with (
+        patch.object(api, "get_db_conn", AsyncMock(return_value=conn)),
+        patch.object(
+            api.student_experience_store, "get", AsyncMock(return_value=record)
+        ),
+        patch.object(api, "generate_json", AsyncMock()) as generate,
+    ):
+        await api.build_document("child", "unit")
+    generate.assert_not_awaited()
+    conn.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_duplicate_build_request_returns_current_progress():
+    import time
+
+    from app.api import classrooms as api
+
+    request = ClassroomRequest(
+        topic="Mixtures", track=Track.CREATION_SCIENCE, action="build"
+    )
+    record = {
+        "id": "copy",
+        "title": "Mixtures",
+        "metadata": {
+            "format_version": CLASSROOM_VERSION,
+            "phase": "building",
+            "heartbeat": time.time(),
+            "blueprint": blueprint(),
+            "scenes": [],
+        },
+    }
+    with (
+        patch("app.services.rate_limit.enforce_rate_limit", AsyncMock()),
+        patch.object(
+            api.student_experience_store, "get", AsyncMock(return_value=record)
+        ),
+        patch.object(api.asyncio, "create_task") as create,
+    ):
+        result = await api.prepare_classroom("child", "unit", request)
+    assert result["phase"] == "building"
+    create.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_gemini_throttle_uses_configured_openai_backup(monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import httpx
+    import openai
+    from app.api import classrooms as api
+
+    monkeypatch.setattr(api, "GEMINI_API_KEY", "gemini-test")
+    monkeypatch.setattr(api, "OPENAI_API_KEY", "openai-test")
+    monkeypatch.setattr(api, "_provider_retry_at", 0)
+    monkeypatch.setattr(api, "_fallback_retry_at", 0)
+    response = httpx.Response(
+        429, request=httpx.Request("POST", "https://provider.test")
+    )
+    primary = MagicMock()
+    primary.chat.completions.create = AsyncMock(
+        side_effect=openai.RateLimitError("Quota", response=response, body={})
+    )
+    backup = MagicMock()
+    backup.chat.completions.create = AsyncMock(
+        return_value=SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=json.dumps(blueprint())),
+                    finish_reason="stop",
+                )
+            ]
+        )
+    )
+    managers = []
+    for client in [primary, backup]:
+        manager = MagicMock()
+        manager.__aenter__ = AsyncMock(return_value=client)
+        manager.__aexit__ = AsyncMock(return_value=False)
+        managers.append(manager)
+    with patch("openai.AsyncOpenAI", side_effect=managers):
+        result = await api.generate_json("Teach.", Blueprint, {})
+    assert result.title == "Mixtures"
+    primary.chat.completions.create.assert_awaited_once()
+    assert backup.chat.completions.create.await_args.kwargs["model"] == "gpt-4o-mini"

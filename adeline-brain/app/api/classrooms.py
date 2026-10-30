@@ -8,7 +8,7 @@ import time
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from app.agents.persona import ADELINE_CLASSROOM_PERSONA
 from app.api.middleware import verify_student_access
@@ -17,6 +17,7 @@ from app.config import (
     GEMINI_BASE_URL,
     GEMINI_MODEL,
     GOOGLE_API_KEY,
+    OPENAI_API_KEY,
     get_db_conn,
 )
 from app.connections.canonical_store import canonical_store
@@ -32,13 +33,54 @@ from app.curriculum.classroom import (
     public_classroom,
 )
 from app.curriculum.interactive_models import ActivityWork, checked_work
-from app.curriculum.learner_context import LearnerContext, private_authoring, resolve_context
+from app.curriculum.learner_context import (
+    LearnerContext,
+    private_authoring,
+    resolve_context,
+)
 from app.curriculum.runtime_capabilities import authoring_capabilities
 from app.schemas.api_models import Track
 
 router = APIRouter(prefix="/classroom", tags=["classroom"])
 logger = logging.getLogger(__name__)
 _tasks = set()
+_builds = set()
+_generation_slots = asyncio.Semaphore(2)
+_provider_retry_at = 0.0
+_fallback_retry_at = 0.0
+
+
+def provider_pause():
+    now = time.time()
+    retry_times = []
+    if GEMINI_API_KEY or GOOGLE_API_KEY:
+        retry_times.append(_provider_retry_at)
+    if OPENAI_API_KEY:
+        retry_times.append(_fallback_retry_at)
+    if retry_times and min(retry_times) > now:
+        raise HTTPException(
+            503,
+            "The lesson provider is busy. Saved work is safe; please try again shortly.",
+            headers={"Retry-After": str(int(min(retry_times) - now) + 1)},
+        )
+
+
+def validate_draft(schema, content, context):
+    draft = schema.model_validate_json(content)
+    # Cross-document rules belong inside the repair loop too.
+    if schema is Scene:
+        brief = context["requested_scene"]
+        if (draft.id, draft.type) != (brief["id"], brief["type"]):
+            raise ValueError("Preserve the requested scene id and type exactly.")
+        roles = {r["id"] for r in context["blueprint"]["roster"]}
+        if any(action.role_id not in roles for action in draft.actions):
+            raise ValueError("Use only role_id values from the supplied roster.")
+    if schema is Blueprint and "track" in context:
+        if draft.teaching_design is None:
+            raise ValueError("Include an explicit teaching_design.")
+        if context["track"] not in [t.value for t in draft.integrated_tracks]:
+            raise ValueError("Include the requested track in integrated_tracks.")
+    return draft
 
 
 class ClassroomRequest(BaseModel):
@@ -70,11 +112,17 @@ def classroom_slug(request, learner_id=None):
                 request.topic.strip().lower(),
                 request.track.value,
                 request.level.strip().lower(),
-                resolve_context(request.level, request.learner_context).model_dump(mode="json"),
+                resolve_context(request.level, request.learner_context).model_dump(
+                    mode="json"
+                ),
                 sorted(request.targets),
                 request.materials,
                 request.learning_need,
-                learner_id if private_authoring(request.level, request.materials, request.learning_need) else None,
+                learner_id
+                if private_authoring(
+                    request.level, request.materials, request.learning_need
+                )
+                else None,
             ],
             ensure_ascii=False,
         ).encode()
@@ -129,47 +177,133 @@ def public_state(record):
 async def generate_json(policy, schema, context):
     import openai
 
+    global _provider_retry_at, _fallback_retry_at
     key = GEMINI_API_KEY or GOOGLE_API_KEY
-    if not key:
+    if not key and not OPENAI_API_KEY:
         raise HTTPException(
             503, "Classroom generation needs a configured model provider."
         )
-    async with openai.AsyncOpenAI(
-        api_key=key, base_url=GEMINI_BASE_URL, max_retries=0, timeout=90
-    ) as client:
-        repair = ""
-        for _ in range(2):
-            response = await client.chat.completions.create(
-                model=GEMINI_MODEL,
-                max_tokens=6500,
-                response_format={"type": "json_object"},
-                messages=[
-                    {
-                        "role": "system",
-                        "content": ADELINE_CLASSROOM_PERSONA
-                        + "\n"
-                        + policy
-                        + "\nTEN TRACKS: "
-                        + ", ".join(t.value for t in Track)
-                        + "\nIntegrate only tracks with a substantive connection; never force all ten into one lesson.\nJSON schema:\n"
-                        + json.dumps(schema.model_json_schema()),
-                    },
-                    {
-                        "role": "user",
-                        "content": json.dumps(context, ensure_ascii=False) + repair,
-                    },
-                ],
+    messages = [
+        {
+            "role": "system",
+            "content": ADELINE_CLASSROOM_PERSONA
+            + "\n"
+            + policy
+            + "\nTEN TRACKS: "
+            + ", ".join(t.value for t in Track)
+            + "\nIntegrate only tracks with a substantive connection; never force all ten into one lesson."
+            + "\nJSON schema:\n"
+            + json.dumps(schema.model_json_schema()),
+        },
+        {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
+    ]
+    async with _generation_slots:
+        provider_pause()
+        providers = []
+        if key and _provider_retry_at <= time.time():
+            providers.append(("gemini", key, GEMINI_BASE_URL, GEMINI_MODEL))
+        if OPENAI_API_KEY and _fallback_retry_at <= time.time():
+            providers.append(
+                ("openai", OPENAI_API_KEY, "https://api.openai.com/v1", "gpt-4o-mini")
             )
-            try:
-                return schema.model_validate_json(
-                    response.choices[0].message.content or ""
-                )
-            except ValueError as exc:
-                repair = (
-                    "\nRepair the previous draft to satisfy these errors: "
-                    + str(exc)[:2500]
-                )
-    raise ValueError("The exploration draft did not pass its content checks.")
+        for provider, api_key, base_url, model in providers:
+            async with openai.AsyncOpenAI(
+                api_key=api_key, base_url=base_url, max_retries=0, timeout=90
+            ) as client:
+                for attempt in range(3):
+                    if provider == "gemini" and _provider_retry_at > time.time():
+                        break
+                    try:
+                        response = await client.chat.completions.create(
+                            model=model,
+                            max_tokens=10000,
+                            response_format={"type": "json_object"},
+                            messages=messages,
+                        )
+                    except openai.RateLimitError as exc:
+                        try:
+                            delay = min(
+                                3600,
+                                max(
+                                    60,
+                                    int(
+                                        float(
+                                            exc.response.headers.get(
+                                                "retry-after", "60"
+                                            )
+                                        )
+                                    ),
+                                ),
+                            )
+                        except (ValueError, TypeError):
+                            delay = 60
+                        if provider == "gemini":
+                            _provider_retry_at = time.time() + delay
+                        else:
+                            _fallback_retry_at = time.time() + delay
+                        body = exc.body if isinstance(exc.body, dict) else {}
+                        error = body.get("error", body)
+                        error = error if isinstance(error, dict) else {}
+                        # Provider metadata only; do not log prompts, responses or credentials.
+                        logger.warning(
+                            "Lesson provider %s throttled: status=429 code=%s status_name=%s request_id=%s retry_seconds=%s",
+                            provider,
+                            error.get("code"),
+                            error.get("status"),
+                            exc.request_id,
+                            delay,
+                        )
+                        if (
+                            provider == "gemini"
+                            and OPENAI_API_KEY
+                            and _fallback_retry_at <= time.time()
+                        ):
+                            logger.info(
+                                "Using configured OpenAI backup for lesson generation"
+                            )
+                            break
+                        raise HTTPException(
+                            503,
+                            "Lesson generation is temporarily unavailable. Saved scenes are safe; please try again shortly.",
+                            headers={"Retry-After": str(delay)},
+                        ) from exc
+                    choice = response.choices[0]
+                    content = choice.message.content or ""
+                    try:
+                        if choice.finish_reason == "length":
+                            raise ValueError(
+                                "Output was truncated. Return a shorter complete JSON document."
+                            )
+                        return validate_draft(schema, content, context)
+                    except ValueError as exc:
+                        if isinstance(exc, ValidationError):
+                            issues = json.dumps(
+                                exc.errors(include_input=False, include_url=False),
+                                default=str,
+                            )
+                        else:
+                            issues = str(exc)
+                        logger.warning(
+                            "Exploration validation failed: schema=%s attempt=%s issues=%s",
+                            schema.__name__,
+                            attempt + 1,
+                            issues[:2500],
+                        )
+                        messages.extend(
+                            [
+                                {"role": "assistant", "content": content},
+                                {
+                                    "role": "user",
+                                    "content": "Repair this draft. Preserve valid teaching and correct these errors: "
+                                    + issues[:4000]
+                                    + " Return the complete corrected JSON only.",
+                                },
+                            ]
+                        )
+    raise HTTPException(
+        502,
+        "Adeline could not finish a valid exploration. Please try again; saved scenes are safe.",
+    )
 
 
 async def save_document(student_id, item_id, record, doc):
@@ -184,6 +318,25 @@ async def save_document(student_id, item_id, record, doc):
     )
 
 
+async def build_heartbeat(student_id, item_id):
+    while True:
+        await asyncio.sleep(30)
+        conn = await get_db_conn()
+        try:
+            await conn.execute(
+                """UPDATE "StudentExperience" SET "metadataJson" = jsonb_set(
+                     "metadataJson", '{heartbeat}', to_jsonb($3::double precision))
+                   WHERE "studentId"=$1 AND "planItemId"=$2
+                     AND "metadataJson"->>'phase'='building'
+                """,
+                student_id,
+                plan_key(item_id),
+                time.time(),
+            )
+        finally:
+            await conn.close()
+
+
 async def build_document(student_id, item_id):
     record = await student_experience_store.get(student_id, plan_key(item_id))
     initial = document_from(record)
@@ -196,9 +349,11 @@ async def build_document(student_id, item_id):
         signed=True,
     )
     locked = False
+    heartbeat = None
     try:
-        await conn.execute("SELECT pg_advisory_lock($1)", lock_key)
-        locked = True
+        locked = bool(await conn.fetchval("SELECT pg_try_advisory_lock($1)", lock_key))
+        if not locked:
+            return  # Another worker owns this canonical; never queue another build.
         record = await student_experience_store.get(student_id, plan_key(item_id))
         doc = document_from(record)
         if not doc or doc["phase"] == "ready":
@@ -219,6 +374,7 @@ async def build_document(student_id, item_id):
         blueprint = Blueprint.model_validate(doc["blueprint"])
         doc.update(phase="building", error=None)
         await save_document(student_id, item_id, record, doc)
+        heartbeat = asyncio.create_task(build_heartbeat(student_id, item_id))
         scenes = [Scene.model_validate(s) for s in doc.get("scenes", [])]
         for brief in blueprint.scenes[len(scenes) :]:
             scene = await generate_json(
@@ -232,7 +388,8 @@ async def build_document(student_id, item_id):
                     "learner_context": resolve_context(
                         doc["request"].get("level", ""),
                         LearnerContext.model_validate(doc["request"]["learner_context"])
-                        if doc["request"].get("learner_context") else None,
+                        if doc["request"].get("learner_context")
+                        else None,
                     ).authoring_context(),
                     "supplied_resources": doc.get("source_context", []),
                     "curriculum_targets": doc.get("curriculum_targets", []),
@@ -266,7 +423,7 @@ async def build_document(student_id, item_id):
                 "agent_name": "Adeline Classroom Author",
             },
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("Classroom generation failed")
         if record:
             doc = document_from(
@@ -275,10 +432,23 @@ async def build_document(student_id, item_id):
             if doc:
                 doc.update(
                     phase="failed",
-                    error="This exploration could not be completed. Saved scenes can be resumed.",
+                    error=exc.detail
+                    if isinstance(exc, HTTPException)
+                    else "This exploration could not be completed. Saved scenes can be resumed.",
+                    retry_at=time.time() + int((exc.headers or {}).get("Retry-After", "60"))
+                    if isinstance(exc, HTTPException) and exc.status_code == 503
+                    else 0,
                 )
                 await save_document(student_id, item_id, record, doc)
     finally:
+        if heartbeat:
+            heartbeat.cancel()
+            try:
+                await heartbeat
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.exception("Classroom heartbeat failed")
         if locked:
             await conn.execute("SELECT pg_advisory_unlock($1)", lock_key)
         await conn.close()
@@ -310,16 +480,36 @@ async def prepare_classroom(
             raise HTTPException(409, "Plan this exploration first.")
         if doc["phase"] == "ready":
             return public_state(record)
+        build_key = (student_id, plan_item_id)
+        if build_key in _builds or (
+            doc["phase"] == "building" and time.time() - doc.get("heartbeat", 0) < 300
+        ):
+            return public_state(record)
+        if doc.get("retry_at", 0) > time.time():
+            raise HTTPException(
+                503,
+                doc.get("error") or "Please try again shortly.",
+                headers={"Retry-After": str(int(doc["retry_at"] - time.time()) + 1)},
+            )
+        provider_pause()
+        _builds.add(build_key)
         task = asyncio.create_task(build_document(student_id, plan_item_id))
         _tasks.add(task)
-        task.add_done_callback(_tasks.discard)
+
+        def finished(done):
+            _tasks.discard(done)
+            _builds.discard(build_key)
+
+        task.add_done_callback(finished)
         return {"phase": "building", "title": record["title"]}
     if doc:
         # Stable plan item is idempotent; an existing classroom is never overwritten.
         if classroom_slug(body, student_id) != doc["canonical_slug"] and (
             not doc.get("request")
             or classroom_slug(body, student_id)
-            != classroom_slug(ClassroomRequest.model_validate(doc["request"]), student_id)
+            != classroom_slug(
+                ClassroomRequest.model_validate(doc["request"]), student_id
+            )
         ):
             raise HTTPException(409, "Use a new exploration id for a different topic.")
         return public_state(record)
@@ -338,6 +528,7 @@ async def prepare_classroom(
     try:
         await planning_conn.execute("SELECT pg_advisory_lock($1)", shared_lock)
         from app.services.learning_loop import known_skills
+
         curriculum_targets = await known_skills(planning_conn, body.targets)
         canonical = await canonical_store.get(slug)
         shared = (
@@ -358,7 +549,8 @@ async def prepare_classroom(
             learners = resolve_context(body.level, body.learner_context)
             packet = await resource_router.search(
                 ResourceQuery(
-                    topic=body.topic, track=body.track.value,
+                    topic=body.topic,
+                    track=body.track.value,
                     grade_level=learners.resource_grade(),
                     limit=5,
                 )
@@ -431,11 +623,16 @@ async def prepare_classroom(
             metadata=doc,
         )
         return public_state(record)
-    except Exception:
+    except Exception as exc:
+        logger.exception("Classroom planning failed")
         await student_experience_store.mark_failed(
             student_id, plan_key(plan_item_id), "Classroom planning failed."
         )
-        raise
+        if isinstance(exc, HTTPException):
+            raise
+        raise HTTPException(
+            502, "Adeline could not prepare this plan. Please try again."
+        ) from exc
 
     finally:
         await planning_conn.execute("SELECT pg_advisory_unlock($1)", shared_lock)
@@ -852,15 +1049,25 @@ class AssessmentRequest(BaseModel):
     submission_key: str = Field(min_length=8, max_length=200)
 
 
-@router.post('/{student_id}/{plan_item_id}/assessment')
-async def assess_response(student_id: str, plan_item_id: str, body: AssessmentRequest, _user=Depends(verify_student_access)):
+@router.post("/{student_id}/{plan_item_id}/assessment")
+async def assess_response(
+    student_id: str,
+    plan_item_id: str,
+    body: AssessmentRequest,
+    _user=Depends(verify_student_access),
+):
     from app.services.classroom_assessment import assess_saved_work
     from app.services.rate_limit import enforce_rate_limit
-    await enforce_rate_limit('classroom-assessment', student_id, limit=30)
+
+    await enforce_rate_limit("classroom-assessment", student_id, limit=30)
     try:
-        return await assess_saved_work(student_id, plan_item_id, body.submission_key, generate_json)
+        return await assess_saved_work(
+            student_id, plan_item_id, body.submission_key, generate_json
+        )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
-        logger.warning('Work saved; assessment unavailable', exc_info=True)
-        raise HTTPException(503, 'Your work is saved. Review is unavailable; retry the review later.') from exc
+        logger.warning("Work saved; assessment unavailable", exc_info=True)
+        raise HTTPException(
+            503, "Your work is saved. Review is unavailable; retry the review later."
+        ) from exc

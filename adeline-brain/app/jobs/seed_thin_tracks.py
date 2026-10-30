@@ -114,7 +114,7 @@ SEED_QUERIES = {
 async def seed_thin_tracks():
     """Run 3 random queries per seeded track through the Researcher."""
     try:
-        from app.tools.researcher import search_witnesses
+        from app.tools.researcher import ResearchUnavailable, search_witnesses
     except ImportError:
         logger.error("[SeedThinTracks] Could not import search_witnesses")
         return
@@ -127,12 +127,15 @@ async def seed_thin_tracks():
 
         for query in selected:
             try:
-                results = await search_witnesses(query=query, track=track)
+                results = await search_witnesses(query=query, track=track, raise_on_unavailable=True)
                 acquired = len(results)
                 total_acquired += acquired
                 if acquired:
                     logger.info(f"[SeedThinTracks] {track}: +{acquired} docs for '{query[:50]}'")
+            except ResearchUnavailable:
+                logger.error("[SeedThinTracks] Research provider unavailable; stopping nightly run.")
+                raise
             except Exception as e:
                 logger.warning(f"[SeedThinTracks] {track} query failed: {e}")
 
-    logger.info(f"[SeedThinTracks] Nightly run complete: {total_acquired} new documents acquired")
+    logger.info(f"[SeedThinTracks] Nightly run complete: {total_acquired} matching documents returned (includes existing corpus)")

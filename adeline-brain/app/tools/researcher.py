@@ -35,20 +35,21 @@ Flow:
 Search backend: DuckDuckGo (100% free, no API key required).
 """
 import asyncio
-import os
 import logging
+import os
+import time
 import traceback
 from typing import Optional
 
 import numpy as np
 import openai
 
+from app.connections.pgvector_client import hippocampus
+from app.protocols.content_filter import should_return_document
+from app.protocols.witness import get_witness_threshold
 from app.schemas.api_models import (
     SourceType,
 )
-from app.connections.pgvector_client import hippocampus
-from app.protocols.witness import get_witness_threshold
-from app.protocols.content_filter import should_return_document
 
 logger = logging.getLogger(__name__)
 
@@ -184,11 +185,31 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 # ── OpenAI embedding helper ────────────────────────────────────────────────────
 
+class ResearchUnavailable(RuntimeError):
+    """A dependency outage, distinct from a valid search with no matches."""
+
+
+_embedding_retry_at = 0.0
+
+
 async def _embed(text: str) -> list[float]:
-    """Embed text using text-embedding-3-small."""
-    client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    resp = await client.embeddings.create(model=EMBED_MODEL, input=text[:8000])
-    return resp.data[0].embedding
+    """Do not retry exhausted billing quota for every document/query."""
+    global _embedding_retry_at
+    if time.time() < _embedding_retry_at:
+        raise ResearchUnavailable("Research embeddings are paused after a provider quota error.")
+    try:
+        async with openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"), max_retries=0) as client:
+            resp = await client.embeddings.create(model=EMBED_MODEL, input=text[:8000])
+            return resp.data[0].embedding
+    except openai.RateLimitError as exc:
+        body = exc.body if isinstance(exc.body, dict) else {}
+        error = body.get("error", body)
+        error = error if isinstance(error, dict) else {}
+        exhausted = error.get("code") in {"credit_balance_exhausted", "insufficient_quota"} or error.get("type") == "insufficient_quota"
+        _embedding_retry_at = time.time() + (3600 if exhausted else 60)
+        raise ResearchUnavailable(
+            "Research embeddings need API credits." if exhausted else "Research embeddings are temporarily rate limited."
+        ) from exc
 
 
 # ── Deep web search helpers ────────────────────────────────────────────────────
@@ -356,6 +377,8 @@ async def search_witnesses(
     track: str,
     top_k: int = 5,
     student_age: Optional[int] = None,
+    *,
+    raise_on_unavailable: bool = False,
 ) -> list[dict]:
     """
     Search for evidence to answer a student question.
@@ -500,6 +523,8 @@ async def search_witnesses(
 
                     logger.info(f"[Researcher] Acquired document: {doc['title']} from {doc['archive']}")
 
+            except ResearchUnavailable:
+                raise
             except Exception as e:
                 logger.warning(f"[Researcher] Failed to process document {doc['title']}: {e}")
                 continue
@@ -519,6 +544,12 @@ async def search_witnesses(
         logger.info("[Researcher] No results from any source. Student gets RESEARCH_MISSION.")
         return []
 
+    except ResearchUnavailable as exc:
+        logger.warning("[Researcher] Dependency unavailable: %s", exc)
+        if raise_on_unavailable:
+            raise
+        # Never turn unscored history/justice candidates into verified evidence.
+        return []
     except Exception as e:
         logger.error(
             f"[Researcher] Error in search_witnesses: {e}\n{traceback.format_exc()}"
