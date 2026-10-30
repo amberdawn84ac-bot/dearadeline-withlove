@@ -431,3 +431,8 @@ Validation: focused classroom, materials, teaching and research-outage tests;
 public-domain reader/proxy checks. Live provider calls and production deployment
 must still be verified separately; mocked tests do not establish live quota or
 lesson quality.
+
+The backend container packages Node 22/npm and prefetches the Prisma CLI/engines
+into a fixed cache during the image build. The build checks the CLI again as the
+unprivileged runtime user, preventing migration startup from relying on a fresh
+nodeenv download. Migration and readiness gates remain enabled.
