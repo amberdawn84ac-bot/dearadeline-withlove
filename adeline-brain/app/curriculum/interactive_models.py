@@ -142,7 +142,14 @@ class Interaction(BaseModel):
                 or len(choice_ids) != len(self.choices)
                 or any(p.match_id not in choice_ids for p in self.pairs)
             ):
-                raise ValueError("Every match must use a unique pair and an existing choice")
+                raise ValueError(
+                    "Matching requires 2–6 pairs with unique pair ids, unique choice ids, "
+                    "and every pair.match_id in choices. "
+                    f"Received pair count={len(self.pairs)}, "
+                    f"pair ids={[p.id for p in self.pairs]}, "
+                    f"choice ids={[c.id for c in self.choices]}, "
+                    f"unknown match ids={[p.match_id for p in self.pairs if p.match_id not in choice_ids]}"
+                )
             if self.steps or self.series_a or self.series_b:
                 raise ValueError("Matching does not use sequence steps or graph series")
         elif self.kind == "graph_compare":

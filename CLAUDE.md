@@ -341,3 +341,8 @@ The backend container packages Node 22/npm and prefetches the Prisma CLI/engines
 into a fixed cache during the image build. The build checks the CLI again as the
 unprivileged runtime user, preventing migration startup from relying on a fresh
 nodeenv download. Migration and readiness gates remain enabled.
+
+Scene authoring also supplies an explicit delivery checklist and a matching
+activity example. Matching validation reports exact pair/choice identities and
+unknown references so a repair can correct the failing activity without
+weakening the content contract.

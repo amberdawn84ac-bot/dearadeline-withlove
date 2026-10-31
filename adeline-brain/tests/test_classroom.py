@@ -650,3 +650,36 @@ async def test_gemini_throttle_uses_configured_openai_backup(monkeypatch, failur
         assert api._provider_retry_at - time.time() > 25195
     primary.chat.completions.create.assert_awaited_once()
     assert backup.chat.completions.create.await_args.kwargs["model"] == "gpt-4o-mini"
+
+
+def test_matching_repairs_receive_exact_reference_diagnostics():
+    from app.curriculum.interactive_models import Interaction
+
+    with pytest.raises(ValidationError) as exc:
+        Interaction.model_validate(
+            {
+                "kind": "matching",
+                "prediction_prompt": "Predict the matching pairs.",
+                "observation_prompt": "Explain your corrected reasoning.",
+                "choices": [
+                    {"id": "source", "label": "Primary source"},
+                    {"id": "opinion", "label": "Opinion"},
+                ],
+                "pairs": [
+                    {
+                        "id": "p1",
+                        "prompt": "A dated original record",
+                        "match_id": "missing",
+                        "reason": "Explain the source.",
+                    },
+                    {
+                        "id": "p2",
+                        "prompt": "A personal judgment",
+                        "match_id": "opinion",
+                        "reason": "Explain the judgment.",
+                    },
+                ],
+            }
+        )
+    assert "unknown match ids=['missing']" in str(exc.value)
+    assert "choice ids=['source', 'opinion']" in str(exc.value)

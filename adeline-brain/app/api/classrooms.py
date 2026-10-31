@@ -83,6 +83,28 @@ def validate_draft(schema, content, context):
     return draft
 
 
+def scene_delivery_rules(context):
+    brief = context.get("requested_scene", {})
+    return (
+        "\nScene delivery checklist (check before returning JSON): "
+        f"id={brief.get('id')!r}, type={brief.get('type')!r}. "
+        "For slide, quiz and pbl set simulation, sorting and interaction to null; "
+        "actions.focus may be content, task or visual, never activity without a mechanism. "
+        "For interactive populate exactly ONE of simulation, sorting or interaction; "
+        "the other two must be null. Every interaction needs prediction_prompt and "
+        "observation_prompt, including diagrams, sequence and matching. "
+        "Matching uses 2–6 pairs and 2–6 choices INSIDE interaction. Every pair has "
+        "id, prompt, match_id and reason. match_id must exactly equal an existing "
+        "interaction.choices[].id, not a label, pair id, index or new id. "
+        "Structural example only (replace example text with this lesson's content): "
+        '{"kind":"matching","prediction_prompt":"Predict the matches and explain why.",'
+        '"observation_prompt":"Explain what changed after checking.",'
+        '"choices":[{"id":"c1","label":"First choice"},{"id":"c2","label":"Second choice"}],'
+        '"pairs":[{"id":"p1","prompt":"First concrete prompt","match_id":"c1","reason":"Explain the first match."},'
+        '{"id":"p2","prompt":"Second concrete prompt","match_id":"c2","reason":"Explain the second match."}]}.'
+    )
+
+
 class ClassroomRequest(BaseModel):
     topic: str = Field(min_length=3, max_length=500)
     track: Track
@@ -197,6 +219,8 @@ async def generate_json(policy, schema, context):
         },
         {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
     ]
+    if schema is Scene:
+        messages[0]["content"] += scene_delivery_rules(context)
     async with _generation_slots:
         provider_pause()
         providers = []
