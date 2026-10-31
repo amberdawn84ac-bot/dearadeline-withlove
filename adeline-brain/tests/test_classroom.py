@@ -575,7 +575,10 @@ async def test_duplicate_build_request_returns_current_progress():
 
 
 @pytest.mark.asyncio
-async def test_gemini_throttle_uses_configured_openai_backup(monkeypatch):
+@pytest.mark.parametrize(
+    "failure", ["rate_limit", "daily_quota", "overload", "timeout"]
+)
+async def test_gemini_throttle_uses_configured_openai_backup(monkeypatch, failure):
     import json
     from types import SimpleNamespace
     from unittest.mock import MagicMock
@@ -591,10 +594,36 @@ async def test_gemini_throttle_uses_configured_openai_backup(monkeypatch):
     response = httpx.Response(
         429, request=httpx.Request("POST", "https://provider.test")
     )
+    if failure == "rate_limit":
+        error = openai.RateLimitError("Quota", response=response, body={})
+    elif failure == "daily_quota":
+        error = openai.RateLimitError(
+            "Daily quota",
+            response=response,
+            body=[
+                {
+                    "error": {
+                        "details": [
+                            {
+                                "@type": "type.googleapis.com/google.rpc.RetryInfo",
+                                "retryDelay": "25196s",
+                            }
+                        ]
+                    }
+                }
+            ],
+        )
+    elif failure == "overload":
+        response = httpx.Response(503, request=response.request)
+        error = openai.InternalServerError(
+            "High demand",
+            response=response,
+            body=[{"error": {"status": "UNAVAILABLE"}}],
+        )
+    else:
+        error = openai.APITimeoutError(request=response.request)
     primary = MagicMock()
-    primary.chat.completions.create = AsyncMock(
-        side_effect=openai.RateLimitError("Quota", response=response, body={})
-    )
+    primary.chat.completions.create = AsyncMock(side_effect=error)
     backup = MagicMock()
     backup.chat.completions.create = AsyncMock(
         return_value=SimpleNamespace(
@@ -615,5 +644,9 @@ async def test_gemini_throttle_uses_configured_openai_backup(monkeypatch):
     with patch("openai.AsyncOpenAI", side_effect=managers):
         result = await api.generate_json("Teach.", Blueprint, {})
     assert result.title == "Mixtures"
+    if failure == "daily_quota":
+        import time
+
+        assert api._provider_retry_at - time.time() > 25195
     primary.chat.completions.create.assert_awaited_once()
     assert backup.chat.completions.create.await_args.kwargs["model"] == "gpt-4o-mini"

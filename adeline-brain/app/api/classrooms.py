@@ -220,37 +220,55 @@ async def generate_json(policy, schema, context):
                             response_format={"type": "json_object"},
                             messages=messages,
                         )
-                    except openai.RateLimitError as exc:
+                    except (
+                        openai.RateLimitError,
+                        openai.InternalServerError,
+                        openai.APIConnectionError,
+                    ) as exc:
+                        upstream = getattr(exc, "response", None)
+                        headers = upstream.headers if upstream is not None else {}
+                        raw_body = getattr(exc, "body", None)
+                        if isinstance(raw_body, list) and raw_body:
+                            raw_body = raw_body[0]
+                        body = raw_body if isinstance(raw_body, dict) else {}
+                        error = body.get("error", body)
+                        error = error if isinstance(error, dict) else {}
                         try:
-                            delay = min(
-                                3600,
-                                max(
-                                    60,
-                                    int(
-                                        float(
-                                            exc.response.headers.get(
-                                                "retry-after", "60"
+                            delay = max(
+                                60, int(float(headers.get("retry-after", "60")))
+                            )
+                            # Gemini reports daily-quota reset times in Google RPC
+                            # RetryInfo, often without an HTTP Retry-After header.
+                            for detail in error.get("details", []):
+                                if isinstance(detail, dict) and str(
+                                    detail.get("@type", "")
+                                ).endswith("RetryInfo"):
+                                    delay = max(
+                                        delay,
+                                        int(
+                                            float(
+                                                str(
+                                                    detail.get("retryDelay", "0s")
+                                                ).removesuffix("s")
                                             )
                                         )
-                                    ),
-                                ),
-                            )
+                                        + 1,
+                                    )
+                            delay = min(86400, delay)
                         except (ValueError, TypeError):
                             delay = 60
                         if provider == "gemini":
                             _provider_retry_at = time.time() + delay
                         else:
                             _fallback_retry_at = time.time() + delay
-                        body = exc.body if isinstance(exc.body, dict) else {}
-                        error = body.get("error", body)
-                        error = error if isinstance(error, dict) else {}
                         # Provider metadata only; do not log prompts, responses or credentials.
                         logger.warning(
-                            "Lesson provider %s throttled: status=429 code=%s status_name=%s request_id=%s retry_seconds=%s",
+                            "Lesson provider %s unavailable: status=%s code=%s status_name=%s request_id=%s retry_seconds=%s",
                             provider,
+                            getattr(exc, "status_code", "connection_error"),
                             error.get("code"),
                             error.get("status"),
-                            exc.request_id,
+                            getattr(exc, "request_id", None),
                             delay,
                         )
                         if (
@@ -435,7 +453,8 @@ async def build_document(student_id, item_id):
                     error=exc.detail
                     if isinstance(exc, HTTPException)
                     else "This exploration could not be completed. Saved scenes can be resumed.",
-                    retry_at=time.time() + int((exc.headers or {}).get("Retry-After", "60"))
+                    retry_at=time.time()
+                    + int((exc.headers or {}).get("Retry-After", "60"))
                     if isinstance(exc, HTTPException) and exc.status_code == 503
                     else 0,
                 )

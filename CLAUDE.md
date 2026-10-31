@@ -319,7 +319,8 @@ coverage, dispositions, reproducibility and real-Postgres validation.
 
 Classroom authoring repairs the actual rejected JSON draft, including scene/cast
 identity checks, without relaxing content validators. Gemini remains primary;
-when its API is throttled, a configured OpenAI key permits backup generation with
+when its API is throttled, overloaded (5xx), or unreachable, a configured OpenAI
+key permits backup generation with
 `gpt-4o-mini` (also used by book recommendations). Both routes use the same schema
 and teaching policies. Rate limits open a bounded provider cooldown; duplicate
 builds do not queue behind an active canonical build. Scene checkpoints remain
