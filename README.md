@@ -442,3 +442,8 @@ Scene authoring also supplies an explicit delivery checklist and a matching
 activity example. Matching validation reports exact pair/choice identities and
 unknown references so a repair can correct the failing activity without
 weakening the content contract.
+
+OpenAI scene/blueprint authoring uses strict JSON-schema output, with all object
+fields required and extra keys disallowed. Scene identity/cast and project steps
+are constrained at generation time. Local semantic validators still run; schema
+compliance alone does not establish teaching quality or correct matching answers.

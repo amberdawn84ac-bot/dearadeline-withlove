@@ -196,6 +196,64 @@ def public_state(record):
     return result
 
 
+def authoring_response_format(provider, schema, context):
+    if provider != "openai" or schema not in (Scene, Blueprint):
+        return {"type": "json_object"}
+
+    contract = schema.model_json_schema()
+    if schema is Scene:
+        properties = contract["properties"]
+        # JSON Schema cannot express a dynamic dictionary in strict output mode.
+        # These three participation bands are already required by Scene itself.
+        properties["family_roles"] = {
+            "type": "object",
+            "properties": {
+                band: {"type": "string", "minLength": 1}
+                for band in ("elementary", "middle", "high_school")
+            },
+        }
+        brief = context.get("requested_scene", {})
+        if brief.get("id"):
+            properties["id"] = {"type": "string", "enum": [brief["id"]]}
+        if brief.get("type"):
+            properties["type"] = {"type": "string", "enum": [brief["type"]]}
+        if brief.get("type") in ("slide", "quiz", "pbl"):
+            for field in ("simulation", "sorting", "interaction"):
+                properties[field] = {"type": "null"}
+        if brief.get("type") == "pbl":
+            properties["steps"]["minItems"] = 1
+        if brief.get("type") == "quiz":
+            properties["question"] = {"$ref": "#/$defs/Question"}
+        elif brief.get("type"):
+            properties["question"] = {"type": "null"}
+        roster = context.get("blueprint", {}).get("roster", [])
+        if roster:
+            contract["$defs"]["Speech"]["properties"]["role_id"] = {
+                "type": "string",
+                "enum": [role["id"] for role in roster],
+            }
+
+    def strict(node):
+        if isinstance(node, list):
+            return [strict(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+        result = {key: strict(value) for key, value in node.items() if key != "default"}
+        if result.get("type") == "object":
+            result["additionalProperties"] = False
+            result["required"] = list(result.get("properties", {}))
+        return result
+
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": schema.__name__,
+            "strict": True,
+            "schema": strict(contract),
+        },
+    }
+
+
 async def generate_json(policy, schema, context):
     import openai
 
@@ -241,7 +299,9 @@ async def generate_json(policy, schema, context):
                         response = await client.chat.completions.create(
                             model=model,
                             max_tokens=10000,
-                            response_format={"type": "json_object"},
+                            response_format=authoring_response_format(
+                                provider, schema, context
+                            ),
                             messages=messages,
                         )
                     except (

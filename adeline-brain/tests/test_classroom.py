@@ -683,3 +683,51 @@ def test_matching_repairs_receive_exact_reference_diagnostics():
         )
     assert "unknown match ids=['missing']" in str(exc.value)
     assert "choice ids=['source', 'opinion']" in str(exc.value)
+
+
+def test_openai_project_schema_requires_complete_scene_and_steps():
+    from app.api.classrooms import authoring_response_format
+
+    context = {
+        "requested_scene": {"id": "project-final", "type": "pbl"},
+        "blueprint": blueprint(),
+    }
+    response_format = authoring_response_format("openai", Scene, context)
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["strict"] is True
+    contract = response_format["json_schema"]["schema"]
+    assert set(contract["required"]) == set(contract["properties"])
+    assert {
+        "content",
+        "actions",
+        "learner_task",
+        "success_criteria",
+        "family_roles",
+        "steps",
+    } <= set(contract["required"])
+    assert contract["properties"]["steps"]["minItems"] == 1
+    assert contract["properties"]["type"]["enum"] == ["pbl"]
+    assert contract["properties"]["id"]["enum"] == ["project-final"]
+    assert contract["properties"]["interaction"] == {"type": "null"}
+    assert set(contract["properties"]["family_roles"]["required"]) == {
+        "elementary",
+        "middle",
+        "high_school",
+    }
+
+    def inspect(node):
+        if isinstance(node, dict):
+            assert "default" not in node
+            if node.get("type") == "object":
+                assert node["additionalProperties"] is False
+                assert set(node["required"]) == set(node.get("properties", {}))
+            for value in node.values():
+                inspect(value)
+        elif isinstance(node, list):
+            for value in node:
+                inspect(value)
+
+    inspect(contract)
+    assert authoring_response_format("gemini", Scene, context) == {
+        "type": "json_object"
+    }
