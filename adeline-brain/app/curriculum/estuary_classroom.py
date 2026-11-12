@@ -333,7 +333,7 @@ def estuary_classroom() -> Classroom:
     previous = []
     for brief, scene in zip(plan.scenes, scenes, strict=True):
         validate_teaching_scene(
-            scene, brief.model_dump(), previous, {ESTUARY_SOURCE["id"]}
+            scene, brief.model_dump(), previous, [ESTUARY_SOURCE]
         )
         previous.append(scene.model_dump())
     return Classroom(blueprint=plan, scenes=scenes)

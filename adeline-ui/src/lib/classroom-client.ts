@@ -103,7 +103,5 @@ export async function reviewClassroomResponse(student: string, item: string, sub
 export async function submitClassroomResponse(student: string, item: string, scene_id: string, text: string, submission_key: string, activity?: ActivityWork): Promise<Feedback> {
   const feedback = await saveClassroomResponse(student, item, scene_id, text, submission_key, activity);
   clearStudentDataCaches(student);
-  if (activity?.stage === 'prediction') return feedback;
-  try { return { ...feedback, submission_key, assessment: await reviewClassroomResponse(student, item, submission_key) }; }
-  catch { return { ...feedback, submission_key, assessment_pending: true }; }
+  return feedback;
 }

@@ -1,6 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import type { SceneVisual as Visual } from '@/lib/classroom-client';
+
+export function LessonImage({ src, alt }: { src?: string | null; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed || !/^(https:\/\/|\/lesson-media\/[a-z0-9-]+\.jpg$)/i.test(src)) {
+    return <p className="rounded-lg bg-[#f2ead7] p-3">Image unavailable. {alt}</p>;
+  }
+  return <img src={src} alt={alt} onError={() => setFailed(true)} className="mx-auto h-auto max-h-[30rem] w-full rounded-xl object-contain" />;
+}
 
 export default function SceneVisual({ visual, activeId, hiddenIds = [] }: { visual: Visual; activeId?: string | null; hiddenIds?: string[] }) {
   return <section aria-label="Visual explanation" className="my-6 space-y-4">
@@ -39,8 +48,8 @@ export default function SceneVisual({ visual, activeId, hiddenIds = [] }: { visu
         }
         if (element.type === 'image') {
           return <figure key={element.id} id={`visual-${element.id}`} className={frame}>
-            {element.url?.startsWith('https://') && <img src={element.url} alt={element.alt || ''} className="h-auto max-h-80 w-full rounded-xl object-contain" />}
-            <figcaption className="mt-2 leading-7">{element.alt || element.text}</figcaption>
+            <LessonImage key={element.url} src={element.url} alt={element.alt || 'Lesson illustration'} />
+            {element.text && <figcaption className="mt-2 leading-7">{element.text}</figcaption>}
           </figure>;
         }
         return <div key={element.id} id={`visual-${element.id}`} className={frame}>
