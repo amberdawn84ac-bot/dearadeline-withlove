@@ -167,3 +167,39 @@ describe('Fresh classroom', () => {
   });
 
 });
+
+it('paces a visual reveal without speech and opens the investigation after a saved prediction', async () => {
+  mocks.submit.mockResolvedValue({ saved: true, review: 'Prediction saved.' });
+  const staged: ClassroomState = {
+    ...state, classroom: {
+      ...state.classroom!,
+      scenes: [
+        { ...scene, type: 'pbl', question: null, response_required: true },
+        {
+          ...scene, id: 'layers', type: 'slide', question: null,
+          actions: [
+            { role_id: 'adeline', kind: 'pause', text: 'Predict which layer settles first.' },
+            { role_id: 'adeline', kind: 'reveal', target_id: 'layers', text: 'Compare both layers now.' },
+          ],
+          visual: {
+            reading: 'The upper water is fresher.',
+            elements: [{ id: 'layers', type: 'layer_stack', labels: ['Fresher surface water', 'Saltier deep water'] }],
+          },
+        },
+      ],
+    },
+  };
+  render(<ClassroomPlayer state={staged} studentId="child" itemId="estuary" grade="8" />);
+  expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Your response'), { target: { value: 'My prediction' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save my work' }));
+  await screen.findByText('Prediction saved.');
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.queryByText('Fresher surface water')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Show the teaching steps' }));
+  expect(screen.getByText('Predict which layer settles first.')).toBeInTheDocument();
+  expect(screen.queryByText('The upper water is fresher.')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Next part' }));
+  expect(screen.getByText('Fresher surface water')).toBeInTheDocument();
+  expect(screen.getByText('The upper water is fresher.')).toBeInTheDocument();
+});

@@ -19,6 +19,7 @@ const RESPONSE_HEADERS = [
   'content-type',
   'etag',
   'last-modified',
+  'retry-after',
 ] as const;
 
 async function proxy(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {

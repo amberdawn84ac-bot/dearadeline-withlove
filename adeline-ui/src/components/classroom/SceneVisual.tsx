@@ -2,13 +2,21 @@
 
 import type { SceneVisual as Visual } from '@/lib/classroom-client';
 
-export default function SceneVisual({ visual, activeId }: { visual: Visual; activeId?: string | null }) {
+export default function SceneVisual({ visual, activeId, hiddenIds = [] }: { visual: Visual; activeId?: string | null; hiddenIds?: string[] }) {
   return <section aria-label="Visual explanation" className="my-6 space-y-4">
-    <p className="text-lg leading-8">{visual.reading}</p>
+    {!hiddenIds.length && <p className="text-lg leading-8">{visual.reading}</p>}
     <div className="grid gap-4">
-      {visual.elements.map(element => {
+      {visual.elements.filter(element => !hiddenIds.includes(element.id)).map(element => {
         const marked = activeId === element.id;
         const frame = `rounded-2xl border border-[#d9cfbc] bg-white p-4 ${marked ? 'ring-2 ring-[#bba978] ring-offset-2' : ''}`;
+        if (element.type === 'layer_stack' && element.labels) {
+          return <figure key={element.id} id={`visual-${element.id}`} className={frame}>
+            <figcaption className="mb-3 font-semibold">{element.text || 'Cross-section'}</figcaption>
+            <ol className="overflow-hidden rounded-xl border border-[#50757a]" aria-label="Layers from top to bottom">
+              {element.labels.map((label, index) => <li key={label} className={`min-h-14 border-b border-[#50757a] p-3 last:border-0 ${index % 2 ? 'bg-[#215e70] text-white' : 'bg-[#d3edf1] text-[#183d32]'}`}>{label}</li>)}
+            </ol>
+          </figure>;
+        }
         if (element.type === 'chart' && element.labels && element.values) {
           const max = Math.max(...element.values.map(value => Math.abs(value)), 1);
           return <figure key={element.id} id={`visual-${element.id}`} className={frame}>

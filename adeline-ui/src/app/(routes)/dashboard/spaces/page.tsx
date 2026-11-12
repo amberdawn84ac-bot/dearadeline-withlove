@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useStudent } from '@/lib/useStudent';
-import { listClassrooms } from '@/lib/classroom-client';
+import { ESTUARY_ITEM, listClassrooms } from '@/lib/classroom-client';
 
 export default function ClassroomsPage() {
   const { student, loading } = useStudent();
@@ -18,5 +18,17 @@ export default function ClassroomsPage() {
   }, [student]);
   if (loading) return <p>Opening your explorations…</p>;
   if (!student) return <p>Please sign in to open your explorations.</p>;
-  return <main className="mx-auto max-w-5xl space-y-7 text-[#183d32]"><header className="rounded-3xl bg-[#183d32] p-8 text-[#fff9ec]"><p className="text-xs uppercase tracking-[.25em]">Dear Adeline</p><h1 className="mt-3 text-4xl">Your explorations</h1><p className="mt-4">Explore, make, question, and learn with Adeline.</p>{newId && <Link href={`/dashboard/lesson/${newId}`} className="mt-6 inline-block rounded-xl bg-[#d8b976] px-5 py-3 font-semibold text-[#183d32]">Start exploring</Link>}</header>{error && <p role="alert">{error}</p>}<div className="grid gap-5 sm:grid-cols-2">{items.map(item => <Link key={item.item_id} href={`/dashboard/lesson/${encodeURIComponent(item.item_id)}`} className="rounded-2xl border border-[#d9cfbc] bg-[#fffdf7] p-6"><h2 className="text-2xl">{item.title}</h2><p className="mt-3 text-sm">{item.phase === 'ready' ? 'Continue exploring' : item.phase === 'planned' ? 'Review your plan' : item.phase === 'failed' ? 'Resume building' : 'Building…'}</p></Link>)}</div>{!items.length && !error && <p>Your explorations will appear here.</p>}</main>;
+  return <main className="mx-auto max-w-5xl space-y-7 text-[#183d32]">
+    <header className="rounded-3xl bg-[#183d32] p-8 text-[#fff9ec]">
+      <h1 className="text-4xl">Your explorations</h1>
+      {newId && <Link href={`/dashboard/lesson/${newId}`} className="mt-6 inline-block rounded-xl bg-[#d8b976] px-5 py-3 font-semibold text-[#183d32]">Start exploring</Link>}
+      <Link href={`/dashboard/lesson/${ESTUARY_ITEM}`} className="mt-6 inline-block px-5 py-3 font-semibold underline underline-offset-4">Open the marine biology family lab</Link>
+    </header>
+    {error && <p role="alert">{error}</p>}
+    <div className="grid gap-5 sm:grid-cols-2">{items.map(item => <Link key={item.item_id} href={`/dashboard/lesson/${encodeURIComponent(item.item_id)}`} className="rounded-2xl border border-[#d9cfbc] bg-[#fffdf7] p-6">
+      <h2 className="text-2xl">{item.title}</h2>
+      <p className="mt-3 text-sm">{item.phase === 'ready' ? 'Continue exploring' : item.phase === 'planned' ? 'Review your plan' : item.phase === 'failed' ? 'Resume building' : 'Building…'}</p>
+    </Link>)}</div>
+    {!items.length && !error && <p>Your explorations will appear here.</p>}
+  </main>;
 }

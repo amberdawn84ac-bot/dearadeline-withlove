@@ -129,3 +129,27 @@ async def test_spaces_insights_merges_credited_and_encountered_sorted_by_recency
     assert credited_ellie.context == "Feeding the starter"
     encountered = next(item for item in response.insights if item.kind == "encountered")
     assert encountered.concept_names == ["Osmosis"]
+
+
+@pytest.mark.asyncio
+async def test_classroom_artifact_is_readable_as_evidence_without_sealed_credit():
+    connection = AsyncMock()
+    connection.fetch.return_value = [{
+        "lesson_id": "attempt-1",
+        "track": "CREATION_SCIENCE",
+        "title": "When the River Meets the Sea",
+        "sealed_at": None,
+        "plan_item_id": None,
+        "evidence_only": True,
+        "sources_json": (
+            '[{"type":"learner_reflection","content":"I would sample the surface and bed at the same time."},'
+            '{"type":"artifact","title":"Estuary field-team note","description":"Saved for review"}]'
+        ),
+    }]
+    with patch("app.config.get_db_conn", new=AsyncMock(return_value=connection)):
+        response = await get_portfolio_items("student-1", _user_id="parent-1")
+    artifact, = response.items
+    assert artifact.evidence_only is True
+    assert artifact.sealed_at is None
+    assert artifact.title == "Estuary field-team note"
+    assert artifact.reflection == "I would sample the surface and bed at the same time."

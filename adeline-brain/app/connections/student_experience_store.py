@@ -123,17 +123,19 @@ class StudentExperienceStore:
         finally:
             await conn.close()
 
-    async def mark_failed(self, student_id: str, plan_item_id: str, message: str) -> int:
+    async def mark_failed(
+        self, student_id: str, plan_item_id: str, message: str, *, count_attempt: bool = True
+    ) -> int:
         """Returns the new consecutive-failure count so callers can decide
         whether to escalate instead of silently offering another retry."""
         conn = await get_db_conn()
         try:
             row = await conn.fetchrow(
                 '''UPDATE "StudentExperience" SET status = 'failed',
-                     "errorMessage" = $3, "failureCount" = "failureCount" + 1, "updatedAt" = NOW()
+                     "errorMessage" = $3, "failureCount" = "failureCount" + $4, "updatedAt" = NOW()
                    WHERE "studentId" = $1 AND "planItemId" = $2 AND status = 'generating'
                    RETURNING "failureCount"''',
-                student_id, plan_item_id, message[:500],
+                student_id, plan_item_id, message[:500], int(count_attempt),
             )
             return row["failureCount"] if row else 0
         finally:
