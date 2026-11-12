@@ -2,8 +2,6 @@ from copy import deepcopy
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from pydantic import ValidationError
-
 from app.agents.persona import ADELINE_CLASSROOM_PERSONA
 from app.api.classrooms import (
     ClassroomRequest,
@@ -19,6 +17,7 @@ from app.curriculum.classroom import (
     public_classroom,
 )
 from app.schemas.api_models import Track
+from pydantic import ValidationError
 
 
 def blueprint():
@@ -490,9 +489,8 @@ async def test_provider_429_sets_cooldown_without_retrying():
 
     import httpx
     import openai
-    from fastapi import HTTPException
-
     from app.api import classrooms as api
+    from fastapi import HTTPException
 
     response = httpx.Response(
         429,
@@ -587,7 +585,6 @@ async def test_gemini_throttle_uses_configured_openai_backup(monkeypatch, failur
 
     import httpx
     import openai
-
     from app.api import classrooms as api
 
     monkeypatch.setattr(api, "GEMINI_API_KEY", "gemini-test")
