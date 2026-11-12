@@ -129,7 +129,7 @@
 @media(max-width:900px){
   .header { padding:0 18px; }
   .headerLabel { display:none; }
-  .body { width:min(100% - 24px,900px); margin-top:20px; grid-template-columns:1fr; }
+  .body { width:min(100% - 24px,900px); margin-top:20px; grid-template-columns:minmax(0,1fr); }
   .sidebar { position:static; }
   .menu { flex-direction:row; overflow-x:auto; border-radius:18px; }
   .menu a { min-width:max-content; }
