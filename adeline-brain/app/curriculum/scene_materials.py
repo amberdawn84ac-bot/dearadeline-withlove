@@ -2,10 +2,17 @@
 
 from urllib.parse import urlparse
 
+from app.curriculum.equine_anatomy import PLATE_PATH, PLATE_SOURCE
 from pydantic import BaseModel, Field
 
 # Reviewed source records, not lesson templates. Original files remain with publishers.
 CATALOG = [
+    {
+        **PLATE_SOURCE,
+        "kind": "image",
+        "image_url": f"https://www.dearadeline.co{PLATE_PATH}",
+        "content": "Lateral view of the horse's superficial locomotor muscles. The horse faces right; g marks the trapezius, and d marks the latissimus dorsi. It depicts exposed muscle layers and uses historical lettering.",
+    },
     {
         "id": "shakespeare-julius-caesar",
         "kind": "link",
@@ -27,8 +34,19 @@ CATALOG = [
 ]
 
 
-def available_sources(context=(), *, include_catalog=True):
-    sources = {r["id"]: dict(r) for r in CATALOG} if include_catalog else {}
+def available_sources(context=(), *, include_catalog=True, topic=""):
+    topic = topic.casefold()
+    equine_anatomy = any(word in topic for word in ("horse", "equine")) and any(
+        word in topic for word in ("anatomy", "muscle", "massage", "movement", "locomotion")
+    )
+    sources = {
+        resource["id"]: dict(resource)
+        for resource in CATALOG
+        if include_catalog
+        or (equine_anatomy and resource["id"] == PLATE_SOURCE["id"])
+        or ("julius caesar" in topic and resource["id"] == "shakespeare-julius-caesar")
+        or ("roman republic" in topic and resource["id"] == "roman-republic-44bc")
+    }
     for index, source in enumerate(context or []):
         url = source.get("url") or source.get("source_url")
         if not isinstance(url, str) or urlparse(url).scheme != "https" or not urlparse(url).netloc:

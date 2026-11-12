@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { Feedback, reviewClassroomResponse } from '@/lib/classroom-client';
 
 export default function LearningReviewPanel({ feedback, studentId, itemId, track }: { feedback: Feedback; studentId: string; itemId: string; track: string }) {
-  const [review, setReview] = useState(feedback.assessment);
+  const [retriedReview, setReview] = useState<Feedback['assessment']>();
+  const review = feedback.assessment ?? retriedReview;
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   async function retry() {
     if (!feedback.submission_key) return;
@@ -20,8 +21,8 @@ export default function LearningReviewPanel({ feedback, studentId, itemId, track
       <p>{f.reasoning}</p><blockquote className="border-l-2 border-[#bba978] pl-3">{f.evidence_quote}</blockquote>
       <p>{f.next_step}</p>
       {f.result !== 'demonstrated' && <Link className="inline-flex min-h-11 items-center rounded-xl border px-4" href={`/dashboard/lesson/new-gap-${encodeURIComponent(f.skill_id)}?${new URLSearchParams({ topic: f.next_step.slice(0, 500), target: f.skill_id, track })}`}>Practice this next</Link>}
-    </article>)}</> : <p>Your work is saved. Its learning review is separate from saving and course credit.</p>}
-    {!review && feedback.submission_key && <button onClick={() => void retry()} disabled={busy} className="min-h-11 rounded-xl border px-4 disabled:opacity-50">{busy ? 'Reviewing your work…' : 'Review my saved work'}</button>}
+    </article>)}</> : <p>{feedback.assessment_pending ? 'Your work is saved. Adeline is reviewing it.' : 'Your work is saved.'}</p>}
+    {!review && !feedback.assessment_pending && feedback.submission_key && <button onClick={() => void retry()} disabled={busy} className="min-h-11 rounded-xl border px-4 disabled:opacity-50">{busy ? 'Reviewing your work…' : 'Review my saved work'}</button>}
     {error && <p role="alert">{error}</p>}
     <Link className="inline-flex min-h-11 items-center font-semibold underline" href="/dashboard">Return to my plan</Link>
   </section>;

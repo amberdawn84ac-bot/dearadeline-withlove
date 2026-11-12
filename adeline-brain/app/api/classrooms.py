@@ -36,6 +36,7 @@ from app.curriculum.classroom_quality import (
     validate_teaching_plan,
     validate_teaching_scene,
 )
+from app.curriculum.equine_anatomy import restore_equine_anatomy
 from app.curriculum.estuary_classroom import (
     ESTUARY_ITEM,
     ESTUARY_SOURCE,
@@ -95,7 +96,7 @@ def validate_draft(schema, content, context):
                 draft,
                 brief,
                 context["previous_scenes"],
-                {source["id"] for source in context["supplied_resources"]},
+                context["supplied_resources"],
             )
     if schema is Blueprint and "track" in context:
         if draft.teaching_design is None:
@@ -215,11 +216,14 @@ def public_state(record):
             doc.get("source_context", []),
             require_attempts=doc.get("authoring_revision")
             == CLASSROOM_AUTHORING_REVISION,
+            topic=(doc.get("request") or {}).get("topic", ""),
         )
-        for scene in result["classroom"]["scenes"]:
+        teacher_id = next(role.id for role in blueprint.roster if role.role == "teacher")
+        for index, scene in enumerate(result["classroom"]["scenes"]):
             stored = next(s for s in doc["scenes"] if s["id"] == scene["id"])
             if stored.get("resources") and not stored.get("source_uses"):
                 scene["resources"] = stored["resources"]
+            result["classroom"]["scenes"][index] = restore_equine_anatomy(scene, teacher_id)
     else:
         result["plan"] = blueprint.model_dump()
     return result
@@ -604,7 +608,7 @@ async def build_document(student_id, item_id):
         blueprint = Blueprint.model_validate(doc["blueprint"])
         sources = list(
             available_sources(
-                doc.get("source_context", []), include_catalog=False
+                doc.get("source_context", []), include_catalog=False, topic=doc["request"]["topic"]
             ).values()
         )
         doc.update(phase="building", error=None)
@@ -833,7 +837,7 @@ async def prepare_classroom(
                         "learner_context": learners.authoring_context(),
                         "supplied_resources": list(
                             available_sources(
-                                source_context, include_catalog=False
+                                source_context, include_catalog=False, topic=body.topic
                             ).values()
                         ),
                         "curriculum_targets": curriculum_targets,
@@ -1178,7 +1182,8 @@ async def converse(
                         409, "This message key identifies different content."
                     )
                 return prior
-            context_scene = dict(scene)
+            teacher_id = next(role["id"] for role in doc["blueprint"]["roster"] if role["role"] == "teacher")
+            context_scene = restore_equine_anatomy(dict(scene), teacher_id)
             if context_scene.get("question"):
                 context_scene["question"] = {
                     k: v

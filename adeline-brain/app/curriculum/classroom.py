@@ -364,12 +364,12 @@ class Classroom(BaseModel):
         return self
 
 
-def public_classroom(classroom: Classroom, source_context=(), *, require_attempts=False):
+def public_classroom(classroom: Classroom, source_context=(), *, require_attempts=False, topic=""):
     from app.curriculum.interactive_models import redact_interaction
     from app.curriculum.scene_materials import attached_sources, available_sources
 
     data = classroom.model_dump()
-    sources = available_sources(source_context, include_catalog=False)
+    sources = available_sources(source_context, include_catalog=False, topic=topic)
     # Do not put answer keys or teacher planning briefs in the browser document.
     for brief, scene in zip(classroom.blueprint.scenes, data["scenes"], strict=True):
         if require_attempts and brief.purpose in {"independent_attempt", "independent_check"}:
@@ -527,8 +527,15 @@ explain that exact part during narration. Never name an absent control or node.
 Keep new scene content concise (usually under 900 characters); let the activity
 carry the work. Reading/source passages may be longer when the task needs them.
 When a slide or explanation is visual, include visual.reading plus elements of
-type text, image, shape, line, table, formula, or chart. Images need alt text and
-an https URL only when a real image exists; never invent a historical photograph.
+type text, image, shape, line, table, formula, or chart. For an image, use the
+exact image_url of a supplied image resource, cite its source_id, and describe
+what the learner can actually see. When none is supplied, use a native
+comparison, cross-section, data table, or a worked example. Teach the underlying
+relationship in the content. Include a concrete case and explain what changes,
+why it changes, and what evidence to look for. Skip introductory boilerplate
+and paragraphs that merely announce or describe a visual. A quiz should read
+like a decision or a problem, a project like a field guide, and a slide like
+teaching that makes the next activity possible.
 Charts use 2–8 labels and finite values. Every element id is unique. Actions may
 set kind to speak, focus, annotate, pause, or clear. focus and annotate must use
 target_id or node_id that exists on this scene. annotate needs note text. pause

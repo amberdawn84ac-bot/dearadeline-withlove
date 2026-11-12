@@ -46,7 +46,7 @@ def validate_teaching_plan(blueprint: Blueprint, capabilities: dict) -> None:
 
 
 def validate_teaching_scene(
-    scene: Scene, brief: dict, previous: list[dict], source_ids: set[str]
+    scene: Scene, brief: dict, previous: list[dict], sources: list[dict]
 ) -> None:
     roles = {normalized(value) for value in scene.family_roles.values()}
     if len(roles) != 3 or "" in roles:
@@ -58,9 +58,25 @@ def validate_teaching_scene(
         raise ValueError(
             "Give specific teaching or context and a separate, actionable task."
         )
+    source_ids = {source["id"] for source in sources}
+    cited = {use.source_id for use in scene.source_uses}
+    approved_images = {
+        source["image_url"]
+        for source in sources
+        if source["id"] in cited and source.get("image_url")
+    }
+    elements = scene.visual.elements if scene.visual else []
+    if any(element.type == "image" and element.url not in approved_images for element in elements):
+        raise ValueError(
+            "Use the exact image_url of a supplied, cited image. Otherwise replace it with a native visual or a worked example."
+        )
     if brief["purpose"] == "explain":
         example = normalized(scene.worked_example or "")
-        if not scene.visual and (not example or example in body or example == task):
+        visual_teaches = any(
+            element.type in {"image", "chart", "table", "layer_stack"}
+            for element in elements
+        )
+        if not visual_teaches and (not example or example in body or example == task):
             raise ValueError(
                 "Teach the idea with a visual explanation or a distinct, worked-through example."
             )
@@ -99,6 +115,8 @@ def validate_teaching_scene(
                 raise ValueError(
                     "Give a fresh independent task using a different example."
                 )
+    if any(body == normalized(prior["content"]) for prior in previous):
+        raise ValueError("Write a new explanation or scenario for this scene; do not repeat an earlier page.")
     used = [use.source_id for use in scene.source_uses]
     if set(used) - source_ids or len(set(used)) != len(used):
         raise ValueError(

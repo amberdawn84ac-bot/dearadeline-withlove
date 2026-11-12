@@ -783,6 +783,20 @@ def test_quality_gate_rejects_thin_plans_and_scenes_before_publish():
             {**scene_context, "supplied_resources": []},
         )
 
+    image = reference.scenes[1].model_dump()
+    image["visual"]["elements"].append({
+        "id": "invented-plate",
+        "type": "image",
+        "url": "https://example.com/estuary.jpg",
+        "alt": "An estuary cross-section.",
+    })
+    with pytest.raises(ValueError, match="exact image_url"):
+        validate_draft(Scene, Scene(**image).model_dump_json(), scene_context)
+    validate_draft(Scene, Scene(**image).model_dump_json(), {
+        **scene_context,
+        "supplied_resources": [{**ESTUARY_SOURCE, "image_url": "https://example.com/estuary.jpg"}],
+    })
+
     check = reference.scenes[3]
     repeated_check = {
         **scene_context,

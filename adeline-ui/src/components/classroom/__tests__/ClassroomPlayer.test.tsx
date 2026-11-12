@@ -2,8 +2,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ClassroomPlayer from '../ClassroomPlayer';
 import type { ClassroomScene, ClassroomState } from '@/lib/classroom-client';
-const mocks = vi.hoisted(() => ({ submit: vi.fn(), talk: vi.fn(), materials: vi.fn() }));
-vi.mock('@/lib/classroom-client', () => ({ submitClassroomResponse: mocks.submit, talkToClassroom: mocks.talk, getSceneMaterials: mocks.materials }));
+const mocks = vi.hoisted(() => ({ submit: vi.fn(), review: vi.fn(), talk: vi.fn(), materials: vi.fn() }));
+vi.mock('@/lib/classroom-client', () => ({ submitClassroomResponse: mocks.submit, reviewClassroomResponse: mocks.review, talkToClassroom: mocks.talk, getSceneMaterials: mocks.materials }));
 const scene: ClassroomScene = {
   id: 'one', title: 'Compare two mixtures', type: 'quiz', content: 'Compare quantities using ratios.',
   key_points: [], actions: [{ role_id: 'adeline', text: 'What relationship do you notice?' }],
@@ -202,4 +202,32 @@ it('paces a visual reveal without speech and opens the investigation after a sav
   fireEvent.click(screen.getByRole('button', { name: 'Next part' }));
   expect(screen.getByText('Fresher surface water')).toBeInTheDocument();
   expect(screen.getByText('The upper water is fresher.')).toBeInTheDocument();
+});
+
+it('advances after a required answer saves while its learning review is still pending', async () => {
+  mocks.submit.mockResolvedValueOnce({ saved: true, correct: true, review: 'Both quantities doubled.', submission_key: 'saved-attempt' });
+  mocks.review.mockReturnValueOnce(new Promise(() => {}));
+  const required = { ...state, classroom: { ...state.classroom!, scenes: [{ ...scene, response_required: true }, state.classroom!.scenes[1]] } };
+  render(<ClassroomPlayer state={required} studentId="child" itemId="unit" grade="8" />);
+  fireEvent.click(screen.getByLabelText('2:4'));
+  fireEvent.click(screen.getByText('Check and save'));
+  await screen.findByText(/Both quantities doubled/);
+  expect(mocks.review).toHaveBeenCalledWith('child', 'unit', 'saved-attempt');
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.getByRole('heading', { name: 'Apply it elsewhere' })).toHaveFocus();
+});
+
+it('replaces a failed image with a readable description and finishes teaching without looping', () => {
+  const illustrated: ClassroomScene = { ...scene, type: 'slide', question: null, visual: {
+    reading: 'This chart compares two mixtures.',
+    elements: [{ id: 'picture', type: 'image', url: 'https://example.com/missing.png', alt: 'Two cups side by side.' }],
+  } };
+  const pages = { ...state, classroom: { ...state.classroom!, scenes: [illustrated, state.classroom!.scenes[1]] } };
+  render(<ClassroomPlayer state={pages} studentId="child" itemId="unit" grade="8" />);
+  fireEvent.error(screen.getByRole('img', { name: 'Two cups side by side.' }));
+  expect(screen.getByText('Image unavailable. Two cups side by side.')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Show the teaching steps' }));
+  expect(screen.getByText('Teaching steps complete')).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Next part' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
 });
