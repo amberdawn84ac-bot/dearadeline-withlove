@@ -31,7 +31,7 @@ def available_sources(context=(), *, include_catalog=True):
     sources = {r["id"]: dict(r) for r in CATALOG} if include_catalog else {}
     for index, source in enumerate(context or []):
         url = source.get("url") or source.get("source_url")
-        if not isinstance(url, str) or urlparse(url).scheme != "https":
+        if not isinstance(url, str) or urlparse(url).scheme != "https" or not urlparse(url).netloc:
             continue
         identity = str(source.get("id") or f"supplied-{index}")
         if identity in sources:
@@ -41,7 +41,8 @@ def available_sources(context=(), *, include_catalog=True):
             "kind": "link",
             "title": str(source.get("title") or "Source"),
             "url": url,
-            "content": str(source.get("description") or "")[:1000],
+            "content": str(source.get("description") or source.get("content") or "")[:1000],
+            "attribution": source.get("attribution"),
         }
     return sources
 

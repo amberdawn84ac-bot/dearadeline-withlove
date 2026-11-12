@@ -5,7 +5,12 @@ import TodayPage from '../page';
 import CanonicalLessonPage from '../lesson/[taskId]/page';
 import * as brain from '@/lib/brain-client';
 import * as classroom from '@/lib/classroom-client';
-vi.mock('@/lib/classroom-client', () => ({ getClassroom: vi.fn(), prepareClassroom: vi.fn(), listClassrooms: vi.fn() }));
+vi.mock('@/lib/classroom-client', async importOriginal => ({
+  ...await importOriginal<typeof import('@/lib/classroom-client')>(),
+  getClassroom: vi.fn(),
+  prepareClassroom: vi.fn(),
+  listClassrooms: vi.fn(),
+}));
 vi.mock('@/components/classroom/ClassroomPlayer', () => ({ default: ({ state }: {state: {title:string}}) => <div>Saved classroom: {state.title}</div> }));
 
 vi.mock('next/navigation', () => ({ useParams: () => ({ taskId: 'today-1' }) }));
@@ -102,6 +107,7 @@ describe('durable Today and experience reopening', () => {
     expect(await screen.findByText('Matter and measurement')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Matter and measurement/ })).toHaveAttribute('href', '/dashboard/lesson/fresh-1');
     expect(screen.getByRole('link', { name: /Start exploring/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /marine biology family lab/i })).toHaveAttribute('href', '/dashboard/lesson/reference-estuary-salinity');
     expect(screen.queryByText('Creek evidence')).not.toBeInTheDocument();
     expect(screen.queryByText('The crime scene')).not.toBeInTheDocument();
     expect(brain.peekLearningPlan).not.toHaveBeenCalled();

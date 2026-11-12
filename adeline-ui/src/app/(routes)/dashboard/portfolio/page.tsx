@@ -215,7 +215,12 @@ export default function PortfolioPage() {
                     <div className="min-w-0 flex-1">
                       <h3 className="font-bold text-[#2F4731] text-sm">{item.title}</h3>
                       {item.artifact_description && <p className="mt-1 text-xs text-[#2F4731]/70">{item.artifact_description}</p>}
-                      {item.reflection && <p className="mt-2 line-clamp-3 text-xs italic text-[#2F4731]/55">“{item.reflection}”</p>}
+                      {item.reflection && (item.evidence_only
+                        ? <details className="mt-2 text-sm text-[#2F4731]">
+                            <summary className="cursor-pointer font-semibold">Read saved work</summary>
+                            <p className="mt-2 whitespace-pre-wrap break-words">{item.reflection}</p>
+                          </details>
+                        : <p className="mt-2 line-clamp-3 text-xs italic text-[#2F4731]/55">“{item.reflection}”</p>)}
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full text-white" style={{ background: color }}>
                           {TRACK_LABELS[item.track] ?? item.track}

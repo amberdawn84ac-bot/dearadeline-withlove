@@ -88,7 +88,7 @@ def authoring_capabilities() -> dict:
         "narration": {
             "fields": list(Speech.model_fields),
             "behavior": "Device speech, one part at a time, or the same parts stepped through as text. Pause, resume, stop, and manual continuation. Text remains available.",
-            "targets": "speak, focus, annotate, pause, and clear. Optional content/activity/task/visual focus. target_id must be an existing visual element or diagram node. No widget writes into learner trials.",
+            "targets": "speak, focus, annotate, pause, clear, and reveal. Reveal shows a previously hidden visual element by ID. Optional content/activity/task/visual focus. Other target IDs may refer to existing visual elements or diagram nodes. No widget writes into learner trials.",
         },
         "evidence": {
             "activity": "Save prediction before exploration; observations include recorded trials. Server recomputes model outputs.",

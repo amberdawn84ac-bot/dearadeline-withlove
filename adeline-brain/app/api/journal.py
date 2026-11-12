@@ -72,6 +72,7 @@ class PortfolioItem(BaseModel):
     # Links back to the Space this evidence came from, if any (null for
     # evidence sealed outside a Space, e.g. the manual FamilyCanonicalLesson flow).
     plan_item_id: str | None = None
+    evidence_only: bool = False
 
 class PortfolioResponse(BaseModel):
     student_id: str
@@ -240,19 +241,32 @@ async def get_portfolio_items(
     conn = await get_db_conn()
     try:
         rows = await conn.fetch(
-            '''SELECT j.lesson_id, j.track, j.sources_json, j.sealed_at, j.plan_item_id,
+            '''SELECT * FROM (
+               SELECT j.lesson_id, j.track, j.sources_json::text, j.sealed_at, j.plan_item_id,
                       -- Space-sourced entries: lesson_id is the in-unit lesson id, not
                       -- StudentExperience.id, so the real Space's title is only found
                       -- by joining on plan_item_id. e1 covers older non-Space entries
                       -- where lesson_id *was* the StudentExperience id.
-                      COALESCE(e2.title, e1.title, j.lesson_id) AS title
+                      COALESCE(e2.title, e1.title, j.lesson_id) AS title,
+                      j.sealed_at AS sort_at, FALSE AS evidence_only
                FROM student_journal j
                LEFT JOIN "StudentExperience" e1
                  ON e1.id = j.lesson_id AND e1."studentId" = j.student_id
                LEFT JOIN "StudentExperience" e2
                  ON e2."planItemId" = j.plan_item_id AND e2."studentId" = j.student_id
                WHERE j.student_id = $1
-               ORDER BY j.sealed_at DESC LIMIT $2''',
+               UNION ALL
+               SELECT a.id, e.track, jsonb_build_array(
+                          jsonb_build_object('type', 'learner_reflection', 'content', a.content->>'text'),
+                          jsonb_build_object('type', 'artifact', 'title', a.content->>'portfolio_title',
+                                             'description', 'Saved for review')
+                      )::text, NULL, NULL, e.title, a."createdAt", TRUE
+               FROM "EvidenceAttempt" a
+               JOIN "StudentExperience" e ON e.id=a."lessonId" AND e."studentId"=a."studentId"
+               WHERE a."studentId"=$1 AND a.kind='note' AND a.content ? 'portfolio_title'
+                 AND e."metadataJson"->'responses'->(a.content->>'scene_id')->'feedback'->>'submission_key'
+                     = a."submissionKey"
+               ) work ORDER BY sort_at DESC, lesson_id LIMIT $2''',
             student_id, min(max(limit, 1), 200),
         )
     finally:
@@ -285,6 +299,6 @@ async def get_portfolio_items(
             lesson_id=str(row["lesson_id"]), title=title, track=str(row["track"]),
             sealed_at=row["sealed_at"].isoformat() if row["sealed_at"] else None,
             reflection=reflection, artifact_description=artifact_description, artifact_refs=refs,
-            plan_item_id=row["plan_item_id"],
+            plan_item_id=row["plan_item_id"], evidence_only=row.get("evidence_only", False),
         ))
     return PortfolioResponse(student_id=student_id, items=items)

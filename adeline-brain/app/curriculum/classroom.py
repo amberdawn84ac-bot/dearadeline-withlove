@@ -12,7 +12,7 @@ from app.curriculum.interactive_models import Interaction
 from app.schemas.api_models import Track
 
 CLASSROOM_VERSION = "openmaic-classroom-v1"
-CLASSROOM_AUTHORING_REVISION = "rich-lessons-v1"
+CLASSROOM_AUTHORING_REVISION = "rich-lessons-v2"
 
 
 class Role(BaseModel):
@@ -28,6 +28,8 @@ class SceneBrief(BaseModel):
     type: Literal["slide", "interactive", "quiz", "pbl"]
     objective: str = Field(min_length=5)
     brief: str = Field(min_length=10)
+    evidence: str | None = Field(default=None, max_length=600)
+    mechanism: str | None = None
     purpose: Literal[
         "introduce",
         "independent_attempt",
@@ -118,7 +120,7 @@ class Speech(BaseModel):
     text: str = Field(min_length=1, max_length=1600)
     focus: Literal["content", "activity", "task", "visual"] | None = None
     node_id: str | None = None
-    kind: Literal["speak", "focus", "annotate", "pause", "clear"] = "speak"
+    kind: Literal["speak", "focus", "annotate", "pause", "clear", "reveal"] = "speak"
     target_id: str | None = None
     note: str | None = Field(default=None, max_length=240)
 
@@ -126,7 +128,7 @@ class Speech(BaseModel):
 class VisualElement(BaseModel):
     model_config = ConfigDict(allow_inf_nan=False)
     id: str = Field(min_length=1, max_length=40)
-    type: Literal["text", "image", "shape", "line", "table", "formula", "chart"]
+    type: Literal["text", "image", "shape", "line", "table", "formula", "chart", "layer_stack"]
     text: str = ""
     alt: str = ""
     url: str | None = None
@@ -154,6 +156,12 @@ class VisualElement(BaseModel):
             or any(len(row) != len(self.headers) for row in self.rows)
         ):
             raise ValueError("A table needs headers and matching rows")
+        if self.type == "layer_stack" and (
+            not 2 <= len(self.labels) <= 4
+            or len({label.strip().casefold() for label in self.labels}) != len(self.labels)
+            or any(not label.strip() for label in self.labels)
+        ):
+            raise ValueError("A cross-section needs two to four distinct layers, in top-to-bottom order")
         return self
 
 
@@ -178,6 +186,7 @@ class Question(BaseModel):
     choices: list[Choice] = Field(min_length=2, max_length=6)
     answer: str
     explanation: str = Field(min_length=5)
+
 
     @model_validator(mode="after")
     def answer_exists(self):
@@ -250,6 +259,11 @@ class Sorting(BaseModel):
         return self
 
 
+class SourceUse(BaseModel):
+    source_id: str = Field(min_length=1, max_length=200)
+    supports: str = Field(min_length=15, max_length=600)
+
+
 class Scene(BaseModel):
     id: str
     title: str = Field(min_length=1)
@@ -265,6 +279,9 @@ class Scene(BaseModel):
     sorting: Sorting | None = None
     interaction: Interaction | None = None
     visual: Visual | None = None
+    worked_example: str | None = Field(default=None, max_length=1500)
+    source_uses: list[SourceUse] = Field(default_factory=list, max_length=5)
+    portfolio_title: str | None = Field(default=None, min_length=5, max_length=150)
     materials: list[str] = Field(default_factory=list, max_length=10)
     steps: list[str] = Field(default_factory=list, max_length=8)
 
@@ -310,7 +327,10 @@ class Scene(BaseModel):
             raise ValueError("Narration node_id must reference a real diagram node")
         if self.type == "pbl" and not self.steps:
             raise ValueError("A project needs actionable steps")
+        if self.portfolio_title and (self.type != "pbl" or not self.portfolio_title.strip()):
+            raise ValueError("A portfolio artifact needs a project and a descriptive title")
         targets = {element.id for element in self.visual.elements} if self.visual else set()
+        visual_ids = targets.copy()
         if self.interaction and self.interaction.kind == "diagram":
             targets.update(node.id for node in self.interaction.nodes)
         for action in self.actions:
@@ -320,6 +340,8 @@ class Scene(BaseModel):
                 raise ValueError("Focus and notes need a real target")
             if action.kind == "annotate" and not (action.note and action.note.strip()):
                 raise ValueError("A note action needs note text")
+            if action.kind == "reveal" and action.target_id not in visual_ids:
+                raise ValueError("Reveal must target an element in the scene visual")
         return self
 
 
@@ -342,14 +364,21 @@ class Classroom(BaseModel):
         return self
 
 
-def public_classroom(classroom: Classroom):
+def public_classroom(classroom: Classroom, source_context=(), *, require_attempts=False):
     from app.curriculum.interactive_models import redact_interaction
-    from app.curriculum.scene_materials import attached_sources
+    from app.curriculum.scene_materials import attached_sources, available_sources
 
     data = classroom.model_dump()
+    sources = available_sources(source_context, include_catalog=False)
     # Do not put answer keys or teacher planning briefs in the browser document.
-    for scene in data["scenes"]:
-        scene["resources"] = attached_sources(scene)
+    for brief, scene in zip(classroom.blueprint.scenes, data["scenes"], strict=True):
+        if require_attempts and brief.purpose in {"independent_attempt", "independent_check"}:
+            scene["response_required"] = True
+        scene["resources"] = [
+            {**sources[use["source_id"]], "supports": use["supports"]}
+            for use in scene.pop("source_uses")
+            if use["source_id"] in sources
+        ] or attached_sources(scene)
         if scene["sorting"]:
             for item in scene["sorting"]["items"]:
                 item.pop("category_id")

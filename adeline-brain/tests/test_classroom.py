@@ -731,3 +731,150 @@ def test_openai_project_schema_requires_complete_scene_and_steps():
     assert authoring_response_format("gemini", Scene, context) == {
         "type": "json_object"
     }
+
+
+def test_quality_gate_rejects_thin_plans_and_scenes_before_publish():
+    from app.api.classrooms import validate_draft
+    from app.curriculum.classroom import CLASSROOM_AUTHORING_REVISION
+    from app.curriculum.estuary_classroom import ESTUARY_SOURCE, estuary_classroom
+    from app.curriculum.runtime_capabilities import authoring_capabilities
+
+    reference = estuary_classroom()
+    context = {
+        "authoring_revision": CLASSROOM_AUTHORING_REVISION,
+        "track": "CREATION_SCIENCE",
+        "runtime_capabilities": authoring_capabilities(),
+    }
+    plan = reference.blueprint.model_dump()
+    plan["scenes"][0]["evidence"] = None
+    with pytest.raises(ValueError, match="name the actual learner work"):
+        validate_draft(Blueprint, Blueprint(**plan).model_dump_json(), context)
+
+    plan = reference.blueprint.model_dump()
+    plan["scenes"][2].update(type="slide", purpose="practice")
+    with pytest.raises(ValueError, match="hands-on project"):
+        validate_draft(Blueprint, Blueprint(**plan).model_dump_json(), context)
+
+    scene_context = {
+        **context,
+        "requested_scene": reference.blueprint.scenes[1].model_dump(),
+        "blueprint": reference.blueprint.model_dump(),
+        "previous_scenes": [],
+        "supplied_resources": [ESTUARY_SOURCE],
+    }
+    explanation = reference.scenes[1].model_dump()
+    explanation.update(
+        visual=None,
+        worked_example=None,
+        actions=[{"role_id": "adeline", "text": "Think about the topic."}],
+    )
+    explanation["family_roles"] = dict.fromkeys(
+        explanation["family_roles"], "Think about the topic."
+    )
+    with pytest.raises(ValueError, match="each age band"):
+        validate_draft(Scene, Scene(**explanation).model_dump_json(), scene_context)
+    explanation["family_roles"] = reference.scenes[1].family_roles
+    with pytest.raises(ValueError, match="worked-through example"):
+        validate_draft(Scene, Scene(**explanation).model_dump_json(), scene_context)
+    with pytest.raises(ValueError, match="supplied source"):
+        validate_draft(
+            Scene,
+            reference.scenes[1].model_dump_json(),
+            {**scene_context, "supplied_resources": []},
+        )
+
+    check = reference.scenes[3]
+    repeated_check = {
+        **scene_context,
+        "requested_scene": reference.blueprint.scenes[3].model_dump(),
+        "previous_scenes": [check.model_dump()],
+    }
+    with pytest.raises(ValueError, match="fresh independent task"):
+        validate_draft(Scene, check.model_dump_json(), repeated_check)
+
+
+@pytest.mark.parametrize("provider", ["gemini", "openai"])
+def test_structured_output_locks_interaction_to_blueprint_mechanism(provider):
+    from app.api.classrooms import authoring_response_format
+    from app.curriculum.classroom import CLASSROOM_AUTHORING_REVISION
+    from app.curriculum.runtime_capabilities import authoring_capabilities
+
+    response_format = authoring_response_format(
+        provider,
+        Scene,
+        {
+            "authoring_revision": CLASSROOM_AUTHORING_REVISION,
+            "requested_scene": {
+                "id": "compare",
+                "type": "interactive",
+                "mechanism": "graph_compare",
+            },
+            "runtime_capabilities": authoring_capabilities(),
+        },
+    )
+    contract = response_format["json_schema"]["schema"]
+    assert contract["properties"]["interaction"]["$ref"] == "#/$defs/Interaction"
+    assert contract["properties"]["simulation"] == {"type": "null"}
+    assert contract["properties"]["sorting"] == {"type": "null"}
+    assert contract["$defs"]["Interaction"]["properties"]["kind"]["enum"] == [
+        "graph_compare"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_reference_opens_through_classroom_route_without_providers_and_keeps_separate_copies():
+    from types import SimpleNamespace
+
+    from app.api import classrooms as api
+    from app.curriculum.estuary_classroom import (
+        ESTUARY_ITEM,
+        ESTUARY_SOURCE,
+        ESTUARY_TITLE,
+    )
+
+    conn = AsyncMock()
+    records = {}
+
+    async def get(student_id, item_id):
+        return records.get((student_id, item_id))
+
+    async def save(student_id, item_id, **data):
+        record = {
+            "id": student_id,
+            "title": data["title"],
+            "metadata": deepcopy(data["metadata"]),
+        }
+        records[student_id, item_id] = record
+        return record
+
+    with (
+        patch("app.services.rate_limit.enforce_rate_limit", AsyncMock()),
+        patch("app.services.learning_loop.known_skills", AsyncMock(return_value=[])),
+        patch.object(api, "get_db_conn", AsyncMock(return_value=conn)),
+        patch.object(api.student_experience_store, "get", side_effect=get),
+        patch.object(
+            api.student_experience_store,
+            "claim",
+            AsyncMock(return_value=SimpleNamespace(claimed=True)),
+        ),
+        patch.object(
+            api.student_experience_store, "save_ready", side_effect=save
+        ) as save_ready,
+        patch.object(api, "generate_json", AsyncMock()) as generate,
+    ):
+        request = ClassroomRequest(topic=ESTUARY_TITLE, track=Track.CREATION_SCIENCE)
+        first = await api.prepare_classroom("child-one", ESTUARY_ITEM, request)
+        records["child-one", api.plan_key(ESTUARY_ITEM)]["metadata"]["responses"][
+            "predict-the-pour"
+        ] = {"text": "My prediction."}
+        reopened = await api.get_classroom("child-one", ESTUARY_ITEM)
+        sibling = await api.prepare_classroom("child-two", ESTUARY_ITEM, request)
+        generate.assert_not_called()
+        assert save_ready.await_count == 2
+    assert first["phase"] == "ready"
+    assert first["classroom"]["scenes"][0]["response_required"]
+    assert first["classroom"]["scenes"][1]["resources"][0]["id"] == ESTUARY_SOURCE["id"]
+    assert "answer" not in first["classroom"]["scenes"][3]["question"]
+    assert reopened["responses"]["predict-the-pour"]["text"] == "My prediction."
+    assert sibling["responses"] == {}
+    assert first["classroom"] == sibling["classroom"]

@@ -9,6 +9,8 @@ export const TRACKS = {
   APPLIED_MATHEMATICS: 'Real-World Mathematics', CREATIVE_ECONOMY: 'Creative Economy',
 } as const;
 export type ClassroomTrack = keyof typeof TRACKS;
+export const ESTUARY_ITEM = 'reference-estuary-salinity';
+export const ESTUARY_TITLE = 'When the River Meets the Sea';
 export type LearnerContext = {
   version: 'learner-context-v1'; mode: 'individual' | 'family' | 'unspecified';
   declared_grades: string[]; working_grade?: string | null;
@@ -18,9 +20,9 @@ export type LearnerContext = {
 export type ClassroomRequest = { topic: string; track: ClassroomTrack; level: string; targets: string[]; materials: string; learning_need?: string; learner_context?: LearnerContext | null; action: 'plan' | 'build' };
 export type SceneType = 'slide' | 'interactive' | 'quiz' | 'pbl';
 type Variable = { label: string; unit: string; minimum: number; maximum: number; initial: number; step: number };
-export type SceneMaterial = { id: string; kind: 'text' | 'link' | 'image'; title: string; content?: string; url?: string; image_url?: string; attribution?: string; license_url?: string };
+export type SceneMaterial = { id: string; kind: 'text' | 'link' | 'image'; title: string; content?: string; url?: string; image_url?: string; attribution?: string; license_url?: string; supports?: string };
 export type VisualElement = {
-  id: string; type: 'text' | 'image' | 'shape' | 'line' | 'table' | 'formula' | 'chart';
+  id: string; type: 'text' | 'image' | 'shape' | 'line' | 'table' | 'formula' | 'chart' | 'layer_stack';
   text?: string; alt?: string; url?: string | null; labels?: string[]; values?: number[];
   headers?: string[]; rows?: string[][];
 };
@@ -42,19 +44,28 @@ export type ActivityWork = { stage: 'prediction' | 'observation'; prediction: st
 export type SavedActivity = ActivityWork & { earlier_notes?: string; output?: Record<string, unknown>; results?: { inputs: ActivityInputs; output: Record<string, unknown> }[] };
 export type ClassroomScene = {
   id: string; title: string; type: SceneType; content: string; key_points: string[];
-  actions: { role_id: string; text: string; focus?: 'content' | 'activity' | 'task' | 'visual' | null; node_id?: string | null; kind?: 'speak' | 'focus' | 'annotate' | 'pause' | 'clear'; target_id?: string | null; note?: string | null }[]; learner_task: string; success_criteria: string[];
+  actions: { role_id: string; text: string; focus?: 'content' | 'activity' | 'task' | 'visual' | null; node_id?: string | null; kind?: 'speak' | 'focus' | 'annotate' | 'pause' | 'clear' | 'reveal'; target_id?: string | null; note?: string | null }[]; learner_task: string; success_criteria: string[];
   family_roles: Record<'elementary' | 'middle' | 'high_school', string>;
   question: { prompt: string; choices: { id: string; label: string }[] } | null;
   simulation: { model: 'proportional' | 'rectangle_area' | 'mixture_fraction'; x: Variable; y: Variable; output_label: string; output_unit: string; explanation: string; prediction_prompt: string; observation_prompt: string } | null;
   interaction?: Interaction | null;
   visual?: SceneVisual | null;
+  worked_example?: string | null;
+  portfolio_title?: string | null;
+  response_required?: boolean;
   sorting?: { instruction: string; categories: { id: string; label: string }[]; items: { id: string; label: string }[] } | null;
   materials: string[]; steps: string[]; resources?: SceneMaterial[];
 };
 export type Blueprint = { title: string; understanding: string; essential_question: string; demonstration: string; integrated_tracks: ClassroomTrack[]; next_revisit: string; roster: { id: string; name: string; role: string; persona: string }[]; scenes?: { id: string; title: string; type: SceneType; objective: string; brief: string }[] };
 export type LearningReview = { status: 'prediction' | 'reviewed' | 'needs_review' | 'unmapped'; message: string; findings: { skill_id: string; result: 'developing' | 'demonstrated' | 'needs_review'; reasoning: string; evidence_quote: string; next_step: string }[] };
 export type Feedback = { submission_key?: string; assessment?: LearningReview; assessment_pending?: boolean; saved: boolean; review: string; correct?: boolean; items?: { item_id: string; correct: boolean; explanation: string }[] };
-export type ClassroomState = { id?: string; request?: ClassroomRequest; phase: 'planned' | 'building' | 'ready' | 'failed'; title: string; built_scenes?: number; error?: string; plan?: Blueprint; classroom?: { blueprint: Blueprint; scenes: ClassroomScene[] }; responses?: Record<string, { text: string; feedback: Feedback; activity?: SavedActivity }>; dialogue?: Record<string, ClassroomTurn[]> };
+export type ClassroomState = { id?: string; request?: ClassroomRequest; phase: 'planned' | 'building' | 'ready' | 'failed'; title: string; built_scenes?: number; error?: string; retry_at?: number | null; plan?: Blueprint; classroom?: { blueprint: Blueprint; scenes: ClassroomScene[] }; responses?: Record<string, { text: string; feedback: Feedback; activity?: SavedActivity }>; dialogue?: Record<string, ClassroomTurn[]> };
+
+export class ClassroomRequestError extends Error {
+  constructor(message: string, readonly retryAt?: number) {
+    super(message);
+  }
+}
 
 async function request<T>(student: string, item: string, body?: unknown, suffix = ''): Promise<T> {
   const { data } = await supabase.auth.getSession();
@@ -67,7 +78,11 @@ async function request<T>(student: string, item: string, body?: unknown, suffix 
   if (response.status === 404 && body === undefined) return null as T;
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(typeof error.detail === 'string' ? error.detail : 'Your exploration could not be opened.');
+    const retrySeconds = Number(response.headers.get('retry-after'));
+    throw new ClassroomRequestError(
+      typeof error.detail === 'string' ? error.detail : 'Your exploration could not be opened.',
+      Number.isFinite(retrySeconds) && retrySeconds > 0 ? Date.now() + retrySeconds * 1000 : undefined,
+    );
   }
   return response.json();
 }
@@ -87,6 +102,7 @@ export async function reviewClassroomResponse(student: string, item: string, sub
 }
 export async function submitClassroomResponse(student: string, item: string, scene_id: string, text: string, submission_key: string, activity?: ActivityWork): Promise<Feedback> {
   const feedback = await saveClassroomResponse(student, item, scene_id, text, submission_key, activity);
+  clearStudentDataCaches(student);
   if (activity?.stage === 'prediction') return feedback;
   try { return { ...feedback, submission_key, assessment: await reviewClassroomResponse(student, item, submission_key) }; }
   catch { return { ...feedback, submission_key, assessment_pending: true }; }

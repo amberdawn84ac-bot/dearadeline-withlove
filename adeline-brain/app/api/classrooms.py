@@ -32,6 +32,16 @@ from app.curriculum.classroom import (
     Scene,
     public_classroom,
 )
+from app.curriculum.classroom_quality import (
+    validate_teaching_plan,
+    validate_teaching_scene,
+)
+from app.curriculum.estuary_classroom import (
+    ESTUARY_ITEM,
+    ESTUARY_SOURCE,
+    ESTUARY_TITLE,
+    estuary_classroom,
+)
 from app.curriculum.interactive_models import ActivityWork, checked_work
 from app.curriculum.learner_context import (
     LearnerContext,
@@ -39,6 +49,7 @@ from app.curriculum.learner_context import (
     resolve_context,
 )
 from app.curriculum.runtime_capabilities import authoring_capabilities
+from app.curriculum.scene_materials import available_sources
 from app.schemas.api_models import Track
 
 router = APIRouter(prefix="/classroom", tags=["classroom"])
@@ -48,20 +59,24 @@ _builds = set()
 _generation_slots = asyncio.Semaphore(2)
 _provider_retry_at = 0.0
 _fallback_retry_at = 0.0
+_provider_pause_reasons: dict[str, str] = {}
 
 
 def provider_pause():
     now = time.time()
-    retry_times = []
+    retry_times = {}
     if GEMINI_API_KEY or GOOGLE_API_KEY:
-        retry_times.append(_provider_retry_at)
+        retry_times["gemini"] = _provider_retry_at
     if OPENAI_API_KEY:
-        retry_times.append(_fallback_retry_at)
-    if retry_times and min(retry_times) > now:
+        retry_times["openai"] = _fallback_retry_at
+    if retry_times and min(retry_times.values()) > now:
+        reasons = " ".join(
+            _provider_pause_reasons.get(name, "") for name in retry_times
+        ).strip()
         raise HTTPException(
             503,
-            "The lesson provider is busy. Saved work is safe; please try again shortly.",
-            headers={"Retry-After": str(int(min(retry_times) - now) + 1)},
+            f"{reasons or 'Lesson generation is temporarily unavailable.'} Saved work is safe.",
+            headers={"Retry-After": str(int(min(retry_times.values()) - now) + 1)},
         )
 
 
@@ -75,11 +90,20 @@ def validate_draft(schema, content, context):
         roles = {r["id"] for r in context["blueprint"]["roster"]}
         if any(action.role_id not in roles for action in draft.actions):
             raise ValueError("Use only role_id values from the supplied roster.")
+        if context.get("authoring_revision") == CLASSROOM_AUTHORING_REVISION:
+            validate_teaching_scene(
+                draft,
+                brief,
+                context["previous_scenes"],
+                {source["id"] for source in context["supplied_resources"]},
+            )
     if schema is Blueprint and "track" in context:
         if draft.teaching_design is None:
             raise ValueError("Include an explicit teaching_design.")
         if context["track"] not in [t.value for t in draft.integrated_tracks]:
             raise ValueError("Include the requested track in integrated_tracks.")
+        if context.get("authoring_revision") == CLASSROOM_AUTHORING_REVISION:
+            validate_teaching_plan(draft, context["runtime_capabilities"])
     return draft
 
 
@@ -88,6 +112,7 @@ def scene_delivery_rules(context):
     return (
         "\nScene delivery checklist (check before returning JSON): "
         f"id={brief.get('id')!r}, type={brief.get('type')!r}. "
+        f"Use the planned activity mechanism {brief.get('mechanism')!r} if one is specified. "
         "For slide, quiz and pbl set simulation, sorting and interaction to null; "
         "actions.focus may be content, task or visual, never activity without a mechanism. "
         "For interactive populate exactly ONE of simulation, sorting or interaction; "
@@ -171,6 +196,7 @@ def public_state(record):
         "title": record["title"],
         "request": doc.get("request"),
         "error": doc.get("error"),
+        "retry_at": doc.get("retry_at"),
         "responses": doc.get("responses", {}),
         "dialogue": doc.get("dialogue", {}),
     }
@@ -185,11 +211,14 @@ def public_state(record):
     blueprint = Blueprint.model_validate(doc["blueprint"])
     if doc["phase"] == "ready":
         result["classroom"] = public_classroom(
-            Classroom(blueprint=blueprint, scenes=doc["scenes"])
+            Classroom(blueprint=blueprint, scenes=doc["scenes"]),
+            doc.get("source_context", []),
+            require_attempts=doc.get("authoring_revision")
+            == CLASSROOM_AUTHORING_REVISION,
         )
         for scene in result["classroom"]["scenes"]:
             stored = next(s for s in doc["scenes"] if s["id"] == scene["id"])
-            if stored.get("resources"):
+            if stored.get("resources") and not stored.get("source_uses"):
                 scene["resources"] = stored["resources"]
     else:
         result["plan"] = blueprint.model_dump()
@@ -197,10 +226,29 @@ def public_state(record):
 
 
 def authoring_response_format(provider, schema, context):
-    if provider != "openai" or schema not in (Scene, Blueprint):
+    if schema not in (Scene, Blueprint) or (
+        provider != "openai"
+        and context.get("authoring_revision") != CLASSROOM_AUTHORING_REVISION
+    ):
         return {"type": "json_object"}
 
     contract = schema.model_json_schema()
+    if (
+        schema is Blueprint
+        and context.get("authoring_revision") == CLASSROOM_AUTHORING_REVISION
+    ):
+        contract["$defs"]["SceneBrief"]["properties"]["mechanism"] = {
+            "anyOf": [
+                {
+                    "type": "string",
+                    "enum": [
+                        item["id"]
+                        for item in context["runtime_capabilities"]["mechanisms"]
+                    ],
+                },
+                {"type": "null"},
+            ],
+        }
     if schema is Scene:
         properties = contract["properties"]
         # JSON Schema cannot express a dynamic dictionary in strict output mode.
@@ -220,6 +268,29 @@ def authoring_response_format(provider, schema, context):
         if brief.get("type") in ("slide", "quiz", "pbl"):
             for field in ("simulation", "sorting", "interaction"):
                 properties[field] = {"type": "null"}
+        mechanism = brief.get("mechanism")
+        if brief.get("type") == "interactive" and mechanism:
+            catalog = context["runtime_capabilities"]["mechanisms"]
+            field = next(
+                item["scene_field"] for item in catalog if item["id"] == mechanism
+            )
+            models = {
+                "simulation": "Simulation",
+                "sorting": "Sorting",
+                "interaction": "Interaction",
+            }
+            for name, model_name in models.items():
+                properties[name] = (
+                    {"$ref": f"#/$defs/{model_name}"}
+                    if field == name
+                    else {"type": "null"}
+                )
+            discriminator = {"simulation": "model", "interaction": "kind"}.get(field)
+            if discriminator:
+                contract["$defs"][models[field]]["properties"][discriminator] = {
+                    "type": "string",
+                    "enum": [mechanism],
+                }
         if brief.get("type") == "pbl":
             properties["steps"]["minItems"] = 1
         if brief.get("type") == "quiz":
@@ -279,6 +350,29 @@ async def generate_json(policy, schema, context):
     ]
     if schema is Scene:
         messages[0]["content"] += scene_delivery_rules(context)
+    if context.get("authoring_revision") == CLASSROOM_AUTHORING_REVISION:
+        if schema is Blueprint:
+            messages[0]["content"] += (
+                "\nFor every scene set evidence to the concrete work a learner will produce. "
+                "Set mechanism to an installed activity ID for every interactive scene and null elsewhere. "
+                "Between the first attempt and the fresh independent check, explicitly teach the concept "
+                "and give learners practice. Workshops need a genuine interactive investigation or "
+                "hands-on project at that point. Plan enough time for teaching and doing."
+            )
+        elif schema is Scene:
+            messages[0]["content"] += (
+                "\nUse the scene brief and its evidence field to name exactly what the learner will make, "
+                "measure or explain. Each family role must produce distinct work suited to the band. "
+                "In explain scenes teach with a meaningful visual or a worked_example that walks through "
+                "the reasoning with concrete details. A visual may use layer_stack with 2–4 labels "
+                "in top-to-bottom order. A reveal action targets an existing visual element. "
+                "Let learners predict before a reveal. Practice and application projects need concrete steps. "
+                "Independent tasks must use a new case. For each source actually used, give its exact "
+                "supplied source_id and specify what it supports. Never turn a search result description "
+                "into a direct quotation or evidence for a claim it does not support. For an application "
+                "project that produces a substantive write-up, give it a descriptive portfolio_title. "
+                "Leave that field null for ordinary practice or reflection."
+            )
     async with _generation_slots:
         provider_pause()
         providers = []
@@ -289,6 +383,8 @@ async def generate_json(policy, schema, context):
                 ("openai", OPENAI_API_KEY, "https://api.openai.com/v1", "gpt-4o-mini")
             )
         for provider, api_key, base_url, model in providers:
+            provider_messages = list(messages)
+            response_format = authoring_response_format(provider, schema, context)
             async with openai.AsyncOpenAI(
                 api_key=api_key, base_url=base_url, max_retries=0, timeout=90
             ) as client:
@@ -299,11 +395,26 @@ async def generate_json(policy, schema, context):
                         response = await client.chat.completions.create(
                             model=model,
                             max_tokens=10000,
-                            response_format=authoring_response_format(
-                                provider, schema, context
-                            ),
-                            messages=messages,
+                            response_format=response_format,
+                            messages=provider_messages,
                         )
+                    except openai.BadRequestError as exc:
+                        issue = str(exc).lower()
+                        if (
+                            provider == "gemini"
+                            and response_format["type"] == "json_schema"
+                            and any(
+                                word in issue for word in ("schema", "response_format")
+                            )
+                        ):
+                            # Some configured Gemini model versions accept only a subset.
+                            # Local validation still enforces the exact delivery contract.
+                            logger.warning(
+                                "Gemini rejected the authoring response schema; retrying in JSON mode"
+                            )
+                            response_format = {"type": "json_object"}
+                            continue
+                        raise
                     except (
                         openai.RateLimitError,
                         openai.InternalServerError,
@@ -341,6 +452,19 @@ async def generate_json(policy, schema, context):
                             delay = min(86400, delay)
                         except (ValueError, TypeError):
                             delay = 60
+                        if provider == "openai" and error.get("code") in {
+                            "credit_balance_exhausted",
+                            "insufficient_quota",
+                        }:
+                            reason = "The OpenAI fallback has no available API credits."
+                            delay = max(delay, 300)
+                        elif provider == "gemini" and isinstance(
+                            exc, openai.RateLimitError
+                        ):
+                            reason = "Gemini has reached its lesson-generation quota."
+                        else:
+                            reason = f"{'Gemini' if provider == 'gemini' else 'OpenAI'} is temporarily unavailable."
+                        _provider_pause_reasons[provider] = reason
                         if provider == "gemini":
                             _provider_retry_at = time.time() + delay
                         else:
@@ -364,9 +488,10 @@ async def generate_json(policy, schema, context):
                                 "Using configured OpenAI backup for lesson generation"
                             )
                             break
+                        provider_pause()
                         raise HTTPException(
                             503,
-                            "Lesson generation is temporarily unavailable. Saved scenes are safe; please try again shortly.",
+                            f"{reason} Saved work is safe.",
                             headers={"Retry-After": str(delay)},
                         ) from exc
                     choice = response.choices[0]
@@ -391,7 +516,7 @@ async def generate_json(policy, schema, context):
                             attempt + 1,
                             issues[:2500],
                         )
-                        messages.extend(
+                        provider_messages.extend(
                             [
                                 {"role": "assistant", "content": content},
                                 {
@@ -470,10 +595,18 @@ async def build_document(student_id, item_id):
                 phase="ready",
                 blueprint=ready.blueprint.model_dump(),
                 scenes=[s.model_dump() for s in ready.scenes],
+                source_context=(
+                    ((shared or {}).get("blocks") or [{}])[0].get("metadata") or {}
+                ).get("source_context", doc.get("source_context", [])),
             )
             await save_document(student_id, item_id, record, doc)
             return
         blueprint = Blueprint.model_validate(doc["blueprint"])
+        sources = list(
+            available_sources(
+                doc.get("source_context", []), include_catalog=False
+            ).values()
+        )
         doc.update(phase="building", error=None)
         await save_document(student_id, item_id, record, doc)
         heartbeat = asyncio.create_task(build_heartbeat(student_id, item_id))
@@ -493,9 +626,10 @@ async def build_document(student_id, item_id):
                         if doc["request"].get("learner_context")
                         else None,
                     ).authoring_context(),
-                    "supplied_resources": doc.get("source_context", []),
+                    "supplied_resources": sources,
                     "curriculum_targets": doc.get("curriculum_targets", []),
                     "runtime_capabilities": authoring_capabilities(),
+                    "authoring_revision": doc.get("authoring_revision"),
                 },
             )
             if (scene.id, scene.type) != (brief.id, brief.type):
@@ -518,7 +652,14 @@ async def build_document(student_id, item_id):
                 "topic": doc["request"]["topic"],
                 "title": blueprint.title,
                 "track": record["track"],
-                "blocks": [{"metadata": {"classroom": classroom.model_dump()}}],
+                "blocks": [
+                    {
+                        "metadata": {
+                            "classroom": classroom.model_dump(),
+                            "source_context": doc.get("source_context", []),
+                        }
+                    }
+                ],
                 "contract_version": 100,
                 "oas_standards": [],
                 "researcher_activated": False,
@@ -578,6 +719,15 @@ async def prepare_classroom(
     await enforce_rate_limit("classroom-build", student_id, limit=8)
     record = await student_experience_store.get(student_id, plan_key(plan_item_id))
     doc = document_from(record)
+    is_estuary = plan_item_id == ESTUARY_ITEM
+    if is_estuary:
+        if doc:
+            return public_state(record)
+        body = ClassroomRequest(
+            topic=ESTUARY_TITLE,
+            track=Track.CREATION_SCIENCE,
+            level="family",
+        )
     if body.action == "build":
         if not doc:
             raise HTTPException(409, "Plan this exploration first.")
@@ -616,11 +766,13 @@ async def prepare_classroom(
         ):
             raise HTTPException(409, "Use a new exploration id for a different topic.")
         return public_state(record)
-    slug = classroom_slug(body, student_id)
+    slug = ESTUARY_ITEM if is_estuary else classroom_slug(body, student_id)
     claim = await student_experience_store.claim(
         student_id, plan_key(plan_item_id), slug
     )
     if not claim.claimed:
+        if is_estuary and document_from(claim.record):
+            return public_state(claim.record)
         raise HTTPException(
             409, "This exploration is being planned. Try opening it shortly."
         )
@@ -633,18 +785,26 @@ async def prepare_classroom(
         from app.services.learning_loop import known_skills
 
         curriculum_targets = await known_skills(planning_conn, body.targets)
-        canonical = await canonical_store.get(slug)
-        shared = (
-            ((canonical or {}).get("blocks") or [{}])[0].get("metadata") or {}
-        ).get("classroom")
-        if shared:
-            classroom = Classroom.model_validate(shared)
+        canonical = await canonical_store.get(slug) if not is_estuary else None
+        canonical_metadata = ((canonical or {}).get("blocks") or [{}])[0].get(
+            "metadata"
+        ) or {}
+        shared = canonical_metadata.get("classroom")
+        if shared or is_estuary:
+            classroom = (
+                estuary_classroom() if is_estuary else Classroom.model_validate(shared)
+            )
             doc = {
                 **classroom.model_dump(),
                 "phase": "ready",
+                "authoring_revision": CLASSROOM_AUTHORING_REVISION,
                 "request": body.model_dump(mode="json"),
                 "canonical_slug": slug,
                 "responses": {},
+                "source_context": [ESTUARY_SOURCE]
+                if is_estuary
+                else canonical_metadata.get("source_context", []),
+                "curriculum_targets": curriculum_targets,
             }
         else:
             from app.services.resource_router import ResourceQuery, resource_router
@@ -661,9 +821,7 @@ async def prepare_classroom(
             source_context = (
                 packet.get("resources", []) if isinstance(packet, dict) else []
             )
-            shared_plan = (
-                ((canonical or {}).get("blocks") or [{}])[0].get("metadata") or {}
-            ).get("classroom_blueprint")
+            shared_plan = canonical_metadata.get("classroom_blueprint")
             blueprint = (
                 Blueprint.model_validate(shared_plan)
                 if shared_plan
@@ -673,9 +831,14 @@ async def prepare_classroom(
                     {
                         **body.model_dump(mode="json"),
                         "learner_context": learners.authoring_context(),
-                        "supplied_resources": source_context,
+                        "supplied_resources": list(
+                            available_sources(
+                                source_context, include_catalog=False
+                            ).values()
+                        ),
                         "curriculum_targets": curriculum_targets,
                         "runtime_capabilities": authoring_capabilities(),
+                        "authoring_revision": CLASSROOM_AUTHORING_REVISION,
                     },
                 )
             )
@@ -685,6 +848,7 @@ async def prepare_classroom(
                 raise ValueError("The blueprint omitted the requested track")
             doc = {
                 "format_version": CLASSROOM_VERSION,
+                "authoring_revision": CLASSROOM_AUTHORING_REVISION,
                 "phase": "planned",
                 "blueprint": blueprint.model_dump(),
                 "scenes": [],
@@ -729,7 +893,12 @@ async def prepare_classroom(
     except Exception as exc:
         logger.exception("Classroom planning failed")
         await student_experience_store.mark_failed(
-            student_id, plan_key(plan_item_id), "Classroom planning failed."
+            student_id,
+            plan_key(plan_item_id),
+            "Classroom planning failed.",
+            count_attempt=not (
+                isinstance(exc, HTTPException) and exc.status_code == 503
+            ),
         )
         if isinstance(exc, HTTPException):
             raise
@@ -890,6 +1059,8 @@ async def save_response(
             }
             if activity:
                 content["activity"] = activity
+            if scene.portfolio_title and body.text.strip():
+                content["portfolio_title"] = scene.portfolio_title
             inserted = await conn.fetchval(
                 """INSERT INTO "EvidenceAttempt"("studentId","canonicalSlug","canonicalRevision","lessonId",kind,content,"submissionKey")
                 VALUES ($1,$2,$3,$4,'note',$5::jsonb,$6) ON CONFLICT ("studentId","submissionKey") DO NOTHING RETURNING id""",

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useStudent } from '@/lib/useStudent';
-import { listClassrooms } from '@/lib/classroom-client';
+import { ESTUARY_ITEM, listClassrooms } from '@/lib/classroom-client';
 import { AdelineConversationCard } from '@/components/AdelineConversationCard';
 import styles from '@/components/nav/sites-dashboard.module.css';
 
@@ -33,6 +33,7 @@ export default function TodayPage() {
       <h2 className="text-3xl">What do you want to explore or learn about?</h2>
       <p className="mt-3">Choose a topic. Review Adeline’s plan, then explore it together through explanations, experiments, questions, and projects.</p>
       {newId && <Link href={`/dashboard/lesson/${newId}`} className="mt-5 inline-block rounded-xl bg-[#d8b976] px-5 py-3 font-semibold text-[#183d32]">Start exploring →</Link>}
+      <Link href={`/dashboard/lesson/${ESTUARY_ITEM}`} className="mt-5 inline-block px-5 py-3 font-semibold underline underline-offset-4">Open the marine biology family lab</Link>
     </section>
     <section className="mt-7" aria-label="Your explorations">
       <h2 className="text-2xl text-[#183d32]">Your explorations</h2>
