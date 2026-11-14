@@ -217,6 +217,7 @@ async def test_preseeded_canonical_opens_without_author_or_resource_search():
         patch("app.api.experience_builder.adaptation_for", new=AsyncMock(return_value=AdaptationRequest(
             grade_level="8", track="CREATION_SCIENCE"
         ))),
+        patch("app.services.curriculum_state.science_foundations", new=AsyncMock(return_value=[])),
         patch("app.api.experience_builder.student_experience_store.save_ready", new=AsyncMock(return_value=saved)),
         patch("app.api.experience_builder._author", new=author),
         patch("app.api.experience_builder.resource_router.search", new=resource_search),

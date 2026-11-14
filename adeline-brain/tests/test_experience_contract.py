@@ -125,7 +125,7 @@ def test_justice_investigation_also_requires_supplied_primary_records():
 
 def test_only_fresh_classroom_builder_is_mounted():
     from app.main import app
-    paths = {route.path for route in app.routes}
+    paths = app.openapi()["paths"]
     assert "/experience/build" not in paths
     assert "/brain/experience/build" not in paths
     assert "/classroom/{student_id}/{plan_item_id}" in paths
