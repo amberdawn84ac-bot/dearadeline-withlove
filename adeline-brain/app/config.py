@@ -199,6 +199,15 @@ _db_pool_lock = None
 
 def _db_ssl_context():
     import ssl as _ssl
+    from urllib.parse import urlparse
+
+    # The disposable CI database has no TLS certificate. Remote and production
+    # connections must still verify both the certificate and the hostname.
+    if ADELINE_ENV == "test" and urlparse(POSTGRES_DSN).hostname in {
+        "localhost", "127.0.0.1", "::1",
+    }:
+        return False
+
     root_cert = os.getenv("DB_SSL_ROOT_CERT", "").strip()
     if root_cert:
         # Railway secrets are commonly provided as inline PEM. Also accept a
