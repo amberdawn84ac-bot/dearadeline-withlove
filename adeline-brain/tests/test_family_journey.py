@@ -144,6 +144,10 @@ async def test_saved_family_investigation_preserves_evidence_and_credits_once(mo
         await journal_store.connect(retries=1)
         conn = await config.get_db_conn()
         try:
+            await conn.execute(
+                'INSERT INTO "CurriculumConcept"(id,title,description,track,difficulty) VALUES ($1,$2,$2,$3,$4)',
+                concept_id, concept, track, "EMERGING",
+            )
             for user_id, role, grade, owner in [
                 (parent, "PARENT", None, None),
                 (learner, "STUDENT", "8", parent),
@@ -236,23 +240,25 @@ async def test_saved_family_investigation_preserves_evidence_and_credits_once(mo
             assert await conn.fetchval(
                 'SELECT count(*) FROM "EvidenceAttempt" WHERE "studentId"=$1 AND "lessonId"=$2', learner, lesson_id,
             ) == 1
-            assert [tuple(row) for row in await conn.fetch(
+            assert {tuple(row) for row in await conn.fetch(
                 'SELECT "skillId",status,"evidenceCount" FROM "StudentSkillState" WHERE "studentId"=$1 ORDER BY "skillId"',
                 learner,
-            )] == [(standard, "secure", 1), (concept_id, "secure", 1)]
+            )} == {(standard, "secure", 1), (concept_id, "secure", 1)}
             assert [tuple(row) for row in await conn.fetch(
                 'SELECT "standardId",proficiency,"evidenceCount" FROM "StandardMastery" WHERE "studentId"=$1',
                 learner,
             )] == [(standard, "EXTENDING", 1)]
             for _ in range(100):
                 card = await conn.fetchrow(
-                    'SELECT "dueAt" FROM "SpacedRepetitionCard" WHERE "studentId"=$1 AND "conceptId"=$2',
+                    'SELECT "dueAt","lastQuality" FROM "SpacedRepetitionCard" WHERE "studentId"=$1 AND "conceptId"=$2',
                     learner, concept_id,
                 )
-                if card and card["dueAt"]:
+                if card and card["lastQuality"] == 3:
                     break
                 await asyncio.sleep(0.05)
-            assert card and card["dueAt"], "Expected the background BKT/SM-2 scheduling write"
+            assert card and card["lastQuality"] == 3 and card["dueAt"] > datetime.now(ZoneInfo("UTC")).replace(tzinfo=None), (
+                "Expected the background BKT/SM-2 scheduling write, not the default card"
+            )
         finally:
             await conn.close()
     finally:

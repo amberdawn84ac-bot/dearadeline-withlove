@@ -230,12 +230,14 @@ class CurriculumGraph:
         self, student_id: str, concept_id: str, score: float,
         sealed_at: Optional[str] = None,
     ) -> None:
-        sealed = sealed_at or datetime.now(timezone.utc).isoformat()
+        sealed = datetime.fromisoformat(sealed_at) if sealed_at else datetime.now(timezone.utc)
+        if sealed.tzinfo is not None:
+            sealed = sealed.astimezone(timezone.utc).replace(tzinfo=None)
         async with _get_session_factory()() as session:
             await session.execute(text('''
                 INSERT INTO "StudentConceptMastery"
                     ("studentId", "conceptId", score, "sealedAt", "updatedAt")
-                VALUES (:student_id, :concept_id, :score, CAST(:sealed_at AS timestamptz), NOW())
+                VALUES (:student_id, :concept_id, :score, :sealed_at, NOW())
                 ON CONFLICT ("studentId", "conceptId") DO UPDATE SET
                     score = EXCLUDED.score, "sealedAt" = EXCLUDED."sealedAt", "updatedAt" = NOW()
             '''), {"student_id": student_id, "concept_id": concept_id,
