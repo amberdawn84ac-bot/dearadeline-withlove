@@ -9,12 +9,12 @@ def normalized(text: str) -> str:
     return " ".join(re.findall(r"\w+", text.casefold()))
 
 
-def validate_teaching_plan(blueprint: Blueprint, capabilities: dict) -> None:
+def validate_teaching_plan(blueprint: Blueprint, capabilities: dict, *, require_rubrics=False) -> None:
     if blueprint.teaching_design is None:
         raise ValueError("Give the lesson an explicit teaching design.")
-    if getattr(blueprint, "class_quality_rubric", None) is None or getattr(
-        blueprint, "mastery_rubric", None
-    ) is None:
+    if require_rubrics and (
+        blueprint.class_quality_rubric is None or blueprint.mastery_rubric is None
+    ):
         raise ValueError("Generate both class-quality and student-mastery rubrics before scenes.")
     mechanisms = {item["id"] for item in capabilities["mechanisms"]}
     for brief in blueprint.scenes:
