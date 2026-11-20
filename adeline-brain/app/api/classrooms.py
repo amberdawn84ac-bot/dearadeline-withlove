@@ -109,7 +109,10 @@ def validate_draft(schema, content, context):
         if context["track"] not in [t.value for t in draft.integrated_tracks]:
             raise ValueError("Include the requested track in integrated_tracks.")
         if context.get("authoring_revision") == CLASSROOM_AUTHORING_REVISION:
-            validate_teaching_plan(draft, context["runtime_capabilities"])
+            validate_teaching_plan(
+                draft, context["runtime_capabilities"],
+                require_rubrics=context.get("rubric_contract") == RUBRIC_CONTRACT_REVISION,
+            )
     return draft
 
 
