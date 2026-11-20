@@ -13,6 +13,7 @@ from app.schemas.api_models import Track
 
 CLASSROOM_VERSION = "openmaic-classroom-v1"
 CLASSROOM_AUTHORING_REVISION = "rich-lessons-v2"
+RUBRIC_CONTRACT_REVISION = "autonomous-rubrics-v1"
 
 
 class Role(BaseModel):
@@ -56,6 +57,38 @@ class TeachingDesign(BaseModel):
     revisit_adds: str = Field(min_length=10)
 
 
+class RubricCriterion(BaseModel):
+    """An observable criterion, not a personality judgment or completion checkbox."""
+
+    id: str = Field(min_length=2, max_length=40)
+    focus: str = Field(min_length=8, max_length=180)
+    evidence: str = Field(min_length=15, max_length=400)
+    emerging: str = Field(min_length=12, max_length=300)
+    developing: str = Field(min_length=12, max_length=300)
+    proficient: str = Field(min_length=12, max_length=300)
+    advanced: str = Field(min_length=12, max_length=300)
+
+
+class ClassRubric(BaseModel):
+    """Generated per topic; fixed evidence rules remain outside the model."""
+
+    purpose: str = Field(min_length=15, max_length=400)
+    criteria: list[RubricCriterion] = Field(min_length=2, max_length=5)
+
+    @model_validator(mode="after")
+    def distinct_criteria(self):
+        if len({c.id for c in self.criteria}) != len(self.criteria):
+            raise ValueError("Rubric criterion ids must be unique.")
+        if len({c.focus.casefold().strip() for c in self.criteria}) != len(self.criteria):
+            raise ValueError("Rubric criteria must address distinct aspects of learning.")
+        for criterion in self.criteria:
+            levels = [criterion.emerging, criterion.developing,
+                      criterion.proficient, criterion.advanced]
+            if len({value.casefold().strip() for value in levels}) != 4:
+                raise ValueError("Each performance level needs a distinct descriptor.")
+        return self
+
+
 class Blueprint(BaseModel):
     title: str = Field(min_length=1)
     understanding: str = Field(min_length=10)
@@ -66,6 +99,8 @@ class Blueprint(BaseModel):
     scenes: list[SceneBrief] = Field(min_length=4, max_length=12)
     next_revisit: str = Field(min_length=10)
     teaching_design: TeachingDesign | None = None
+    class_quality_rubric: ClassRubric | None = None
+    mastery_rubric: ClassRubric | None = None
 
     @model_validator(mode="after")
     def coherent(self):
@@ -390,6 +425,7 @@ def public_classroom(classroom: Classroom, source_context=(), *, require_attempt
             redact_interaction(scene["interaction"])
     data["blueprint"].pop("scenes")
     data["blueprint"].pop("teaching_design", None)
+    data["blueprint"].pop("class_quality_rubric", None)
     return data
 
 
@@ -404,7 +440,19 @@ The supplied runtime_capabilities describes installed delivery, not optional ide
 Choose only its supported mechanisms and controls. If the topic needs something
 unavailable, use a real project/source task; do not promise a nonexistent activity.
 Use backward design: transferable understanding, essential question, observable
-work, then a coherent scene plan. One teacher named Adeline and one assistant
+work, then a coherent scene plan.
+Before planning scenes, independently author TWO topic-specific rubrics:
+class_quality_rubric (judges Adeline's teaching quality: accurate explanations,
+source fidelity, genuine practice, age-appropriate challenge and usable feedback),
+and mastery_rubric (judges learners' observable independent explanation, procedure,
+transfer and evidence for this particular topic). Each has 2-5 distinct criteria
+with four genuinely distinct evidence-based performance descriptions: emerging,
+developing, proficient and advanced. Write observable evidence and concrete,
+topic-specific examples; no generic "participates" or "finishes worksheet" criteria.
+Hold instructional quality and learner mastery separate. Rubric criteria cannot
+override supplied standards, safety requirements, or the independent-evidence
+policy. Do not change rubrics merely to award a higher level. Carry the mastery
+evidence into the saved independent_check and application scenes. One teacher named Adeline and one assistant
 with a clear teaching purpose. One shared reality with different responsibilities
 for elementary, middle and high school learners. Keep subject facts accurate;
 teach missing knowledge directly. Characters never change facts. No mandatory
