@@ -12,6 +12,10 @@ def normalized(text: str) -> str:
 def validate_teaching_plan(blueprint: Blueprint, capabilities: dict) -> None:
     if blueprint.teaching_design is None:
         raise ValueError("Give the lesson an explicit teaching design.")
+    if getattr(blueprint, "class_quality_rubric", None) is None or getattr(
+        blueprint, "mastery_rubric", None
+    ) is None:
+        raise ValueError("Generate both class-quality and student-mastery rubrics before scenes.")
     mechanisms = {item["id"] for item in capabilities["mechanisms"]}
     for brief in blueprint.scenes:
         if not brief.evidence or not brief.evidence.strip():
