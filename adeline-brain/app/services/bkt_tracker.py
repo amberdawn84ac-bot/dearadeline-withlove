@@ -284,10 +284,10 @@ async def update_card_after_lesson(
         # SM-2 scheduling
         sm2_result = sm2(quality, prev_interval, prev_ease, prev_reps)
 
-        # Defensive: ensure next_due_at is timezone-aware before DB insert
+        # Prisma stores dueAt as a timezone-naive UTC timestamp.
         due_at = sm2_result.next_due_at
-        if due_at.tzinfo is None:
-            due_at = due_at.replace(tzinfo=timezone.utc)
+        if due_at.tzinfo is not None:
+            due_at = due_at.astimezone(timezone.utc).replace(tzinfo=None)
 
         # Full UPSERT — all card fields updated
         conn = await get_db_conn()

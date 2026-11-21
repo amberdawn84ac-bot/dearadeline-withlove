@@ -1,7 +1,5 @@
 """Autonomous per-class rubrics: contracts and safe, evidence-based feedback."""
 
-import json
-
 import pytest
 from pydantic import ValidationError
 
@@ -56,11 +54,22 @@ def test_new_blueprint_cannot_omit_either_generated_rubric():
             {"id": "peer", "name": "Peer", "role": "assistant", "persona": "Asks useful questions."},
         ],
         "scenes": [
-            {"id": str(i), "title": "Ratio", "type": "quiz" if i == 3 else "slide",
+            {"id": str(i), "title": "Ratio", "type": "quiz" if i in (0, 3) else "slide",
+             "purpose": ("independent_attempt", "explain", "practice", "independent_check")[i],
              "objective": "Explain how ratios work.", "brief": "Analyze a concrete ratio example."}
             for i in range(4)
         ],
         "next_revisit": "Compare ratios using proportional graphs next.",
+        "teaching_design": {
+            "approach": "guided_practice",
+            "rationale": "Compare ratios using concrete evidence.",
+            "initial_attempt": "Explain a comparison before receiving help.",
+            "likely_difficulty": "May compare differences instead of scaling.",
+            "support": "Model multiplicative reasoning on another example.",
+            "independent_check": "Explain a fresh ratio without step hints.",
+            "learning_strategy": "Predict and then check a scaled mixture.",
+            "revisit_adds": "Compare the same relationship on a graph.",
+        },
     }
     # Past documents remain readable, but new authored drafts must generate both.
     blueprint = Blueprint.model_validate(data)
