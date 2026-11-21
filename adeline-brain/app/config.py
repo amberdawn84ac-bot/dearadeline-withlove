@@ -66,6 +66,12 @@ REDIS_URL = os.getenv("REDIS_URL", "" if IS_PRODUCTION else "redis://localhost:6
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
+# Independent third provider for classroom JSON generation, after Gemini and OpenAI.
+# API key must be provisioned in the deployment environment, not source control.
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+
 if IS_PRODUCTION and not OPENAI_API_KEY:
     logger.warning(
         "[Config] OPENAI_API_KEY not set — embedding and lesson generation will fail. "
