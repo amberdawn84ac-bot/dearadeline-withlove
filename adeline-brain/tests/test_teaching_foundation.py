@@ -12,6 +12,7 @@ from app.curriculum.classroom import Blueprint
 from app.curriculum.runtime_capabilities import authoring_capabilities
 from app.schemas.api_models import Track
 from tests.test_classroom import blueprint
+from tests.test_autonomous_rubrics import rubric
 
 
 def test_catalog_is_json_safe_and_returns_isolated_snapshots():
@@ -38,6 +39,8 @@ def test_new_canonical_identity_changes_with_delivery_contract():
 @pytest.mark.asyncio
 async def test_planning_receives_and_preserves_actual_delivery_capabilities():
     draft = blueprint()
+    draft["class_quality_rubric"] = rubric()
+    draft["mastery_rubric"] = rubric()
     draft["teaching_design"] = {
         "approach": "guided_practice",
         "rationale": "Compare the evidence in two actual mixtures.",
@@ -97,6 +100,8 @@ async def test_planning_receives_and_preserves_actual_delivery_capabilities():
         generated.await_args.args[2]["runtime_capabilities"] == authoring_capabilities()
     )
     assert saved[0]["runtime_capabilities"] == authoring_capabilities()
+    assert saved[0]["blueprint"]["class_quality_rubric"] == draft["class_quality_rubric"]
+    assert saved[0]["blueprint"]["mastery_rubric"] == draft["mastery_rubric"]
     assert searched.await_args.args[0].grade_level == "3"
     assert generated.await_args.args[2]["learner_context"]["declared_grades"] == ["3"]
     assert saved[0]["learner_context"]["resource_grade"] == "3"

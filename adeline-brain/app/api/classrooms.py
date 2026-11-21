@@ -24,6 +24,7 @@ from app.connections.canonical_store import canonical_store
 from app.connections.student_experience_store import student_experience_store
 from app.curriculum.classroom import (
     CLASSROOM_AUTHORING_REVISION,
+    RUBRIC_CONTRACT_REVISION,
     CLASSROOM_VERSION,
     PLAN_POLICY,
     SCENE_POLICY,
@@ -101,10 +102,17 @@ def validate_draft(schema, content, context):
     if schema is Blueprint and "track" in context:
         if draft.teaching_design is None:
             raise ValueError("Include an explicit teaching_design.")
+        if context.get("rubric_contract") == RUBRIC_CONTRACT_REVISION and (
+            draft.class_quality_rubric is None or draft.mastery_rubric is None
+        ):
+            raise ValueError("Include both class_quality_rubric and mastery_rubric.")
         if context["track"] not in [t.value for t in draft.integrated_tracks]:
             raise ValueError("Include the requested track in integrated_tracks.")
         if context.get("authoring_revision") == CLASSROOM_AUTHORING_REVISION:
-            validate_teaching_plan(draft, context["runtime_capabilities"])
+            validate_teaching_plan(
+                draft, context["runtime_capabilities"],
+                require_rubrics=context.get("rubric_contract") == RUBRIC_CONTRACT_REVISION,
+            )
     return draft
 
 
@@ -156,6 +164,7 @@ def classroom_slug(request, learner_id=None):
             [
                 CLASSROOM_VERSION,
                 CLASSROOM_AUTHORING_REVISION,
+                RUBRIC_CONTRACT_REVISION,
                 authoring_capabilities()["fingerprint"],
                 request.topic.strip().lower(),
                 request.track.value,
@@ -357,6 +366,10 @@ async def generate_json(policy, schema, context):
     if context.get("authoring_revision") == CLASSROOM_AUTHORING_REVISION:
         if schema is Blueprint:
             messages[0]["content"] += (
+                "\nGenerate an original class_quality_rubric and mastery_rubric before "
+                "writing scenes. Make them specific to the subject, observable, "
+                "independent of mere task completion, and anchored in real evidence. "
+                "Use mastery criteria to design independent checks. "
                 "\nFor every scene set evidence to the concrete work a learner will produce. "
                 "Set mechanism to an installed activity ID for every interactive scene and null elsewhere. "
                 "Between the first attempt and the fresh independent check, explicitly teach the concept "
@@ -365,6 +378,9 @@ async def generate_json(policy, schema, context):
             )
         elif schema is Scene:
             messages[0]["content"] += (
+                "\nAlign scene tasks, worked examples, and success criteria with the "
+                "blueprint mastery_rubric. Do not display or promise awarded mastery. "
+                "Keep teacher-facing class_quality_rubric for self-review. "
                 "\nUse the scene brief and its evidence field to name exactly what the learner will make, "
                 "measure or explain. Each family role must produce distinct work suited to the band. "
                 "In explain scenes teach with a meaningful visual or a worked_example that walks through "
@@ -634,6 +650,7 @@ async def build_document(student_id, item_id):
                     "curriculum_targets": doc.get("curriculum_targets", []),
                     "runtime_capabilities": authoring_capabilities(),
                     "authoring_revision": doc.get("authoring_revision"),
+                    "rubric_contract": doc.get("rubric_contract"),
                 },
             )
             if (scene.id, scene.type) != (brief.id, brief.type):
@@ -802,6 +819,7 @@ async def prepare_classroom(
                 **classroom.model_dump(),
                 "phase": "ready",
                 "authoring_revision": CLASSROOM_AUTHORING_REVISION,
+                "rubric_contract": RUBRIC_CONTRACT_REVISION,
                 "request": body.model_dump(mode="json"),
                 "canonical_slug": slug,
                 "responses": {},
@@ -843,16 +861,20 @@ async def prepare_classroom(
                         "curriculum_targets": curriculum_targets,
                         "runtime_capabilities": authoring_capabilities(),
                         "authoring_revision": CLASSROOM_AUTHORING_REVISION,
+                        "rubric_contract": RUBRIC_CONTRACT_REVISION,
                     },
                 )
             )
             if not shared_plan and blueprint.teaching_design is None:
                 raise ValueError("New classrooms require an explicit teaching design")
+            if not blueprint.class_quality_rubric or not blueprint.mastery_rubric:
+                raise ValueError("New classrooms require independently authored rubrics.")
             if body.track not in blueprint.integrated_tracks:
                 raise ValueError("The blueprint omitted the requested track")
             doc = {
                 "format_version": CLASSROOM_VERSION,
                 "authoring_revision": CLASSROOM_AUTHORING_REVISION,
+                "rubric_contract": RUBRIC_CONTRACT_REVISION,
                 "phase": "planned",
                 "blueprint": blueprint.model_dump(),
                 "scenes": [],
