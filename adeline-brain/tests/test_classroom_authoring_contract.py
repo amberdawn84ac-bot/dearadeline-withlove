@@ -66,7 +66,7 @@ def test_all_missing_scene_evidence_is_reported_in_one_repair():
 
 
 @pytest.mark.asyncio
-async def test_schema_negotiation_preserves_repairs_and_json_mode_uses_full_contract(monkeypatch):
+async def test_schema_negotiation_keeps_request_cap_and_json_mode_uses_full_contract(monkeypatch):
     for key, value in {
         "GEMINI_API_KEY": "test", "GOOGLE_API_KEY": "", "OPENAI_API_KEY": "",
         "GROQ_API_KEY": "", "_provider_retry_at": 0, "_fallback_retry_at": 0,
@@ -77,16 +77,13 @@ async def test_schema_negotiation_preserves_repairs_and_json_mode_uses_full_cont
     missing = deepcopy(plan)
     missing["scenes"][0]["evidence"] = None
     missing["scenes"][1]["evidence"] = None
-    bad_workshop = deepcopy(plan)
-    bad_workshop["scenes"][-1]["type"] = "slide"
-    bad_workshop["scenes"][-1]["purpose"] = "reflect"
     choices = [
         openai.BadRequestError(
             "response_format schema unsupported",
             response=httpx.Response(400, request=httpx.Request("POST", "https://provider.test")),
             body={"error": {"message": "schema unsupported"}},
         ),
-        response(missing), response(bad_workshop), response(plan),
+        response(missing), response(plan),
     ]
     calls = []
 
@@ -105,10 +102,18 @@ async def test_schema_negotiation_preserves_repairs_and_json_mode_uses_full_cont
     with patch("openai.AsyncOpenAI", return_value=manager):
         result = await api.generate_json("Teach the topic.", Blueprint, context())
     assert result.title == plan["title"]
-    assert len(calls) == 4  # one rejected format + at most three generated drafts
+    assert len(calls) == 3  # request ceiling is unchanged, including negotiation
     assert all(call["response_format"] == {"type": "json_object"} for call in calls[1:])
     prompt_contract = json.loads(calls[1]["messages"][0]["content"].split("JSON schema:\n")[1].split("\nGenerate")[0])
     assert prompt_contract == api.authoring_contract(Blueprint, context())
     repair = calls[2]["messages"][-1]["content"]
     assert all(f"{scene['id']}.evidence" in repair for scene in missing["scenes"][:2])
-    assert "not a summary slide" in calls[3]["messages"][-1]["content"]
+    assert "not a summary slide" in repair
+
+
+def test_workshop_summary_slide_is_still_rejected():
+    plan = valid_plan()
+    plan["scenes"][-1]["type"] = "slide"
+    plan["scenes"][-1]["purpose"] = "reflect"
+    with pytest.raises(ValueError, match="ends with work"):
+        api.validate_draft(Blueprint, json.dumps(plan), context())

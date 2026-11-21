@@ -443,10 +443,12 @@ async def generate_json(policy, schema, context):
                 api_key=api_key, base_url=base_url, max_retries=0, timeout=90
             ) as client:
                 attempt = 0
-                while attempt < 3:
+                requests = 0
+                while requests < 3:
                     if provider == "gemini" and _provider_retry_at > time.time():
                         break
                     try:
+                        requests += 1
                         response = await client.chat.completions.create(
                             model=model,
                             max_tokens=10000,
@@ -543,8 +545,8 @@ async def generate_json(policy, schema, context):
                         # when Groq can still serve the request.
                         logger.info("Provider %s unavailable; checking next configured provider", provider)
                         break
-                    # Schema negotiation is not a generated draft and must not
-                    # consume the bounded three-draft validation/repair budget.
+                    # Count actual drafts separately from schema negotiation,
+                    # but never exceed the existing three-request provider cap.
                     attempt += 1
                     choice = response.choices[0]
                     content = choice.message.content or ""
