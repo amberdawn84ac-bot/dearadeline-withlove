@@ -7,7 +7,59 @@ from app.curriculum.classroom import Blueprint, Scene
 from app.curriculum.classroom_review import (
     QualityReview, checked_review, review_and_repair,
 )
-from test_classroom import blueprint as basic_blueprint, scene as basic_scene
+def basic_blueprint():
+    return {
+        "title": "Mixtures",
+        "understanding": "Ratios compare quantities multiplicatively.",
+        "essential_question": "How can we compare mixtures?",
+        "demonstration": "Compare and explain two new mixtures.",
+        "integrated_tracks": ["CREATION_SCIENCE", "APPLIED_MATHEMATICS"],
+        "roster": [
+            {"id": "adeline", "name": "Adeline", "role": "teacher",
+             "persona": "Warm, knowledgeable mentor."},
+            {"id": "peer", "name": "Colleague", "role": "assistant",
+             "persona": "Asks for evidence and clarification."},
+        ],
+        "scenes": [
+            {"id": f"s{i}", "title": f"Compare mixture {i}",
+             "type": "quiz" if i == 3 else "slide",
+             "objective": "Explain the quantities.",
+             "brief": "Show a concrete example and explain it."}
+            for i in range(4)
+        ],
+        "next_revisit": "Connect ratios to graphs in another context.",
+    }
+
+
+def basic_scene(i):
+    scene = {
+        "id": f"s{i}",
+        "title": "Compare mixtures",
+        "type": "quiz" if i == 3 else "slide",
+        "content": "One cup to two cups gives a 1:2 ratio.",
+        "actions": [
+            {"role_id": "adeline", "text": "What changes when both amounts double?"}
+        ],
+        "learner_task": "Explain the comparison.",
+        "success_criteria": ["Use multiplicative reasoning."],
+        "family_roles": {
+            "elementary": "Draw amounts.",
+            "middle": "Compare ratios.",
+            "high_school": "Justify scaling.",
+        },
+    }
+    if i == 3:
+        scene["question"] = {
+            "prompt": "Which equals 1:2?",
+            "choices": [
+                {"id": "a", "label": "2:4"},
+                {"id": "b", "label": "2:3"},
+            ],
+            "answer": "a",
+            "explanation": "Multiplying both amounts by two preserves the ratio.",
+        }
+    return scene
+
 
 
 def reviewed_blueprint():
