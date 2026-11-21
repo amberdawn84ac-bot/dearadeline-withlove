@@ -17,6 +17,9 @@ from app.config import (
     GEMINI_BASE_URL,
     GEMINI_MODEL,
     GOOGLE_API_KEY,
+    GROQ_API_KEY,
+    GROQ_BASE_URL,
+    GROQ_MODEL,
     OPENAI_API_KEY,
     get_db_conn,
 )
@@ -62,6 +65,7 @@ _builds = set()
 _generation_slots = asyncio.Semaphore(2)
 _provider_retry_at = 0.0
 _fallback_retry_at = 0.0
+_groq_retry_at = 0.0
 _provider_pause_reasons: dict[str, str] = {}
 
 
@@ -72,6 +76,8 @@ def provider_pause():
         retry_times["gemini"] = _provider_retry_at
     if OPENAI_API_KEY:
         retry_times["openai"] = _fallback_retry_at
+    if GROQ_API_KEY:
+        retry_times["groq"] = _groq_retry_at
     if retry_times and min(retry_times.values()) > now:
         reasons = " ".join(
             _provider_pause_reasons.get(name, "") for name in retry_times
@@ -240,6 +246,10 @@ def public_state(record):
 
 
 def authoring_response_format(provider, schema, context):
+    if provider == "groq":
+        # JSON object mode plus local Pydantic validation and repair. Complex
+        # strict JSON schemas may not be supported on every Groq model.
+        return {"type": "json_object"}
     if schema not in (Scene, Blueprint) or (
         provider != "openai"
         and context.get("authoring_revision") != CLASSROOM_AUTHORING_REVISION
@@ -342,9 +352,9 @@ def authoring_response_format(provider, schema, context):
 async def generate_json(policy, schema, context):
     import openai
 
-    global _provider_retry_at, _fallback_retry_at
+    global _provider_retry_at, _fallback_retry_at, _groq_retry_at
     key = GEMINI_API_KEY or GOOGLE_API_KEY
-    if not key and not OPENAI_API_KEY:
+    if not key and not OPENAI_API_KEY and not GROQ_API_KEY:
         raise HTTPException(
             503, "Classroom generation needs a configured model provider."
         )
@@ -405,6 +415,8 @@ async def generate_json(policy, schema, context):
             providers.append(
                 ("openai", OPENAI_API_KEY, "https://api.openai.com/v1", "gpt-4o-mini")
             )
+        if GROQ_API_KEY and _groq_retry_at <= time.time():
+            providers.append(("groq", GROQ_API_KEY, GROQ_BASE_URL, GROQ_MODEL))
         for provider, api_key, base_url, model in providers:
             provider_messages = list(messages)
             response_format = authoring_response_format(provider, schema, context)
@@ -485,13 +497,17 @@ async def generate_json(policy, schema, context):
                             exc, openai.RateLimitError
                         ):
                             reason = "Gemini has reached its lesson-generation quota."
+                        elif provider == "groq" and isinstance(exc, openai.RateLimitError):
+                            reason = "Groq has reached its classroom-generation limit."
                         else:
-                            reason = f"{'Gemini' if provider == 'gemini' else 'OpenAI'} is temporarily unavailable."
+                            reason = f"{provider.capitalize()} is temporarily unavailable."
                         _provider_pause_reasons[provider] = reason
                         if provider == "gemini":
                             _provider_retry_at = time.time() + delay
-                        else:
+                        elif provider == "openai":
                             _fallback_retry_at = time.time() + delay
+                        else:
+                            _groq_retry_at = time.time() + delay
                         # Provider metadata only; do not log prompts, responses or credentials.
                         logger.warning(
                             "Lesson provider %s unavailable: status=%s code=%s status_name=%s request_id=%s retry_seconds=%s",
@@ -502,21 +518,11 @@ async def generate_json(policy, schema, context):
                             getattr(exc, "request_id", None),
                             delay,
                         )
-                        if (
-                            provider == "gemini"
-                            and OPENAI_API_KEY
-                            and _fallback_retry_at <= time.time()
-                        ):
-                            logger.info(
-                                "Using configured OpenAI backup for lesson generation"
-                            )
-                            break
-                        provider_pause()
-                        raise HTTPException(
-                            503,
-                            f"{reason} Saved work is safe.",
-                            headers={"Retry-After": str(delay)},
-                        ) from exc
+                        # Keep trying each remaining configured, healthy
+                        # provider; an exhausted OpenAI balance is not fatal
+                        # when Groq can still serve the request.
+                        logger.info("Provider %s unavailable; checking next configured provider", provider)
+                        break
                     choice = response.choices[0]
                     content = choice.message.content or ""
                     try:
@@ -550,6 +556,7 @@ async def generate_json(policy, schema, context):
                                 },
                             ]
                         )
+    provider_pause()  # When every configured provider is cooling down, report 503.
     raise HTTPException(
         502,
         "Adeline could not finish a valid exploration. Please try again; saved scenes are safe.",
