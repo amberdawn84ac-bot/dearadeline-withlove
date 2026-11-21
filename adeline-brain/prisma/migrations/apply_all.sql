@@ -585,6 +585,10 @@ CREATE INDEX IF NOT EXISTS "ChildPrivacyConsent_studentId_consentedAt_idx"
   ON "ChildPrivacyConsent"("studentId", "consentedAt" DESC);
 CREATE INDEX IF NOT EXISTS "ChildPrivacyConsent_parentId_consentedAt_idx"
   ON "ChildPrivacyConsent"("parentId", "consentedAt" DESC);
+ALTER TABLE "User"
+  ADD COLUMN IF NOT EXISTS "parentId" TEXT,
+  ADD COLUMN IF NOT EXISTS "coppaPendingToken" TEXT,
+  ADD COLUMN IF NOT EXISTS "coppaTokenExpiresAt" TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS "User_parentId_role_idx" ON "User"("parentId", role);
 CREATE INDEX IF NOT EXISTS "ReadingSession_studentId_status_idx" ON "ReadingSession"("studentId", status);
 CREATE INDEX IF NOT EXISTS "User_coppaTokenExpiresAt_pending_idx"
