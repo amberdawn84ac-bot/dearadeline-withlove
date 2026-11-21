@@ -17,15 +17,16 @@ def validate_teaching_plan(blueprint: Blueprint, capabilities: dict, *, require_
     ):
         raise ValueError("Generate both class-quality and student-mastery rubrics before scenes.")
     mechanisms = {item["id"] for item in capabilities["mechanisms"]}
+    errors = []
     for brief in blueprint.scenes:
         if not brief.evidence or not brief.evidence.strip():
-            raise ValueError(
-                f"{brief.id}: name the actual learner work that will show progress."
+            errors.append(
+                f"{brief.id}.evidence: name the actual learner work that will show progress."
             )
         if brief.type == "interactive" and brief.mechanism not in mechanisms:
-            raise ValueError(f"{brief.id}: select one installed activity mechanism.")
+            errors.append(f"{brief.id}: select one installed activity mechanism.")
         if brief.type != "interactive" and brief.mechanism is not None:
-            raise ValueError(f"{brief.id}: only interactive scenes use a mechanism.")
+            errors.append(f"{brief.id}: only interactive scenes use a mechanism.")
     purposes = [brief.purpose for brief in blueprint.scenes]
     initial, final = (
         purposes.index("independent_attempt"),
@@ -33,20 +34,22 @@ def validate_teaching_plan(blueprint: Blueprint, capabilities: dict, *, require_
     )
     instruction = blueprint.scenes[initial + 1 : final]
     if not any(brief.purpose == "explain" for brief in instruction):
-        raise ValueError(
+        errors.append(
             "Explain the core idea after the initial attempt and before the final check."
         )
     if not any(brief.purpose in {"practice", "apply"} for brief in instruction):
-        raise ValueError(
+        errors.append(
             "Give learners a chance to use the idea before checking it independently."
         )
     if blueprint.teaching_design.approach == "workshop" and not any(
         brief.type in {"interactive", "pbl"} and brief.purpose in {"practice", "apply"}
         for brief in instruction
     ):
-        raise ValueError(
+        errors.append(
             "A workshop needs an interactive investigation or a hands-on project before the check."
         )
+    if errors:
+        raise ValueError("\n".join(errors))
 
 
 def validate_teaching_scene(
