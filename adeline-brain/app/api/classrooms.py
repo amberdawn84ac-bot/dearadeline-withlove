@@ -37,6 +37,7 @@ from app.curriculum.classroom_quality import (
     validate_teaching_plan,
     validate_teaching_scene,
 )
+from app.curriculum.classroom_review import review_and_repair
 from app.curriculum.equine_anatomy import restore_equine_anatomy
 from app.curriculum.estuary_classroom import (
     ESTUARY_ITEM,
@@ -378,6 +379,8 @@ async def generate_json(policy, schema, context):
             )
         elif schema is Scene:
             messages[0]["content"] += (
+                "\nTreat quality_review_feedback as mandatory correction instructions when present. "
+                "Respond to each specific concern without changing id, type, or mechanism. "
                 "\nAlign scene tasks, worked examples, and success criteria with the "
                 "blueprint mastery_rubric. Do not display or promise awarded mastery. "
                 "Keep teacher-facing class_quality_rubric for self-review. "
@@ -662,6 +665,42 @@ async def build_document(student_id, item_id):
             scenes.append(scene)
             doc["scenes"] = [s.model_dump() for s in scenes]
             await save_document(student_id, item_id, record, doc)
+        # New classrooms are reviewed before publication. Older saved plans
+        # remain compatible and are not retroactively subjected to this gate.
+        if doc.get("rubric_contract") == RUBRIC_CONTRACT_REVISION:
+            learner_ctx = resolve_context(
+                doc["request"].get("level", ""),
+                LearnerContext.model_validate(doc["request"]["learner_context"])
+                if doc["request"].get("learner_context")
+                else None,
+            ).authoring_context()
+
+            def repair_context(brief, preceding, diagnostic):
+                return {
+                    "blueprint": blueprint.model_dump(),
+                    "requested_scene": brief.model_dump(),
+                    "previous_scenes": [scene.model_dump() for scene in preceding],
+                    "request": doc["request"],
+                    "learner_context": learner_ctx,
+                    "supplied_resources": sources,
+                    "curriculum_targets": doc.get("curriculum_targets", []),
+                    "runtime_capabilities": authoring_capabilities(),
+                    "authoring_revision": doc.get("authoring_revision"),
+                    "rubric_contract": doc.get("rubric_contract"),
+                    "quality_review_feedback": diagnostic,
+                }
+
+            async def persist_repair(revised):
+                doc["scenes"] = [scene.model_dump() for scene in revised]
+                await save_document(student_id, item_id, record, doc)
+
+            scenes, quality_review = await review_and_repair(
+                blueprint, scenes, generate=generate_json,
+                make_scene_context=repair_context,
+                on_repair=persist_repair,
+            )
+            doc["quality_review"] = quality_review
+
         classroom = Classroom(blueprint=blueprint, scenes=scenes)
         doc.update(phase="ready", scenes=[s.model_dump() for s in classroom.scenes])
         await save_document(student_id, item_id, record, doc)
