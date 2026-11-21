@@ -74,8 +74,8 @@ GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 if IS_PRODUCTION and not OPENAI_API_KEY:
     logger.warning(
-        "[Config] OPENAI_API_KEY not set — embedding and lesson generation will fail. "
-        "Set OPENAI_API_KEY in Railway environment variables."
+        "[Config] OPENAI_API_KEY not set — OpenAI embeddings and the OpenAI "
+        "classroom fallback are unavailable. Gemini or Groq may still generate lessons."
     )
 
 # ── Gemini (multimodal synthesis — 30x cheaper than Claude for JSON extraction) ──
