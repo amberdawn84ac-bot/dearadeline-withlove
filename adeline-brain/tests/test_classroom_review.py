@@ -7,7 +7,7 @@ from app.curriculum.classroom import Blueprint, Scene
 from app.curriculum.classroom_review import (
     QualityReview, checked_review, review_and_repair,
 )
-from tests.test_classroom import blueprint as basic_blueprint, scene as basic_scene
+from test_classroom import blueprint as basic_blueprint, scene as basic_scene
 
 
 def reviewed_blueprint():
