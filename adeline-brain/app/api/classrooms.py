@@ -245,22 +245,26 @@ def public_state(record):
     return result
 
 
-def authoring_response_format(provider, schema, context):
-    if provider == "groq":
-        # JSON object mode plus local Pydantic validation and repair. Complex
-        # strict JSON schemas may not be supported on every Groq model.
-        return {"type": "json_object"}
-    if schema not in (Scene, Blueprint) or (
-        provider != "openai"
-        and context.get("authoring_revision") != CLASSROOM_AUTHORING_REVISION
-    ):
-        return {"type": "json_object"}
+def authoring_contract(schema, context):
+    """Match new-authoring instructions to the contract we actually validate.
 
+    Saved documents still use the backward-compatible Pydantic models. JSON-mode
+    providers need these same stronger instructions, not the permissive read schema.
+    """
     contract = schema.model_json_schema()
     if (
         schema is Blueprint
         and context.get("authoring_revision") == CLASSROOM_AUTHORING_REVISION
     ):
+        brief = contract["$defs"]["SceneBrief"]
+        brief["properties"]["evidence"] = {
+            "type": "string", "minLength": 1, "maxLength": 600,
+            "description": "Concrete learner output for THIS scene, including introductions, explanations and reflections; never null or just participation.",
+        }
+        contract["properties"]["teaching_design"] = {"$ref": "#/$defs/TeachingDesign"}
+        if context.get("rubric_contract") == RUBRIC_CONTRACT_REVISION:
+            for name in ("class_quality_rubric", "mastery_rubric"):
+                contract["properties"][name] = {"$ref": "#/$defs/ClassRubric"}
         contract["$defs"]["SceneBrief"]["properties"]["mechanism"] = {
             "anyOf": [
                 {
@@ -339,12 +343,21 @@ def authoring_response_format(provider, schema, context):
             result["required"] = list(result.get("properties", {}))
         return result
 
+    return strict(contract)
+
+
+def authoring_response_format(provider, schema, context):
+    if provider == "groq" or schema not in (Scene, Blueprint) or (
+        provider != "openai"
+        and context.get("authoring_revision") != CLASSROOM_AUTHORING_REVISION
+    ):
+        return {"type": "json_object"}
     return {
         "type": "json_schema",
         "json_schema": {
             "name": schema.__name__,
             "strict": True,
-            "schema": strict(contract),
+            "schema": authoring_contract(schema, context),
         },
     }
 
@@ -368,7 +381,7 @@ async def generate_json(policy, schema, context):
             + ", ".join(t.value for t in Track)
             + "\nIntegrate only tracks with a substantive connection; never force all ten into one lesson."
             + "\nJSON schema:\n"
-            + json.dumps(schema.model_json_schema()),
+            + json.dumps(authoring_contract(schema, context)),
         },
         {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
     ]
@@ -386,6 +399,12 @@ async def generate_json(policy, schema, context):
                 "Between the first attempt and the fresh independent check, explicitly teach the concept "
                 "and give learners practice. Workshops need a genuine interactive investigation or "
                 "hands-on project at that point. Plan enough time for teaching and doing."
+                " Every scene, INCLUDING introduce/explain/reflect, needs a nonblank evidence "
+                "field naming its specific learner output (for example an annotated comparison "
+                "or a brief explanation); do not use generic completion or participation. "
+                "A workshop must END with pbl, quiz or interactive work, never a summary slide. "
+                "Never put three exposition slides in a row in a workshop. "
+                "Check ALL scenes against this checklist before returning the plan."
             )
         elif schema is Scene:
             messages[0]["content"] += (
@@ -423,7 +442,8 @@ async def generate_json(policy, schema, context):
             async with openai.AsyncOpenAI(
                 api_key=api_key, base_url=base_url, max_retries=0, timeout=90
             ) as client:
-                for attempt in range(3):
+                attempt = 0
+                while attempt < 3:
                     if provider == "gemini" and _provider_retry_at > time.time():
                         break
                     try:
@@ -523,6 +543,9 @@ async def generate_json(policy, schema, context):
                         # when Groq can still serve the request.
                         logger.info("Provider %s unavailable; checking next configured provider", provider)
                         break
+                    # Schema negotiation is not a generated draft and must not
+                    # consume the bounded three-draft validation/repair budget.
+                    attempt += 1
                     choice = response.choices[0]
                     content = choice.message.content or ""
                     try:
@@ -542,7 +565,7 @@ async def generate_json(policy, schema, context):
                         logger.warning(
                             "Exploration validation failed: schema=%s attempt=%s issues=%s",
                             schema.__name__,
-                            attempt + 1,
+                            attempt,
                             issues[:2500],
                         )
                         provider_messages.extend(
@@ -552,6 +575,14 @@ async def generate_json(policy, schema, context):
                                     "role": "user",
                                     "content": "Repair this draft. Preserve valid teaching and correct these errors: "
                                     + issues[:4000]
+                                    + (
+                                        " Recheck EVERY scene.evidence: provide concrete learner work, "
+                                        "including intro/explanation/reflection scenes. For a workshop, "
+                                        "end with pbl/quiz/interactive work, not a summary slide, and "
+                                        "avoid three consecutive slides. Keep both generated rubrics."
+                                        if schema is Blueprint and context.get("authoring_revision")
+                                        == CLASSROOM_AUTHORING_REVISION else ""
+                                    )
                                     + " Return the complete corrected JSON only.",
                                 },
                             ]
